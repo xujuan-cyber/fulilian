@@ -1,0 +1,702 @@
+"""多题并行调度器 + 自动调度 + 收割轮 + 时间盒 + 探针（F2-001/002/003/007/008/010）。
+
+确定性调度（非 LLM 驱动）：
+1. 新题优先（按 score 降序）
+2. 无新题 → 收割轮：按 EV 排序回退已放弃/超时的题
+3. 分配前探活（可解性探针）→ INFRA_BLOCKED 跳过
+4. 每个 solver 独立进程（崩溃不影响其他），时间盒到期自动中断并输出接力块
+
+状态机：NEW →(探针)→ IN_PROGRESS → SOLVED / ABANDONED / TIMEOUT；探针失败 → INFRA_BLOCKED
+收割轮会重跑 ABANDONED / TIMEOUT 的题（attempts 递增，超过 max_attempts 不再回收）。
+
+EV 公式（收割轮排序）：EV = score * difficulty_factor * attempts_penalty
+难度因子 easy=1.0 / medium=0.7 / hard=0.4；每次尝试惩罚 20%（下限 0.2）。
+"""
+
+from __future__ import annotations
+
+import json
+import multiprocessing
+import time
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, field
+from enum import Enum
+from pathlib import Path
+from typing import Callable, Optional
+
+from .blackboard import BLACKBOARD_FILENAME, Fact, State, load_blackboard, save_blackboard
+from .probe import ProbeResult, probe_challenge
+from .relay import build_relay, parse_relay, read_relay_file, write_relay_file
+from .solver import SOLVER_LOG, SolverResult, read_flag_file, scan_log_for_flag, solver_worker
+from .verify import VerificationResult, verify_flag
+from .stopper import (
+    DEFAULT_MAX_NO_OUTPUT_ROUNDS,
+    DEFAULT_MAX_TOKENS,
+    DEFAULT_MAX_VARIANT_FAILURES,
+    Stopper,
+    TokenCounter,
+    count_variant_failures,
+    estimate_tokens_from_log,
+)
+from .timebox import Timebox, difficulty_adjusted_budget
+
+
+class ChallengeStatus(str, Enum):
+    NEW = "new"
+    IN_PROGRESS = "in_progress"
+    ABANDONED = "abandoned"
+    TIMEOUT = "timeout"
+    SOLVED = "solved"
+    INFRA_BLOCKED = "infra_blocked"
+
+
+# 收割轮可回收的状态（已放弃/超时，等待按 EV 重评）
+HARVESTABLE = (ChallengeStatus.ABANDONED, ChallengeStatus.TIMEOUT)
+
+# 难度因子（EV 计算用）：越难的题回收价值越低
+DIFFICULTY_FACTORS = {"easy": 1.0, "medium": 0.7, "hard": 0.4}
+
+# 探针并行数上限（同时探活的题数）
+PROBE_CONCURRENCY = 4
+
+
+def _safe_target(solver_fn: Callable, project: Project, work_dir: str,
+                 model: str, queue) -> None:
+    """solver 进程的异常安全包装：任何异常都上报 SolverResult，不裸崩。
+
+    真实 solver（solver_worker）自身已捕获异常；此包装兜底 fake/第三方
+    solver_fn，保证「崩溃不影响其他」的进程隔离语义。
+    """
+    try:
+        solver_fn(project, work_dir, model, queue)
+    except BaseException as e:  # noqa: BLE001 — 进程隔离：任何异常都不影响其他 solver
+        try:
+            queue.put(SolverResult(ok=False, exit_code=1, error=f"{type(e).__name__}: {e}"))
+        except Exception:  # noqa: BLE001
+            pass
+
+
+@dataclass
+class Project:
+    """一道 CTF 题的完整上下文（solver project）。"""
+
+    challenge_id: str
+    challenge_dir: str = ""
+    target_host: str = ""
+    target_port: int = 0
+    difficulty: str = "medium"
+    title: str = ""
+    category: str = ""
+    description: str = ""
+    score: int = 0
+    status: ChallengeStatus = ChallengeStatus.NEW
+    attempts: int = 0
+    ev_score: float = 0.0
+    stop_reason: str = ""
+    flag: str = ""
+    model: str = ""
+    timebox_override: int = 0
+    started_at: float = 0.0
+    finished_at: float = 0.0
+    last_tier: str = ""
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.challenge_id,
+            "title": self.title,
+            "category": self.category,
+            "difficulty": self.difficulty,
+            "score": self.score,
+            "status": self.status.value,
+            "attempts": self.attempts,
+            "ev_score": round(self.ev_score, 3),
+            "stop_reason": self.stop_reason,
+            "flag": self.flag,
+            "target_host": self.target_host,
+            "target_port": self.target_port,
+            "challenge_dir": self.challenge_dir,
+            "model": self.model,
+            "started_at": self.started_at,
+            "finished_at": self.finished_at,
+            "last_tier": self.last_tier,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "Project":
+        known = {f.name for f in cls.__dataclass_fields__.values()}  # noqa: F841
+        return cls(
+            challenge_id=str(d.get("id", "")),
+            challenge_dir=str(d.get("challenge_dir", "")),
+            target_host=str(d.get("target_host", "")),
+            target_port=int(d.get("target_port", 0) or 0),
+            difficulty=str(d.get("difficulty", "medium")).lower(),
+            title=str(d.get("title", "")),
+            category=str(d.get("category", "")).lower(),
+            description=str(d.get("description", "")),
+            score=int(d.get("score", 0) or 0),
+            status=ChallengeStatus(str(d.get("status", "new"))),
+            attempts=int(d.get("attempts", 0)),
+            ev_score=float(d.get("ev_score", 0.0)),
+            stop_reason=str(d.get("stop_reason", "")),
+            flag=str(d.get("flag", "")),
+            model=str(d.get("model", "")),
+            timebox_override=int(d.get("timebox_override", 0) or 0),
+            started_at=float(d.get("started_at", 0.0) or 0.0),
+            finished_at=float(d.get("finished_at", 0.0) or 0.0),
+            last_tier=str(d.get("last_tier", "")),
+        )
+
+
+class Dispatcher:
+    """确定性调度器，非 LLM 驱动。"""
+
+    def __init__(
+        self,
+        max_workers: int = 3,
+        model: str = "",
+        probe_timeout: int = 60,
+        max_attempts: int = 3,
+        timebox_override: int = 0,
+        solver_fn: Optional[Callable] = None,
+        quiet: bool = False,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
+        max_no_output_rounds: int = DEFAULT_MAX_NO_OUTPUT_ROUNDS,
+        max_variant_failures: int = DEFAULT_MAX_VARIANT_FAILURES,
+        stop_loss: bool = True,
+        token_counter: Optional[TokenCounter] = None,
+        no_output_round_seconds: int = 60,
+    ):
+        self.max_workers = max(1, int(max_workers))
+        self.model = model
+        self.probe_timeout = max(1, int(probe_timeout))
+        self.max_attempts = max(1, int(max_attempts))
+        self.timebox_override = int(timebox_override)
+        self._solver_fn = solver_fn or solver_worker
+        self.quiet = quiet
+        # 止损治理器（F2-004 / F2-011，步骤 07）
+        self.stop_loss = bool(stop_loss)
+        self.stopper = Stopper(
+            max_tokens=max_tokens,
+            max_no_output_rounds=max_no_output_rounds,
+            max_variant_failures=max_variant_failures,
+        )
+        # 无产出的「一轮」= 这么多秒无任何进展（新 Fact 或 solver.log 增长）。
+        # 调度器轮询间隔不固定，轮数按停滞时长折算，避免高频轮询误杀活跃 solver。
+        self.no_output_round_seconds = max(1, int(no_output_round_seconds))
+        self.token_counter = token_counter  # 可注入精确 token 计数器；None 走日志估算
+        self.projects: dict[str, Project] = {}
+        self._running: dict[str, dict] = {}  # challenge_id → slot
+        self._spawns = 0
+
+    # ── 项目管理 ────────────────────────────────────────────────────────
+
+    def add_project(self, project: Project) -> None:
+        self.projects[project.challenge_id] = project
+
+    # ── 调度决策（确定性，非 LLM）────────────────────────────────────────
+
+    def schedule(self, available: int) -> list[Project]:
+        """调度决策：1. 新题优先（score 降序） 2. 无新题 → 收割轮（EV 排序）。"""
+        if available <= 0:
+            return []
+        new = [
+            p for p in self.projects.values() if p.status == ChallengeStatus.NEW
+        ]
+        new.sort(key=lambda p: p.score, reverse=True)
+        if new:
+            return new[:available]
+        return self.harvest_cycle()[:available]
+
+    def harvest_cycle(self) -> list[Project]:
+        """收割轮：按 EV 排序，回退已放弃/超时的题（attempts 未达上限的）。
+
+        EV = score * difficulty_factor * (1 - attempts * 0.2)
+        """
+        abandoned = [
+            p for p in self.projects.values()
+            if p.status in HARVESTABLE and p.attempts < self.max_attempts
+            # 预算耗尽是硬止损：token 估算不随重跑下降，重跑必在首次轮询再撞墙，
+            # 只会空耗 attempts 配额，故排除出收割轮
+            and "BUDGET_EXCEEDED" not in p.stop_reason
+        ]
+        for p in abandoned:
+            df = DIFFICULTY_FACTORS.get(p.difficulty, 0.5)
+            penalty = max(0.2, 1.0 - p.attempts * 0.2)
+            p.ev_score = (p.score * df) * penalty
+        abandoned.sort(key=lambda p: p.ev_score, reverse=True)
+        return abandoned
+
+    # ── 主循环 ──────────────────────────────────────────────────────────
+
+    def run(self, limit: Optional[int] = None) -> dict:
+        """执行调度主循环，直到所有题进入终态（SOLVED/INFRA_BLOCKED/放弃到上限）。
+
+        Args:
+            limit: 最多启动的 solver 次数（含收割轮重跑）；None 不限
+
+        Returns:
+            dict: 汇总报告（totals + 每题状态），供 CLI 输出/持久化
+        """
+        started = time.time()
+        try:
+            while True:
+                self._reap_finished()
+                self._check_timeboxes()
+                self._check_stop_loss()
+
+                if not self._running:
+                    if limit is not None and self._spawns >= limit:
+                        break  # 达到启动上限，不再分配
+                    available = self.max_workers - len(self._running)
+                    candidates = self.schedule(available)
+                    if not candidates:
+                        break
+                    self._spawn_candidates(candidates, limit)
+                    if not self._running:
+                        # 全部候选被探针拦下（INFRA_BLOCKED）→ 无题可跑
+                        continue
+                    continue
+
+                # 等待：到最近的档位边界或任意 solver 结束（≤5s 轮询，保证响应）
+                wait = min(slot["timebox"].remaining() for slot in self._running.values())
+                wait = max(0.1, min(wait, 5.0))
+                sentinels = [slot["process"].sentinel for slot in self._running.values()]
+                multiprocessing.connection.wait(sentinels, timeout=wait)
+        except BaseException:
+            self.stop_all()
+            raise
+
+        return {
+            "started_at": started,
+            "finished_at": time.time(),
+            "duration": round(time.time() - started, 1),
+            "max_workers": self.max_workers,
+            "spawns": self._spawns,
+            "projects": [p.to_dict() for p in self.projects.values()],
+            "totals": self._totals(),
+        }
+
+    def _totals(self) -> dict:
+        counts: dict[str, int] = {s.value: 0 for s in ChallengeStatus}
+        for p in self.projects.values():
+            counts[p.status.value] += 1
+        return counts
+
+    # ── 内部：探针 + 分配 ───────────────────────────────────────────────
+
+    def _probe_and_maybe_spawn(self, project: Project) -> bool:
+        """探活单个候选；可达则分配 solver，不可达标记 INFRA_BLOCKED。"""
+        if project.target_host:
+            if not self.quiet:
+                print(
+                    f"[probe] {project.challenge_id} → "
+                    f"{project.target_host}:{project.target_port or ''}"
+                )
+            result = probe_challenge(
+                project.target_host, project.target_port, timeout=self.probe_timeout
+            )
+            if result == ProbeResult.INFRA_BLOCKED:
+                project.status = ChallengeStatus.INFRA_BLOCKED
+                project.stop_reason = "probe: infra blocked"
+                if not self.quiet:
+                    print(f"[probe] {project.challenge_id}: INFRA_BLOCKED — skipped")
+                return False
+            if result == ProbeResult.UNKNOWN:
+                if not self.quiet:
+                    print(f"[probe] {project.challenge_id}: UNKNOWN — proceeding anyway")
+        self._spawn(project)
+        return True
+
+    def _spawn_candidates(self, candidates: list[Project], limit: Optional[int]) -> None:
+        """并行探活候选（≤4 并发），可达的分配 solver。"""
+        remaining_limit = limit - self._spawns if limit is not None else None
+        if remaining_limit is not None and remaining_limit <= 0:
+            return
+        targets = candidates[:remaining_limit] if remaining_limit is not None else candidates
+        if not targets:
+            return
+        with ThreadPoolExecutor(max_workers=min(PROBE_CONCURRENCY, self.max_workers)) as ex:
+            reachable = list(ex.map(self._probe_and_maybe_spawn, targets))
+        # ex.map 已按序完成探活+分配；返回 False 的已被标记 INFRA_BLOCKED
+
+    def _spawn(self, project: Project) -> None:
+        """启动一个 solver 独立进程。"""
+        work_dir = Path(project.challenge_dir or project.challenge_id)
+        work_dir.mkdir(parents=True, exist_ok=True)
+        # F4-001：spawn 时即生成 AGENTS.md（solver_worker 内 ensure 幂等兜底）
+        try:
+            from .agents_md import ensure_agents_md
+
+            ensure_agents_md(work_dir, project)
+        except Exception:  # noqa: BLE001 — 生成失败不阻断调度
+            pass
+        budget = (
+            project.timebox_override
+            or self.timebox_override
+            or difficulty_adjusted_budget(project.difficulty)
+        )
+        incremental = not (project.timebox_override or self.timebox_override)
+        tb = Timebox(initial_budget=budget, incremental=incremental)
+        tb.start()
+        queue = multiprocessing.Queue()
+        proc = multiprocessing.Process(
+            target=_safe_target,
+            args=(self._solver_fn, project, str(work_dir), self.model or project.model, queue),
+            name=f"solver-{project.challenge_id}",
+        )
+        proc.start()
+        project.status = ChallengeStatus.IN_PROGRESS
+        project.attempts += 1
+        project.started_at = time.time()
+        project.last_tier = tb.tier_label
+        self._spawns += 1
+        # 续接注入：RELAY.md 的死路/已达成原语 → 黑板（07 指南集成步骤 1）
+        self._inject_relay_into_board(work_dir)
+        board = load_blackboard(work_dir / BLACKBOARD_FILENAME)
+        self._running[project.challenge_id] = {
+            "project": project,
+            "process": proc,
+            "timebox": tb,
+            "queue": queue,
+            "work_dir": work_dir,
+            # 止损状态（F2-004）：无产出轮数 / 最近一次黑板 Fact 计数
+            "no_output_rounds": 0,
+            "last_fact_count": (
+                len(
+                    [
+                        f
+                        for f in board.facts.values()
+                        if f.state in (State.CONFIRMED, State.REFUTED)
+                    ]
+                )
+                if board
+                else 0
+            ),
+        }
+        if not self.quiet:
+            print(
+                f"[dispatch] {project.challenge_id}: spawn "
+                f"(pid={proc.pid}, tier0={budget}s, workers={len(self._running)}/{self.max_workers})"
+            )
+
+    def _inject_relay_into_board(self, work_dir: Path) -> None:
+        """续接时把 RELAY.md 的死路/已达成原语注入黑板（07 指南集成步骤 1）。
+
+        存在 RELAY.md（上次时间盒/止损留下）且黑板已持久化时：死路进免疫集，
+        已达成原语进 Fact（source=\"relay\"）。使黑板状态与接力块一致，供
+        新 solver / 其他 solver 读取，不重复侦察。
+        """
+        relay_text = read_relay_file(work_dir)
+        board_path = work_dir / BLACKBOARD_FILENAME
+        if not relay_text or not board_path.is_file():
+            return
+        board = load_blackboard(board_path)
+        if board is None:
+            return
+        relay = parse_relay(relay_text)
+        for d in relay["dead_ends"]:
+            board.mark_dead_end(d)
+        # 原语按 content 幂等注入：接力块在多次重跑间反复存在，按 id 去重无效
+        # （Fact 每次 new uuid）；运行时元信息行（"solver ran ..."）不是原语，不注入。
+        existing = {f.content for f in board.get_facts()}
+        for p in relay["achieved_primitives"]:
+            if p.startswith("solver ran ") or p in existing:
+                continue
+            try:
+                board.add_fact(Fact(content=p, source="relay"))
+                existing.add(p)
+            except ValueError:
+                pass  # append-only：重复 id 忽略
+        save_blackboard(board, board_path)
+
+    # ── 内部：收割与中断 ────────────────────────────────────────────────
+
+    def _reap_finished(self) -> None:
+        """收割已结束的 solver 进程，判定 SOLVED / ABANDONED。"""
+        for cid, slot in list(self._running.items()):
+            if not slot["process"].is_alive():
+                self._reap(cid, slot)
+
+    def _reap(self, cid: str, slot: dict) -> None:
+        project: Project = slot["project"]
+        proc: multiprocessing.Process = slot["process"]
+        queue = slot["queue"]
+        work_dir: Path = slot["work_dir"]
+        self._running.pop(cid, None)
+        proc.join(timeout=3)
+
+        result: Optional[SolverResult] = None
+        try:
+            if not queue.empty():
+                result = queue.get(timeout=1)
+        except Exception:  # noqa: BLE001
+            result = None
+
+        project.finished_at = time.time()
+        flag = ""
+        gate_note = ""
+        declared = (result.flag if result else "") or ""
+        if declared:
+            # 声明式 FLAG 文件内容同样要过三重校验门：agent 可能绕过
+            # submit_flag 直接写 FLAG 文件，占位/畸形内容不得判 SOLVED
+            gate = verify_flag(declared, evidence="", require_grounding=False)
+            if gate is VerificationResult.CONFIRMED:
+                flag = declared
+            else:
+                gate_note = f"flag file rejected by gate: {gate.value}"
+        if not flag:
+            flag = scan_log_for_flag(work_dir)  # 兜底：扫描 solver.log（走三重校验门）
+        if flag:
+            project.status = ChallengeStatus.SOLVED
+            project.flag = flag
+            try:
+                (work_dir / "FLAG").write_text(flag + "\n", encoding="utf-8")
+            except OSError:
+                pass
+        else:
+            project.status = ChallengeStatus.ABANDONED
+            project.stop_reason = (
+                (result.error if result and result.error else "")
+                or f"solver exit={result.exit_code if result else 'crash'}"
+            )
+            if gate_note:
+                project.stop_reason = f"{gate_note}; {project.stop_reason}"
+        if not self.quiet:
+            detail = f" flag={flag}" if flag else f" reason={project.stop_reason}"
+            print(f"[dispatch] {project.challenge_id}: {project.status.value}{detail}")
+
+        # 经验落库（F3-003/F3-004）：SOLVED / ABANDONED 都落，best-effort
+        board = load_blackboard(work_dir / BLACKBOARD_FILENAME)
+        fact_contents = (
+            [
+                f.content[:120]
+                for f in board.get_facts()
+                if f.state in (State.CONFIRMED, State.REFUTED)
+            ][:20]
+            if board
+            else []
+        )
+        try:
+            from .experiential_learning import record_solve_outcome
+            record_solve_outcome(
+                challenge_id=project.challenge_id,
+                category=project.category or "misc",
+                success=(project.status is ChallengeStatus.SOLVED),
+                key_commands=fact_contents,
+                flag=project.flag,
+            )
+        except Exception:  # noqa: BLE001 — 经验落库失败不影响调度
+            pass
+
+    def _check_timeboxes(self) -> None:
+        """检查运行中的时间盒：档位升级（继续）或最终超时（中断+接力块）。"""
+        for cid, slot in list(self._running.items()):
+            tb: Timebox = slot["timebox"]
+            if tb.check():
+                self._interrupt(cid, slot)
+
+    # ── 内部：止损治理（F2-004 / F2-011，步骤 07）──────────────────────────
+
+    def _check_stop_loss(self) -> None:
+        """对每个运行中的 solver 执行 4 维止损检查；命中即终止并写接力块。
+
+        维度（见 stopper.Stopper）：预算超限 / 无产出 / 不可达目标 /
+        假设空间重复；多 flag 链临门不弃放大预算。无黑板文件时无产出与
+        变体维度无法判定（跳过，不误杀未启用黑板的流程）。
+        """
+        if not self.stop_loss:
+            return
+        for cid, slot in list(self._running.items()):
+            reason = self._stop_reason_for(slot)
+            if reason:
+                self._interrupt_stopped(cid, slot, reason)
+
+    def _stop_reason_for(self, slot: dict) -> Optional[str]:
+        """计算单个 solver 的止损原因（无命中返回 None）。"""
+        project: Project = slot["project"]
+        work_dir: Path = slot["work_dir"]
+
+        # 维度 1 — 预算超限：token 计数（可注入精确计数器；默认按日志估算）
+        if self.token_counter is not None:
+            tokens = int(self.token_counter(work_dir) or 0)
+        else:
+            tokens = estimate_tokens_from_log(work_dir)
+
+        # 维度 2/4 — 无产出 / 假设空间重复：需要黑板数据源
+        board = load_blackboard(work_dir / BLACKBOARD_FILENAME)
+        if board is None:
+            rounds_without_fact = 0
+            variant_failures = 0
+        else:
+            fact_count = len(
+                [f for f in board.facts.values() if f.state in (State.CONFIRMED, State.REFUTED)]
+            )
+            try:
+                log_size = (
+                    (work_dir / SOLVER_LOG).stat().st_size
+                    if (work_dir / SOLVER_LOG).is_file()
+                    else 0
+                )
+            except OSError:
+                log_size = 0
+            # 进展 = 新 Fact 或 solver.log 增长/重写（新尝试）。轮数按停滞时长折算
+            # （1 轮 = no_output_round_seconds 秒无进展），与轮询频率解耦，避免误杀。
+            progressed = (
+                fact_count > slot.get("last_fact_count", 0)
+                or log_size != slot.get("last_log_size", -1)
+            )
+            now = time.time()
+            if progressed:
+                slot["last_fact_count"] = fact_count
+                slot["last_log_size"] = log_size
+                slot["last_progress_time"] = now
+                slot["no_output_rounds"] = 0
+            else:
+                last_progress = slot.get("last_progress_time") or now
+                slot["no_output_rounds"] = int(
+                    (now - last_progress) // self.no_output_round_seconds
+                )
+            rounds_without_fact = slot["no_output_rounds"]
+            variant_failures = count_variant_failures(board)
+
+        # 临门不弃（F2-011）：FLAG 文件内容过校验门，或 solver.log 检出 flag。
+        # 占位/畸形 FLAG 不算「已拿到 flag」（与 _reap 的声明式提交口径一致）。
+        declared = read_flag_file(work_dir)
+        if declared and verify_flag(
+            declared, evidence="", require_grounding=False
+        ) is not VerificationResult.CONFIRMED:
+            declared = ""
+        has_partial_flag = bool(declared) or bool(scan_log_for_flag(work_dir))
+
+        return self.stopper.check(
+            project_tokens=tokens,
+            rounds_without_new_fact=rounds_without_fact,
+            variant_failures=variant_failures,
+            is_infra_blocked=project.status == ChallengeStatus.INFRA_BLOCKED,
+            has_partial_flag=has_partial_flag,
+        )
+
+    def _interrupt_stopped(self, cid: str, slot: dict, reason: str) -> None:
+        """止损命中：终止 solver 进程，标记 ABANDONED（可收割轮换方向重试），写接力块。"""
+        project: Project = slot["project"]
+        proc: multiprocessing.Process = slot["process"]
+        tb: Timebox = slot["timebox"]
+        work_dir: Path = slot["work_dir"]
+        self._running.pop(cid, None)
+
+        proc.terminate()
+        try:
+            proc.join(timeout=3)
+        except Exception:  # noqa: BLE001
+            pass
+        if proc.is_alive():
+            proc.kill()
+            proc.join(timeout=2)
+
+        project.finished_at = time.time()
+        project.status = ChallengeStatus.ABANDONED
+        project.last_tier = tb.tier_label
+        project.stop_reason = (
+            f"STOPPED: {reason} ({self.stopper.describe(reason)}) "
+            f"after {int(tb.elapsed)}s at tier '{tb.tier_label}'"
+        )
+        self._write_relay(project, tb, work_dir, reason=reason)
+        if not self.quiet:
+            print(
+                f"[dispatch] {project.challenge_id}: STOPPED ({reason}) — RELAY.md written"
+            )
+
+    def _interrupt(self, cid: str, slot: dict) -> None:
+        """时间盒最终超时：终止 solver 进程，标记 TIMEOUT，输出接力块。"""
+        project: Project = slot["project"]
+        proc: multiprocessing.Process = slot["process"]
+        tb: Timebox = slot["timebox"]
+        work_dir: Path = slot["work_dir"]
+        self._running.pop(cid, None)
+
+        proc.terminate()
+        try:
+            proc.join(timeout=3)
+        except Exception:  # noqa: BLE001
+            pass
+        if proc.is_alive():
+            proc.kill()
+            proc.join(timeout=2)
+
+        project.finished_at = time.time()
+        project.status = ChallengeStatus.TIMEOUT
+        project.last_tier = tb.tier_label
+        project.stop_reason = (
+            f"timebox expired at tier '{tb.tier_label}' after {int(tb.elapsed)}s "
+            f"(budget {tb.current_budget}s)"
+        )
+        self._write_relay(project, tb, work_dir)
+        if not self.quiet:
+            print(
+                f"[dispatch] {project.challenge_id}: TIMEOUT "
+                f"(tier={tb.tier_label}, elapsed={int(tb.elapsed)}s) — RELAY.md written"
+            )
+
+    def _write_relay(self, project: Project, tb: Timebox, work_dir: Path,
+                     reason: Optional[str] = None) -> None:
+        """把当前状态沉淀为接力块（三段式续接契约）。
+
+        时间盒到期（reason=None）或止损命中（reason 为 STOP_REASONS 键）时调用。
+        若黑板已持久化，把 facts 并入「已达成原语」、dead_ends 并入「已证死路」，
+        保证续接时从「下一步」开始、不重复侦察（07 指南 7.2）。
+        """
+        achieved = [
+            f"solver ran {int(tb.elapsed)}s at tier '{tb.tier_label}' "
+            f"(budget {tb.current_budget}s); progress log: {work_dir / 'solver.log'}"
+        ]
+        dead_ends: list[str] = []
+        board = load_blackboard(work_dir / BLACKBOARD_FILENAME)
+        if board:
+            achieved.extend(f.content for f in board.get_facts())
+            dead_ends = sorted(board.dead_ends)
+
+        hint = "read solver.log for progress and continue from where it stopped"
+        if reason:
+            hint = f"stop-loss '{reason}' ({self.stopper.describe(reason)}); {hint}"
+        relay_text = build_relay(
+            achieved_primitives=achieved,
+            dead_ends=dead_ends,
+            next_steps=[
+                f"RESUME {project.challenge_id}: re-run solver with a fresh agent; {hint}"
+            ],
+        )
+        write_relay_file(work_dir, relay_text)
+
+    # ── 停止 ────────────────────────────────────────────────────────────
+
+    def stop_all(self) -> None:
+        """终止所有运行中的 solver（Ctrl-C / 异常时清理）。"""
+        for cid, slot in list(self._running.items()):
+            proc = slot["process"]
+            try:
+                proc.terminate()
+                proc.join(timeout=3)
+            except Exception:  # noqa: BLE001
+                pass
+            if proc.is_alive():
+                try:
+                    proc.kill()
+                except Exception:  # noqa: BLE001
+                    pass
+        self._running.clear()
+
+    # ── 状态持久化（供后续 status 命令复用）─────────────────────────────
+
+    def save_state(self, summary: dict, path: str | Path) -> None:
+        Path(path).write_text(
+            json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+
+
+__all__ = [
+    "ChallengeStatus",
+    "Project",
+    "Dispatcher",
+    "HARVESTABLE",
+    "DIFFICULTY_FACTORS",
+]
