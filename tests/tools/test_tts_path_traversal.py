@@ -32,16 +32,16 @@ def test_output_path_rejects_bare_dotdot():
     assert "traversal" in result["error"].lower()
 
 
-def test_output_path_rejects_hermes_oauth_store(tmp_path, monkeypatch):
+def test_output_path_rejects_fulilian_oauth_store(tmp_path, monkeypatch):
     """TTS output_path must not bypass the shared protected-file write guard."""
     import agent.file_safety as file_safety
 
-    hermes_home = tmp_path / "hermes-home"
-    hermes_home.mkdir()
-    monkeypatch.setattr(file_safety, "_hermes_home_path", lambda: hermes_home)
-    monkeypatch.setattr(file_safety, "_hermes_root_path", lambda: hermes_home)
+    fulilian_home = tmp_path / "fulilian-home"
+    fulilian_home.mkdir()
+    monkeypatch.setattr(file_safety, "_fulilian_home_path", lambda: fulilian_home)
+    monkeypatch.setattr(file_safety, "_fulilian_root_path", lambda: fulilian_home)
 
-    target = hermes_home / ".anthropic_oauth.json"
+    target = fulilian_home / ".anthropic_oauth.json"
     result = json.loads(text_to_speech_tool(
         text="hello",
         output_path=str(target),
@@ -56,11 +56,11 @@ def test_output_path_rejects_mcp_token_directory(tmp_path, monkeypatch):
     """TTS output_path must not write synthesized audio over MCP token files."""
     import agent.file_safety as file_safety
 
-    hermes_home = tmp_path / "hermes-home"
-    token_dir = hermes_home / "mcp-tokens"
+    fulilian_home = tmp_path / "fulilian-home"
+    token_dir = fulilian_home / "mcp-tokens"
     token_dir.mkdir(parents=True)
-    monkeypatch.setattr(file_safety, "_hermes_home_path", lambda: hermes_home)
-    monkeypatch.setattr(file_safety, "_hermes_root_path", lambda: hermes_home)
+    monkeypatch.setattr(file_safety, "_fulilian_home_path", lambda: fulilian_home)
+    monkeypatch.setattr(file_safety, "_fulilian_root_path", lambda: fulilian_home)
 
     target = token_dir / "server.mp3"
     result = json.loads(text_to_speech_tool(

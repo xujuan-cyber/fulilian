@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { $providerWaitSessions } from '@/store/provider-wait'
 import { clearAllSessionStates, dropSessionState } from '@/store/session-states'
-import type { RpcEvent } from '@/types/hermes'
+import type { RpcEvent } from '@/types/fulilian'
 
 import { type MessageStreamHarness, renderMessageStream } from './test-harness'
 

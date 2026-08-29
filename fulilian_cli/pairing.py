@@ -2,14 +2,14 @@
 CLI commands for the DM pairing system.
 
 Usage:
-    hermes pairing list              # Show all pending + approved users
-    hermes pairing approve <platform> <request-id|code>  # Approve a pairing request
-    hermes pairing revoke <platform> <user_id> # Revoke user access
-    hermes pairing clear-pending     # Clear all expired/pending codes
+    fulilian pairing list              # Show all pending + approved users
+    fulilian pairing approve <platform> <request-id|code>  # Approve a pairing request
+    fulilian pairing revoke <platform> <user_id> # Revoke user access
+    fulilian pairing clear-pending     # Clear all expired/pending codes
 """
 
 def pairing_command(args):
-    """Handle hermes pairing subcommands."""
+    """Handle fulilian pairing subcommands."""
     from gateway.pairing import PairingStore
 
     store = PairingStore()
@@ -24,8 +24,8 @@ def pairing_command(args):
     elif action == "clear-pending":
         _cmd_clear_pending(store)
     else:
-        print("Usage: hermes pairing {list|approve|revoke|clear-pending}")
-        print("Run 'hermes pairing --help' for details.")
+        print("Usage: fulilian pairing {list|approve|revoke|clear-pending}")
+        print("Run 'fulilian pairing --help' for details.")
 
 
 def _cmd_list(store):
@@ -46,7 +46,7 @@ def _cmd_list(store):
                 f"  {p['platform']:<12} {(p.get('request_id') or '-'):<18} {p['user_id']:<20} "
                 f"{(p.get('user_name') or ''):<20} {p['age_minutes']}m ago"
             )
-        print("\n  Approve with: hermes pairing approve <platform> <request-id>")
+        print("\n  Approve with: fulilian pairing approve <platform> <request-id>")
         print("  The code the bot DM'd the user also works if they relay it.")
     else:
         print("\n  No pending pairing requests.")
@@ -94,11 +94,11 @@ def _cmd_approve(store, platform: str, code: str):
         print(f"  Lockout clears in ~{mins} minute(s).")
         print(
             "  To reset sooner, delete the '_lockout:{0}' entry from "
-            "~/.hermes/platforms/pairing/_rate_limits.json\n".format(platform)
+            "~/.fulilian/platforms/pairing/_rate_limits.json\n".format(platform)
         )
     else:
         print(f"\n  Pairing request or code '{code}' not found or expired for platform '{platform}'.")
-        print("  Run 'hermes pairing list' to see pending requests.\n")
+        print("  Run 'fulilian pairing list' to see pending requests.\n")
 
 
 def _cmd_revoke(store, platform: str, user_id: str):

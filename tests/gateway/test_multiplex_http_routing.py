@@ -56,7 +56,7 @@ class TestWebhookProfileResolution:
             allowlist=["worker"],
         )
         monkeypatch.setattr(
-            "hermes_cli.profiles.profiles_to_serve",
+            "fulilian_cli.profiles.profiles_to_serve",
             lambda multiplex, profile_allowlist=None: [
                 (name, f"/profiles/{name}") for name in served
             ],

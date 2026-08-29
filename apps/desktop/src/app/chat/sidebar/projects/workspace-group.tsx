@@ -4,7 +4,7 @@ import { useState } from 'react'
 
 import { Codicon } from '@/components/ui/codicon'
 import { ProfileGlyph } from '@/components/ui/profile-glyph'
-import type { SessionInfo } from '@/hermes'
+import type { SessionInfo } from '@/fulilian'
 import { useI18n } from '@/i18n'
 import { displayPath } from '@/lib/display-path'
 import { useStoreSelector } from '@/lib/use-session-slice'

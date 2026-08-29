@@ -1,12 +1,12 @@
-"""``hermes worktree`` — audit and reclaim accumulated git worktrees/branches.
+"""``fulilian worktree`` — audit and reclaim accumulated git worktrees/branches.
 
 Attended counterpart of the silent startup pruner (see
-``hermes_cli/worktree_gc.py`` for the policy and shared invariants). Usage:
+``fulilian_cli/worktree_gc.py`` for the policy and shared invariants). Usage:
 
-    hermes worktree list             # audit: verdict + reason per tree
-    hermes worktree prune            # reap safe trees + merged branches
-    hermes worktree prune --dry-run  # show the plan, change nothing
-    hermes worktree prune --trees-only / --branches-only
+    fulilian worktree list             # audit: verdict + reason per tree
+    fulilian worktree prune            # reap safe trees + merged branches
+    fulilian worktree prune --dry-run  # show the plan, change nothing
+    fulilian worktree prune --trees-only / --branches-only
 """
 
 from __future__ import annotations
@@ -55,7 +55,7 @@ def cmd_worktree(args) -> int:
             )
         print(
             f"\n{len(records)} tree(s), {_fmt_size(total_mb)} total — "
-            f"{_fmt_size(reapable_mb)} reclaimable now via `hermes worktree prune`."
+            f"{_fmt_size(reapable_mb)} reclaimable now via `fulilian worktree prune`."
         )
         branch_records = worktree_gc.audit_branches(repo_root)
         deletable = [b for b in branch_records if b.verdict == "delete"]

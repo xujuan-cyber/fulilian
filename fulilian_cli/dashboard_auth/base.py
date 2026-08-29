@@ -12,7 +12,7 @@ class Session:
 
     All fields are mandatory. Providers that don't have a concept of orgs
     should set ``org_id`` to an empty string. ``access_token`` and
-    ``refresh_token`` are opaque to Hermes — provider-specific.
+    ``refresh_token`` are opaque to Fulilian — provider-specific.
     """
 
     user_id: str
@@ -70,7 +70,7 @@ class LoginStart:
     chain back from the IDP, which Chromium drops intermittently under
     ``Lax`` (crbug 40508226). Over plain HTTP it stays ``Lax``, since
     ``SameSite=None`` requires ``Secure``. See
-    :func:`hermes_cli.dashboard_auth.cookies.set_pkce_cookie`.
+    :func:`fulilian_cli.dashboard_auth.cookies.set_pkce_cookie`.
     """
 
     redirect_url: str

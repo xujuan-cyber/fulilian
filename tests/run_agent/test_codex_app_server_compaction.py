@@ -51,7 +51,7 @@ class DummyAgent:
     ):
         self.api_mode = "codex_app_server"
         self.codex_app_server_auto_compaction = auto_compaction
-        self.session_id = "hermes-session-1"
+        self.session_id = "fulilian-session-1"
         self.platform = "cli"
         self._cached_system_prompt = "cached prompt"
         self._codex_session = FakeCodexSession(result)
@@ -179,7 +179,7 @@ def test_codex_app_server_compression_failure_preserves_bookkeeping():
 
 
 
-def test_codex_native_boundary_clears_stale_hermes_fallback_streak():
+def test_codex_native_boundary_clears_stale_fulilian_fallback_streak():
     from unittest.mock import patch
 
     from agent.context_compressor import ContextCompressor

@@ -1,7 +1,7 @@
 import { act, cleanup } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import type { RpcEvent } from '@/types/hermes'
+import type { RpcEvent } from '@/types/fulilian'
 
 import { type MessageStreamHarness, renderMessageStream } from './test-harness'
 

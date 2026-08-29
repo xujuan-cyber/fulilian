@@ -366,9 +366,9 @@ class TestDelegationCleanup:
         """_run_single_child finally block should call close() on child."""
         from unittest.mock import MagicMock
         from fulilian_constants import (
-            get_hermes_home,
-            reset_hermes_home_override,
-            set_hermes_home_override,
+            get_fulilian_home,
+            reset_fulilian_home_override,
+            set_fulilian_home_override,
         )
         from fulilian_cli.observability import relay_runtime
         from tools.delegate_tool import _run_single_child
@@ -383,7 +383,7 @@ class TestDelegationCleanup:
         observed = {}
 
         def run_conversation(**_kwargs):
-            observed["hermes_home"] = get_hermes_home()
+            observed["fulilian_home"] = get_fulilian_home()
             raise RuntimeError("test abort")
 
         child.run_conversation.side_effect = run_conversation
@@ -393,7 +393,7 @@ class TestDelegationCleanup:
         parent._active_children.append(child)
 
         profile_home = tmp_path / "profile-a"
-        token = set_hermes_home_override(profile_home)
+        token = set_fulilian_home_override(profile_home)
         try:
             result = _run_single_child(
                 task_index=0,
@@ -402,10 +402,10 @@ class TestDelegationCleanup:
                 parent_agent=parent,
             )
         finally:
-            reset_hermes_home_override(token)
+            reset_fulilian_home_override(token)
 
         child.close.assert_called_once()
-        assert observed["hermes_home"] == profile_home
+        assert observed["fulilian_home"] == profile_home
         relay_host.unregister_subagent.assert_called_once_with(
             {"child_session_id": "child-session"}
         )
@@ -451,14 +451,14 @@ class TestDelegationCleanup:
 
         from agent import relay_runtime
         from fulilian_constants import (
-            reset_hermes_home_override,
-            set_hermes_home_override,
+            reset_fulilian_home_override,
+            set_fulilian_home_override,
         )
         from tools.delegate_tool import _run_single_child
 
         relay_runtime._reset_for_tests()
         profile_home = tmp_path / "profile-timeout"
-        profile_token = set_hermes_home_override(profile_home)
+        profile_token = set_fulilian_home_override(profile_home)
         child_started = threading.Event()
         release_child = threading.Event()
         child_finished = threading.Event()
@@ -528,5 +528,5 @@ class TestDelegationCleanup:
             )
         finally:
             release_child.set()
-            reset_hermes_home_override(profile_token)
+            reset_fulilian_home_override(profile_token)
             relay_runtime._reset_for_tests()

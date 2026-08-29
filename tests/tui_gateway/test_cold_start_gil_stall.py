@@ -2,7 +2,7 @@
 
 The Desktop/TUI cold start could stall the event loop for ~14s because
 synchronous CPU-bound work ran on the loop thread during the window
-between ``HERMES_BACKEND_READY`` and the first prompt. Three fixes:
+between ``FULILIAN_BACKEND_READY`` and the first prompt. Three fixes:
 
 1. ``copilot_auth.resolve_copilot_token`` skips the ``gh auth token``
    subprocess when a Copilot env var is explicitly set (even if invalid).
@@ -40,7 +40,7 @@ class TestCopilotAuthSkipsGhCli:
         monkeypatch.delenv("COPILOT_GITHUB_TOKEN", raising=False)
         monkeypatch.delenv("GH_TOKEN", raising=False)
         monkeypatch.setenv("GITHUB_TOKEN", "ghp_classic_pat_nope")
-        with patch("hermes_cli.copilot_auth._try_gh_cli_token") as mock_cli:
+        with patch("fulilian_cli.copilot_auth._try_gh_cli_token") as mock_cli:
             token, source = resolve_copilot_token()
         assert token == ""
         assert source == ""
@@ -51,7 +51,7 @@ class TestCopilotAuthSkipsGhCli:
         from fulilian_cli.copilot_auth import resolve_copilot_token
 
         monkeypatch.setenv("GITHUB_TOKEN", "gho_valid_oauth_token")
-        with patch("hermes_cli.copilot_auth._try_gh_cli_token") as mock_cli:
+        with patch("fulilian_cli.copilot_auth._try_gh_cli_token") as mock_cli:
             token, source = resolve_copilot_token()
         assert token == "gho_valid_oauth_token"
         assert source == "GITHUB_TOKEN"
@@ -65,7 +65,7 @@ class TestCopilotAuthSkipsGhCli:
         monkeypatch.delenv("GH_TOKEN", raising=False)
         monkeypatch.delenv("GITHUB_TOKEN", raising=False)
         with patch(
-            "hermes_cli.copilot_auth._try_gh_cli_token",
+            "fulilian_cli.copilot_auth._try_gh_cli_token",
             return_value="gho_from_cli",
         ) as mock_cli:
             token, source = resolve_copilot_token()
@@ -178,13 +178,13 @@ def test_warm_gateway_module_imports_cold_start_chains():
     import fulilian_cli.web_server as web_server_mod
 
     required = {
-        "hermes_cli.gateway",
-        "hermes_cli.auth",
-        "hermes_cli.copilot_auth",
-        "hermes_cli.runtime_provider",
-        "hermes_cli.skin_engine",
-        "hermes_cli.inventory",
-        "hermes_cli.model_switch",
+        "fulilian_cli.gateway",
+        "fulilian_cli.auth",
+        "fulilian_cli.copilot_auth",
+        "fulilian_cli.runtime_provider",
+        "fulilian_cli.skin_engine",
+        "fulilian_cli.inventory",
+        "fulilian_cli.model_switch",
     }
 
     web_server_mod._warm_gateway_module()

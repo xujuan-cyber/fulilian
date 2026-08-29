@@ -1,7 +1,7 @@
-"""Windows installer regression for Hermes children outside the venv.
+"""Windows installer regression for Fulilian children outside the venv.
 
 The venv sweep deliberately selects process roots by executable path so it
-does not kill unrelated Python processes. A selected Hermes process can spawn
+does not kill unrelated Python processes. A selected Fulilian process can spawn
 a managed-runtime child whose executable lives outside the venv, though. The
 installer must stop that whole tree before replacing the venv.
 """
@@ -83,10 +83,10 @@ def _write_cmd(path: Path, text: str) -> None:
 def test_venv_sweep_stops_managed_runtime_children_but_not_unrelated_processes(
     tmp_path: Path,
 ) -> None:
-    hermes_home = tmp_path / "hermes-home"
-    install_dir = hermes_home / "hermes-agent"
+    fulilian_home = tmp_path / "fulilian-home"
+    install_dir = fulilian_home / "fulilian-agent"
     venv_scripts = install_dir / "venv" / "Scripts"
-    runtime_dir = hermes_home / ".hermes-runtime" / "python" / "generation-test"
+    runtime_dir = fulilian_home / ".fulilian-runtime" / "python" / "generation-test"
     unrelated_dir = tmp_path / "unrelated"
     fake_bin = tmp_path / "fake-bin"
     for directory in (venv_scripts, runtime_dir, unrelated_dir, fake_bin):
@@ -107,7 +107,7 @@ def test_venv_sweep_stops_managed_runtime_children_but_not_unrelated_processes(
     unrelated_script = tmp_path / "unrelated.cmd"
     _write_cmd(unrelated_script, "@ping -t 127.0.0.1 >nul\n")
 
-    # Keep the test away from real gateway tasks and real Hermes launchers
+    # Keep the test away from real gateway tasks and real Fulilian launchers
     # while still exercising the installer's actual process enumeration and
     # per-PID taskkill behavior.
     _write_cmd(fake_bin / "schtasks.cmd", "@exit /b 0\n")
@@ -115,7 +115,7 @@ def test_venv_sweep_stops_managed_runtime_children_but_not_unrelated_processes(
         fake_bin / "taskkill.cmd",
         "@echo off\n"
         'echo %* | "%SystemRoot%\\System32\\findstr.exe" /I '
-        '/C:"/IM hermes.exe" >nul\n'
+        '/C:"/IM fulilian.exe" >nul\n'
         "if not errorlevel 1 exit /b 0\n"
         '"%SystemRoot%\\System32\\taskkill.exe" %*\n',
     )
@@ -163,8 +163,8 @@ def test_venv_sweep_stops_managed_runtime_children_but_not_unrelated_processes(
                 "-NonInteractive",
                 "-InstallDir",
                 str(install_dir),
-                "-HermesHome",
-                str(hermes_home),
+                "-FulilianHome",
+                str(fulilian_home),
             ],
             cwd=tmp_path,
             env=env,

@@ -13,7 +13,7 @@ Routing contract (exercised by ``tests/tools/test_browser_extension_router.py``)
   default: ``browser.extension_control.enabled`` is false unless explicitly
   configured, so every real browser action keeps its exact legacy path.
 
-- **No server-bound identity ⇒ legacy.** Generic Hermes callers keep the
+- **No server-bound identity ⇒ legacy.** Generic Fulilian callers keep the
   existing backend when no authenticated browser-controller identity is bound.
 
 - **Bound identity ⇒ authoritative extension lane.** Once the gateway binds a
@@ -64,10 +64,10 @@ def extension_controller_available(action: str) -> bool:
 
         if not browser_control_enabled():
             return False
-        session_id = get_session_env("HERMES_SESSION_ID", "") or None
-        principal_id = get_session_env("HERMES_BROWSER_CONTROL_PRINCIPAL", "") or None
+        session_id = get_session_env("FULILIAN_SESSION_ID", "") or None
+        principal_id = get_session_env("FULILIAN_BROWSER_CONTROL_PRINCIPAL", "") or None
         transport_family = get_session_env(
-            "HERMES_BROWSER_CONTROL_TRANSPORT_FAMILY", ""
+            "FULILIAN_BROWSER_CONTROL_TRANSPORT_FAMILY", ""
         ) or None
         if not session_id or not principal_id or not transport_family:
             return False
@@ -124,7 +124,7 @@ def route_browser_tool(
     principal_id/transport_family:
         Server-bound caller identity. Both are mandatory when the feature is
         enabled; missing values preserve the existing backend for generic
-        Hermes callers.
+        Fulilian callers.
     tool_call_id:
         Caller tool-call id forwarded verbatim to ``dispatch``.
 
@@ -245,12 +245,12 @@ def routed_browser_handler(
     try:
         from gateway.session_context import get_session_env
 
-        session_id = session_id or get_session_env("HERMES_SESSION_ID", "") or None
+        session_id = session_id or get_session_env("FULILIAN_SESSION_ID", "") or None
         principal_id = principal_id or get_session_env(
-            "HERMES_BROWSER_CONTROL_PRINCIPAL", ""
+            "FULILIAN_BROWSER_CONTROL_PRINCIPAL", ""
         ) or None
         transport_family = transport_family or get_session_env(
-            "HERMES_BROWSER_CONTROL_TRANSPORT_FAMILY", ""
+            "FULILIAN_BROWSER_CONTROL_TRANSPORT_FAMILY", ""
         ) or None
     except Exception:
         pass

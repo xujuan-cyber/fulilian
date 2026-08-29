@@ -4,7 +4,7 @@ Each migrated wrapper keeps its caller-facing contract (signature, all
 failures swallowed, ``None`` return) while routing the actual tree
 termination through :func:`agent.deadline.kill_process_tree`:
 
-* ``hermes_cli._subprocess_compat.kill_process_tree(proc)`` — also consumed
+* ``fulilian_cli._subprocess_compat.kill_process_tree(proc)`` — also consumed
   by ``agent.shell_hooks`` by name; falls back to
   ``_legacy_kill_process_tree`` when delegation fails.
 * ``tools.browser_tool._kill_process_tree(proc)`` — same pattern.
@@ -38,7 +38,7 @@ class _FakeProc:
 
 
 # ---------------------------------------------------------------------------
-# (1) hermes_cli._subprocess_compat.kill_process_tree
+# (1) fulilian_cli._subprocess_compat.kill_process_tree
 # ---------------------------------------------------------------------------
 
 class TestSubprocessCompatDelegation:

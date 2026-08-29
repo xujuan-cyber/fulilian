@@ -1,23 +1,23 @@
-import { buildHermesWebSocketUrl } from "@hermes/shared";
+import { buildFulilianWebSocketUrl } from "@fulilian/shared";
 
 // The dashboard can be served either at the root of its host (e.g.
 // https://kanban.tilos.com/) or under a URL prefix when reverse-proxied
-// (e.g. https://mission-control.tilos.com/hermes/). The Python backend
-// injects ``window.__HERMES_BASE_PATH__`` into index.html based on the
+// (e.g. https://mission-control.tilos.com/fulilian/). The Python backend
+// injects ``window.__FULILIAN_BASE_PATH__`` into index.html based on the
 // incoming ``X-Forwarded-Prefix`` header so the SPA can address its own
 // ``/api/...`` and ``/dashboard-plugins/...`` URLs correctly without a
 // rebuild. Empty string means "served at root".
 function readBasePath(): string {
   if (typeof window === "undefined") return "";
-  const raw = window.__HERMES_BASE_PATH__ ?? "";
+  const raw = window.__FULILIAN_BASE_PATH__ ?? "";
   if (!raw) return "";
   // Normalise: ensure leading slash, strip trailing slash.
   const withLead = raw.startsWith("/") ? raw : `/${raw}`;
   return withLead.replace(/\/+$/, "");
 }
 
-export const HERMES_BASE_PATH = readBasePath();
-const BASE = HERMES_BASE_PATH;
+export const FULILIAN_BASE_PATH = readBasePath();
+const BASE = FULILIAN_BASE_PATH;
 
 import type { DashboardTheme } from "@/themes/types";
 import {
@@ -29,16 +29,16 @@ import {
 // Injected into index.html by the server — never fetched via API.
 declare global {
   interface Window {
-    __HERMES_SESSION_TOKEN__?: string;
-    __HERMES_BASE_PATH__?: string;
+    __FULILIAN_SESSION_TOKEN__?: string;
+    __FULILIAN_BASE_PATH__?: string;
     /** Server-injected flag: ``true`` when the dashboard's OAuth gate is
      * engaged (public bind, no ``--insecure``). Toggles the SPA's
      * WS-upgrade path from legacy ``?token=`` to single-use ``?ticket=``
      * fetched via :func:`getWsTicket`. */
-    __HERMES_AUTH_REQUIRED__?: boolean;
+    __FULILIAN_AUTH_REQUIRED__?: boolean;
   }
 }
-const SESSION_HEADER = "X-Hermes-Session-Token";
+const SESSION_HEADER = "X-Fulilian-Session-Token";
 
 function setSessionHeader(headers: Headers, token: string): void {
   if (!headers.has(SESSION_HEADER)) {
@@ -107,7 +107,7 @@ export async function fetchJSON<T>(
   url = withManagementProfile(url);
   // Inject the session token into all /api/ requests.
   const headers = new Headers(init?.headers);
-  const token = window.__HERMES_SESSION_TOKEN__;
+  const token = window.__FULILIAN_SESSION_TOKEN__;
   if (token) {
     setSessionHeader(headers, token);
   }
@@ -144,7 +144,7 @@ export async function fetchJSON<T>(
       // fallback the post-login handler can read.
       try {
         sessionStorage.setItem(
-          "hermes.lastLocation",
+          "fulilian.lastLocation",
           window.location.pathname + window.location.search,
         );
       } catch {
@@ -155,15 +155,15 @@ export async function fetchJSON<T>(
       return new Promise<T>(() => {});
     }
     // Loopback mode: ``_SESSION_TOKEN`` rotates on every server restart
-    // (``hermes update``, ``hermes gateway restart``, etc.). A tab kept
+    // (``fulilian update``, ``fulilian gateway restart``, etc.). A tab kept
     // open across the restart holds the OLD token in
-    // ``window.__HERMES_SESSION_TOKEN__`` from the previous HTML render,
+    // ``window.__FULILIAN_SESSION_TOKEN__`` from the previous HTML render,
     // so every fetch returns 401. The HTML is served ``Cache-Control:
     // no-store`` so a reload picks up the freshly-injected token. Trigger
     // that reload once on the first stale-token 401 — gated mode is
     // handled above, so reaching here in gated mode means a real
     // middleware failure that should not reload-loop.
-    if (!window.__HERMES_AUTH_REQUIRED__ && !options?.allowUnauthorized) {
+    if (!window.__FULILIAN_AUTH_REQUIRED__ && !options?.allowUnauthorized) {
       if (attemptDashboardTokenReloadOnce()) {
         return new Promise<T>(() => {});
       }
@@ -171,7 +171,7 @@ export async function fetchJSON<T>(
   }
   if (res.ok) {
     // Clear the stale-token reload guard: a successful 2xx proves the
-    // current ``window.__HERMES_SESSION_TOKEN__`` is valid, so the next
+    // current ``window.__FULILIAN_SESSION_TOKEN__`` is valid, so the next
     // 401 — if any — should be allowed to trigger its own reload cycle.
     clearDashboardTokenReloadAttempt();
   }
@@ -190,7 +190,7 @@ function pluginPath(name: string): string {
 /**
  * Fetch a single-use ticket for a WebSocket upgrade in gated mode.
  *
- * The dashboard's gated-mode WS auth (``hermes_cli.web_server._ws_auth_ok``)
+ * The dashboard's gated-mode WS auth (``fulilian_cli.web_server._ws_auth_ok``)
  * rejects the legacy ``?token=<_SESSION_TOKEN>`` path and only accepts
  * ``?ticket=<minted>`` consumed against the in-memory ticket store. Browsers
  * can't set ``Authorization`` on a WS upgrade, so this round-trip via the
@@ -216,11 +216,11 @@ export async function getWsTicket(): Promise<{ ticket: string; ttl_seconds: numb
  * mode returns the injected session token.
  */
 export async function buildWsAuthParam(): Promise<[string, string]> {
-  if (window.__HERMES_AUTH_REQUIRED__) {
+  if (window.__FULILIAN_AUTH_REQUIRED__) {
     const { ticket } = await getWsTicket();
     return ["ticket", ticket];
   }
-  const token = window.__HERMES_SESSION_TOKEN__ ?? "";
+  const token = window.__FULILIAN_SESSION_TOKEN__ ?? "";
   return ["token", token];
 }
 
@@ -231,9 +231,9 @@ export async function buildWsAuthParam(): Promise<[string, string]> {
  * the caller can read ``.blob()`` / ``.formData()`` / stream it.
  *
  * Auth, in both modes, exactly as ``fetchJSON`` does it:
- *  - loopback / ``--insecure``: attach the ``X-Hermes-Session-Token`` header.
+ *  - loopback / ``--insecure``: attach the ``X-Fulilian-Session-Token`` header.
  *  - gated OAuth: no token header (it's absent by design); the
- *    ``hermes_session_at`` cookie rides along via ``credentials: 'include'``.
+ *    ``fulilian_session_at`` cookie rides along via ``credentials: 'include'``.
  *
  * Unlike ``fetchJSON`` this does NOT parse the body, does NOT throw on
  * non-2xx (the caller decides — a 404 on a download is meaningful), and
@@ -246,7 +246,7 @@ export async function authedFetch(
   init?: RequestInit,
 ): Promise<Response> {
   const headers = new Headers(init?.headers);
-  const token = window.__HERMES_SESSION_TOKEN__;
+  const token = window.__FULILIAN_SESSION_TOKEN__;
   if (token) {
     setSessionHeader(headers, token);
   }
@@ -262,7 +262,7 @@ export async function authedFetch(
  * with the correct auth query param appended for the active mode (fresh
  * single-use ``ticket`` in gated mode, ``token`` in loopback). Plugins and
  * the SPA should use this instead of hand-assembling a WS URL + reading
- * ``window.__HERMES_SESSION_TOKEN__`` directly, so the gated-mode ticket
+ * ``window.__FULILIAN_SESSION_TOKEN__`` directly, so the gated-mode ticket
  * path can never be forgotten.
  *
  * ``path`` is the dashboard-relative path (e.g.
@@ -274,7 +274,7 @@ export async function buildWsUrl(
   path: string,
   params?: Record<string, string>,
 ): Promise<string> {
-  return buildHermesWebSocketUrl({
+  return buildFulilianWebSocketUrl({
     authParam: await buildWsAuthParam(),
     basePath: BASE,
     params,
@@ -952,11 +952,11 @@ export const api = {
   // Gateway / update actions
   restartGateway: () =>
     fetchJSON<ActionResponse>("/api/gateway/restart", { method: "POST" }),
-  updateHermes: () =>
-    fetchJSON<ActionResponse>("/api/hermes/update", { method: "POST" }),
-  checkHermesUpdate: (force = false) =>
+  updateFulilian: () =>
+    fetchJSON<ActionResponse>("/api/fulilian/update", { method: "POST" }),
+  checkFulilianUpdate: (force = false) =>
     fetchJSON<UpdateCheckResponse>(
-      `/api/hermes/update/check${force ? "?force=true" : ""}`,
+      `/api/fulilian/update/check${force ? "?force=true" : ""}`,
     ),
   getActionStatus: (name: string, lines = 200) =>
     fetchJSON<ActionStatusResponse>(
@@ -1419,7 +1419,7 @@ export interface SkillHubSource {
   label: string;
   /** GitHub only: whether the API is currently rate-limited. */
   rate_limited?: boolean;
-  /** hermes-index only: whether the centralized index loaded. */
+  /** fulilian-index only: whether the centralized index loaded. */
   available?: boolean;
 }
 
@@ -1787,7 +1787,7 @@ export interface SystemStats {
   hostname: string;
   python_version: string;
   python_impl: string;
-  hermes_version: string;
+  fulilian_version: string;
   cpu_count: number | null;
   psutil: boolean;
   cpu_percent?: number;
@@ -1877,8 +1877,8 @@ export interface StatusResponse {
    * desktop falls back to the embedded-webview flow. */
   auth_flows?: string[];
   /** False when the dashboard is running in a hosted/managed layout where
-   * updates are handled by the outer launcher instead of ``hermes update``. */
-  can_update_hermes?: boolean;
+   * updates are handled by the outer launcher instead of ``fulilian update``. */
+  can_update_fulilian?: boolean;
   config_path: string;
   config_version: number;
   env_path: string;
@@ -1889,12 +1889,12 @@ export interface StatusResponse {
   gateway_running: boolean;
   gateway_state: string | null;
   gateway_updated_at: string | null;
-  hermes_home: string;
+  fulilian_home: string;
   latest_config_version: number;
   /** NS-656: memory-pressure rollup from the gateway heartbeat +
    * lifecycle ledger. Absent on older gateways. */
   memory?: MemoryPressureStatus;
-  /** NS-656: disk-usage rollup for the HERMES_HOME volume. Absent on
+  /** NS-656: disk-usage rollup for the FULILIAN_HOME volume. Absent on
    * older gateways. */
   disk?: DiskPressureStatus;
   release_date: string;
@@ -1920,7 +1920,7 @@ export interface MemoryPressureStatus {
 }
 
 /** NS-656: coarse disk telemetry served by /api/status. Live statvfs
- * sample of the HERMES_HOME volume — no staleness dimension, so no
+ * sample of the FULILIAN_HOME volume — no staleness dimension, so no
  * sampled_at. */
 export interface DiskPressureStatus {
   pressure: "ok" | "elevated" | "critical" | "unknown";
@@ -2252,7 +2252,7 @@ export interface CronJob {
   id: string;
   profile?: string | null;
   profile_name?: string | null;
-  hermes_home?: string | null;
+  fulilian_home?: string | null;
   is_default_profile?: boolean;
   name?: string | null;
   prompt?: string | null;

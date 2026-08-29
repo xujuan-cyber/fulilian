@@ -35,13 +35,13 @@ const SYSTEM_MONO = 'Menlo, Monaco, "SF Mono", "Courier Prime", monospace, ' + E
 export const DEFAULT_TYPOGRAPHY: DesktopThemeTypography = { fontSans: SYSTEM_SANS, fontMono: SYSTEM_MONO }
 
 /**
- * Nous — the canonical Hermes desktop identity, forked from the GitHub VS Code
+ * Nous — the canonical Fulilian desktop identity, forked from the GitHub VS Code
  * theme (github.github-vscode-theme). Light is GitHub Light Default, dark is
  * GitHub Dark Default, both converted through the same path a Marketplace
  * install takes, so the palette here is byte-identical to importing the
  * extension yourself.
  *
- * Typography stays Hermes's own: a VS Code theme carries no font opinion, and
+ * Typography stays Fulilian's own: a VS Code theme carries no font opinion, and
  * these are the stacks every skin has been rendering with.
  */
 /**
@@ -161,7 +161,7 @@ export const githubTheme: DesktopTheme = {
 /** Catppuccin — Latte in light, Mocha in dark (Catppuccin.catppuccin-vsc). */
 
 /**
- * Nous — the canonical Hermes desktop identity: GitHub's chrome carrying Nous
+ * Nous — the canonical Fulilian desktop identity: GitHub's chrome carrying Nous
  * blue. Forked from github.github-vscode-theme (Light Default / Dark Default),
  * with only the accent family re-seeded; every neutral is upstream's.
  *

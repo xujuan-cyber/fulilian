@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock, patch
 from types import SimpleNamespace
 
-from cli import HermesCLI
+from cli import FulilianCLI
 from fulilian_cli.main import cmd_insights
 
 
@@ -20,10 +20,10 @@ class _InsightsEngineStub:
 
 
 def _run_show_insights(command: str):
-    cli_obj = HermesCLI.__new__(HermesCLI)
+    cli_obj = FulilianCLI.__new__(FulilianCLI)
     db = MagicMock()
     _InsightsEngineStub.calls = []
-    with patch("hermes_state.SessionDB", return_value=db), \
+    with patch("fulilian_state.SessionDB", return_value=db), \
          patch("agent.insights.InsightsEngine", _InsightsEngineStub):
         cli_obj._show_insights(command)
     return _InsightsEngineStub.calls, db
@@ -47,7 +47,7 @@ def test_cli_insights_keeps_days_flag_and_source(capsys):
 
 def test_subcommand_insights_closes_database_when_generation_fails(capsys):
     db = MagicMock()
-    with patch("hermes_state.SessionDB", return_value=db), \
+    with patch("fulilian_state.SessionDB", return_value=db), \
          patch("agent.insights.InsightsEngine", side_effect=RuntimeError("boom")):
         cmd_insights(SimpleNamespace(days=30, source=None))
 

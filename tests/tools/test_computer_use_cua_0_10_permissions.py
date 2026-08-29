@@ -17,7 +17,7 @@ def _reset_computer_use_state():
     reset_backend_for_tests()
 
 
-def test_normal_hermes_session_maps_to_standard_mode():
+def test_normal_fulilian_session_maps_to_standard_mode():
     from tools.computer_use import tool as computer_use
 
     with patch(
@@ -27,7 +27,7 @@ def test_normal_hermes_session_maps_to_standard_mode():
         assert computer_use._cua_permission_mode("session-a") == "standard"
 
 
-def test_any_explicit_hermes_bypass_maps_to_unrestricted_mode():
+def test_any_explicit_fulilian_bypass_maps_to_unrestricted_mode():
     from tools.computer_use import tool as computer_use
 
     with patch(
@@ -220,7 +220,7 @@ def test_standard_existing_profile_grant_owns_private_macos_runtime():
         ["mcp"],
         grant_existing_profile=True,
         platform="darwin",
-        socket_path="/tmp/hermes-cua-test.sock",
+        socket_path="/tmp/fulilian-cua-test.sock",
     )
 
     assert args == [
@@ -228,9 +228,9 @@ def test_standard_existing_profile_grant_owns_private_macos_runtime():
         "--grant",
         "existing-profile",
         "--socket",
-        "/tmp/hermes-cua-test.sock",
+        "/tmp/fulilian-cua-test.sock",
     ]
-    assert socket_path == "/tmp/hermes-cua-test.sock"
+    assert socket_path == "/tmp/fulilian-cua-test.sock"
 
 
 def test_standard_existing_profile_grant_stays_in_process_off_macos():

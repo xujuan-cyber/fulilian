@@ -17,7 +17,7 @@ import { codiconIcon } from '@/components/ui/codicon'
 import { Command, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { HighlightMatches } from '@/components/ui/highlight-matches'
 import { KbdCombo } from '@/components/ui/kbd'
-import { getHermesConfigRecord, listAllProfileSessions } from '@/hermes'
+import { getFulilianConfigRecord, listAllProfileSessions } from '@/fulilian'
 import { useMediaQuery } from '@/hooks/use-media-query'
 import { useI18n } from '@/i18n'
 import { sessionTitle } from '@/lib/chat-runtime'
@@ -372,7 +372,7 @@ const PaletteRow = memo(function PaletteRow({
   )
 })
 
-// Hermes session ids: <YYYYMMDD>_<HHMMSS>_<6 hex>. Used to offer a direct
+// Fulilian session ids: <YYYYMMDD>_<HHMMSS>_<6 hex>. Used to offer a direct
 // "Go to session ‹id›" jump for ids that aren't in the recent-200 list.
 const SESSION_ID_RE = /^\d{8}_\d{6}_[a-f0-9]{6}$/
 
@@ -646,7 +646,7 @@ function CommandPaletteBody({ onExited }: { onExited: () => void }) {
   // reopen paints from cache and revalidates in the background.
   const configQuery = useQuery({
     queryKey: ['command-palette', 'config'],
-    queryFn: () => getHermesConfigRecord()
+    queryFn: () => getFulilianConfigRecord()
   })
 
   const sessionsQuery = useQuery({
@@ -925,9 +925,9 @@ function CommandPaletteBody({ onExited }: { onExited: () => void }) {
           {
             detail: updateVersionLabel,
             icon: Download,
-            id: 'cc-update-hermes',
-            keywords: ['update', 'upgrade', 'hermes', 'version', 'system', 'restart'],
-            label: cc.updateHermes,
+            id: 'cc-update-fulilian',
+            keywords: ['update', 'upgrade', 'fulilian', 'version', 'system', 'restart'],
+            label: cc.updateFulilian,
             run: () => requestActiveUpdate()
           },
           {

@@ -121,7 +121,7 @@ class TestSingleTask:
             return real_invoke(hook_name, **kwargs)
 
         with patch("tools.delegate_tool._run_single_child") as mock_run, \
-             patch("hermes_cli.plugins.invoke_hook", side_effect=_tracking_invoke):
+             patch("fulilian_cli.plugins.invoke_hook", side_effect=_tracking_invoke):
             mock_run.return_value = {
                 "task_index": 0, "status": "completed",
                 "summary": "x", "api_calls": 1, "duration_seconds": 0.1,
@@ -195,7 +195,7 @@ class TestBatchMode:
             return real_invoke(hook_name, **kwargs)
 
         with patch("tools.delegate_tool._run_single_child") as mock_run, \
-             patch("hermes_cli.plugins.invoke_hook", side_effect=_tracking_invoke):
+             patch("fulilian_cli.plugins.invoke_hook", side_effect=_tracking_invoke):
             mock_run.side_effect = [
                 {"task_index": 0, "status": "completed",
                  "summary": "A", "api_calls": 1, "duration_seconds": 1.0,

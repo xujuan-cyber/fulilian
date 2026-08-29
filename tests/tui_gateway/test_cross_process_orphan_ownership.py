@@ -78,7 +78,7 @@ def _spawn_lease_holder(
         if key.endswith("_API_KEY") or key.endswith("_TOKEN"):
             env.pop(key)
     env.update({
-        "HERMES_HOME": str(home),
+        "FULILIAN_HOME": str(home),
         "PYTHONPATH": os.pathsep.join(
             part for part in (str(repo_root), env.get("PYTHONPATH", "")) if part
         ),

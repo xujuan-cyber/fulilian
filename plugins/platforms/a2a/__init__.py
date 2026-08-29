@@ -1,8 +1,8 @@
 """
-A2A (Agent-to-Agent) plugin for Hermes Agent.
+A2A (Agent-to-Agent) plugin for FuLiLian.
 
 Registers:
-  - The ``a2a`` platform adapter (inbound: exposes Hermes as an A2A agent,
+  - The ``a2a`` platform adapter (inbound: exposes Fulilian as an A2A agent,
     protocol v1.0).
   - Five client tools in the ``a2a`` toolset (outbound: call other agents).
 
@@ -45,7 +45,7 @@ def is_connected(config) -> bool:
 
 
 def interactive_setup() -> None:
-    """`hermes gateway setup` flow for A2A."""
+    """`fulilian gateway setup` flow for A2A."""
     from fulilian_cli.setup import (
         prompt,
         prompt_yes_no,
@@ -57,7 +57,7 @@ def interactive_setup() -> None:
     )
 
     print_header("A2A (Agent-to-Agent)")
-    print_info("Expose Hermes as an A2A-discoverable agent and call other A2A agents.")
+    print_info("Expose Fulilian as an A2A-discoverable agent and call other A2A agents.")
     print_info("Uses Python stdlib — no extra packages needed.")
     print()
 
@@ -95,7 +95,7 @@ def interactive_setup() -> None:
 
 
 def register(ctx) -> None:
-    """Plugin entry point — called by the Hermes plugin system."""
+    """Plugin entry point — called by the Fulilian plugin system."""
     # 1) Client tools (outbound). Registering these even when the inbound
     #    platform is disabled lets the agent call peers without exposing itself.
     try:

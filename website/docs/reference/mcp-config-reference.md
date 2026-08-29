@@ -1,7 +1,7 @@
 ---
 sidebar_position: 8
 title: "MCP Config Reference"
-description: "Reference for Hermes Agent MCP configuration keys, filtering semantics, and utility-tool policy"
+description: "Reference for FuLiLian MCP configuration keys, filtering semantics, and utility-tool policy"
 ---
 
 # MCP Config Reference
@@ -10,7 +10,7 @@ This page is the compact reference companion to the main MCP docs.
 
 For conceptual guidance, see:
 - [MCP (Model Context Protocol)](/user-guide/features/mcp)
-- [Use MCP with Hermes](/guides/use-mcp-with-hermes)
+- [Use MCP with Fulilian](/guides/use-mcp-with-fulilian)
 
 ## Root config shape
 
@@ -82,7 +82,7 @@ mcp_servers:
       GITHUB_PERSONAL_ACCESS_TOKEN: "${env:GITHUB_TOKEN}"   # same as "${GITHUB_TOKEN}"
 ```
 
-Values resolve from the active profile's secret scope (falling back to the process environment), so put the secret in `~/.hermes/.env`. An unset variable keeps its literal placeholder.
+Values resolve from the active profile's secret scope (falling back to the process environment), so put the secret in `~/.fulilian/.env`. An unset variable keeps its literal placeholder.
 
 ### Context variables
 
@@ -151,7 +151,7 @@ Result:
 
 ## Utility-tool policy
 
-Hermes may register these utility wrappers per MCP server:
+Fulilian may register these utility wrappers per MCP server:
 
 Resources:
 - `list_resources`
@@ -177,7 +177,7 @@ tools:
 
 ### Capability-aware registration
 
-Even when `resources: true` or `prompts: true`, Hermes only registers those utility tools if the MCP session actually exposes the corresponding capability.
+Even when `resources: true` or `prompts: true`, Fulilian only registers those utility tools if the MCP session actually exposes the corresponding capability.
 
 So this is normal:
 - you enable prompts
@@ -201,7 +201,7 @@ Behavior:
 
 ## Empty result behavior
 
-If filtering removes all server-native tools and no utility tools are registered, Hermes does not create an empty MCP runtime toolset for that server.
+If filtering removes all server-native tools and no utility tools are registered, Fulilian does not create an empty MCP runtime toolset for that server.
 
 ## Example configs
 
@@ -331,36 +331,36 @@ mcp_servers:
 ```
 
 Behavior:
-- Hermes uses the MCP SDK's OAuth 2.1 PKCE flow (metadata discovery, client identification, token exchange, and refresh)
+- Fulilian uses the MCP SDK's OAuth 2.1 PKCE flow (metadata discovery, client identification, token exchange, and refresh)
 - On first connect, a browser window opens for authorization
-- Tokens are persisted to `~/.hermes/mcp-tokens/<server>.json` and reused across sessions
+- Tokens are persisted to `~/.fulilian/mcp-tokens/<server>.json` and reused across sessions
 - Token refresh is automatic; re-authorization only happens when refresh fails
 - Only applies to HTTP/StreamableHTTP transport (`url`-based servers)
 
 ### Client identification: CIMD and DCR
 
-Hermes identifies itself to authorization servers with a **Client ID Metadata Document** (CIMD), the mechanism the MCP `2026-07-28` spec adopted in place of Dynamic Client Registration. The document is published at
-`https://nousresearch.github.io/hermes-agent/docs/oauth/client-metadata.json`, and that URL *is* the `client_id` — the authorization server fetches it to learn Hermes' name, logo, and permitted redirect URIs. Nothing is registered per install, and nothing is user-specific.
+Fulilian identifies itself to authorization servers with a **Client ID Metadata Document** (CIMD), the mechanism the MCP `2026-07-28` spec adopted in place of Dynamic Client Registration. The document is published at
+`https://nousresearch.github.io/fulilian-agent/docs/oauth/client-metadata.json`, and that URL *is* the `client_id` — the authorization server fetches it to learn Fulilian' name, logo, and permitted redirect URIs. Nothing is registered per install, and nothing is user-specific.
 
 The final choice belongs to the authorization server: the SDK sends the document URL as the `client_id` only when the server advertises `client_id_metadata_document_supported: true` in its metadata, and otherwise registers via DCR exactly as before. DCR is deprecated in the MCP spec but still what almost every deployed server uses today.
 
 #### Callback ports
 
-The document declares a fixed set of loopback redirect URIs, and the spec requires the redirect URI in an authorization request to be an *exact string match* against one of them — so a CIMD flow cannot use the random high port Hermes normally picks. Hermes therefore pins the callback to one of ports `27890`–`27894`.
+The document declares a fixed set of loopback redirect URIs, and the spec requires the redirect URI in an authorization request to be an *exact string match* against one of them — so a CIMD flow cannot use the random high port Fulilian normally picks. Fulilian therefore pins the callback to one of ports `27890`–`27894`.
 
-That pin has to be chosen before the server's capabilities are known, because the redirect URI is fixed at the start of the flow while the server's metadata only arrives partway through. So Hermes pins the port for any flow that *could* end up using CIMD, and reverts to a random port for the rest:
+That pin has to be chosen before the server's capabilities are known, because the redirect URI is fixed at the start of the flow while the server's metadata only arrives partway through. So Fulilian pins the port for any flow that *could* end up using CIMD, and reverts to a random port for the rest:
 
-- A server Hermes has connected to before, whose cached metadata does not advertise CIMD, keeps the random port it has always used.
-- A server Hermes has never reached gets a pinned port on that first login, since guessing is the only way CIMD can ever be used.
+- A server Fulilian has connected to before, whose cached metadata does not advertise CIMD, keeps the random port it has always used.
+- A server Fulilian has never reached gets a pinned port on that first login, since guessing is the only way CIMD can ever be used.
 - Anything that would move the callback elsewhere reverts too: a pre-registered `oauth.client_id`, an `oauth.client_secret`, a custom `oauth.client_name` or `oauth.token_endpoint_auth_method`, an `oauth.redirect_uri` or `oauth.redirect_port` override, a dashboard- or desktop-driven login, an existing client registration on disk, or all five ports being held by other processes.
 
 Each pinned port is bound as soon as it is chosen and held until the browser redirect arrives, so two concurrent logins — a second profile, or another server in the same process — cannot land on the same listener.
 
 #### When a server rejects the document
 
-If a server fetches the document and refuses it at the *token* endpoint (`invalid_client`), Hermes logs the rejection, records it under `~/.hermes/mcp-tokens/<server>.cimd-off`, and uses DCR for that server from then on.
+If a server fetches the document and refuses it at the *token* endpoint (`invalid_client`), Fulilian logs the rejection, records it under `~/.fulilian/mcp-tokens/<server>.cimd-off`, and uses DCR for that server from then on.
 
-A server that cannot fetch or validate the document at all aborts at the *authorization* endpoint instead, before any redirect happens. There is no signal Hermes can observe there, so the browser shows an invalid-client error and the login times out after five minutes. The timeout message names the document and points at `cimd: false`. Running `hermes mcp login <server>` clears the recorded rejection, so a corrected document gets another chance.
+A server that cannot fetch or validate the document at all aborts at the *authorization* endpoint instead, before any redirect happens. There is no signal Fulilian can observe there, so the browser shows an invalid-client error and the login times out after five minutes. The timeout message names the document and points at `cimd: false`. Running `fulilian mcp login <server>` clears the recorded rejection, so a corrected document gets another chance.
 
 #### Optional per-server keys
 
@@ -375,16 +375,16 @@ mcp_servers:
       user_agent: "My-MCP-Client/1.0"                          # token-request User-Agent
 ```
 
-`client_metadata_url` must be an HTTPS URL with a path (no bare origin, no fragment, no userinfo, no `.`/`..` segments) that returns `200` and `Content-Type: application/json` with **no redirect** — authorization servers are forbidden from following redirects when fetching it. Hermes still pins its callback to the same `27890`–`27894` range, so a self-hosted document must declare all ten loopback URIs (`http://127.0.0.1:<port>/callback` and `http://localhost:<port>/callback` for each port), and its `client_id` must be its own URL.
+`client_metadata_url` must be an HTTPS URL with a path (no bare origin, no fragment, no userinfo, no `.`/`..` segments) that returns `200` and `Content-Type: application/json` with **no redirect** — authorization servers are forbidden from following redirects when fetching it. Fulilian still pins its callback to the same `27890`–`27894` range, so a self-hosted document must declare all ten loopback URIs (`http://127.0.0.1:<port>/callback` and `http://localhost:<port>/callback` for each port), and its `client_id` must be its own URL.
 
 `user_agent` replaces the HTTP library's default `User-Agent` on **token-endpoint requests only** (authorization-code exchange and refresh) — some authorization servers and WAFs reject the default `python-httpx/...` value there. It never applies to MCP traffic or OAuth discovery, and no other token-request headers are configurable. Empty or null values are ignored.
 
-## Add to Hermes link
+## Add to Fulilian link
 
-MCP vendors and docs can offer a one-click **"Add to Hermes"** button that opens the Hermes desktop app with a pre-filled server config, mirroring Cursor's `cursor://anysphere.cursor-deeplink/mcp/install` scheme:
+MCP vendors and docs can offer a one-click **"Add to Fulilian"** button that opens the Fulilian desktop app with a pre-filled server config, mirroring Cursor's `cursor://anysphere.cursor-deeplink/mcp/install` scheme:
 
 ```text
-hermes://mcp/install?name=NAME&config=BASE64
+fulilian://mcp/install?name=NAME&config=BASE64
 ```
 
 - `name` — the server name. Must match `^[A-Za-z0-9._-]{1,64}$`.
@@ -394,7 +394,7 @@ Example (JavaScript):
 
 ```js
 const config = { url: 'https://mcp.example.com/mcp' }
-const link = `hermes://mcp/install?name=example&config=${btoa(JSON.stringify(config))
+const link = `fulilian://mcp/install?name=example&config=${btoa(JSON.stringify(config))
   .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')}`
 ```
 

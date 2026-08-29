@@ -101,7 +101,7 @@ class TestLatencyFlagResolution:
             'apiKey': 'k',
             'queryRewrite': False,
             'firstTurnBaseWait': 3,
-            'hosts': {'hermes': {
+            'hosts': {'fulilian': {
                 'queryRewrite': True,
                 'firstTurnBaseWait': 0,
                 'firstTurnDialecticWait': 0.5,
@@ -118,7 +118,7 @@ class TestLatencyFlagResolution:
         config_path.write_text(json.dumps({
             'apiKey': 'k',
             'timeout': 30,
-            'hosts': {'hermes': {'timeout': 5}},
+            'hosts': {'fulilian': {'timeout': 5}},
         }))
         cfg = HonchoClientConfig.from_global_config(config_path=config_path)
         assert cfg.timeout == 5.0
@@ -164,13 +164,13 @@ class TestProfileKeyIsolationWarning:
         config_path = tmp_path / 'config.json'
         config_path.write_text(json.dumps({
             'hosts': {
-                'hermes': {'apiKey': 'shared-key'},
-                'hermes_coder': {'baseUrl': 'http://192.168.1.50:8000'},
+                'fulilian': {'apiKey': 'shared-key'},
+                'fulilian_coder': {'baseUrl': 'http://192.168.1.50:8000'},
             },
         }))
         with caplog.at_level(logging.WARNING, logger='plugins.memory.honcho.client'):
             cfg = HonchoClientConfig.from_global_config(
-                host='hermes_coder', config_path=config_path,
+                host='fulilian_coder', config_path=config_path,
             )
         assert cfg.api_key is None  # isolation preserved — no silent inheritance
         assert any('NOT inherited' in r.message for r in caplog.records)
@@ -181,13 +181,13 @@ class TestProfileKeyIsolationWarning:
         config_path = tmp_path / 'config.json'
         config_path.write_text(json.dumps({
             'hosts': {
-                'hermes': {'apiKey': 'shared-key'},
-                'hermes_coder': {'apiKey': 'coder-key'},
+                'fulilian': {'apiKey': 'shared-key'},
+                'fulilian_coder': {'apiKey': 'coder-key'},
             },
         }))
         with caplog.at_level(logging.WARNING, logger='plugins.memory.honcho.client'):
             cfg = HonchoClientConfig.from_global_config(
-                host='hermes_coder', config_path=config_path,
+                host='fulilian_coder', config_path=config_path,
             )
         assert cfg.api_key == 'coder-key'
         assert not any('NOT inherited' in r.message for r in caplog.records)
@@ -197,10 +197,10 @@ class TestProfileKeyIsolationWarning:
         monkeypatch.delenv('HONCHO_API_KEY', raising=False)
         config_path = tmp_path / 'config.json'
         config_path.write_text(json.dumps({
-            'hosts': {'hermes': {'baseUrl': 'http://localhost:8000'}},
+            'hosts': {'fulilian': {'baseUrl': 'http://localhost:8000'}},
         }))
         with caplog.at_level(logging.WARNING, logger='plugins.memory.honcho.client'):
             HonchoClientConfig.from_global_config(
-                host='hermes', config_path=config_path,
+                host='fulilian', config_path=config_path,
             )
         assert not any('NOT inherited' in r.message for r in caplog.records)

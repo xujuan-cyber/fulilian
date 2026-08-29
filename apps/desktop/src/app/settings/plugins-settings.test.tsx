@@ -13,7 +13,7 @@ vi.mock('@/app/gateway/hooks/use-gateway-request', () => ({
   useGatewayRequest: () => ({ requestGateway })
 }))
 
-vi.mock('@/hermes', async importOriginal => ({
+vi.mock('@/fulilian', async importOriginal => ({
   ...(await importOriginal<Record<string, unknown>>()),
   getProfiles
 }))

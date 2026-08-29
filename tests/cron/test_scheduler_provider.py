@@ -1,7 +1,7 @@
 """Characterization tests for the cron trigger before/after the provider refactor.
 
 These lock the CURRENT in-process-ticker contract (Phase 0 of the pluggable
-CronScheduler plan, .hermes/plans/cron-scheduler-provider-interface.md). They
+CronScheduler plan, .fulilian/plans/cron-scheduler-provider-interface.md). They
 must pass unchanged on `main` now, and after every subsequent phase of the
 refactor — they are the regression harness that proves the built-in firing
 behavior is byte-for-byte preserved when the ticker is moved behind the
@@ -9,7 +9,7 @@ CronScheduler provider interface.
 
 No production code is exercised beyond the two ticker entry points:
   - gateway/run.py::_start_cron_ticker        (production gateway ticker)
-  - hermes_cli/web_server.py::_start_desktop_cron_ticker  (desktop fallback)
+  - fulilian_cli/web_server.py::_start_desktop_cron_ticker  (desktop fallback)
 
 Both call `cron.scheduler.tick(...)` on a loop and exit when their stop_event
 is set. We patch `cron.scheduler.tick` (both tickers import it locally as

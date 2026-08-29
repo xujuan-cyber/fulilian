@@ -1,4 +1,4 @@
-"""``hermes gateway enroll`` — enroll a self-hosted gateway with a relay connector.
+"""``fulilian gateway enroll`` — enroll a self-hosted gateway with a relay connector.
 
 The connector⇄gateway channel is authenticated (the gateway may be
 customer-managed and internet-exposed). This command is the gateway half of the
@@ -6,7 +6,7 @@ zero-touch enrollment in the connector repo's
 ``docs/connector-gateway-auth-design.md``:
 
   1. Resolve a fresh Nous Portal access token from the existing login
-     (``~/.hermes/auth.json``) — the same path ``hermes dashboard register``
+     (``~/.fulilian/auth.json``) — the same path ``fulilian dashboard register``
      uses (``resolve_nous_access_token``). This proves *which Nous org (tenant)*
      the caller owns; the connector derives the authoritative tenant from it via
      ``GET /api/oauth/account`` (never from anything the gateway asserts).
@@ -17,7 +17,7 @@ zero-touch enrollment in the connector repo's
      delivery key, and returns both ONCE.
   4. Persist ``GATEWAY_RELAY_ID`` / ``GATEWAY_RELAY_SECRET`` /
      ``GATEWAY_RELAY_DELIVERY_KEY`` (+ ``GATEWAY_RELAY_URL`` if supplied) into
-     ``~/.hermes/.env``. The per-gateway secret authenticates the WS upgrade;
+     ``~/.fulilian/.env``. The per-gateway secret authenticates the WS upgrade;
      the per-tenant delivery key verifies signed inbound deliveries.
 
 Managed/hosted installs do NOT self-enroll: the orchestrator (NAS) mints the
@@ -53,7 +53,7 @@ def _default_gateway_id() -> str:
         host = socket.gethostname().strip()
     except Exception:
         host = ""
-    return f"gw-{host or 'hermes'}"
+    return f"gw-{host or 'fulilian'}"
 
 
 def _resolve_connector_url(override: Optional[str]) -> Optional[str]:
@@ -139,7 +139,7 @@ def _post_enroll(
         if exc.code == 401:
             raise RuntimeError(
                 "Connector rejected the caller identity (401). Your Nous Portal "
-                "token could not be verified — try `hermes auth add nous` and retry."
+                "token could not be verified — try `fulilian auth add nous` and retry."
             ) from exc
         if exc.code == 403:
             raise RuntimeError(
@@ -170,7 +170,7 @@ def cmd_gateway_enroll(args) -> None:
     # write anyway.
     if is_managed():
         print(
-            "✗ `hermes gateway enroll` is not available in a managed/hosted install.\n"
+            "✗ `fulilian gateway enroll` is not available in a managed/hosted install.\n"
             "  The relay gateway secret is provisioned by the hosting platform."
         )
         sys.exit(1)
@@ -203,7 +203,7 @@ def cmd_gateway_enroll(args) -> None:
     except AuthError as exc:
         if getattr(exc, "relogin_required", False):
             print("✗ You're not logged into Nous Portal.")
-            print("  Run `hermes setup` (or `hermes auth add nous`) first, then retry.")
+            print("  Run `fulilian setup` (or `fulilian auth add nous`) first, then retry.")
         else:
             print(f"✗ Could not resolve a Nous Portal access token: {exc}")
         sys.exit(1)
@@ -229,7 +229,7 @@ def cmd_gateway_enroll(args) -> None:
     resolved_gateway_id = str(result.get("gatewayId") or gateway_id)
 
     # 4. Persist the creds idempotently. The secret + delivery key are sensitive;
-    #    save_env_value writes them to ~/.hermes/.env (0600 dir) and never logs.
+    #    save_env_value writes them to ~/.fulilian/.env (0600 dir) and never logs.
     to_write = {
         "GATEWAY_RELAY_ID": resolved_gateway_id,
         "GATEWAY_RELAY_SECRET": secret,
@@ -276,7 +276,7 @@ def cmd_gateway_enroll(args) -> None:
     # the PROCESS environment only, never from a secondary profile's .env
     # (which is loaded into an isolated secret scope, not exported). The .env
     # write above works for a single-profile gateway and for the profile the
-    # process is launched under (load_hermes_dotenv exports that .env), so
+    # process is launched under (load_fulilian_dotenv exports that .env), so
     # warn rather than refuse — but don't let a secondary-profile enroll claim
     # a config that will silently never activate. Emitted BEFORE the generic
     # restart line so the two don't contradict each other.
@@ -301,15 +301,15 @@ def _warn_if_secondary_multiplex_profile() -> bool:
     ``<default_root>/config.yaml`` (or the GATEWAY_MULTIPLEX_PROFILES env
     override), and the secondary check is the resolved-path relationship to
     ``<default_root>/profiles/`` — mirroring the multiplexer-conflict guard
-    in hermes_cli/gateway.py. Best-effort: any failure to determine the
+    in fulilian_cli/gateway.py. Best-effort: any failure to determine the
     topology stays silent (the credential write itself succeeded).
     """
     try:
-        from fulilian_constants import get_default_hermes_root
-        from fulilian_cli.config import get_hermes_home
+        from fulilian_constants import get_default_fulilian_root
+        from fulilian_cli.config import get_fulilian_home
 
-        default_root = Path(get_default_hermes_root()).resolve()
-        home = Path(get_hermes_home()).resolve()
+        default_root = Path(get_default_fulilian_root()).resolve()
+        home = Path(get_fulilian_home()).resolve()
         try:
             home.relative_to(default_root / "profiles")
         except ValueError:

@@ -46,7 +46,7 @@ export type ScanOutcome =
 // ---------------------------------------------------------------------------
 
 const SCAN_TIMEOUT_MS = 15000
-const SCAN_MODULE = 'hermes_cli._scan_venv_blockers'
+const SCAN_MODULE = 'fulilian_cli._scan_venv_blockers'
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -96,7 +96,7 @@ function classifyVenvBlocker(
 
 /**
  * Stop only blockers that the fresh scanner identified as Python static-file
- * preview servers. Unknown Python/Hermes processes are deliberately ignored.
+ * preview servers. Unknown Python/Fulilian processes are deliberately ignored.
  */
 export async function stopSafeVenvBlockers(
   updateRoot: string,
@@ -127,7 +127,7 @@ export async function stopSafeVenvBlockers(
     try {
       await execFn(
         pythonPath,
-        ['-m', 'hermes_cli._scan_venv_blockers', '--terminate-safe', String(process.pid), String(process.createTime)],
+        ['-m', 'fulilian_cli._scan_venv_blockers', '--terminate-safe', String(process.pid), String(process.createTime)],
         { cwd: updateRoot, windowsHide: true, timeout: 10_000, maxBuffer: 256 * 1024 }
       )
       stopped.push(process.pid)
@@ -271,7 +271,7 @@ export function resolveVenvPython(updateRoot: string): string | null {
  */
 export function formatBlockerMessage(result: VenvBlockerScanResult): string {
   const lines = [
-    'Update aborted: another Hermes process is using this installation.',
+    'Update aborted: another Fulilian process is using this installation.',
     '',
     'These processes must be stopped before updating:',
     ''
@@ -300,9 +300,9 @@ export function formatBlockerMessage(result: VenvBlockerScanResult): string {
  */
 export function formatProbeFailedMessage(): string {
   return (
-    'Update aborted: Desktop could not verify the Hermes installation is free.\n' +
+    'Update aborted: Desktop could not verify the Fulilian installation is free.\n' +
     '\n' +
-    'Close other Hermes windows and terminals, then retry.  If the problem\n' +
-    'persists, run `hermes update` in a terminal for detailed diagnostics.'
+    'Close other Fulilian windows and terminals, then retry.  If the problem\n' +
+    'persists, run `fulilian update` in a terminal for detailed diagnostics.'
   )
 }

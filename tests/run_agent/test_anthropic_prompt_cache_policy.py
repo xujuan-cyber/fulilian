@@ -264,9 +264,9 @@ class TestThirdPartyAnthropicGateway:
         agent and the policy loads config itself."""
         import textwrap
 
-        hermes_home = tmp_path / ".hermes"
-        hermes_home.mkdir()
-        (hermes_home / "config.yaml").write_text(
+        fulilian_home = tmp_path / ".fulilian"
+        fulilian_home.mkdir()
+        (fulilian_home / "config.yaml").write_text(
             textwrap.dedent(
                 """
                 providers:
@@ -282,9 +282,9 @@ class TestThirdPartyAnthropicGateway:
                 """
             )
         )
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        monkeypatch.setenv("FULILIAN_HOME", str(fulilian_home))
         # load_config's cache is keyed by resolved config path, so pointing
-        # HERMES_HOME at a fresh tempdir needs no cache invalidation.
+        # FULILIAN_HOME at a fresh tempdir needs no cache invalidation.
         agent = _make_agent(
             provider="custom:anthropic-proxy",
             base_url="https://gateway.example.com/anthropic",
@@ -357,7 +357,7 @@ class TestCustomProviderOpenAIWireCapability:
             pytest.fail("unrelated built-in route performed custom capability lookup")
 
         monkeypatch.setattr(
-            "hermes_cli.config.get_custom_provider_model_capability",
+            "fulilian_cli.config.get_custom_provider_model_capability",
             unexpected_lookup,
         )
 
@@ -437,9 +437,9 @@ class TestCustomProviderOpenAIWireCapability:
     ):
         import textwrap
 
-        hermes_home = tmp_path / ".hermes"
-        hermes_home.mkdir()
-        (hermes_home / "config.yaml").write_text(
+        fulilian_home = tmp_path / ".fulilian"
+        fulilian_home.mkdir()
+        (fulilian_home / "config.yaml").write_text(
             textwrap.dedent(
                 """
                 providers:
@@ -452,7 +452,7 @@ class TestCustomProviderOpenAIWireCapability:
                 """
             )
         )
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        monkeypatch.setenv("FULILIAN_HOME", str(fulilian_home))
         agent = _make_agent(
             provider="edge-router",
             base_url="https://models.example.net/v1",

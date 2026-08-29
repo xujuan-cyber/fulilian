@@ -3,7 +3,7 @@
 Invariants only — no snapshots of specific model ids. Most surface-level
 contracts (network-failure → empty list, tag filtering, no-model error)
 are covered by the shared tag-filter test in
-``tests/hermes_cli/test_api_key_providers.py``; these two tests pin the
+``tests/fulilian_cli/test_api_key_providers.py``; these two tests pin the
 plugin-specific bits that wrapper doesn't reach.
 """
 
@@ -33,7 +33,7 @@ def _b64_png() -> str:
 
 @pytest.fixture(autouse=True)
 def _isolation(tmp_path, monkeypatch):
-    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+    monkeypatch.setenv("FULILIAN_HOME", str(tmp_path))
     import fulilian_cli.models as _models_mod
     monkeypatch.setattr(_models_mod, "_deepinfra_catalog_cache", {})
     monkeypatch.setenv("DEEPINFRA_API_KEY", "test-key")

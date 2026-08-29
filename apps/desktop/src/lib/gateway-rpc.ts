@@ -8,7 +8,7 @@ export function isMissingRpcMethod(error: unknown): boolean {
 /** REST twin of isMissingRpcMethod: the route does not exist on this backend.
  *  Matches the backend catch-all ('404: {"detail":"No such API endpoint: …}'),
  *  FastAPI's bare 404 on headless serve — directly, or wrapped as "Error
- *  invoking remote method 'hermes:api': Error: 404: …" through the IPC bridge
+ *  invoking remote method 'fulilian:api': Error: 404: …" through the IPC bridge
  *  — and the Electron JSON-guard ("endpoint is likely missing"). Transient
  *  failures (timeouts, 5xx, connection refused) must NOT match: they are
  *  retryable, not a capability verdict. Only sound for calls where a 404 can

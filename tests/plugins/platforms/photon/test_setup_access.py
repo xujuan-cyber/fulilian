@@ -1,8 +1,8 @@
-"""Tests for `hermes photon setup`'s access auto-configuration.
+"""Tests for `fulilian photon setup`'s access auto-configuration.
 
 `_autoconfigure_access` allowlists the operator and points the cron home
-channel at their DM, writing to the per-test ~/.hermes/.env (the hermetic
-HERMES_HOME fixture isolates this). It must fill only unset keys so a re-run
+channel at their DM, writing to the per-test ~/.fulilian/.env (the hermetic
+FULILIAN_HOME fixture isolates this). It must fill only unset keys so a re-run
 never clobbers a hand-tuned allowlist.
 """
 from __future__ import annotations
@@ -82,7 +82,7 @@ def test_setup_hint_uses_gateway_service_command(monkeypatch: pytest.MonkeyPatch
 
     assert rc == 0
     out = capsys.readouterr().out
-    assert "Start the gateway:  hermes gateway start" in out
+    assert "Start the gateway:  fulilian gateway start" in out
     assert "--platform photon" not in out
     assert "new secret saved" in out
     assert "restart it so the sidecar" in out

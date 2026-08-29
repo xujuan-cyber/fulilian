@@ -7,8 +7,8 @@ Two additive capabilities, both designed so a failure inside them can never
 break an update (every public entry point is exception-swallowing):
 
 1. **Update receipt** — a machine-readable JSON record of what one
-   ``hermes update`` run discovered, did, skipped (and why), written to
-   ``<HERMES_HOME>/logs/update_receipts/``. Silent-failure classes this
+   ``fulilian update`` run discovered, did, skipped (and why), written to
+   ``<FULILIAN_HOME>/logs/update_receipts/``. Silent-failure classes this
    makes visible: #88848 (helper died after "success" printed), #74973
    (restart silently skipped), #85753 (restart phase never ran), #81193
    (desktop shows failure for a successful update).
@@ -21,7 +21,7 @@ break an update (every public entry point is exception-swallowing):
    become a loud, actionable report instead of a latent state.
 
 Deployment-kind awareness (docker/image-managed installs) rides on
-``hermes_cli.build_info.get_code_identity()``: an image build reports
+``fulilian_cli.build_info.get_code_identity()``: an image build reports
 ``source="build-file"`` and the receipt records that the install is not
 in-place updatable.
 """
@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 _RECEIPT_DIR_NAME = "update_receipts"
 _RECEIPT_KEEP = 20  # keep the last N receipts per profile home
 
-# Module-level current receipt. ``hermes update`` is a single-threaded CLI
+# Module-level current receipt. ``fulilian update`` is a single-threaded CLI
 # command; a module singleton lets the 7k-line updater record steps from
 # any depth without threading a handle through every helper.
 _current: Optional["UpdateReceipt"] = None
@@ -54,7 +54,7 @@ def _utc_now_iso() -> str:
 
 
 class UpdateReceipt:
-    """Collects the observable facts of one ``hermes update`` run."""
+    """Collects the observable facts of one ``fulilian update`` run."""
 
     def __init__(self) -> None:
         self.data: dict[str, Any] = {
@@ -147,9 +147,9 @@ class UpdateReceipt:
 
 
 def _receipt_dir() -> Path:
-    from fulilian_cli.config import get_hermes_home
+    from fulilian_cli.config import get_fulilian_home
 
-    return get_hermes_home() / "logs" / _RECEIPT_DIR_NAME
+    return get_fulilian_home() / "logs" / _RECEIPT_DIR_NAME
 
 
 def begin_update_receipt() -> None:
@@ -237,7 +237,7 @@ def finalize_pending_update_receipt(
 ) -> Optional[Path]:
     """Command-boundary safety net: persist a still-open receipt, if any.
 
-    ``hermes update`` has many early-termination paths (Windows
+    ``fulilian update`` has many early-termination paths (Windows
     concurrent-instance preflight, venv-holder refusal, head-pinned no-op,
     fetch failure — all ``sys.exit``) that predate the inner finalize
     call sites. Any receipt still open when the update COMMAND unwinds is
@@ -345,13 +345,13 @@ def collect_fleet_versions(
     try:
         from gateway.status import read_runtime_status, runtime_status_pid_is_live
         from fulilian_cli.profiles import (
-            _get_default_hermes_home,
+            _get_default_fulilian_home,
             _get_profiles_root,
             _PROFILE_ID_RE,
         )
 
         homes: list[tuple[str, Path]] = []
-        default_home = _get_default_hermes_home()
+        default_home = _get_default_fulilian_home()
         if default_home.is_dir():
             homes.append(("default", default_home))
         profiles_root = _get_profiles_root()
@@ -503,6 +503,6 @@ def print_fleet_version_matrix(fleet: list[dict[str, Any]]) -> bool:
             print("  ⚠ Stale gateways keep serving pre-update code until restarted:")
         if any_down:
             print("  ⚠ Down gateways stopped serving messaging entirely — restart them:")
-        print("      hermes gateway restart                # active profile")
-        print("      hermes -p <profile> gateway restart   # named profile")
+        print("      fulilian gateway restart                # active profile")
+        print("      fulilian -p <profile> gateway restart   # named profile")
     return any_stale or any_down

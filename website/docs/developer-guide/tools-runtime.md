@@ -6,7 +6,7 @@ description: "Runtime behavior of the tool registry, toolsets, dispatch, and ter
 
 # Tools Runtime
 
-Hermes tools are self-registering functions grouped into toolsets and executed through a central registry/dispatch system.
+Fulilian tools are self-registering functions grouped into toolsets and executed through a central registry/dispatch system.
 
 Primary files:
 
@@ -66,7 +66,7 @@ Each import triggers the module's `registry.register()` calls. Errors in optiona
 After core tool discovery, MCP tools and plugin tools are also discovered:
 
 1. **MCP tools** — `tools.mcp_tool.discover_mcp_tools()` reads MCP server config and registers tools from external servers.
-2. **Plugin tools** — `hermes_cli.plugins.discover_plugins()` loads user/project/pip plugins that may register additional tools.
+2. **Plugin tools** — `fulilian_cli.plugins.discover_plugins()` loads user/project/pip plugins that may register additional tools.
 
 ## Tool availability checking (`check_fn`)
 
@@ -96,12 +96,12 @@ Key behaviors:
 
 ## Toolset resolution
 
-Toolsets are named bundles of tools. Hermes resolves them through:
+Toolsets are named bundles of tools. Fulilian resolves them through:
 
 - explicit enabled/disabled toolset lists
-- platform presets (`hermes-cli`, `hermes-telegram`, etc.)
+- platform presets (`fulilian-cli`, `fulilian-telegram`, etc.)
 - dynamic MCP toolsets
-- curated special-purpose sets like `hermes-acp`
+- curated special-purpose sets like `fulilian-acp`
 
 ### How `get_tool_definitions()` filters tools
 

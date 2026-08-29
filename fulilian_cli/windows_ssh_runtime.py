@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from fulilian_constants import get_default_hermes_root
+from fulilian_constants import get_default_fulilian_root
 
 _HEX32 = re.compile(r"[0-9a-f]{32}\Z")
 _HEX16 = re.compile(r"[0-9a-f]{16}\Z")
@@ -52,8 +52,8 @@ def _root() -> Path:
     # The helper uploads the token before the child applies `--profile`, while
     # read_token() runs after profile activation. Anchor both processes to the
     # machine root so a named profile cannot move the reader away from the
-    # helper's token, including custom HERMES_HOME layouts.
-    return get_default_hermes_root() / "desktop-ssh"
+    # helper's token, including custom FULILIAN_HOME layouts.
+    return get_default_fulilian_root() / "desktop-ssh"
 
 
 def _directory(ownership_id: str) -> Path:
@@ -288,7 +288,7 @@ def remove_artifact(path: Path) -> bool:
     return True
 
 
-def process_state(pid: int, creation_time_ns: int, hermes_path: str, spawn_nonce: str) -> dict[str, Any]:
+def process_state(pid: int, creation_time_ns: int, fulilian_path: str, spawn_nonce: str) -> dict[str, Any]:
     import psutil
     _nonce(spawn_nonce)
     try:
@@ -307,17 +307,17 @@ def process_state(pid: int, creation_time_ns: int, hermes_path: str, spawn_nonce
                 "actualCreationTimeNs": str(actual_creation), "expectedCreationTimeNs": str(creation_time_ns)}
     if not argv:
         return {"alive": True, "owned": False, "indeterminate": True, "reason": "argv-unavailable"}
-    expected = os.path.normcase(os.path.abspath(hermes_path))
+    expected = os.path.normcase(os.path.abspath(fulilian_path))
     arg0 = os.path.normcase(os.path.abspath(argv[0]))
-    # argv[0] is either the hermes exe directly, or (normal case) the base Python
+    # argv[0] is either the fulilian exe directly, or (normal case) the base Python
     # interpreter -- its exact path varies by venv/uv layout, so match on "a python
     # running our module". We launch via `-c` bootstrap, so it shows as
-    # `-c <bootstrap that runs hermes_cli.main>`; also accept a plain `-m` launch.
+    # `-c <bootstrap that runs fulilian_cli.main>`; also accept a plain `-m` launch.
     # Identity is anchored by the unforgeable creation-time + secret owner-nonce below.
     is_python = os.path.basename(arg0).startswith("python")
     launches_module = (
-        argv[1:3] == ["-m", "hermes_cli.main"]
-        or (len(argv) > 2 and argv[1] == "-c" and "hermes_cli.main" in argv[2])
+        argv[1:3] == ["-m", "fulilian_cli.main"]
+        or (len(argv) > 2 and argv[1] == "-c" and "fulilian_cli.main" in argv[2])
     )
     executable_match = arg0 == expected or (is_python and launches_module)
     try:
@@ -331,8 +331,8 @@ def process_state(pid: int, creation_time_ns: int, hermes_path: str, spawn_nonce
             "argv": argv[:20], "expectedExecutable": expected}
 
 
-def terminate_owned(pid: int, creation_time_ns: int, hermes_path: str, spawn_nonce: str) -> bool:
-    state = process_state(pid, creation_time_ns, hermes_path, spawn_nonce)
+def terminate_owned(pid: int, creation_time_ns: int, fulilian_path: str, spawn_nonce: str) -> bool:
+    state = process_state(pid, creation_time_ns, fulilian_path, spawn_nonce)
     if not state["alive"] or not state["owned"]:
         return False
     import psutil
@@ -355,12 +355,12 @@ def _resolve_direct_interpreter(python_entry: str) -> tuple[str, list[str]]:
     interpreter directly with the launcher's sys.path injected yields ONE process
     that both owns the port and is the process we lock.
 
-    Also resolves hermes_cli's own location and prepends its parent, because the
+    Also resolves fulilian_cli's own location and prepends its parent, because the
     launcher finds the module via cwd / an editable-install path hook that a bare
     PYTHONPATH does not reproduce."""
     query = (
         "import sys,json,os,importlib.util as u;"
-        "s=u.find_spec('hermes_cli');"
+        "s=u.find_spec('fulilian_cli');"
         "root=os.path.dirname(os.path.dirname(s.origin)) if s and s.origin else '';"
         "print(json.dumps({'base':getattr(sys,'_base_executable','') or sys.executable,"
         "'path':[p for p in sys.path if p],'root':root}))"
@@ -375,32 +375,32 @@ def _resolve_direct_interpreter(python_entry: str) -> tuple[str, list[str]]:
     # drop editable-install finder markers ('__editable__.*.finder.__path_hook__')
     # that PYTHONPATH cannot reproduce; keep only real filesystem entries.
     py_path = [p for p in info.get("path", []) if os.path.exists(p)]
-    # the hermes_cli package parent must be explicit -- the launcher resolves it via
+    # the fulilian_cli package parent must be explicit -- the launcher resolves it via
     # cwd or an editable path hook, neither of which survives a bare PYTHONPATH spawn.
     root = info.get("root") or ""
     if root and os.path.isdir(root) and root not in py_path:
         py_path.insert(0, root)
     if not root or not os.path.isdir(root):
-        raise ValueError("could not locate the hermes_cli package")
+        raise ValueError("could not locate the fulilian_cli package")
     return base, py_path
 
 
 def spawn_backend(payload: dict[str, Any]) -> dict[str, Any]:
     ownership_id = _ownership(str(payload["ownershipId"]))
     spawn_nonce = _nonce(str(payload["spawnNonce"]))
-    configured_path = str(payload["hermesPath"])
+    configured_path = str(payload["fulilianPath"])
     if not os.path.isabs(configured_path):
-        raise ValueError("Hermes path must be absolute")
-    hermes_path = os.path.abspath(configured_path)
+        raise ValueError("Fulilian path must be absolute")
+    fulilian_path = os.path.abspath(configured_path)
     token_path = str(_token_path(ownership_id, spawn_nonce))
     log_path = _log_path(ownership_id, spawn_nonce)
     profile = str(payload.get("profile") or "")
     if len(profile) > 256 or any(ch in profile for ch in "\x00\r\n"):
         raise ValueError("invalid profile")
-    venv_dir = os.path.dirname(hermes_path)
+    venv_dir = os.path.dirname(fulilian_path)
     python_entry = os.path.join(venv_dir, "python.exe")
     if not os.path.isfile(python_entry):
-        raise ValueError("Hermes Python runtime was not found")
+        raise ValueError("Fulilian Python runtime was not found")
     base_python, sys_path = _resolve_direct_interpreter(python_entry)
     # Seed sys.path IN-PROCESS via a -c bootstrap rather than exporting PYTHONPATH:
     # PYTHONPATH would be inherited by every subprocess the running backend spawns
@@ -409,7 +409,7 @@ def spawn_backend(payload: dict[str, Any]) -> dict[str, Any]:
     bootstrap = (
         "import sys,runpy;"
         f"sys.path[:0]={sys_path!r};"
-        "runpy.run_module('hermes_cli.main',run_name='__main__',alter_sys=True)"
+        "runpy.run_module('fulilian_cli.main',run_name='__main__',alter_sys=True)"
     )
     args = [base_python, "-c", bootstrap]
     if profile:
@@ -436,10 +436,10 @@ def spawn_backend(payload: dict[str, Any]) -> dict[str, Any]:
             "logPath": str(log_path), "tokenPath": token_path}
 
 
-def inspect_hermes(hermes_path: str) -> dict[str, Any]:
-    path = os.path.abspath(hermes_path)
-    if not os.path.isabs(hermes_path) or not os.path.isfile(path):
-        raise ValueError("Hermes path is not an executable file")
+def inspect_fulilian(fulilian_path: str) -> dict[str, Any]:
+    path = os.path.abspath(fulilian_path)
+    if not os.path.isabs(fulilian_path) or not os.path.isfile(path):
+        raise ValueError("Fulilian path is not an executable file")
     version = subprocess.run([path, "--version"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=20)
     help_result = subprocess.run([path, "serve", "--help"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=20)
     help_text = help_result.stdout + help_result.stderr
@@ -456,7 +456,7 @@ def dispatch(argv: list[str]) -> Any:
     operation = argv[0]
     if operation == "probe":
         import platform
-        return {"os": "Windows", "arch": platform.machine(), "hermesHome": str(get_default_hermes_root()), "python": sys.executable}
+        return {"os": "Windows", "arch": platform.machine(), "fulilianHome": str(get_default_fulilian_root()), "python": sys.executable}
     if operation == "upload-token" and len(argv) == 3:
         return upload_token(argv[1], argv[2], sys.stdin.buffer.read(65))
     if operation == "read-lock" and len(argv) == 2:
@@ -488,7 +488,7 @@ def dispatch(argv: list[str]) -> Any:
     if operation == "spawn":
         return spawn_backend(_read_json_stdin())
     if operation == "inspect" and len(argv) == 2:
-        return inspect_hermes(argv[1])
+        return inspect_fulilian(argv[1])
     if operation == "process-state" and len(argv) == 5:
         return process_state(int(argv[1]), int(argv[2]), argv[3], argv[4])
     if operation == "terminate" and len(argv) == 5:

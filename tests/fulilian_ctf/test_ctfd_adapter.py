@@ -182,7 +182,7 @@ def test_poll_new_challenges_detects_new(ctfd_base_url, tmp_path):
 
 
 def test_create_poll_job_uses_cron(tmp_path, monkeypatch):
-    """复用 Hermes cron 创建定时任务（不触碰真实 jobs.json）。"""
+    """复用 Fulilian cron 创建定时任务（不触碰真实 jobs.json）。"""
     captured = {}
 
     def fake_create_job(**kwargs):

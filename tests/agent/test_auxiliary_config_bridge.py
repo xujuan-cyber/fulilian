@@ -202,7 +202,7 @@ class TestVisionModelOverride:
 
 
 class TestDefaultConfigShape:
-    """Verify the DEFAULT_CONFIG in hermes_cli/config.py has correct auxiliary structure."""
+    """Verify the DEFAULT_CONFIG in fulilian_cli/config.py has correct auxiliary structure."""
 
     def test_auxiliary_section_exists(self):
         from fulilian_cli.config import DEFAULT_CONFIG

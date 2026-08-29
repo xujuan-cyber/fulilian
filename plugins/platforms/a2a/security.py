@@ -347,10 +347,10 @@ def is_safe_callback_url(url: str) -> bool:
 
 def _audit_path() -> Path:
     try:
-        from fulilian_constants import get_hermes_home
-        base = Path(get_hermes_home())
+        from fulilian_constants import get_fulilian_home
+        base = Path(get_fulilian_home())
     except Exception:
-        base = Path(os.path.expanduser("~/.hermes"))
+        base = Path(os.path.expanduser("~/.fulilian"))
     return base / "a2a_audit.jsonl"
 
 

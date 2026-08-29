@@ -4,7 +4,7 @@ act/
 .act-sandbox-agent.*
 agent-browser/
 # also created in-repo when an agent operates in this checkout). Plans, audit
-# and `hermes update`'s untracked autostash does not treat it as a local edit (#66189 / #54855).
+# and `fulilian update`'s untracked autostash does not treat it as a local edit (#66189 / #54855).
 apps/desktop/build/
 apps/desktop/demo/
 apps/desktop/dist/
@@ -20,20 +20,20 @@ apps/shared/src/**/*.js
 apps/shared/src/**/*.js.map
 # automation-blueprints-index.json is a build artifact emitted by
 /bin/
-# bootstrap installer. It is Hermes-managed runtime state, never a code change —
+# bootstrap installer. It is Fulilian-managed runtime state, never a code change —
 browser-use/
 build/
 # Bundled community plugin index seed (shipped as package data) — the bare
 # by accident via 3a69e34702, removed in the #72002 salvage).
-# by `hermes update` / launch-time self-heal. Runtime state, never a code change
+# by `fulilian update` / launch-time self-heal. Runtime state, never a code change
 .bytecode-fingerprint
 .bytecode-fingerprint.tmp
 # Checkout fingerprint the __pycache__ tree was last validated against
 # CLI config (may contain sensitive SSH paths)
 cli-config.yaml
 .codex/
-# committed to the repo root. See the hermes-release skill.
-compose.hermes.local.yml
+# committed to the repo root. See the fulilian-release skill.
+compose.fulilian.local.yml
 config/mcporter.json
 # Cross-process web UI build lock (flock target, always empty)
 .cursor/
@@ -43,13 +43,13 @@ data/*
 # `data/` pattern above would otherwise swallow it.
 /default.tar.gz
 # Desktop/bootstrap install marker written into the managed checkout root by the
-# Desktop demo-run scratch output (hermes writes demo/*.txt during recorded
+# Desktop demo-run scratch output (fulilian writes demo/*.txt during recorded
 .direnv/
 dist/
 docs/superpowers/*
 .DS_Store
 *.egg-info/
-# e.g. hermes-bots): plugin.js IS the source, not tsc output. No .tsx
+# e.g. fulilian-bots): plugin.js IS the source, not tsc output. No .tsx
 .env
 .env.development
 .env.development.local
@@ -64,21 +64,21 @@ examples/
 export*
 .gemini/
 # git for the same reason as skills-index.json (large, generated, change
-.hermes/
-hermes-*/*
-hermes_agent.egg-info/
-.hermes-bootstrap-complete
-!hermes_cli/data/
-!hermes_cli/data/plugin_index.json
-hermes_cli/scripts/
-hermes_cli/tui_dist/*
-hermes_cli/web_dist/
-.hermes-docker/
-/.hermes-runtime/
-.hermes-sandbox/
-.hermes-sandbox-e2e*/
+.fulilian/
+fulilian-*/*
+fulilian_agent.egg-info/
+.fulilian-bootstrap-complete
+!fulilian_cli/data/
+!fulilian_cli/data/plugin_index.json
+fulilian_cli/scripts/
+fulilian_cli/tui_dist/*
+fulilian_cli/web_dist/
+.fulilian-docker/
+/.fulilian-runtime/
+.fulilian-sandbox/
+.fulilian-sandbox-e2e*/
 ignored/
-# ignore it so `hermes update`'s `git stash push --include-untracked` does not
+# ignore it so `fulilian update`'s `git stash push --include-untracked` does not
 # — ignore so `git status` stays clean and update's autostash skips them.
 # image-provider (fal.media) URL — they are NEVER committed to the repo. The
 images/
@@ -121,7 +121,7 @@ playwright-report/
 # Playwright visual regression baselines — cached from main in CI, not committed
 /*.png.bak
 *.ppk
-# PR body is the archive. See the hermes-agent-dev skill's
+# PR body is the archive. See the fulilian-agent-dev skill's
 # PR infographics are rendered locally and embedded in PR descriptions via the
 # pr-infographic-workflow reference (storage rule + lapse #8 / #COMMIT-1).
 # Private keys
@@ -143,14 +143,14 @@ result
 run_datagen_kimik2-thinking.sh
 run_datagen_megascience_glm4-6.sh
 run_datagen_sonnet.sh
-# Runtime marker written by hermes update when a lazy dependency refresh is
+# Runtime marker written by fulilian update when a lazy dependency refresh is
 # Runtime metadata only — never a code change. Ignore so `git status` stays clean
 # Sandbox dirs used by the install/update E2E (tests/install/). The suffix is
 scripts/out/
 # sibling exists, so the stale-shadow hazard above cannot apply.
 # sidestepped by an `infograficos/` directory (#70552). .gitignore is only
 skills/.hub/
-# Skills Hub state (lives in ~/.hermes/skills/.hub/ at runtime, but just in case)
+# Skills Hub state (lives in ~/.fulilian/skills/.hub/ at runtime, but just in case)
 # skills.json + skills-meta.json are build artifacts emitted by
 # slip into a commit and break `npm ci` on CI with ENOTDIR).
 *-snapshots/
@@ -194,6 +194,6 @@ website/static/api/skills-meta.json
 # Web UI assets — synced from @nous-research/ui at build time via
 .web_ui_build.lock
 # Web UI build output
-# Working directory for the Hermes Agent's session state (~/.hermes/ at runtime;
+# Working directory for the Fulilian Agent's session state (~/.fulilian/ at runtime;
 .worktrees/
 .zed/

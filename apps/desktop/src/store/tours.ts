@@ -3,7 +3,7 @@
  *
  * A tour takes the screen: it dims the app, spotlights an element, and pages
  * with Next/Prev. That is worth having and worth being able to refuse, and
- * unlike tips there is no ambient half to separate out — every tour is Hermes
+ * unlike tips there is no ambient half to separate out — every tour is Fulilian
  * running one, so the switch governs the whole feature.
  *
  * Renderer-owned because the renderer is what a tour happens to. Turning it off
@@ -13,7 +13,7 @@
 
 import { Codecs, persistentAtom } from '@/lib/persisted'
 
-export const $toursEnabled = persistentAtom('hermes.desktop.tours.v1', true, Codecs.bool)
+export const $toursEnabled = persistentAtom('fulilian.desktop.tours.v1', true, Codecs.bool)
 
 export function setToursEnabled(enabled: boolean): void {
   $toursEnabled.set(enabled)

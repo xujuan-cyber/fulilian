@@ -4,8 +4,8 @@ import { useMemo, useState } from 'react'
 
 import { Codicon } from '@/components/ui/codicon'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
-import type { HermesGitWorktree } from '@/global'
-import type { SessionInfo } from '@/hermes'
+import type { FulilianGitWorktree } from '@/global'
+import type { SessionInfo } from '@/fulilian'
 import { useI18n } from '@/i18n'
 import { displayPath } from '@/lib/display-path'
 import { $dismissedWorktreeIds, dismissWorktree, setWorkspaceNodeOpen } from '@/store/layout'
@@ -40,7 +40,7 @@ export function EnteredProjectContent({
   project: SidebarProjectTree
   renderRows: (sessions: SessionInfo[]) => React.ReactNode
   onNewSession?: (path: null | string) => void
-  repoWorktrees?: Record<string, HermesGitWorktree[]>
+  repoWorktrees?: Record<string, FulilianGitWorktree[]>
   liveSessions?: SessionInfo[]
   removedSessionIds?: ReadonlySet<string>
 }) {
@@ -87,7 +87,7 @@ function RepoFlatSection({
   showHeader: boolean
   renderRows: (sessions: SessionInfo[]) => React.ReactNode
   onNewSession?: (path: null | string) => void
-  discoveredWorktrees?: HermesGitWorktree[]
+  discoveredWorktrees?: FulilianGitWorktree[]
   liveSessions?: SessionInfo[]
   removedSessionIds?: ReadonlySet<string>
 }) {

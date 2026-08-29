@@ -1,21 +1,21 @@
 """
-Hermes CLI - Unified command-line interface for Hermes Agent.
+Fulilian CLI - Unified command-line interface for FuLiLian.
 
 Provides subcommands for:
-- hermes chat          - Interactive chat (same as ./hermes)
-- hermes gateway       - Run gateway in foreground
-- hermes gateway start - Start gateway service
-- hermes gateway stop  - Stop gateway service
-- hermes setup         - Interactive setup wizard
-- hermes status        - Show status of all components
-- hermes cron          - Manage cron jobs
+- fulilian chat          - Interactive chat (same as ./fulilian)
+- fulilian gateway       - Run gateway in foreground
+- fulilian gateway start - Start gateway service
+- fulilian gateway stop  - Stop gateway service
+- fulilian setup         - Interactive setup wizard
+- fulilian status        - Show status of all components
+- fulilian cron          - Manage cron jobs
 """
 
 import os
 import sys
 
-__version__ = "0.20.6"
-__release_date__ = "2026.8.27"
+__version__ = "0.1.0"
+__release_date__ = "2026.8.29"
 
 
 def _ensure_utf8():
@@ -31,7 +31,7 @@ def _ensure_utf8():
     The CLI prints box-drawing characters (┌│├└─) and the ⚕ glyph in the setup
     wizard, doctor, and status banners. Encoding those under a non-UTF-8 codec
     raises an unhandled UnicodeEncodeError that crashes the command before it
-    can even start — e.g. `hermes setup` on a fresh Pi.
+    can even start — e.g. `fulilian setup` on a fresh Pi.
 
     This runs at import time so it protects every CLI subcommand, on any
     platform. It re-wraps stdout/stderr as UTF-8 when their encoding is not
@@ -44,7 +44,7 @@ def _ensure_utf8():
     stream change and no environment mutation.
 
     Note: this is intentionally the earliest, platform-agnostic guard.
-    hermes_cli/stdio.py::configure_windows_stdio() runs later from the entry
+    fulilian_cli/stdio.py::configure_windows_stdio() runs later from the entry
     points and layers on the Windows-only extras (console code-page flip,
     EDITOR default, PATH augmentation); its stream reconfiguration is a
     harmless idempotent no-op once we have already repaired the streams here.

@@ -30,9 +30,9 @@ import yaml
 
 
 def _write_config(monkeypatch: pytest.MonkeyPatch, tmp_path, config: object) -> None:
-    home = tmp_path / "hermes-home"
+    home = tmp_path / "fulilian-home"
     home.mkdir(exist_ok=True)
-    monkeypatch.setenv("HERMES_HOME", str(home))
+    monkeypatch.setenv("FULILIAN_HOME", str(home))
     (home / "config.yaml").write_text(yaml.safe_dump(config), encoding="utf-8")
 
 
@@ -42,7 +42,7 @@ def _configure_mode(monkeypatch: pytest.MonkeyPatch, tmp_path, mode: object) -> 
 
 def _disable_vulnerable_gate(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "hermes_state.is_sqlite_wal_reset_vulnerable",
+        "fulilian_state.is_sqlite_wal_reset_vulnerable",
         lambda **kwargs: False,
     )
 
@@ -62,18 +62,18 @@ def _make_delete_db_with_content(path) -> None:
 @pytest.fixture(autouse=True)
 def _reset_dedup():
     """Order-independence: the warning is deduped per process per db_label."""
-    import hermes_state
+    import fulilian_state
 
-    hermes_state._journal_upgrade_warned_paths.clear()
+    fulilian_state._journal_upgrade_warned_paths.clear()
     yield
-    hermes_state._journal_upgrade_warned_paths.clear()
+    fulilian_state._journal_upgrade_warned_paths.clear()
 
 
 class TestTheContentProbe:
     """``_database_has_content`` is what keeps fresh installs quiet."""
 
     def test_a_brand_new_database_has_no_content(self, tmp_path):
-        from hermes_state import _database_has_content
+        from fulilian_state import _database_has_content
 
         conn = sqlite3.connect(str(tmp_path / "new.db"))
         try:
@@ -82,7 +82,7 @@ class TestTheContentProbe:
             conn.close()
 
     def test_a_database_with_a_table_has_content(self, tmp_path):
-        from hermes_state import _database_has_content
+        from fulilian_state import _database_has_content
 
         path = tmp_path / "used.db"
         _make_delete_db_with_content(path)
@@ -98,7 +98,7 @@ class TestTheContentProbe:
         Answering True on an error would emit the warning for a database we
         could not measure, which includes every fresh one.
         """
-        from hermes_state import _database_has_content
+        from fulilian_state import _database_has_content
 
         conn = sqlite3.connect(":memory:")
         try:
@@ -113,7 +113,7 @@ class TestTheWarningFires:
     def test_an_existing_delete_database_warns_when_flipped(
         self, monkeypatch, tmp_path, caplog
     ):
-        from hermes_state import apply_wal_with_fallback
+        from fulilian_state import apply_wal_with_fallback
 
         _configure_mode(monkeypatch, tmp_path, "wal")
         _disable_vulnerable_gate(monkeypatch)
@@ -122,7 +122,7 @@ class TestTheWarningFires:
 
         conn = sqlite3.connect(str(path))
         try:
-            with caplog.at_level("WARNING", logger="hermes_state"):
+            with caplog.at_level("WARNING", logger="fulilian_state"):
                 assert apply_wal_with_fallback(conn, db_label="state.db") == "wal"
         finally:
             conn.close()
@@ -139,7 +139,7 @@ class TestTheWarningFires:
         Telling an operator their mode changed, without telling them which
         lever survives an open, leaves them doing the same PRAGMA again.
         """
-        from hermes_state import apply_wal_with_fallback
+        from fulilian_state import apply_wal_with_fallback
 
         _configure_mode(monkeypatch, tmp_path, "wal")
         _disable_vulnerable_gate(monkeypatch)
@@ -148,7 +148,7 @@ class TestTheWarningFires:
 
         conn = sqlite3.connect(str(path))
         try:
-            with caplog.at_level("WARNING", logger="hermes_state"):
+            with caplog.at_level("WARNING", logger="fulilian_state"):
                 apply_wal_with_fallback(conn, db_label="state.db")
         finally:
             conn.close()
@@ -165,7 +165,7 @@ class TestTheWarningFires:
         (managed_uv repairs it on update, citing ~2600x slower appends), so
         this must warn about the change without preventing it.
         """
-        from hermes_state import apply_wal_with_fallback
+        from fulilian_state import apply_wal_with_fallback
 
         _configure_mode(monkeypatch, tmp_path, "wal")
         _disable_vulnerable_gate(monkeypatch)
@@ -183,12 +183,12 @@ class TestTheWarningFires:
         self, monkeypatch, tmp_path, caplog
     ):
         """kanban opens a connection per operation; undeduped this is a flood."""
-        from hermes_state import apply_wal_with_fallback
+        from fulilian_state import apply_wal_with_fallback
 
         _configure_mode(monkeypatch, tmp_path, "wal")
         _disable_vulnerable_gate(monkeypatch)
 
-        with caplog.at_level("WARNING", logger="hermes_state"):
+        with caplog.at_level("WARNING", logger="fulilian_state"):
             for name in ("a", "b"):
                 path = tmp_path / f"{name}.db"
                 _make_delete_db_with_content(path)
@@ -205,12 +205,12 @@ class TestTheWarningFires:
         self, monkeypatch, tmp_path, caplog
     ):
         """#89293 saw four databases flip. Dedup is per label, not global."""
-        from hermes_state import apply_wal_with_fallback
+        from fulilian_state import apply_wal_with_fallback
 
         _configure_mode(monkeypatch, tmp_path, "wal")
         _disable_vulnerable_gate(monkeypatch)
 
-        with caplog.at_level("WARNING", logger="hermes_state"):
+        with caplog.at_level("WARNING", logger="fulilian_state"):
             for label in ("state.db", "kanban.db"):
                 path = tmp_path / f"{label}"
                 _make_delete_db_with_content(path)
@@ -236,14 +236,14 @@ class TestTheWarningStaysQuiet:
         every opener applies WAL before creating any schema -- so without
         this guard the warning fires on every first run of every install.
         """
-        from hermes_state import apply_wal_with_fallback
+        from fulilian_state import apply_wal_with_fallback
 
         _configure_mode(monkeypatch, tmp_path, "wal")
         _disable_vulnerable_gate(monkeypatch)
 
         conn = sqlite3.connect(str(tmp_path / "fresh.db"))
         try:
-            with caplog.at_level("WARNING", logger="hermes_state"):
+            with caplog.at_level("WARNING", logger="fulilian_state"):
                 assert apply_wal_with_fallback(conn, db_label="fresh.db") == "wal"
         finally:
             conn.close()
@@ -252,7 +252,7 @@ class TestTheWarningStaysQuiet:
 
     def test_an_existing_wal_database_is_silent(self, monkeypatch, tmp_path, caplog):
         """No flip happens: the probe returns early. Nothing to report."""
-        from hermes_state import apply_wal_with_fallback
+        from fulilian_state import apply_wal_with_fallback
 
         _configure_mode(monkeypatch, tmp_path, "wal")
         _disable_vulnerable_gate(monkeypatch)
@@ -262,7 +262,7 @@ class TestTheWarningStaysQuiet:
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("CREATE TABLE t (x)")
             conn.commit()
-            with caplog.at_level("WARNING", logger="hermes_state"):
+            with caplog.at_level("WARNING", logger="fulilian_state"):
                 assert apply_wal_with_fallback(conn, db_label="already-wal.db") == "wal"
         finally:
             conn.close()
@@ -271,7 +271,7 @@ class TestTheWarningStaysQuiet:
 
     def test_configured_delete_is_silent(self, monkeypatch, tmp_path, caplog):
         """The operator used the durable lever. There is nothing to tell them."""
-        from hermes_state import apply_wal_with_fallback
+        from fulilian_state import apply_wal_with_fallback
 
         _configure_mode(monkeypatch, tmp_path, "delete")
         _disable_vulnerable_gate(monkeypatch)
@@ -280,7 +280,7 @@ class TestTheWarningStaysQuiet:
 
         conn = sqlite3.connect(str(path))
         try:
-            with caplog.at_level("WARNING", logger="hermes_state"):
+            with caplog.at_level("WARNING", logger="fulilian_state"):
                 assert apply_wal_with_fallback(conn, db_label="configured-delete.db") == "delete"
             assert conn.execute("PRAGMA journal_mode").fetchone()[0].lower() == "delete"
         finally:
@@ -299,11 +299,11 @@ class TestTheWarningStaysQuiet:
         the SQLite upgrade -- warning here would blame the guard that was
         doing its job.
         """
-        from hermes_state import apply_wal_with_fallback
+        from fulilian_state import apply_wal_with_fallback
 
         _configure_mode(monkeypatch, tmp_path, "wal")
         monkeypatch.setattr(
-            "hermes_state.is_sqlite_wal_reset_vulnerable",
+            "fulilian_state.is_sqlite_wal_reset_vulnerable",
             lambda **kwargs: True,
         )
         path = tmp_path / "vulnerable.db"
@@ -311,7 +311,7 @@ class TestTheWarningStaysQuiet:
 
         conn = sqlite3.connect(str(path))
         try:
-            with caplog.at_level("WARNING", logger="hermes_state"):
+            with caplog.at_level("WARNING", logger="fulilian_state"):
                 apply_wal_with_fallback(conn, db_label="vulnerable.db")
         finally:
             conn.close()
@@ -327,7 +327,7 @@ class TestTheExistingContractIsUnchanged:
     """Behaviour preservation for the rules this change sits next to."""
 
     def test_on_disk_wal_is_still_never_live_downgraded(self, monkeypatch, tmp_path):
-        from hermes_state import apply_wal_with_fallback
+        from fulilian_state import apply_wal_with_fallback
 
         _configure_mode(monkeypatch, tmp_path, "delete")
         path = tmp_path / "existing-wal.db"
@@ -335,7 +335,7 @@ class TestTheExistingContractIsUnchanged:
         try:
             assert conn.execute("PRAGMA journal_mode=WAL").fetchone()[0].lower() == "wal"
             monkeypatch.setattr(
-                "hermes_state.is_sqlite_wal_reset_vulnerable",
+                "fulilian_state.is_sqlite_wal_reset_vulnerable",
                 lambda **kwargs: True,
             )
             assert apply_wal_with_fallback(conn, db_label="existing-wal.db") == "wal"
@@ -346,7 +346,7 @@ class TestTheExistingContractIsUnchanged:
     def test_default_config_still_yields_wal_on_a_fresh_database(
         self, monkeypatch, tmp_path
     ):
-        from hermes_state import apply_wal_with_fallback
+        from fulilian_state import apply_wal_with_fallback
 
         _configure_mode(monkeypatch, tmp_path, "wal")
         _disable_vulnerable_gate(monkeypatch)

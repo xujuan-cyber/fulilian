@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/dialog'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { SanitizedInput } from '@/components/ui/sanitized-input'
-import type { HermesGitBranch } from '@/global'
+import type { FulilianGitBranch } from '@/global'
 import { useI18n } from '@/i18n'
 import { gitRef } from '@/lib/sanitize'
 import { notifyError } from '@/store/notifications'
@@ -39,7 +39,7 @@ interface BranchActionCopy {
   branchTrackRemote: string
 }
 
-const branchActionLabel = (branch: HermesGitBranch, copy: BranchActionCopy) => {
+const branchActionLabel = (branch: FulilianGitBranch, copy: BranchActionCopy) => {
   if (branch.checkedOut) {
     return copy.branchOpenExisting
   }
@@ -74,7 +74,7 @@ export function WorktreeDialog() {
   const [name, setName] = useState('')
   const [pending, setPending] = useState(false)
   const [convertMode, setConvertMode] = useState(false)
-  const [branches, setBranches] = useState<HermesGitBranch[]>([])
+  const [branches, setBranches] = useState<FulilianGitBranch[]>([])
   const [branchesLoading, setBranchesLoading] = useState(false)
   const [selectedBase, setSelectedBase] = useState('')
   // The repo that the dialog targets. It is seeded from the resolved intent.
@@ -180,7 +180,7 @@ export function WorktreeDialog() {
     }
   }
 
-  const convert = async (branch: HermesGitBranch) => {
+  const convert = async (branch: FulilianGitBranch) => {
     if (pending || !repoPath || !branch) {
       return
     }

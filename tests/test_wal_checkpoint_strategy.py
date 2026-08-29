@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from hermes_state import SessionDB
+from fulilian_state import SessionDB
 
 
 class TrackingConnection:

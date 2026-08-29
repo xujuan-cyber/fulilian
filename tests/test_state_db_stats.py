@@ -1,12 +1,12 @@
-"""Tests for state.db health/stats collection (hermes doctor section).
+"""Tests for state.db health/stats collection (fulilian doctor section).
 
 Covers:
-- ``hermes_state.collect_state_db_stats``: read-only, best-effort stats
+- ``fulilian_state.collect_state_db_stats``: read-only, best-effort stats
   (page_count, freelist, WAL size, journal mode, row counts, FTS presence,
   pending v23 FTS-rebuild bookkeeping).
-- ``hermes_state.count_db_holders``: /proc-based best-effort probe for how
+- ``fulilian_state.count_db_holders``: /proc-based best-effort probe for how
   many processes hold the DB file open (Linux only; None elsewhere/on error).
-- ``hermes_cli.doctor._render_state_db_stats``: formatting/threshold helper
+- ``fulilian_cli.doctor._render_state_db_stats``: formatting/threshold helper
   the doctor state.db section prints from.
 """
 
@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from hermes_state import SessionDB, collect_state_db_stats, count_db_holders
+from fulilian_state import SessionDB, collect_state_db_stats, count_db_holders
 
 
 @pytest.fixture()

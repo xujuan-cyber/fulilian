@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reveal/focus a pane in the Hermes desktop GUI.
+"""Reveal/focus a pane in the Fulilian desktop GUI.
 
 Lives in the ``desktop_ui`` toolset (like the other GUI affordances), which the
 GUI gateway enables only for desktop-sourced sessions. Emits ``pane.reveal``
@@ -28,7 +28,7 @@ def focus_pane_tool(pane: str) -> str:
     except Exception as exc:
         return tool_error(f"Failed to focus the {name} pane: {exc}")
     if not ok:
-        return tool_error("Pane focus is only available in the Hermes desktop app.")
+        return tool_error("Pane focus is only available in the Fulilian desktop app.")
 
     return json.dumps({"success": True, "pane": name}, ensure_ascii=False)
 
@@ -36,7 +36,7 @@ def focus_pane_tool(pane: str) -> str:
 FOCUS_PANE_SCHEMA = {
     "name": "focus_pane",
     "description": (
-        "Reveal and focus a pane in the Hermes desktop app when the user asks to "
+        "Reveal and focus a pane in the Fulilian desktop app when the user asks to "
         "see it — e.g. \"show me the terminal\", \"open the file browser\", \"show "
         "the diff\". Panes: chat (the conversation), files (project file browser), "
         "terminal (embedded shell), review (git diff), sessions (the session list). "

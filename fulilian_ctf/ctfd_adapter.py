@@ -7,13 +7,13 @@
 2. **新题同步与轮询（F3-011）** — ``sync_challenges`` 把 CTFd 题目导出为
    步骤 05 调度引擎可消费的 manifest（``registry.load_challenges`` 兼容
    格式，``fulilian solve-all <dir>`` 直接可跑）；``poll_new_challenges``
-   检测新题；``create_poll_job`` 复用 Hermes cron 创建定时任务
+   检测新题；``create_poll_job`` 复用 Fulilian cron 创建定时任务
    （``cron.jobs.create_job``，"every 5m" 间隔），到点自动轮询 + spawn
    solver——指南的 ``fulilian cron create --schedule "every 5m"`` 通路。
 3. **MCP 对接（F3-012）** — 自包含的 stdio MCP server（JSON-RPC 2.0：
    initialize / tools/list / tools/call），暴露 ctfd_list_challenges /
    ctfd_get_challenge / ctfd_submit_flag 三个 tool。不依赖原生 MCP
-   客户端栈，避免与 Hermes 的 mcp 子系统冲突；任何 MCP client
+   客户端栈，避免与 Fulilian 的 mcp 子系统冲突；任何 MCP client
    （``fulilian mcp add``）均可按 stdio 协议接入。
 """
 
@@ -190,7 +190,7 @@ def create_poll_job(
     schedule: str = "every 5m",
     name: str = "ctfd-poll",
 ) -> dict:
-    """创建 CTFd 轮询 cron 任务（复用 Hermes cron，F3-011）。
+    """创建 CTFd 轮询 cron 任务（复用 Fulilian cron，F3-011）。
 
     任务 prompt 自包含：轮询新题 → 有新题则同步 manifest → 批量求解。
     需 gateway 进程在运行（cron ticker 由 gateway 驱动）。

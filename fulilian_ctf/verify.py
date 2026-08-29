@@ -14,7 +14,7 @@
 
 参考：hxbai（https://github.com/inwpu/hxbai）
 实现指南：02-实施指南/02-P1-三重校验门.md
-模块设计：03-代码设计/00-hermes_ctf模块设计.md（fulilian_ctf/verify.py）
+模块设计：03-代码设计/00-fulilian_ctf模块设计.md（fulilian_ctf/verify.py）
 """
 
 from __future__ import annotations

@@ -20,7 +20,7 @@ import plugins.video_gen.deepinfra as deepinfra_plugin
 
 @pytest.fixture(autouse=True)
 def _isolation(tmp_path, monkeypatch):
-    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+    monkeypatch.setenv("FULILIAN_HOME", str(tmp_path))
     import fulilian_cli.models as _models_mod
     monkeypatch.setattr(_models_mod, "_deepinfra_catalog_cache", {})
     monkeypatch.setenv("DEEPINFRA_API_KEY", "test-key")
@@ -101,7 +101,7 @@ def _mock_url_download(captured: dict, raise_exc: Exception | None = None):
         captured["url"] = url
         if raise_exc:
             raise raise_exc
-        return Path(f"/home/x/.hermes/cache/videos/{prefix}_test.mp4")
+        return Path(f"/home/x/.fulilian/cache/videos/{prefix}_test.mp4")
 
     with patch.object(base, "save_url_video", _fake_save_url_video):
         yield

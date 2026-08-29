@@ -1,14 +1,14 @@
-"""Install and remove the Linux desktop entry (``hermes.desktop``).
+"""Install and remove the Linux desktop entry (``fulilian.desktop``).
 
-``hermes desktop`` builds and launches the Electron app. On Linux, a
+``fulilian desktop`` builds and launches the Electron app. On Linux, a
 freshly-built app has no launcher presence: no menu item, no icon. This
 module writes the XDG desktop entry that gives it one.
-``hermes uninstall --gui`` removes the entry again.
+``fulilian uninstall --gui`` removes the entry again.
 
 Two values must be absolute for the entry to work:
 
   - ``Exec`` — the launcher runs without shell ``PATH`` customizations, so
-    a bare ``hermes desktop`` fails when hermes lives in ``~/.local/bin``
+    a bare ``fulilian desktop`` fails when fulilian lives in ``~/.local/bin``
     or a venv. Resolve the real binary and write its full path.
   - ``Icon`` — an unqualified icon name needs an indexed icon theme. The
     spec allows an absolute path instead, so point at the app icon in the
@@ -32,7 +32,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-DESKTOP_ENTRY_NAME = "hermes.desktop"
+DESKTOP_ENTRY_NAME = "fulilian.desktop"
 
 
 def is_supported() -> bool:
@@ -48,7 +48,7 @@ def _xdg_data_home() -> Path:
 
 
 def desktop_entry_path() -> Path:
-    """Where the ``hermes.desktop`` entry lives."""
+    """Where the ``fulilian.desktop`` entry lives."""
     return _xdg_data_home() / "applications" / DESKTOP_ENTRY_NAME
 
 
@@ -58,37 +58,37 @@ def icon_path(project_root: Path) -> Path:
 
 
 def resolve_exec_command() -> str:
-    """Build the absolute ``Exec=`` command line for ``hermes desktop``.
+    """Build the absolute ``Exec=`` command line for ``fulilian desktop``.
 
-    Prefer the real ``hermes`` executable (argv[0] or PATH). When Hermes
+    Prefer the real ``fulilian`` executable (argv[0] or PATH). When Fulilian
     runs as a module with no launcher installed, use the current
     interpreter, also absolute.
     """
-    from fulilian_cli.relaunch import resolve_hermes_bin
+    from fulilian_cli.relaunch import resolve_fulilian_bin
 
-    bin_path = resolve_hermes_bin()
+    bin_path = resolve_fulilian_bin()
     if bin_path:
         resolved = Path(bin_path).resolve()
         if _needs_interpreter(resolved):
             # The resolved launcher is a Python script whose shebang points at
-            # a NON-venv interpreter (e.g. the repo's `hermes` script with
+            # a NON-venv interpreter (e.g. the repo's `fulilian` script with
             # `#!/usr/bin/env python3` when argv[0] came from the shell
             # installer's bash wrapper). Launched from the .desktop entry that
             # shebang resolves to the SYSTEM python and dies on the first
             # third-party import (#90292) — silently, since Terminal=false.
-            # sys.executable is the interpreter actually running Hermes (the
+            # sys.executable is the interpreter actually running Fulilian (the
             # venv one), so prefix it explicitly.
             argv = [str(Path(sys.executable).resolve()), str(resolved), "desktop"]
         else:
             argv = [str(resolved), "desktop"]
     else:
-        argv = [str(Path(sys.executable).resolve()), "-m", "hermes_cli.main", "desktop"]
+        argv = [str(Path(sys.executable).resolve()), "-m", "fulilian_cli.main", "desktop"]
     return " ".join(_quote_exec_arg(a) for a in argv)
 
 
 def _needs_interpreter(bin_path: Path) -> bool:
     """Whether ``bin_path`` is a Python script that must run under
-    ``sys.executable`` to see Hermes' venv (rather than its own shebang)."""
+    ``sys.executable`` to see Fulilian' venv (rather than its own shebang)."""
     try:
         with open(bin_path, "rb") as fh:
             head = fh.readline(256)
@@ -126,15 +126,15 @@ def render_desktop_entry(exec_command: str, icon: str) -> str:
     return (
         "[Desktop Entry]\n"
         "Type=Application\n"
-        "Name=Hermes\n"
-        "GenericName=Hermes Desktop\n"
-        "Comment=Launch Hermes Desktop\n"
+        "Name=Fulilian\n"
+        "GenericName=Fulilian Desktop\n"
+        "Comment=Launch Fulilian Desktop\n"
         f"Exec={exec_command}\n"
         f"Icon={icon}\n"
         "Terminal=false\n"
         "Categories=Utility;\n"
         "StartupNotify=true\n"
-        "StartupWMClass=Hermes\n"
+        "StartupWMClass=Fulilian\n"
     )
 
 
@@ -177,7 +177,7 @@ def _run_quiet(cmd: "list[str]") -> bool:
 
 
 def install_desktop_entry(project_root: Path) -> Optional[Path]:
-    """Write (or refresh) the Hermes desktop entry. Return its path.
+    """Write (or refresh) the Fulilian desktop entry. Return its path.
 
     Return ``None`` on non-Linux platforms or when the write fails. This
     is a convenience, never a reason to fail a launch.
@@ -189,7 +189,7 @@ def install_desktop_entry(project_root: Path) -> Optional[Path]:
     icon = icon_path(project_root)
     # Use the themed name when the checkout has no icon (a lite or
     # packaged install). A broken absolute path renders as no icon.
-    icon_value = str(icon) if icon.is_file() else "hermes"
+    icon_value = str(icon) if icon.is_file() else "fulilian"
     contents = render_desktop_entry(resolve_exec_command(), icon_value)
 
     try:

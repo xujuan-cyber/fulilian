@@ -17,7 +17,7 @@ import { PromptOverlays } from '@/components/prompt-overlays'
 import { Button } from '@/components/ui/button'
 import { ErrorState } from '@/components/ui/error-state'
 import { TitleMenuTrigger } from '@/components/ui/title-menu-trigger'
-import { type HermesGateway } from '@/hermes'
+import { type FulilianGateway } from '@/fulilian'
 import { useI18n } from '@/i18n'
 import type { ChatMessage } from '@/lib/chat-messages'
 import { NEW_SESSION_TITLE, quickModelOptions, sessionTitle } from '@/lib/chat-runtime'
@@ -50,7 +50,7 @@ import {
 import { $focusedStoredSessionId, sessionTileDelegate } from '@/store/session-states'
 import { $transcriptTailBySessionId, transcriptTailState } from '@/store/transcript-tail'
 import { isAuxiliaryWindow, isWatchWindow } from '@/store/windows'
-import type { ModelOptionsResponse } from '@/types/hermes'
+import type { ModelOptionsResponse } from '@/types/fulilian'
 
 import { primaryRouteSelectedSessionId, routeSessionId } from '../routes'
 import { titlebarHeaderBaseClass, titlebarHeaderShadowClass, titlebarHeaderTitleClass } from '../shell/titlebar'
@@ -80,7 +80,7 @@ import {
 import { advanceTranscriptWindow, type TranscriptWindowState } from './transcript-window'
 
 interface ChatViewProps extends Omit<React.ComponentProps<'div'>, 'onSubmit'> {
-  gateway: HermesGateway | null
+  gateway: FulilianGateway | null
   modelMenuContent?: React.ReactNode
   onToggleSelectedPin: () => void
   onDeleteSelectedSession: () => void

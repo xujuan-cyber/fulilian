@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 # Freeze YOLO mode at module import time. Reading os.environ on every call
 # would allow any skill running inside the process to set this variable and
 # instantly bypass all approval checks — a prompt-injection escalation path.
-_YOLO_MODE_FROZEN: bool = is_truthy_value(os.getenv("HERMES_YOLO_MODE", ""))
+_YOLO_MODE_FROZEN: bool = is_truthy_value(os.getenv("FULILIAN_YOLO_MODE", ""))
 
 # Per-thread/per-task gateway session identity.
 # Gateway runs agent turns concurrently in executor threads, so reading a
@@ -52,7 +52,7 @@ _approval_tool_call_id: contextvars.ContextVar[str] = contextvars.ContextVar(
     "approval_tool_call_id",
     default="",
 )
-# Hermes session id (observability identity, distinct from the gateway
+# Fulilian session id (observability identity, distinct from the gateway
 # routing session_key above). Approval hooks forward it so observer
 # plugins can attach approval marks to the REAL session scope — without
 # it they fall back to a synthetic "default" session whose scope never
@@ -65,44 +65,44 @@ _approval_session_id: contextvars.ContextVar[str] = contextvars.ContextVar(
 
 # Interactive-CLI flag. Concurrent ACP sessions run on a shared
 # ThreadPoolExecutor (acp_adapter/server.py), so mutating the process-global
-# os.environ["HERMES_INTERACTIVE"] races: one session's restore in `finally`
+# os.environ["FULILIAN_INTERACTIVE"] races: one session's restore in `finally`
 # can clobber another session's set mid-run, dropping it onto the
 # non-interactive auto-approve path so a dangerous command executes without
 # the approval callback firing (GHSA-96vc-wcxf-jjff). A contextvar is
 # thread/task-local, so each executor worker (or asyncio task) sees only its
 # own value. None = unset → fall back to the env var for legacy
-# single-threaded CLI callers that still export HERMES_INTERACTIVE.
-_hermes_interactive_ctx: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
-    "hermes_interactive",
+# single-threaded CLI callers that still export FULILIAN_INTERACTIVE.
+_fulilian_interactive_ctx: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+    "fulilian_interactive",
     default=None,
 )
 
 
-def set_hermes_interactive_context(interactive: bool) -> contextvars.Token:
+def set_fulilian_interactive_context(interactive: bool) -> contextvars.Token:
     """Bind interactive mode for the current context (thread or asyncio task).
 
-    Use this instead of mutating ``os.environ["HERMES_INTERACTIVE"]`` from
+    Use this instead of mutating ``os.environ["FULILIAN_INTERACTIVE"]`` from
     concurrent executor threads. When unset (default), interactive detection
-    falls back to the ``HERMES_INTERACTIVE`` env var for legacy callers.
+    falls back to the ``FULILIAN_INTERACTIVE`` env var for legacy callers.
     """
-    return _hermes_interactive_ctx.set("1" if interactive else "")
+    return _fulilian_interactive_ctx.set("1" if interactive else "")
 
 
-def reset_hermes_interactive_context(token: contextvars.Token) -> None:
-    """Restore the prior value from :func:`set_hermes_interactive_context`."""
-    _hermes_interactive_ctx.reset(token)
+def reset_fulilian_interactive_context(token: contextvars.Token) -> None:
+    """Restore the prior value from :func:`set_fulilian_interactive_context`."""
+    _fulilian_interactive_ctx.reset(token)
 
 
 def _is_interactive_cli() -> bool:
     """True when running an interactive CLI/ACP session.
 
     Prefers the context-local flag (set by concurrent ACP sessions) and falls
-    back to the ``HERMES_INTERACTIVE`` env var for single-threaded callers.
+    back to the ``FULILIAN_INTERACTIVE`` env var for single-threaded callers.
     """
-    ctx_val = _hermes_interactive_ctx.get()
+    ctx_val = _fulilian_interactive_ctx.get()
     if ctx_val is not None:
         return is_truthy_value(ctx_val)
-    return env_var_enabled("HERMES_INTERACTIVE")
+    return env_var_enabled("FULILIAN_INTERACTIVE")
 
 
 def _fire_approval_hook(hook_name: str, **kwargs) -> None:
@@ -124,7 +124,7 @@ def _fire_approval_hook(hook_name: str, **kwargs) -> None:
     try:
         kwargs.setdefault("turn_id", _approval_turn_id.get())
         kwargs.setdefault("tool_call_id", _approval_tool_call_id.get())
-        # Forward the Hermes session id so observer plugins parent approval
+        # Forward the Fulilian session id so observer plugins parent approval
         # marks to the real session scope instead of a synthetic "default"
         # session (whose scope never closes → marks never export).
         _session_id = _approval_session_id.get()
@@ -236,7 +236,7 @@ def get_current_session_key(default: str = "default") -> str:
     if session_key:
         return session_key
     from gateway.session_context import get_session_env
-    return get_session_env("HERMES_SESSION_KEY", default)
+    return get_session_env("FULILIAN_SESSION_KEY", default)
 
 
 def _get_session_platform() -> str:
@@ -244,9 +244,9 @@ def _get_session_platform() -> str:
     try:
         from gateway.session_context import get_session_env
 
-        return get_session_env("HERMES_SESSION_PLATFORM", "") or ""
+        return get_session_env("FULILIAN_SESSION_PLATFORM", "") or ""
     except Exception:
-        return os.getenv("HERMES_SESSION_PLATFORM", "") or ""
+        return os.getenv("FULILIAN_SESSION_PLATFORM", "") or ""
 
 
 def _is_cron_approval_context() -> bool:
@@ -260,16 +260,16 @@ def _is_cron_approval_context() -> bool:
     try:
         from gateway.session_context import get_session_env
 
-        return is_truthy_value(get_session_env("HERMES_CRON_SESSION", ""))
+        return is_truthy_value(get_session_env("FULILIAN_CRON_SESSION", ""))
     except Exception:
-        return env_var_enabled("HERMES_CRON_SESSION")
+        return env_var_enabled("FULILIAN_CRON_SESSION")
 
 
 def _is_single_query_approval_context() -> bool:
     """True when the current approval decision is from a single-query (-q) session.
 
-    ``hermes chat -q "..."`` runs one turn and exits with no user waiting to
-    answer approval prompts, but it still exports ``HERMES_INTERACTIVE=1`` so
+    ``fulilian chat -q "..."`` runs one turn and exits with no user waiting to
+    answer approval prompts, but it still exports ``FULILIAN_INTERACTIVE=1`` so
     interactive sudo password prompts can be driven from stdin. Without an
     explicit marker, ``_is_interactive_cli()`` would report True and the gate
     would wait the full approval timeout for a human who never comes — failing
@@ -285,20 +285,20 @@ def _is_single_query_approval_context() -> bool:
     try:
         from gateway.session_context import get_session_env
 
-        return is_truthy_value(get_session_env("HERMES_SINGLE_QUERY_SESSION", ""))
+        return is_truthy_value(get_session_env("FULILIAN_SINGLE_QUERY_SESSION", ""))
     except Exception:
-        return env_var_enabled("HERMES_SINGLE_QUERY_SESSION")
+        return env_var_enabled("FULILIAN_SINGLE_QUERY_SESSION")
 
 
 def _is_gateway_approval_context() -> bool:
     """True when this call is inside a gateway/API session.
 
-    Legacy gateway integrations set HERMES_GATEWAY_SESSION in process env.
-    Newer concurrent gateway paths bind HERMES_SESSION_PLATFORM via
+    Legacy gateway integrations set FULILIAN_GATEWAY_SESSION in process env.
+    Newer concurrent gateway paths bind FULILIAN_SESSION_PLATFORM via
     contextvars so approval mode does not depend on process-global flags.
 
     Cron jobs are NEVER gateway-approval contexts even when they originate
-    from a gateway platform (cron binds HERMES_SESSION_PLATFORM via
+    from a gateway platform (cron binds FULILIAN_SESSION_PLATFORM via
     contextvars for delivery routing). Cron approvals are governed by
     ``approvals.cron_mode`` config, not interactive resolve — letting cron
     fall through to the gateway branch would submit a pending approval
@@ -306,7 +306,7 @@ def _is_gateway_approval_context() -> bool:
     """
     if _is_cron_approval_context():
         return False
-    if env_var_enabled("HERMES_GATEWAY_SESSION"):
+    if env_var_enabled("FULILIAN_GATEWAY_SESSION"):
         return True
     return bool(_get_session_platform())
 
@@ -334,7 +334,7 @@ def _should_fall_through_to_cli_approval(
 ) -> bool:
     """Prefer the classic CLI Dangerous Command panel over silent pending.
 
-    ``HERMES_EXEC_ASK`` (and sometimes a session platform marker) can leak into
+    ``FULILIAN_EXEC_ASK`` (and sometimes a session platform marker) can leak into
     an interactive CLI process — most commonly via ``import gateway.run``, which
     historically set ask-mode as a module-level side effect. Without a gateway
     notify listener, the ask/gateway branch used to return ``pending_approval``
@@ -343,32 +343,32 @@ def _should_fall_through_to_cli_approval(
     return bool(is_cli and approval_callback is not None and notify_cb is None)
 
 # Sensitive write targets that should trigger approval even when referenced
-# via shell expansions like $HOME or $HERMES_HOME, or by the resolved absolute
-# active profile home path such as /home/hermes/.hermes/config.yaml. The
-# resolved-absolute form is folded into the ~/.hermes/ patterns at detection
+# via shell expansions like $HOME or $FULILIAN_HOME, or by the resolved absolute
+# active profile home path such as /home/fulilian/.fulilian/config.yaml. The
+# resolved-absolute form is folded into the ~/.fulilian/ patterns at detection
 # time by _normalize_command_for_detection() — see the rewrite step there — so
 # these static patterns stay free of any import-time path snapshot (which would
-# go stale when HERMES_HOME is set after this module is imported, e.g. under the
+# go stale when FULILIAN_HOME is set after this module is imported, e.g. under the
 # hermetic test conftest or any deferred-profile-resolution path).
 _SSH_SENSITIVE_PATH = r'(?:~|\$home|\$\{home\})/\.ssh(?:/|$)'
-_HERMES_ENV_PATH = (
-    r'(?:~\/\.hermes/|'
-    r'(?:\$home|\$\{home\})/\.hermes/|'
-    r'(?:\$hermes_home|\$\{hermes_home\})/)'
+_FULILIAN_ENV_PATH = (
+    r'(?:~\/\.fulilian/|'
+    r'(?:\$home|\$\{home\})/\.fulilian/|'
+    r'(?:\$fulilian_home|\$\{fulilian_home\})/)'
     r'\.env\b'
 )
-# ~/.hermes/config.yaml IS the security policy: approvals.mode, yolo, and the
+# ~/.fulilian/config.yaml IS the security policy: approvals.mode, yolo, and the
 # permanent-approval allowlist live here, and the config cache is mtime-keyed
 # so a write takes effect mid-session (the agent could flip approvals.mode=off
 # and immediately bypass the gate). Pair the write_file/patch deny (file_tools
 # _check_sensitive_path) with terminal-side coverage so `sed -i`, `tee`, `>`,
 # `cp`, etc. targeting it are gated too — otherwise the deny is unpaired
-# theater. Mirrors _HERMES_ENV_PATH; matches the HERMES_HOME override form as
-# well as ~/.hermes/.
-_HERMES_CONFIG_PATH = (
-    r'(?:~\/\.hermes/|'
-    r'(?:\$home|\$\{home\})/\.hermes/|'
-    r'(?:\$hermes_home|\$\{hermes_home\})/)'
+# theater. Mirrors _FULILIAN_ENV_PATH; matches the FULILIAN_HOME override form as
+# well as ~/.fulilian/.
+_FULILIAN_CONFIG_PATH = (
+    r'(?:~\/\.fulilian/|'
+    r'(?:\$home|\$\{home\})/\.fulilian/|'
+    r'(?:\$fulilian_home|\$\{fulilian_home\})/)'
     r'config\.yaml\b'
 )
 _PROJECT_ENV_PATH = r'(?:(?:/|\.{1,2}/)?(?:[^\s/"\'`]+/)*\.env(?:\.[^/\s"\'`]+)*)'
@@ -395,8 +395,8 @@ _SYSTEM_CONFIG_PATH = (
 _SENSITIVE_WRITE_TARGET = (
     rf'(?:{_SYSTEM_CONFIG_PATH}|/dev/sd|'
     rf'{_SSH_SENSITIVE_PATH}|'
-    rf'{_HERMES_ENV_PATH}|'
-    rf'{_HERMES_CONFIG_PATH}|'
+    rf'{_FULILIAN_ENV_PATH}|'
+    rf'{_FULILIAN_CONFIG_PATH}|'
     rf'{_SHELL_RC_FILES}|'
     rf'{_CREDENTIAL_FILES})'
 )
@@ -818,10 +818,10 @@ def _save_blocked_payload(command: str) -> Optional[str]:
     back to the manual write_file recipe).
     """
     try:
-        from fulilian_constants import get_hermes_home
+        from fulilian_constants import get_fulilian_home
         import time as _time
         import uuid as _uuid
-        script_dir = get_hermes_home() / "cache" / "blocked-scripts"
+        script_dir = get_fulilian_home() / "cache" / "blocked-scripts"
         script_dir.mkdir(parents=True, exist_ok=True)
         # Opportunistic cleanup: blocked payloads older than 7 days.
         cutoff = _time.time() - 7 * 86400
@@ -834,7 +834,7 @@ def _save_blocked_payload(command: str) -> Optional[str]:
         path = script_dir / f"blocked-{int(_time.time())}-{_uuid.uuid4().hex[:8]}.sh"
         path.write_text(
             "#!/bin/bash\n"
-            "# Auto-saved by Hermes: this command exceeded the inline command\n"
+            "# Auto-saved by Fulilian: this command exceeded the inline command\n"
             "# parser limit and was blocked from direct execution. Review it,\n"
             "# then run it via: bash " + str(path) + "\n"
             + command
@@ -941,7 +941,7 @@ DANGEROUS_PATTERNS = [
     (r'\b(?:powershell|pwsh)(?:\.exe)?\b(?:\s+-\S+)*\s+(?:-(?:command|c)\s+)?["\']?(?:remove-item|rmdir|erase|del|rd|ri|rm)\b', "Windows PowerShell destructive delete"),
     (r'\b(?:powershell|pwsh)(?:\.exe)?\b.*\s-(?:encodedcommand|enc|e)\b', "PowerShell encoded command execution"),
     # ── Windows destructive tier (#69472) ────────────────────────────────
-    # These are native Windows EXEs / cmdlets reachable from ANY Hermes
+    # These are native Windows EXEs / cmdlets reachable from ANY Fulilian
     # terminal backend on a Windows host — including the default git-bash
     # backend (taskkill.exe, icacls.exe, reg.exe, vssadmin.exe, bcdedit.exe,
     # cipher.exe are ordinary PATH executables there). Detection input is
@@ -987,7 +987,7 @@ DANGEROUS_PATTERNS = [
     # Credential/key paths in Windows form — the POSIX ~/.ssh patterns never
     # match drive-letter or backslash spellings. Match both separators.
     (r'\busers[\\/][^\\/\s]+[\\/]\.ssh\b', "access to SSH keys (Windows path)"),
-    (r'\bappdata[\\/](?:local|roaming)[\\/]hermes[^\n]*\.env\b', "access to Hermes secrets (Windows path)"),
+    (r'\bappdata[\\/](?:local|roaming)[\\/]fulilian[^\n]*\.env\b', "access to Fulilian secrets (Windows path)"),
     # ─────────────────────────────────────────────────────────────────────
     (r'\bchmod\s+(-[^\s]*\s+)*(777|666|o\+[rwx]*w|a\+[rwx]*w)\b', "world/other-writable permissions"),
     (r'\bchmod\s+--recursive\b.*(777|666|o\+[rwx]*w|a\+[rwx]*w)', "recursive world/other-writable (long flag)"),
@@ -1053,14 +1053,14 @@ DANGEROUS_PATTERNS = [
     # Gateway lifecycle protection: prevent the agent from killing its own
     # gateway process.  These commands trigger a gateway restart/stop that
     # terminates all running agents mid-work.  Allow global flags between
-    # `hermes` and `gateway` (e.g. `hermes -p ade gateway restart`) so a
+    # `fulilian` and `gateway` (e.g. `fulilian -p ade gateway restart`) so a
     # profile flag can't slip the agent past the guard.
-    (r'\bhermes\s+(?:-{1,2}\S+(?:\s+\S+)?\s+)*gateway\s+(stop|restart)\b', "stop/restart hermes gateway (kills running agents)"),
-    (r'\bhermes\s+update\b', "hermes update (restarts gateway, kills running agents)"),
+    (r'\bfulilian\s+(?:-{1,2}\S+(?:\s+\S+)?\s+)*gateway\s+(stop|restart)\b', "stop/restart fulilian gateway (kills running agents)"),
+    (r'\bfulilian\s+update\b', "fulilian update (restarts gateway, kills running agents)"),
     # Docker container lifecycle — any user with docker.sock mounted (a common
     # Docker Compose pattern) gives the agent the ability to restart/stop/kill
     # containers without approval.  These are agent-initiated lifecycle operations
-    # that should always require user consent, just like `hermes gateway restart`
+    # that should always require user consent, just like `fulilian gateway restart`
     # already does for the gateway process.
     # Docker/Podman daemon redirect — global flags or env prefixes that point
     # the CLI at a DIFFERENT daemon, often a remote host over ssh/tcp.  A
@@ -1090,53 +1090,53 @@ DANGEROUS_PATTERNS = [
     # Allow global flags between `docker`/`compose` and the verb (e.g.
     # `docker compose -f prod.yml down`, `docker --log-level debug stop app`)
     # and the legacy hyphenated `docker-compose` binary, so a flag can't slip
-    # a lifecycle command past the guard — same treatment as the `hermes ...
+    # a lifecycle command past the guard — same treatment as the `fulilian ...
     # gateway` pattern above.
     (r'\bdocker(?:-compose|\s+compose)\s+(?:-{1,2}\S+(?:[=\s]\S+)?\s+)*(restart|stop|kill|down)\b',
      "docker compose restart/stop/kill/down (container lifecycle)"),
     (r'\bdocker\s+(?:-{1,2}\S+(?:[=\s]\S+)?\s+)*(restart|stop|kill)\b',
      "docker restart/stop/kill (container lifecycle)"),
     # Gateway protection: never start gateway outside systemd management
-    (r'gateway\s+run\b.*(&\s*$|&\s*;|\bdisown\b|\bsetsid\b)', "start gateway outside systemd (use 'systemctl --user restart hermes-gateway')"),
-    (r'\bnohup\b.*gateway\s+run\b', "start gateway outside systemd (use 'systemctl --user restart hermes-gateway')"),
+    (r'gateway\s+run\b.*(&\s*$|&\s*;|\bdisown\b|\bsetsid\b)', "start gateway outside systemd (use 'systemctl --user restart fulilian-gateway')"),
+    (r'\bnohup\b.*gateway\s+run\b', "start gateway outside systemd (use 'systemctl --user restart fulilian-gateway')"),
     # Self-termination protection: prevent agent from killing its own process
-    (r'\b(pkill|killall)\b.*\b(hermes|gateway|cli\.py)\b', "kill hermes/gateway process (self-termination)"),
+    (r'\b(pkill|killall)\b.*\b(fulilian|gateway|cli\.py)\b', "kill fulilian/gateway process (self-termination)"),
     # Self-termination via kill + command substitution (pgrep/pidof).
-    # The name-based pattern above catches `pkill hermes` but not
-    # `kill -9 $(pgrep -f hermes)` because the substitution is opaque
+    # The name-based pattern above catches `pkill fulilian` but not
+    # `kill -9 $(pgrep -f fulilian)` because the substitution is opaque
     # to regex at detection time. Catch the structural pattern instead.
     # `pidof` is the BSD/Linux alternative to `pgrep` and is equally
     # opaque, so include it in the same alternation.
     (r'\bkill\b.*\$\(\s*(pgrep|pidof)\b', "kill process via pgrep/pidof expansion (self-termination)"),
     (r'\bkill\b.*`\s*(pgrep|pidof)\b', "kill process via backtick pgrep/pidof expansion (self-termination)"),
     # launchctl-driven gateway stop/restart on macOS. The agent can bypass
-    # the `hermes gateway stop|restart` pattern above by driving launchd
-    # directly against the service label (commonly `ai.hermes.gateway`).
+    # the `fulilian gateway stop|restart` pattern above by driving launchd
+    # directly against the service label (commonly `ai.fulilian.gateway`).
     # Catch the operations that stop, restart, or unload it.
     #
     # Order-independent (2026-08-02 incident): the previous version required
-    # "hermes"/"ai.hermes" to appear AFTER the launchctl verb in the same
+    # "fulilian"/"ai.fulilian" to appear AFTER the launchctl verb in the same
     # string (`.*` only scans forward). A shell for-loop that builds the
     # label from a list defined earlier in the command — e.g. `for item in
-    # 'ai.hermes.gateway-apollo:...' ...; do label=${item%%:*}; launchctl
-    # bootout "$label"; done` — never has the literal text "hermes" appear
+    # 'ai.fulilian.gateway-apollo:...' ...; do label=${item%%:*}; launchctl
+    # bootout "$label"; done` — never has the literal text "fulilian" appear
     # after "bootout" (only the expanded variable does), so it slipped past
     # undetected and restarted 4 gateways with zero approval. Two
     # independent lookaheads instead of one sequential match: both
     # substrings must appear SOMEWHERE in the command, in either order.
     # This is intentionally broader (a launchctl-verb command anywhere near
-    # an unrelated "hermes" mention now also matches) — for an approval gate
+    # an unrelated "fulilian" mention now also matches) — for an approval gate
     # that's the correct direction to err: an extra approval prompt is
     # cheap, a missed one took down the whole gateway fleet.
-    (r'(?=[\s\S]*\blaunchctl\s+(?:stop|kickstart|bootout|unload|kill|disable|remove)\b)(?=[\s\S]*\b(?:hermes|ai\.hermes)\b)', "stop/restart hermes launchd service (kills running agents)"),
+    (r'(?=[\s\S]*\blaunchctl\s+(?:stop|kickstart|bootout|unload|kill|disable|remove)\b)(?=[\s\S]*\b(?:fulilian|ai\.fulilian)\b)', "stop/restart fulilian launchd service (kills running agents)"),
     # File copy/move/edit into sensitive system paths (/etc/ and macOS
     # /private/etc/ mirror).
     (rf'\b(cp|mv|install)\b.*\s{_SYSTEM_CONFIG_PATH}', "copy/move file into system config path"),
     (rf'\b(cp|mv|install)\b.*\s["\']?{_PROJECT_SENSITIVE_WRITE_TARGET}["\']?{_COMMAND_TAIL}', "overwrite project env/config file"),
-    # cp/mv/install OVERWRITING a sensitive credential/SSH/shell-rc/Hermes file.
+    # cp/mv/install OVERWRITING a sensitive credential/SSH/shell-rc/Fulilian file.
     # The tee/redirection patterns above already gate _SENSITIVE_WRITE_TARGET
     # (~/.ssh/*, ~/.netrc/.pgpass/.npmrc/.pypirc, shell rc files,
-    # ~/.hermes/config.yaml/.env), but cp/mv/install was only paired for /etc and
+    # ~/.fulilian/config.yaml/.env), but cp/mv/install was only paired for /etc and
     # project-relative env/config — so `cp evil ~/.ssh/authorized_keys` (key
     # implant), `cp creds ~/.netrc`, and `cp evil ~/.bashrc` (login-time command
     # injection) slipped through with auto-approve. Same unpaired-door rationale
@@ -1156,12 +1156,12 @@ DANGEROUS_PATTERNS = [
     (rf'\b(?:perl|ruby)\b.*(?:^|\s)-[^\s]*i\b.*(?:{_USER_SENSITIVE_WRITE_TARGET})[^\s"\']*', "in-place edit of sensitive credential/SSH/shell-rc path (perl/ruby)"),
     (rf'\bsed\s+-[^\s]*i.*\s{_SYSTEM_CONFIG_PATH}', "in-place edit of system config"),
     (rf'\bsed\s+--in-place\b.*\s{_SYSTEM_CONFIG_PATH}', "in-place edit of system config (long flag)"),
-    # In-place edit of a Hermes-managed security file (~/.hermes/config.yaml or
+    # In-place edit of a Fulilian-managed security file (~/.fulilian/config.yaml or
     # .env). sed -i bypasses the redirection/tee patterns above because it
     # mutates the file directly. Pairs the file_tools write_file/patch deny so
     # the terminal side is not an open door. See #14639.
-    (rf'\bsed\s+-[^\s]*i.*(?:{_HERMES_CONFIG_PATH}|{_HERMES_ENV_PATH})', "in-place edit of Hermes config/env"),
-    (rf'\bsed\s+--in-place\b.*(?:{_HERMES_CONFIG_PATH}|{_HERMES_ENV_PATH})', "in-place edit of Hermes config/env (long flag)"),
+    (rf'\bsed\s+-[^\s]*i.*(?:{_FULILIAN_CONFIG_PATH}|{_FULILIAN_ENV_PATH})', "in-place edit of Fulilian config/env"),
+    (rf'\bsed\s+--in-place\b.*(?:{_FULILIAN_CONFIG_PATH}|{_FULILIAN_ENV_PATH})', "in-place edit of Fulilian config/env (long flag)"),
     # perl -i and ruby -i perform the same in-place mutation as sed -i but are
     # not caught by the -e/-c script-execution pattern above (which targets code
     # evaluation, not file mutation). Pairs the sed -i coverage from #14639.
@@ -1170,7 +1170,7 @@ DANGEROUS_PATTERNS = [
     # backup suffix (`perl -i.bak`). Match any flag token containing `i`
     # anywhere in the args, not just the first token — `perl -e '...'` (code
     # eval, no -i) does not trip because it has no `-...i` flag token.
-    (rf'\b(?:perl|ruby)\b.*(?:^|\s)-[^\s]*i\b.*(?:{_HERMES_CONFIG_PATH}|{_HERMES_ENV_PATH})', "in-place edit of Hermes config/env (perl/ruby)"),
+    (rf'\b(?:perl|ruby)\b.*(?:^|\s)-[^\s]*i\b.*(?:{_FULILIAN_CONFIG_PATH}|{_FULILIAN_ENV_PATH})', "in-place edit of Fulilian config/env (perl/ruby)"),
     # Interpreter heredocs are handled by _execution_flag_findings() alongside
     # inline-exec flags; keep only shell heredocs regex-based here.
     # Shell execution via heredoc — `bash <<'EOF' ... EOF` runs arbitrary
@@ -1308,10 +1308,10 @@ def _normalize_command_for_detection(command: str) -> str:
     # home-prefix folds below (which match C:\Users\alice\... — no newline).
     command = re.sub(r'\\\r?\n', '', command)
     # Fold absolute home / active-profile-home prefixes into their canonical
-    # ~/ and ~/.hermes/ forms so static user-sensitive patterns catch
+    # ~/ and ~/.fulilian/ forms so static user-sensitive patterns catch
     # /home/alice/.bashrc and C:\Users\alice\.bashrc the same way they catch
     # ~/.bashrc. Resolve at detection time (not via an import-time snapshot) so
-    # it tracks HOME / HERMES_HOME even when those are set after this module is
+    # it tracks HOME / FULILIAN_HOME even when those are set after this module is
     # imported — as the hermetic test conftest and profile/session launchers do.
     #
     # This MUST run before the backslash-escape strip below: on Windows the home
@@ -1319,10 +1319,10 @@ def _normalize_command_for_detection(command: str) -> str:
     # would otherwise dissolve (-> C:Usersalice) and make the fold impossible.
     # The fold matches either separator, so POSIX paths are unaffected by order.
     #
-    # Fold the (more specific) Hermes home first: on Windows it nests under the
-    # user home (C:\Users\alice\AppData\...\hermes), so folding the user home
-    # first would eat the prefix the Hermes-home fold needs.
-    command = _rewrite_resolved_hermes_home(command)
+    # Fold the (more specific) Fulilian home first: on Windows it nests under the
+    # user home (C:\Users\alice\AppData\...\fulilian), so folding the user home
+    # first would eat the prefix the Fulilian-home fold needs.
+    command = _rewrite_resolved_fulilian_home(command)
     command = _rewrite_resolved_user_home(command)
     # Strip shell backslash-escapes: r\m → rm. Prevents \-injection bypass.
     command = re.sub(r'\\([^\n])', r'\1', command)
@@ -1363,7 +1363,7 @@ def _home_prefix_fold_regex(path: str):
     required (``+``), so a bare home with no path under it is not folded.
 
     Returns ``None`` for an unset or degenerate path — one with fewer than two
-    components below the root — so a stray HOME / HERMES_HOME such as ``/``,
+    components below the root — so a stray HOME / FULILIAN_HOME such as ``/``,
     ``C:\\`` or ``""`` cannot rewrite unrelated filesystem prefixes. Cached
     because the resolved home is stable across calls on this hot path.
     """
@@ -1385,7 +1385,7 @@ def _home_prefix_fold_regex(path: str):
 def _fold_home_prefixes(command: str, paths, replacement: str) -> str:
     """Fold each resolved home *path* prefix in *command* to *replacement*.
 
-    *replacement* has no trailing separator (``~`` / ``~/.hermes``); the matched
+    *replacement* has no trailing separator (``~`` / ``~/.fulilian``); the matched
     path tail (with its backslashes normalized to ``/``) supplies it. Longest
     candidate first so a deeper home (e.g. an explicit HOME under USERPROFILE)
     folds before a shorter overlapping one that would otherwise clobber it.
@@ -1427,28 +1427,28 @@ def _rewrite_resolved_user_home(command: str) -> str:
     return _fold_home_prefixes(command, candidates, "~")
 
 
-def _rewrite_resolved_hermes_home(command: str) -> str:
-    """Rewrite the resolved absolute Hermes home prefix to ``~/.hermes/``.
+def _rewrite_resolved_fulilian_home(command: str) -> str:
+    """Rewrite the resolved absolute Fulilian home prefix to ``~/.fulilian/``.
 
-    Resolves the active ``HERMES_HOME`` at call time (and its symlink-resolved
+    Resolves the active ``FULILIAN_HOME`` at call time (and its symlink-resolved
     form) and folds an occurrence of ``<home>/`` in *command* into
-    ``~/.hermes/`` so the static ``_HERMES_CONFIG_PATH`` / ``_HERMES_ENV_PATH``
+    ``~/.fulilian/`` so the static ``_FULILIAN_CONFIG_PATH`` / ``_FULILIAN_ENV_PATH``
     patterns match. In Docker and gateway deployments the agent often references
     the resolved absolute path directly (e.g. ``sed -i ...
-    /home/hermes/.hermes/config.yaml``) rather than ``~``, ``$HOME``, or
-    ``$HERMES_HOME``. Matches both POSIX and Windows separators. No-op when the
+    /home/fulilian/.fulilian/config.yaml``) rather than ``~``, ``$HOME``, or
+    ``$FULILIAN_HOME``. Matches both POSIX and Windows separators. No-op when the
     path can't be resolved or doesn't appear.
     """
     try:
-        from fulilian_constants import get_hermes_home
-        home = get_hermes_home().expanduser()
+        from fulilian_constants import get_fulilian_home
+        home = get_fulilian_home().expanduser()
         candidates = [
             str(home),
             str(home.resolve(strict=False)),
         ]
     except Exception:
         return command
-    return _fold_home_prefixes(command, candidates, "~/.hermes")
+    return _fold_home_prefixes(command, candidates, "~/.fulilian")
 
 
 _PARAM_REPLACEMENT_RE = re.compile(r"\$\{[^}/\s]+/[^}/]*/(?P<replacement>[^}]*)\}")
@@ -2289,7 +2289,7 @@ def _mask_quoted_newlines(command: str) -> str:
     Detection-only rewrite. A newline inside a quoted string is DATA to the
     shell — part of the argument, not a command separator — yet the flat
     ``_CMDPOS`` start-position class treats every raw ``\\n`` as a command
-    start. That made any multi-line quoted argument (``hermes send`` message
+    start. That made any multi-line quoted argument (``fulilian send`` message
     bodies, ``git commit -m`` messages, heredoc text) trip the hardline
     blocklist when a data line began with e.g. ``sudo reboot``.
 
@@ -2450,7 +2450,7 @@ def _command_detection_variants(command: str):
 
 
 def _is_verification_artifact_cleanup(command: str) -> bool:
-    """Return whether *command* only removes one Hermes ad-hoc temp script."""
+    """Return whether *command* only removes one Fulilian ad-hoc temp script."""
     try:
         argv = shlex.split(command, posix=True)
     except ValueError:
@@ -2467,11 +2467,11 @@ def _is_verification_artifact_cleanup(command: str) -> bool:
     target = os.path.realpath(operand)
     if os.path.dirname(target) != temp_dir:
         return False
-    return re.fullmatch(r"hermes-(?:verify|ad-hoc)-[A-Za-z0-9_.-]+", basename) is not None
+    return re.fullmatch(r"fulilian-(?:verify|ad-hoc)-[A-Za-z0-9_.-]+", basename) is not None
 
 
 _GATEWAY_LIFECYCLE_SPLICE_DESCRIPTION = (
-    "stop/restart hermes gateway via shell-spliced verb (kills running agents)"
+    "stop/restart fulilian gateway via shell-spliced verb (kills running agents)"
 )
 
 
@@ -2484,11 +2484,11 @@ def _is_shell_token_spliced_gateway_lifecycle(command: str) -> bool:
     deliberately scoped to command-position words (widening it would let
     quoted prose like ``git commit -m "rm -rf /"`` match the destructive
     patterns), and the spliced verb sits in an ARGUMENT position. So
-    ``launchctl kick"start" -k gui/501/ai.hermes.gateway`` auto-approved
+    ``launchctl kick"start" -k gui/501/ai.fulilian.gateway`` auto-approved
     while executing exactly as the gated ``kickstart`` form (#80269).
 
     Delegate to ``cron.lifecycle_guard``, which tokenizes with shlex and is
-    anchored on a hermes-gateway identifier — reusing its prose
+    anchored on a fulilian-gateway identifier — reusing its prose
     false-positive coverage instead of loosening the generic pattern
     engine. This runs last, so an ordinary pattern match still wins and
     keeps its more specific reason string. Unlike the guard's use inside
@@ -2919,7 +2919,7 @@ def approve_session(session_key: str, pattern_key: str):
 
 
 def _release_permission_mode_dependents(session_key: str) -> None:
-    """Drop resources whose immutable mode is derived from Hermes YOLO.
+    """Drop resources whose immutable mode is derived from Fulilian YOLO.
 
     The import stays lazy so approval-only sessions do not load computer-use.
     Releasing on both edges makes enabling YOLO replace an existing standard
@@ -3274,7 +3274,7 @@ def _prompt_dangerous_approval_inner(command: str, description: str,
         # tests, sshd, etc.).
         pass
 
-    os.environ["HERMES_SPINNER_PAUSE"] = "1"
+    os.environ["FULILIAN_SPINNER_PAUSE"] = "1"
     try:
         # Resolve the active UI language once per prompt so we don't re-read
         # config/YAML inside the retry loop below.
@@ -3352,8 +3352,8 @@ def _prompt_dangerous_approval_inner(command: str, description: str,
         print("\n" + t("approval.cancelled"))
         return "deny"
     finally:
-        if "HERMES_SPINNER_PAUSE" in os.environ:
-            del os.environ["HERMES_SPINNER_PAUSE"]
+        if "FULILIAN_SPINNER_PAUSE" in os.environ:
+            del os.environ["FULILIAN_SPINNER_PAUSE"]
         print()
         sys.stdout.flush()
 
@@ -3410,11 +3410,11 @@ def _get_approval_mode() -> str:
 
 
 def is_approval_bypass_active_for_session(session_key: str) -> bool:
-    """Return whether one exact session bypasses Hermes approval prompts.
+    """Return whether one exact session bypasses Fulilian approval prompts.
 
     Collapses the canonical three-source bypass check used across the codebase
     into one place:
-      - process-scoped ``--yolo`` / ``HERMES_YOLO_MODE`` (frozen at import time
+      - process-scoped ``--yolo`` / ``FULILIAN_YOLO_MODE`` (frozen at import time
         so a mid-process skill can't flip it — a prompt-injection escalation
         path; see ``_YOLO_MODE_FROZEN`` above),
       - the session-scoped gateway ``/yolo`` toggle,
@@ -3727,7 +3727,7 @@ def _run_approval_gate(
             auto-approve warning (identifies command vs plugin origin).
         fail_closed_when_no_human: When True, a non-interactive non-gateway
             context that is NOT a cron session (e.g. a bare script with
-            HERMES_INTERACTIVE unset) BLOCKS instead of auto-approving. The
+            FULILIAN_INTERACTIVE unset) BLOCKS instead of auto-approving. The
             dangerous-command path keeps its historical fail-open default
             (False); the plugin-escalation path opts in to fail-closed so a
             plugin-flagged action never runs ungated without a human.
@@ -3753,7 +3753,7 @@ def _run_approval_gate(
     is_cli = _is_interactive_cli()
     is_gateway = _is_gateway_approval_context()
 
-    # Single-query (-q) sessions export HERMES_INTERACTIVE=1 but have no user
+    # Single-query (-q) sessions export FULILIAN_INTERACTIVE=1 but have no user
     # to answer approval prompts — an unanswered prompt just waits the full
     # timeout then fails closed. Treat them as a deterministic non-interactive
     # context governed by approvals.single_query_mode (mirrors cron below).
@@ -3798,8 +3798,8 @@ def _run_approval_gate(
             # command path keeps the historical fail-open default.)
             logger.warning(
                 "%s (pattern: %s): %s — no interactive user/gateway present; "
-                "BLOCKED (fail-closed). Set HERMES_INTERACTIVE or "
-                "HERMES_GATEWAY_SESSION to answer the prompt.",
+                "BLOCKED (fail-closed). Set FULILIAN_INTERACTIVE or "
+                "FULILIAN_GATEWAY_SESSION to answer the prompt.",
                 autoapprove_log_prefix, pattern_key, description,
             )
             return {
@@ -3812,13 +3812,13 @@ def _run_approval_gate(
                 "description": description,
             }
         logger.warning(
-            "%s (pattern: %s): %s — set HERMES_INTERACTIVE or "
-            "HERMES_GATEWAY_SESSION to require approval.",
+            "%s (pattern: %s): %s — set FULILIAN_INTERACTIVE or "
+            "FULILIAN_GATEWAY_SESSION to require approval.",
             autoapprove_log_prefix, pattern_key, description,
         )
         return {"approved": True, "message": None}
 
-    if is_gateway or env_var_enabled("HERMES_EXEC_ASK"):
+    if is_gateway or env_var_enabled("FULILIAN_EXEC_ASK"):
         # Interactive gateway round-trip when a notify callback is
         # registered for this session (Discord/Telegram/Slack embed +
         # buttons, same mechanism as check_dangerous_command). Blocks the
@@ -3892,7 +3892,7 @@ def _run_approval_gate(
 
         # No notify callback: interactive CLI with a panel callback should
         # still prompt locally instead of queuing a pending approval nobody
-        # can see (HERMES_EXEC_ASK / platform-marker leaks into CLI).
+        # can see (FULILIAN_EXEC_ASK / platform-marker leaks into CLI).
         if not _should_fall_through_to_cli_approval(
             is_cli=is_cli,
             approval_callback=approval_callback,
@@ -4111,7 +4111,7 @@ def request_tool_approval(
 
     Non-interactive contexts: cron jobs honor ``approvals.cron_mode`` (parity
     with dangerous commands); any OTHER non-interactive non-gateway context
-    (a bare script with no ``HERMES_INTERACTIVE``) fails CLOSED — a plugin-
+    (a bare script with no ``FULILIAN_INTERACTIVE``) fails CLOSED — a plugin-
     flagged action never runs ungated without a human.
     """
     description = reason or f"Plugin requires approval for {tool_name}"
@@ -4693,16 +4693,16 @@ def check_all_command_guards(command: str, env_type: str,
     approval_callback = _resolve_cli_approval_callback(approval_callback)
     is_cli = _is_interactive_cli()
     is_gateway = _is_gateway_approval_context()
-    is_ask = env_var_enabled("HERMES_EXEC_ASK")
+    is_ask = env_var_enabled("FULILIAN_EXEC_ASK")
 
-    # Single-query (-q) sessions export HERMES_INTERACTIVE=1 but have no user
+    # Single-query (-q) sessions export FULILIAN_INTERACTIVE=1 but have no user
     # to answer approval prompts — an unanswered prompt just waits the full
     # timeout then fails closed. Treat them as a deterministic non-interactive
     # context governed by approvals.single_query_mode (mirrors cron below).
     if _is_single_query_approval_context():
         is_cli = False
         is_gateway = False
-        # HERMES_EXEC_ASK routes through the gateway decision loop (no human
+        # FULILIAN_EXEC_ASK routes through the gateway decision loop (no human
         # either here) — ignore it so single_query_mode actually takes effect.
         is_ask = False
 
@@ -5324,7 +5324,7 @@ def check_execute_code_guard(code: str, env_type: str,
         return {"approved": True, "message": None}
 
     is_gateway = _is_gateway_approval_context()
-    is_ask = env_var_enabled("HERMES_EXEC_ASK")
+    is_ask = env_var_enabled("FULILIAN_EXEC_ASK")
     is_cli = _is_interactive_cli()
     approval_callback = _resolve_cli_approval_callback()
 
@@ -5374,7 +5374,7 @@ def check_execute_code_guard(code: str, env_type: str,
     #     (context now propagates into the RPC thread, #33057); a whole-script
     #     prompt would fire on every execute_code call.
     #   * Local non-interactive non-gateway: documented limitation above.
-    # Ask-mode (HERMES_EXEC_ASK) still takes this path even when INTERACTIVE
+    # Ask-mode (FULILIAN_EXEC_ASK) still takes this path even when INTERACTIVE
     # is also set — that combination is how gateway/smart tests and messaging
     # ask-mode drive whole-script approval. When that combination leaks into
     # an interactive CLI with no gateway notify callback registered, the
@@ -5510,7 +5510,7 @@ def check_execute_code_guard(code: str, env_type: str,
         notify_cb = _gateway_notify_cbs.get(session_key)
 
     if notify_cb is None:
-        # HERMES_EXEC_ASK (and sometimes a session platform marker) can leak
+        # FULILIAN_EXEC_ASK (and sometimes a session platform marker) can leak
         # into an interactive CLI process — most commonly via `import
         # gateway.run`. Without this, that combination silently queued a
         # pending approval nobody could see instead of showing the CLI panel

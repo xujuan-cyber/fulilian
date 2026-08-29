@@ -31,7 +31,7 @@ from tools.delegate_tool import (
     _resolve_child_credential_pool,
     _resolve_delegation_credentials,
 )
-from hermes_state import SessionDB
+from fulilian_state import SessionDB
 
 
 def _make_mock_parent(depth=0):
@@ -169,7 +169,7 @@ class TestStripBlockedTools(unittest.TestCase):
     def test_mixed_composite_is_subtracted_at_child_assembly(self):
         """A mixed platform bundle must not re-expose blocked leaf tools.
 
-        ``hermes-cli`` contains both allowed tools and every sensitive
+        ``fulilian-cli`` contains both allowed tools and every sensitive
         delegate tool, so it cannot be dropped wholesale. Child construction
         must instead pass exact one-tool deny toolsets to AIAgent, where
         model_tools applies them after resolving the composite.
@@ -177,7 +177,7 @@ class TestStripBlockedTools(unittest.TestCase):
         import model_tools
 
         parent = _make_mock_parent()
-        parent.enabled_toolsets = ["hermes-cli"]
+        parent.enabled_toolsets = ["fulilian-cli"]
         parent.disabled_toolsets = ["browser"]
 
         with patch("run_agent.AIAgent") as MockAgent:
@@ -222,7 +222,7 @@ class TestStripBlockedTools(unittest.TestCase):
         import model_tools
 
         parent = _make_mock_parent()
-        parent.enabled_toolsets = ["hermes-cli"]
+        parent.enabled_toolsets = ["fulilian-cli"]
         parent.disabled_toolsets = ["delegation", "browser"]
 
         with (
@@ -827,7 +827,7 @@ class TestDelegationCredentialResolution(unittest.TestCase):
         self.assertEqual(creds["api_mode"], "anthropic_messages")
 
 
-    @patch("hermes_cli.runtime_provider.resolve_runtime_provider")
+    @patch("fulilian_cli.runtime_provider.resolve_runtime_provider")
     def test_provider_resolution_failure_raises_valueerror(self, mock_resolve):
         """When provider resolution fails, ValueError is raised with helpful message."""
         mock_resolve.side_effect = RuntimeError("OPENROUTER_API_KEY not set")
@@ -838,7 +838,7 @@ class TestDelegationCredentialResolution(unittest.TestCase):
         self.assertIn("openrouter", str(ctx.exception).lower())
         self.assertIn("Cannot resolve", str(ctx.exception))
 
-    @patch("hermes_cli.runtime_provider.resolve_runtime_provider")
+    @patch("fulilian_cli.runtime_provider.resolve_runtime_provider")
     def test_provider_resolves_but_no_api_key_raises(self, mock_resolve):
         """When provider resolves but has no API key, ValueError is raised."""
         mock_resolve.return_value = {
@@ -853,7 +853,7 @@ class TestDelegationCredentialResolution(unittest.TestCase):
             _resolve_delegation_credentials(cfg, parent)
         self.assertIn("no API key", str(ctx.exception))
 
-    @patch("hermes_cli.runtime_provider.resolve_runtime_provider")
+    @patch("fulilian_cli.runtime_provider.resolve_runtime_provider")
     def test_named_custom_provider_preserves_provider_name(self, mock_resolve):
         """Named custom provider (e.g. crof.ai) resolves to 'custom' at runtime level
         but the subagent must retain the original provider identity so that
@@ -1471,7 +1471,7 @@ class TestConcurrencyDefaults(unittest.TestCase):
 
         with patch.dict("sys.modules", {"cli": stale_cli}):
             with patch(
-                "hermes_cli.config.load_config_readonly", return_value=active_config
+                "fulilian_cli.config.load_config_readonly", return_value=active_config
             ):
                 self.assertEqual(_load_config()["max_concurrent_children"], 50)
                 self.assertEqual(_get_max_concurrent_children(), 50)
@@ -1961,7 +1961,7 @@ class TestFallbackModelInheritance(unittest.TestCase):
             "args": [],
         }
         with patch(
-            "hermes_cli.runtime_provider.resolve_runtime_provider",
+            "fulilian_cli.runtime_provider.resolve_runtime_provider",
             return_value=runtime,
         ):
             with patch("shutil.which", return_value=None):

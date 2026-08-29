@@ -1,8 +1,8 @@
-"""``hermes_cli/_scan_venv_blockers.py`` — Standalone venv-process scan for JSON consumption.
+"""``fulilian_cli/_scan_venv_blockers.py`` — Standalone venv-process scan for JSON consumption.
 
 Invoked by the Desktop Electron app::
 
-    venv\\Scripts\\python.exe -m hermes_cli._scan_venv_blockers
+    venv\\Scripts\\python.exe -m fulilian_cli._scan_venv_blockers
 
 Exits 0 for valid clear or blocked results.  Non-zero exit signals probe
 failure (the detector itself crashed, psutil unavailable, etc.).  Exactly
@@ -205,13 +205,13 @@ def _is_pausable_gateway(cmdline: str) -> bool:
 
     A running gateway shows up in the venv-holder scan as one or both halves
     of its launcher/worker chain (``venv\\Scripts\\python.exe -m
-    hermes_cli.main gateway run`` and the uv-side interpreter re-running the
+    fulilian_cli.main gateway run`` and the uv-side interpreter re-running the
     same argv). Reporting those as blockers dead-ends the Desktop update:
     the preflight aborts with ``venv-blocked`` *before* spawning
-    ``hermes-setup``, so the CLI updater's own
+    ``fulilian-setup``, so the CLI updater's own
     ``_pause_windows_gateways_for_update()`` — which exists precisely to
-    stop these processes (and is always active: ``hermes-setup`` invokes
-    ``hermes update --yes --gateway``) — never gets the chance to run.
+    stop these processes (and is always active: ``fulilian-setup`` invokes
+    ``fulilian update --yes --gateway``) — never gets the chance to run.
 
     Only gateway invocations are exempted. Anything else running from the
     venv (an operator's REPL, a stray script, a ``serve`` backend that

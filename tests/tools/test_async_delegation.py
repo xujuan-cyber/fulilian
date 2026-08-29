@@ -105,7 +105,7 @@ def test_connect_preserves_wal_and_applies_macos_durability_barriers(
     tmp_path, monkeypatch
 ):
     """Each ledger connection must carry the macOS write barriers."""
-    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+    monkeypatch.setenv("FULILIAN_HOME", str(tmp_path))
     seed = sqlite3.connect(tmp_path / "state.db")
     try:
         assert seed.execute("PRAGMA journal_mode=WAL").fetchone()[0] == "wal"
@@ -560,7 +560,7 @@ def test_in_tool_stall_uses_higher_threshold(monkeypatch):
 def test_real_process_restart_restores_owned_completion_once(tmp_path):
     """Real-import E2E: a fresh interpreter restores a prior process's result."""
     repo = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-    env = {**os.environ, "HERMES_HOME": str(tmp_path), "PYTHONPATH": repo}
+    env = {**os.environ, "FULILIAN_HOME": str(tmp_path), "PYTHONPATH": repo}
     producer = r'''
 import time
 from tools import async_delegation as ad

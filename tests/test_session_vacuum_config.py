@@ -16,7 +16,7 @@ def test_cli_auto_maintenance_forwards_vacuum_interval(monkeypatch, tmp_path: Pa
     session_db = MagicMock()
     session_db.get_meta.return_value = "already-done"
     monkeypatch.setattr(
-        hermes_cli.config,
+        fulilian_cli.config,
         "load_config",
         lambda: {
             "sessions": {
@@ -28,7 +28,7 @@ def test_cli_auto_maintenance_forwards_vacuum_interval(monkeypatch, tmp_path: Pa
             }
         },
     )
-    monkeypatch.setattr(hermes_constants, "get_hermes_home", lambda: tmp_path)
+    monkeypatch.setattr(fulilian_constants, "get_fulilian_home", lambda: tmp_path)
 
     cli._run_state_db_auto_maintenance(session_db)
 

@@ -66,7 +66,7 @@ def nous_tool_gateway_unavailable_message(
     except Exception:
         pass
     return (
-        f"{capability} is unavailable. Run `hermes model` to refresh your "
+        f"{capability} is unavailable. Run `fulilian model` to refresh your "
         "Nous Portal login and billing status."
     )
 
@@ -163,18 +163,18 @@ def resolve_provider_secret(
 ) -> str:
     """Resolve a voice-provider API key. Single owner for STT/TTS key lookup.
 
-    Resolution order (fixes #68003 — keys added via ``hermes auth add
+    Resolution order (fixes #68003 — keys added via ``fulilian auth add
     <provider>`` were invisible to the voice tools, which only consulted
     env/.env):
 
     1. An explicit ``config_value`` from config.yaml, when the caller has one.
-    2. The environment / ``~/.hermes/.env``. Under a multiplexed gateway turn
+    2. The environment / ``~/.fulilian/.env``. Under a multiplexed gateway turn
        this reads the active profile's secret scope (authoritative — a scope
        miss must NOT borrow another profile's ``os.environ``; see
        ``agent/secret_scope.py``). Outside multiplexing it reads
-       ``hermes_cli.config.get_env_value`` (os.environ, then ``.env``),
+       ``fulilian_cli.config.get_env_value`` (os.environ, then ``.env``),
        matching the tools' historical behaviour exactly.
-    3. The credential pool / auth store for ``provider_id`` (``hermes auth
+    3. The credential pool / auth store for ``provider_id`` (``fulilian auth
        add <provider_id>``). Skipped under an active multiplex turn, where
        only the profile scope is authoritative for credentials.
 
@@ -183,7 +183,7 @@ def resolve_provider_secret(
 
     ``env_getter`` lets callers supply their module-level ``get_env_value``
     wrapper (transcription_tools / tts_tool expose one that tests patch);
-    when omitted, ``hermes_cli.config.get_env_value`` is used directly.
+    when omitted, ``fulilian_cli.config.get_env_value`` is used directly.
     """
     value = str(config_value or "").strip()
     if value:
@@ -224,7 +224,7 @@ def resolve_provider_secret(
     try:
         from agent.credential_pool import load_pool
 
-        # `hermes auth add <provider>` keys a registry provider by its plain
+        # `fulilian auth add <provider>` keys a registry provider by its plain
         # id, but a provider declared via config.yaml ``providers.<name>`` /
         # ``custom_providers`` is pooled under ``custom:<name>`` (see
         # agent/credential_pool.py CUSTOM_POOL_PREFIX). Check both.
@@ -265,7 +265,7 @@ def resolve_openai_audio_api_key() -> str:
     ``agent/secret_scope.py``.
 
     Outside a multiplexed turn, ``OPENAI_API_KEY`` additionally falls back to
-    the credential pool (``hermes auth add openai-api``) via
+    the credential pool (``fulilian auth add openai-api``) via
     ``resolve_provider_secret`` — same #68003 fix as the other voice
     providers. The dedicated voice-tools override remains env/scope-only.
     """
@@ -314,7 +314,7 @@ _DEFAULT_NAME_KEYS = ("provider", "backend", "cloud_provider")
 
 
 def read_selection(section: str) -> str | None:
-    """Return the stored `hermes tools` provider string for a config section.
+    """Return the stored `fulilian tools` provider string for a config section.
 
     THE single runtime read of the persisted selection. Returns:
     - ``"nous"`` — the managed Nous Tool Gateway row was selected,
@@ -405,16 +405,16 @@ def selection_exists(section: str) -> bool:
 def selection_error(section: str, selection_name: str, failure: str) -> str:
     """The uniform honest-error contract for a selected-but-broken provider."""
     return (
-        f"{section} is configured to use {selection_name} (set via hermes "
-        f"tools), but {failure}. Run 'hermes tools' to change it."
+        f"{section} is configured to use {selection_name} (set via fulilian "
+        f"tools), but {failure}. Run 'fulilian tools' to change it."
     )
 
 
 def fal_key_is_configured() -> bool:
     """Return True when FAL_KEY is set to a non-whitespace value.
 
-    Consults both ``os.environ`` and ``~/.hermes/.env`` (via
-    ``hermes_cli.config.get_env_value`` when available) so tool-side
+    Consults both ``os.environ`` and ``~/.fulilian/.env`` (via
+    ``fulilian_cli.config.get_env_value`` when available) so tool-side
     checks and CLI setup-time checks agree.  A whitespace-only value
     is treated as unset everywhere.
     """

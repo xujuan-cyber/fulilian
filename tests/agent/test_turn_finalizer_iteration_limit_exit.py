@@ -139,7 +139,7 @@ def _finalize(
 def test_pending_response_does_not_mask_later_terminal_exit(
     monkeypatch, exit_reason, interrupted, failed
 ):
-    monkeypatch.setattr("hermes_cli.plugins.invoke_hook", lambda *_a, **_kw: [])
+    monkeypatch.setattr("fulilian_cli.plugins.invoke_hook", lambda *_a, **_kw: [])
     agent = _LimitAgent()
 
     result = finalize_turn(
@@ -166,12 +166,12 @@ def test_pending_response_does_not_mask_later_terminal_exit(
 
 
 def test_pending_response_records_kanban_timeout(monkeypatch):
-    monkeypatch.setattr("hermes_cli.plugins.invoke_hook", lambda *_a, **_kw: [])
-    monkeypatch.setenv("HERMES_KANBAN_TASK", "task-123")
+    monkeypatch.setattr("fulilian_cli.plugins.invoke_hook", lambda *_a, **_kw: [])
+    monkeypatch.setenv("FULILIAN_KANBAN_TASK", "task-123")
     record = MagicMock(name="record_task_failure")
     conn = SimpleNamespace(close=lambda: None)
-    monkeypatch.setattr("hermes_cli.kanban_db.connect", lambda: conn)
-    monkeypatch.setattr("hermes_cli.kanban_db._record_task_failure", record)
+    monkeypatch.setattr("fulilian_cli.kanban_db.connect", lambda: conn)
+    monkeypatch.setattr("fulilian_cli.kanban_db._record_task_failure", record)
     agent = _LimitAgent()
 
     result = _finalize(
@@ -201,7 +201,7 @@ def test_published_pending_candidate_is_not_duplicated_by_finalizer(monkeypatch)
     already the tail assistant message, the finalizer must NOT append a
     duplicate. The content-comparison guard prevents this. (#65919 §7)
     """
-    monkeypatch.setattr("hermes_cli.plugins.invoke_hook", lambda *_a, **_kw: [])
+    monkeypatch.setattr("fulilian_cli.plugins.invoke_hook", lambda *_a, **_kw: [])
     agent = _LimitAgent()
     report = "the composed report"
 
@@ -240,12 +240,12 @@ def test_bounded_fallback_records_kanban_failure_when_interrupted(monkeypatch):
     ``finalize_turn`` must still record a terminal kanban failure via
     the bounded fallback path (#87096).
     """
-    monkeypatch.setattr("hermes_cli.plugins.invoke_hook", lambda *_a, **_kw: [])
-    monkeypatch.setenv("HERMES_KANBAN_TASK", "task-456")
+    monkeypatch.setattr("fulilian_cli.plugins.invoke_hook", lambda *_a, **_kw: [])
+    monkeypatch.setenv("FULILIAN_KANBAN_TASK", "task-456")
     record = MagicMock(name="record_task_failure")
     conn = SimpleNamespace(close=lambda: None)
-    monkeypatch.setattr("hermes_cli.kanban_db.connect", lambda: conn)
-    monkeypatch.setattr("hermes_cli.kanban_db._record_task_failure", record)
+    monkeypatch.setattr("fulilian_cli.kanban_db.connect", lambda: conn)
+    monkeypatch.setattr("fulilian_cli.kanban_db._record_task_failure", record)
     agent = _LimitAgent()
 
     # Budget exhausted (60/60), interrupted, no fallback-eligible exit_reason
@@ -281,12 +281,12 @@ def test_bounded_fallback_records_kanban_failure_when_failed(monkeypatch):
     """When budget is exhausted and the turn failed,
     the bounded fallback must still record a terminal kanban failure (#87096).
     """
-    monkeypatch.setattr("hermes_cli.plugins.invoke_hook", lambda *_a, **_kw: [])
-    monkeypatch.setenv("HERMES_KANBAN_TASK", "task-789")
+    monkeypatch.setattr("fulilian_cli.plugins.invoke_hook", lambda *_a, **_kw: [])
+    monkeypatch.setenv("FULILIAN_KANBAN_TASK", "task-789")
     record = MagicMock(name="record_task_failure")
     conn = SimpleNamespace(close=lambda: None)
-    monkeypatch.setattr("hermes_cli.kanban_db.connect", lambda: conn)
-    monkeypatch.setattr("hermes_cli.kanban_db._record_task_failure", record)
+    monkeypatch.setattr("fulilian_cli.kanban_db.connect", lambda: conn)
+    monkeypatch.setattr("fulilian_cli.kanban_db._record_task_failure", record)
     agent = _LimitAgent()
 
     result = finalize_turn(
@@ -315,11 +315,11 @@ def test_bounded_fallback_does_not_fire_without_kanban_task(monkeypatch):
     """When budget is exhausted and interrupted but no kanban task is
     active, the bounded fallback must NOT fire (#87096).
     """
-    monkeypatch.setattr("hermes_cli.plugins.invoke_hook", lambda *_a, **_kw: [])
+    monkeypatch.setattr("fulilian_cli.plugins.invoke_hook", lambda *_a, **_kw: [])
     record = MagicMock(name="record_task_failure")
     conn = SimpleNamespace(close=lambda: None)
-    monkeypatch.setattr("hermes_cli.kanban_db.connect", lambda: conn)
-    monkeypatch.setattr("hermes_cli.kanban_db._record_task_failure", record)
+    monkeypatch.setattr("fulilian_cli.kanban_db.connect", lambda: conn)
+    monkeypatch.setattr("fulilian_cli.kanban_db._record_task_failure", record)
     agent = _LimitAgent()
 
     result = finalize_turn(
@@ -345,12 +345,12 @@ def test_bounded_fallback_does_not_fire_when_budget_not_exhausted(monkeypatch):
     """When budget is NOT exhausted but turn is interrupted and a kanban
     task is active, the bounded fallback must NOT fire (#87096).
     """
-    monkeypatch.setattr("hermes_cli.plugins.invoke_hook", lambda *_a, **_kw: [])
-    monkeypatch.setenv("HERMES_KANBAN_TASK", "task-999")
+    monkeypatch.setattr("fulilian_cli.plugins.invoke_hook", lambda *_a, **_kw: [])
+    monkeypatch.setenv("FULILIAN_KANBAN_TASK", "task-999")
     record = MagicMock(name="record_task_failure")
     conn = SimpleNamespace(close=lambda: None)
-    monkeypatch.setattr("hermes_cli.kanban_db.connect", lambda: conn)
-    monkeypatch.setattr("hermes_cli.kanban_db._record_task_failure", record)
+    monkeypatch.setattr("fulilian_cli.kanban_db.connect", lambda: conn)
+    monkeypatch.setattr("fulilian_cli.kanban_db._record_task_failure", record)
     agent = _LimitAgent(budget_remaining=60)
 
     # api_call_count=10, max_iterations=60 — budget NOT exhausted

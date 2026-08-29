@@ -15,7 +15,7 @@ def test_plugins_manage_install_success():
         "enabled": True,
     }
     with patch(
-        "hermes_cli.plugins_cmd.dashboard_install_plugin",
+        "fulilian_cli.plugins_cmd.dashboard_install_plugin",
         return_value=payload,
     ) as mock_install:
         resp = server.handle_request(
@@ -55,7 +55,7 @@ def test_plugins_manage_install_missing_identifier():
 
 def test_plugins_manage_install_failure():
     with patch(
-        "hermes_cli.plugins_cmd.dashboard_install_plugin",
+        "fulilian_cli.plugins_cmd.dashboard_install_plugin",
         return_value={"ok": False, "error": "Git clone failed"},
     ):
         resp = server.handle_request(

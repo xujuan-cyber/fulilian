@@ -1,9 +1,9 @@
 """
-Multi-provider authentication system for Hermes Agent.
+Multi-provider authentication system for FuLiLian.
 
 Supports OAuth device code flows (Nous Portal, future: OpenAI Codex) and
 traditional API key providers (OpenRouter, custom endpoints). Auth state
-is persisted in ~/.hermes/auth.json with cross-process file locking.
+is persisted in ~/.fulilian/auth.json with cross-process file locking.
 
 Architecture:
 - ProviderConfig registry defines known OAuth providers
@@ -34,7 +34,7 @@ import time
 import uuid
 import webbrowser
 
-# httpx is imported lazily: it costs ~30ms at import time and hermes_cli.auth
+# httpx is imported lazily: it costs ~30ms at import time and fulilian_cli.auth
 # is on the interactive-CLI startup path via credential_pool → auxiliary_client
 # → cli_commands_mixin, where no HTTP request is ever made before first use.
 # The proxy resolves to the real module on first attribute access; every
@@ -65,7 +65,7 @@ else:
             return getattr(self._resolve(), name)
 
         # Forward set/del to the real module so monkeypatch.setattr
-        # ("hermes_cli.auth.httpx.Client", ...) keeps working in tests.
+        # ("fulilian_cli.auth.httpx.Client", ...) keeps working in tests.
         def __setattr__(self, name, value):
             setattr(self._resolve(), name, value)
 
@@ -82,7 +82,7 @@ from typing import Any, Callable, Dict, FrozenSet, Iterable, List, Optional, Tup
 from urllib.parse import parse_qs, urlencode, urlparse
 
 from fulilian_cli.config import (
-    get_hermes_home,
+    get_fulilian_home,
     get_config_path,
     read_raw_config,
     require_readable_config_before_write,
@@ -112,7 +112,7 @@ AUTH_LOCK_TIMEOUT_SECONDS = 15.0
 # Nous Portal defaults
 DEFAULT_NOUS_PORTAL_URL = "https://portal.nousresearch.com"
 DEFAULT_NOUS_INFERENCE_URL = "https://inference-api.nousresearch.com/v1"
-DEFAULT_NOUS_CLIENT_ID = "hermes-cli"
+DEFAULT_NOUS_CLIENT_ID = "fulilian-cli"
 NOUS_INFERENCE_INVOKE_SCOPE = "inference:invoke"
 NOUS_BILLING_MANAGE_SCOPE = "billing:manage"
 DEFAULT_NOUS_SCOPE = NOUS_INFERENCE_INVOKE_SCOPE
@@ -142,10 +142,10 @@ STEPFUN_STEP_PLAN_CN_BASE_URL = "https://api.stepfun.com/step_plan/v1"
 CODEX_OAUTH_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 CODEX_OAUTH_TOKEN_URL = "https://auth.openai.com/oauth/token"
 try:  # Version tag for the Codex token-endpoint User-Agent; fall back if unavailable.
-    from fulilian_cli import __version__ as _HERMES_CLI_VERSION
+    from fulilian_cli import __version__ as _FULILIAN_CLI_VERSION
 except Exception:  # pragma: no cover - version import should always succeed
-    _HERMES_CLI_VERSION = "unknown"
-CODEX_OAUTH_USER_AGENT = f"hermes-cli/{_HERMES_CLI_VERSION}"
+    _FULILIAN_CLI_VERSION = "unknown"
+CODEX_OAUTH_USER_AGENT = f"fulilian-cli/{_FULILIAN_CLI_VERSION}"
 CODEX_ACCESS_TOKEN_REFRESH_SKEW_SECONDS = 120
 XAI_OAUTH_ISSUER = "https://auth.x.ai"
 XAI_OAUTH_DISCOVERY_URL = f"{XAI_OAUTH_ISSUER}/.well-known/openid-configuration"
@@ -207,7 +207,7 @@ def normalize_actual_base_url(base_url: str) -> str:
 
     Actual hosted inference is exposed at api.actual.inc, while the Actual
     client's offline local server binds a loopback host. Both use a /v1 API
-    surface for Hermes' Responses transport.
+    surface for Fulilian' Responses transport.
     """
     url = str(base_url or "").strip().rstrip("/")
     if not url:
@@ -400,7 +400,7 @@ PROVIDER_REGISTRY: Dict[str, ProviderConfig] = {
         # `sk-ant-oat01…` OAuth token: sent as `x-api-key` it 401s, and sent as a
         # bare Bearer it 429s. It is listed here because this tuple doubles as the
         # credential-DISCOVERY list (agent/credential_pool.py builds its env scan
-        # from it), so removing it would stop Hermes finding a setup-token
+        # from it), so removing it would stop Fulilian finding a setup-token
         # credential at all. The adapter routes such a value down the OAuth path
         # on the strength of its prefix, not on this entry. Only ANTHROPIC_API_KEY
         # and ANTHROPIC_TOKEN are usable as literal API keys.
@@ -491,7 +491,7 @@ PROVIDER_REGISTRY: Dict[str, ProviderConfig] = {
         inference_base_url="https://opencode.ai/zen/v1",
         # Deliberately NO api_key_env_vars: the free tier is served
         # anonymously (any unrecognized bearer is a 401), so there is no
-        # secret to configure. Select via `hermes model` / `/model free`.
+        # secret to configure. Select via `fulilian model` / `/model free`.
         api_key_env_vars=(),
     ),
     "kilocode": ProviderConfig(
@@ -606,7 +606,7 @@ def get_anthropic_key() -> str:
     """Return the first usable Anthropic credential, or ``""``.
 
     Checks both the ``.env`` file and the process environment, preferring
-    ``~/.hermes/.env`` so a deliberate key rotation isn't shadowed by a stale
+    ``~/.fulilian/.env`` so a deliberate key rotation isn't shadowed by a stale
     shell export (matches the api-key resolution path — see #20591).  The
     order mirrors the ``PROVIDER_REGISTRY["anthropic"].api_key_env_vars``
     tuple:
@@ -740,7 +740,7 @@ def _resolve_api_key_provider_secret(
 
     from fulilian_cli.config import get_env_value_prefer_dotenv
     for env_var in pconfig.api_key_env_vars:
-        # Prefer ~/.hermes/.env over os.environ so a deliberate key rotation
+        # Prefer ~/.fulilian/.env over os.environ so a deliberate key rotation
         # in the user's .env file isn't shadowed by a stale shell export
         # inherited from a parent process (Codex CLI, test runners, etc.).
         val = (get_env_value_prefer_dotenv(env_var) or "").strip()
@@ -1009,7 +1009,7 @@ def is_rate_limited_auth_error(error: Exception) -> bool:
 
     These failures are transient — re-authenticating cannot resolve them — so
     callers should surface a "retry later" notice and prefer a fallback chain
-    instead of prompting the operator to run ``hermes auth``.
+    instead of prompting the operator to run ``fulilian auth``.
     """
     return (
         isinstance(error, AuthError)
@@ -1042,7 +1042,7 @@ def format_auth_error(error: Exception) -> str:
         return str(error)
 
     if error.relogin_required:
-        return f"{error} Run `hermes model` to re-authenticate."
+        return f"{error} Run `fulilian model` to re-authenticate."
 
     if error.code == "subscription_required":
         if error.provider == "nous":
@@ -1094,7 +1094,7 @@ def _token_fingerprint(token: Any) -> Optional[str]:
 
 
 def _oauth_trace_enabled() -> bool:
-    raw = os.getenv("HERMES_OAUTH_TRACE", "").strip().lower()
+    raw = os.getenv("FULILIAN_OAUTH_TRACE", "").strip().lower()
     return raw in {"1", "true", "yes", "on"}
 
 
@@ -1109,18 +1109,18 @@ def _oauth_trace(event: str, *, sequence_id: Optional[str] = None, **fields: Any
 
 
 # =============================================================================
-# Auth Store — persistence layer for ~/.hermes/auth.json
+# Auth Store — persistence layer for ~/.fulilian/auth.json
 # =============================================================================
 
 def _auth_file_path() -> Path:
-    path = get_hermes_home() / "auth.json"
-    # Seat belt: if pytest is running and HERMES_HOME resolves to the real
+    path = get_fulilian_home() / "auth.json"
+    # Seat belt: if pytest is running and FULILIAN_HOME resolves to the real
     # user's auth store, refuse rather than silently corrupt it. This catches
-    # tests that forgot to monkeypatch HERMES_HOME, tests invoked without the
+    # tests that forgot to monkeypatch FULILIAN_HOME, tests invoked without the
     # hermetic conftest, or sandbox escapes via threads/subprocesses. In
     # production (no PYTEST_CURRENT_TEST) this is a single dict lookup.
     if os.environ.get("PYTEST_CURRENT_TEST"):
-        real_home_auth = (Path.home() / ".hermes" / "auth.json").resolve(strict=False)
+        real_home_auth = (Path.home() / ".fulilian" / "auth.json").resolve(strict=False)
         try:
             resolved = path.resolve(strict=False)
         except Exception:
@@ -1128,7 +1128,7 @@ def _auth_file_path() -> Path:
         if resolved == real_home_auth:
             raise RuntimeError(
                 f"Refusing to touch real user auth store during test run: {path}. "
-                "Set HERMES_HOME to a tmp_path in your test fixture, or run "
+                "Set FULILIAN_HOME to a tmp_path in your test fixture, or run "
                 "via scripts/run_tests.sh for hermetic CI-parity env."
             )
     return path
@@ -1138,18 +1138,18 @@ def _global_auth_file_path() -> Optional[Path]:
     """Return the global-root auth.json when the process is in profile mode.
 
     Returns ``None`` when the profile and global root resolve to the same
-    directory (classic mode, or custom HERMES_HOME that is not a profile).
+    directory (classic mode, or custom FULILIAN_HOME that is not a profile).
     Used by read-only fallback paths so providers authed at the root are
     visible to profile processes that haven't configured them locally.
 
     See issue #18594 follow-up (credential_pool shadowing).
     """
     try:
-        from fulilian_constants import get_default_hermes_root
-        global_root = get_default_hermes_root()
+        from fulilian_constants import get_default_fulilian_root
+        global_root = get_default_fulilian_root()
     except Exception:
         return None
-    profile_home = get_hermes_home()
+    profile_home = get_fulilian_home()
     try:
         if profile_home.resolve(strict=False) == global_root.resolve(strict=False):
             return None
@@ -1174,7 +1174,7 @@ def _load_global_auth_store() -> Dict[str, Any]:
     Memoised keyed on the global auth file's path + mtime (same pattern as
     ``_nous_auth_status_cache``): read_credential_pool() -> load_pool() runs
     this once per provider row in the /model picker, and the path resolution
-    (``_global_auth_file_path()`` -> ``get_default_hermes_root()``) + JSON
+    (``_global_auth_file_path()`` -> ``get_default_fulilian_root()``) + JSON
     parse cost ~105us+ per call even when nothing changed. The global
     store only changes when the user authenticates at global scope (writes
     always go through _save_auth_store, which touches the file), so the mtime
@@ -1200,7 +1200,7 @@ def _load_global_auth_store() -> Dict[str, Any]:
     if os.environ.get("PYTEST_CURRENT_TEST"):
         real_home_env = os.environ.get("HOME", "")
         if real_home_env:
-            real_root = Path(real_home_env) / ".hermes" / "auth.json"
+            real_root = Path(real_home_env) / ".fulilian" / "auth.json"
             try:
                 if global_path.resolve(strict=False) == real_root.resolve(strict=False):
                     _global_auth_store_cache = None
@@ -1425,7 +1425,7 @@ def _save_auth_store(auth_store: Dict[str, Any], target_path: Optional[Path] = N
     # Tighten parent dir to 0o700 so siblings can't traverse to creds.
     # No-op on Windows (POSIX mode bits not enforced); ignore failures.
     # secure_parent_dir refuses to chmod /, top-level dirs, or the
-    # hermes-agent install tree (#25821, #93050).
+    # fulilian-agent install tree (#25821, #93050).
     secure_parent_dir(auth_file)
     auth_store["version"] = AUTH_STORE_VERSION
     auth_store["updated_at"] = datetime.now(timezone.utc).isoformat()
@@ -1537,7 +1537,7 @@ def _load_provider_state(auth_store: Dict[str, Any], provider_id: str) -> Option
     profile has no entry for ``provider_id``. This mirrors the per-provider
     shadowing already used by ``read_credential_pool``: workers spawned in a
     profile can see providers (e.g. ``nous``) that were only authenticated at
-    global scope. Once the user runs ``hermes auth login <provider>`` inside
+    global scope. Once the user runs ``fulilian auth login <provider>`` inside
     the profile, the profile state fully shadows the global state on the next
     read. See issue #18594 follow-up.
     """
@@ -1619,7 +1619,7 @@ def _persist_provider_state_to_store(
 def mark_provider_active_if_unset(provider_id: str) -> None:
     """Set ``active_provider`` to *provider_id* only when none is set yet.
 
-    Used by ``hermes auth add`` OAuth paths that create credential-pool
+    Used by ``fulilian auth add`` OAuth paths that create credential-pool
     entries directly (no singleton ``providers.<id>`` block). Adding the
     very first credential for a provider should make it the active provider
     so the setup wizard's ``_model_section_has_credentials()`` check (which
@@ -1677,7 +1677,7 @@ def read_credential_pool(provider_id: Optional[str] = None) -> Dict[str, Any]:
 
     Profile entries always win: the global fallback only applies per-provider
     when the profile has zero entries for that provider. Once the user runs
-    ``hermes auth add <provider>`` inside the profile, profile entries
+    ``fulilian auth add <provider>`` inside the profile, profile entries
     fully shadow global for that provider on the next read.
 
     Writes always go to the profile (``write_credential_pool`` is unchanged).
@@ -1974,7 +1974,7 @@ def is_provider_explicitly_configured(provider_id: str) -> bool:
                 return True
 
         # MoA presets are explicit model selections too.  A user who configured
-        # ``provider: anthropic`` as a MoA advisor/aggregator has opted Hermes
+        # ``provider: anthropic`` as a MoA advisor/aggregator has opted Fulilian
         # into using Anthropic credentials for that slot even when the main
         # session model is another provider.  Without this, Claude Code OAuth
         # entries are pruned/ignored by credential_pool.load_pool("anthropic"),
@@ -2008,7 +2008,7 @@ def is_provider_explicitly_configured(provider_id: str) -> bool:
 
     # 3. Check provider-specific env vars
     # Exclude CLAUDE_CODE_OAUTH_TOKEN — it's set by Claude Code itself,
-    # not by the user explicitly configuring anthropic in Hermes.
+    # not by the user explicitly configuring anthropic in Fulilian.
     _IMPLICIT_ENV_VARS = {"CLAUDE_CODE_OAUTH_TOKEN"}
     pconfig = PROVIDER_REGISTRY.get(normalized)
     # Fallback to ProviderDef from models.dev catalog when the provider
@@ -2042,7 +2042,7 @@ def is_provider_explicitly_configured(provider_id: str) -> bool:
             return True
 
     # 4. Check persisted credential-pool entries that came from EXPLICIT flows
-    # the user initiated inside Hermes (manual add / device-code / PKCE), plus
+    # the user initiated inside Fulilian (manual add / device-code / PKCE), plus
     # env-backed pool entries. This intentionally excludes ambient borrowed
     # sources like gh_cli / claude_code / qwen-cli.
     try:
@@ -2061,7 +2061,7 @@ def is_provider_explicitly_configured(provider_id: str) -> bool:
                     return True
                 continue
             if (
-                source in {"device_code", "loopback_pkce", "hermes_pkce", "manual"}
+                source in {"device_code", "loopback_pkce", "fulilian_pkce", "manual"}
                 or source.startswith("manual:")
             ):
                 return True
@@ -2081,7 +2081,7 @@ def is_provider_explicitly_configured(provider_id: str) -> bool:
     # NOTE: this uses has_explicit_vertex_config(), NOT has_vertex_credentials()
     # — the latter also counts an ambient GOOGLE_APPLICATION_CREDENTIALS path
     # (commonly set globally for unrelated GCP work), which would mark Vertex
-    # explicit for users who never set Hermes up for it. Only Hermes-scoped
+    # explicit for users who never set Fulilian up for it. Only Fulilian-scoped
     # signals (VERTEX_PROJECT_ID / vertex.project_id / VERTEX_CREDENTIALS_PATH)
     # count here.
     try:
@@ -2106,7 +2106,7 @@ def is_provider_explicitly_configured(provider_id: str) -> bool:
 
 def clear_provider_auth(provider_id: Optional[str] = None) -> bool:
     """
-    Clear auth state for a provider. Used by `hermes logout`.
+    Clear auth state for a provider. Used by `fulilian logout`.
     If provider_id is None, clears the active provider.
     Returns True if something was cleared.
     """
@@ -2173,7 +2173,7 @@ def _get_config_hint_for_unknown_provider(provider_name: str) -> str:
         if not issues:
             return ""
 
-        lines = ["Config issue detected — run 'hermes doctor' for full diagnostics:"]
+        lines = ["Config issue detected — run 'fulilian doctor' for full diagnostics:"]
         for ci in issues:
             prefix = "ERROR" if ci.severity == "error" else "WARNING"
             lines.append(f"  [{prefix}] {ci.message}")
@@ -2272,7 +2272,7 @@ def resolve_provider(
         if _config_hint:
             msg += f"\n\n{_config_hint}"
         else:
-            msg += " Check 'hermes model' for available providers, or run 'hermes doctor' to diagnose config issues."
+            msg += " Check 'fulilian model' for available providers, or run 'fulilian doctor' to diagnose config issues."
         raise AuthError(msg, code="invalid_provider")
 
     # Explicit one-off CLI creds always mean openrouter/custom
@@ -2325,10 +2325,10 @@ def resolve_provider(
     ):
         return "openrouter"
 
-    # Auto-detect an OpenRouter credential added via `hermes auth add openrouter`
+    # Auto-detect an OpenRouter credential added via `fulilian auth add openrouter`
     # (manual pool entry, no env var). Without this, a key that only lives in
     # the credential pool is invisible to auto-detection — the user sees
-    # `hermes auth list` showing the credential while requests go out with no
+    # `fulilian auth list` showing the credential while requests go out with no
     # Authorization header ("HTTP 401: Missing Authentication header"). The
     # env-var check above only covers keys exported as OPENROUTER_API_KEY /
     # OPENAI_API_KEY. See issue #42130.
@@ -2368,7 +2368,7 @@ def resolve_provider(
             if has_usable_secret(_scoped_key_env(env_var)):
                 # An exported API key now wins over a logged-in OAuth provider
                 # (the #29285 fix). Surface that so a user who deliberately uses
-                # OAuth but has a stale key in ~/.hermes/.env isn't silently
+                # OAuth but has a stale key in ~/.fulilian/.env isn't silently
                 # switched without knowing why.
                 if _oauth_active and _oauth_active != pid:
                     logger.warning(
@@ -2407,9 +2407,9 @@ def resolve_provider(
         pass  # boto3 not installed — skip Bedrock auto-detection
 
     raise AuthError(
-        "No inference provider configured. Run 'hermes model' to choose a "
+        "No inference provider configured. Run 'fulilian model' to choose a "
         "provider and model, or set an API key (OPENROUTER_API_KEY, "
-        "OPENAI_API_KEY, etc.) in ~/.hermes/.env.",
+        "OPENAI_API_KEY, etc.) in ~/.fulilian/.env.",
         code="no_provider_configured",
     )
 
@@ -2562,11 +2562,11 @@ def _nous_inference_env_override() -> Optional[str]:
 def _nous_portal_env_override() -> Optional[str]:
     """Return the user/deployment-set Portal base URL override, if any.
 
-    Mirrors ``_nous_inference_env_override()``: ``HERMES_PORTAL_BASE_URL`` /
+    Mirrors ``_nous_inference_env_override()``: ``FULILIAN_PORTAL_BASE_URL`` /
     ``NOUS_PORTAL_BASE_URL`` are the documented dev/staging escape hatch for
-    pointing Hermes at a non-production Nous Portal (e.g. a hosted agent
+    pointing Fulilian at a non-production Nous Portal (e.g. a hosted agent
     provisioned on nous-account-service's `staging` environment, which stamps
-    ``HERMES_PORTAL_BASE_URL=https://portal.staging-nousresearch.com`` into
+    ``FULILIAN_PORTAL_BASE_URL=https://portal.staging-nousresearch.com`` into
     the container env). The env source is trusted (the OS user/deployment
     set it themselves), so — like the inference override — it must NOT be
     gated by ``_NOUS_PORTAL_ALLOWED_HOSTS``: that allowlist exists to reject
@@ -2577,7 +2577,7 @@ def _nous_portal_env_override() -> Optional[str]:
     neither env var is set/blank.
     """
     return _optional_base_url(
-        os.getenv("HERMES_PORTAL_BASE_URL") or os.getenv("NOUS_PORTAL_BASE_URL")
+        os.getenv("FULILIAN_PORTAL_BASE_URL") or os.getenv("NOUS_PORTAL_BASE_URL")
     )
 
 
@@ -2672,7 +2672,7 @@ def _assert_nous_inference_jwt_usable(
         return
     raise AuthError(
         "Nous Portal access token is not a usable inference JWT "
-        f"({reason}). Re-authenticate with: hermes auth add nous",
+        f"({reason}). Re-authenticate with: fulilian auth add nous",
         provider="nous",
         code=reason,
         relogin_required=True,
@@ -2814,7 +2814,7 @@ def _save_qwen_cli_tokens(tokens: Dict[str, Any]) -> Path:
     auth_path = _qwen_cli_auth_path()
     auth_path.parent.mkdir(parents=True, exist_ok=True)
     # secure_parent_dir refuses to chmod /, top-level dirs, or the
-    # hermes-agent install tree (#25821, #93050).
+    # fulilian-agent install tree (#25821, #93050).
     secure_parent_dir(auth_path)
     # Per-process random temp suffix avoids collisions between concurrent
     # writers and stale leftovers from a crashed prior write.
@@ -2962,7 +2962,7 @@ def resolve_qwen_runtime_credentials(
             code="qwen_access_token_missing",
         )
 
-    base_url = os.getenv("HERMES_QWEN_BASE_URL", "").strip().rstrip("/") or DEFAULT_QWEN_BASE_URL
+    base_url = os.getenv("FULILIAN_QWEN_BASE_URL", "").strip().rstrip("/") or DEFAULT_QWEN_BASE_URL
     return {
         "provider": "qwen-oauth",
         "base_url": base_url,
@@ -2978,7 +2978,7 @@ def get_qwen_auth_status() -> Dict[str, Any]:
     try:
         # Validate the runtime credentials, including refresh when the cached
         # CLI token is expired. Otherwise stale tokens show up as "logged in"
-        # and `hermes model` walks users into a broken Qwen setup flow.
+        # and `fulilian model` walks users into a broken Qwen setup flow.
         creds = resolve_qwen_runtime_credentials(refresh_if_expiring=True)
         return {
             "logged_in": True,
@@ -2996,7 +2996,7 @@ def get_qwen_auth_status() -> Dict[str, Any]:
 
 
 # =============================================================================
-# Spotify auth — PKCE tokens stored in ~/.hermes/auth.json
+# Spotify auth — PKCE tokens stored in ~/.fulilian/auth.json
 # =============================================================================
 
 
@@ -3024,7 +3024,7 @@ def _spotify_client_id(
 
     candidates = (
         explicit,
-        get_env_value("HERMES_SPOTIFY_CLIENT_ID"),
+        get_env_value("FULILIAN_SPOTIFY_CLIENT_ID"),
         get_env_value("SPOTIFY_CLIENT_ID"),
         state.get("client_id") if isinstance(state, dict) else None,
     )
@@ -3033,7 +3033,7 @@ def _spotify_client_id(
         if cleaned:
             return cleaned
     raise AuthError(
-        "Spotify client_id is required. Set HERMES_SPOTIFY_CLIENT_ID or pass --client-id.",
+        "Spotify client_id is required. Set FULILIAN_SPOTIFY_CLIENT_ID or pass --client-id.",
         provider="spotify",
         code="spotify_client_id_missing",
     )
@@ -3047,7 +3047,7 @@ def _spotify_redirect_uri(
 
     candidates = (
         explicit,
-        get_env_value("HERMES_SPOTIFY_REDIRECT_URI"),
+        get_env_value("FULILIAN_SPOTIFY_REDIRECT_URI"),
         get_env_value("SPOTIFY_REDIRECT_URI"),
         state.get("redirect_uri") if isinstance(state, dict) else None,
         DEFAULT_SPOTIFY_REDIRECT_URI,
@@ -3063,7 +3063,7 @@ def _spotify_api_base_url(state: Optional[Dict[str, Any]] = None) -> str:
     from fulilian_cli.config import get_env_value
 
     candidates = (
-        get_env_value("HERMES_SPOTIFY_API_BASE_URL"),
+        get_env_value("FULILIAN_SPOTIFY_API_BASE_URL"),
         state.get("api_base_url") if isinstance(state, dict) else None,
         DEFAULT_SPOTIFY_API_BASE_URL,
     )
@@ -3078,7 +3078,7 @@ def _spotify_accounts_base_url(state: Optional[Dict[str, Any]] = None) -> str:
     from fulilian_cli.config import get_env_value
 
     candidates = (
-        get_env_value("HERMES_SPOTIFY_ACCOUNTS_BASE_URL"),
+        get_env_value("FULILIAN_SPOTIFY_ACCOUNTS_BASE_URL"),
         state.get("accounts_base_url") if isinstance(state, dict) else None,
         DEFAULT_SPOTIFY_ACCOUNTS_BASE_URL,
     )
@@ -3322,7 +3322,7 @@ def _refresh_spotify_oauth_state(
     refresh_token = str(state.get("refresh_token", "") or "").strip()
     if not refresh_token:
         raise AuthError(
-            "Spotify refresh token missing. Run `hermes auth spotify` again.",
+            "Spotify refresh token missing. Run `fulilian auth spotify` again.",
             provider="spotify",
             code="spotify_refresh_token_missing",
             relogin_required=True,
@@ -3351,7 +3351,7 @@ def _refresh_spotify_oauth_state(
     if response.status_code >= 400:
         detail = response.text.strip()
         raise AuthError(
-            "Spotify token refresh failed. Run `hermes auth spotify` again."
+            "Spotify token refresh failed. Run `fulilian auth spotify` again."
             + (f" Response: {detail}" if detail else ""),
             provider="spotify",
             code="spotify_refresh_failed",
@@ -3389,7 +3389,7 @@ def resolve_spotify_runtime_credentials(
         state = _load_provider_state(auth_store, "spotify")
         if not state:
             raise AuthError(
-                "Spotify is not authenticated. Run `hermes auth spotify` first.",
+                "Spotify is not authenticated. Run `fulilian auth spotify` first.",
                 provider="spotify",
                 code="spotify_auth_missing",
                 relogin_required=True,
@@ -3428,7 +3428,7 @@ def resolve_spotify_runtime_credentials(
     access_token = str(state.get("access_token", "") or "").strip()
     if not access_token:
         raise AuthError(
-            "Spotify access token missing. Run `hermes auth spotify` again.",
+            "Spotify access token missing. Run `fulilian auth spotify` again.",
             provider="spotify",
             code="spotify_access_token_missing",
             relogin_required=True,
@@ -3469,7 +3469,7 @@ def get_spotify_auth_status() -> Dict[str, Any]:
 
 def _spotify_interactive_setup(redirect_uri_hint: str) -> str:
     """Walk the user through creating a Spotify developer app, persist the
-    resulting client_id to ~/.hermes/.env, and return it.
+    resulting client_id to ~/.fulilian/.env, and return it.
 
     Raises SystemExit if the user aborts or submits an empty value.
     """
@@ -3489,7 +3489,7 @@ def _spotify_interactive_setup(redirect_uri_hint: str) -> str:
     print("Steps:")
     print(f"  1. Opening {SPOTIFY_DASHBOARD_URL} in your browser...")
     print("  2. Click 'Create app' and fill in:")
-    print("       App name:     anything (e.g. hermes-agent)")
+    print("       App name:     anything (e.g. fulilian-agent)")
     print("       Description:  anything")
     print(f"       Redirect URI: {redirect_uri_hint}")
     print("       API/SDK:      Web API")
@@ -3517,15 +3517,15 @@ def _spotify_interactive_setup(redirect_uri_hint: str) -> str:
         print(f"No Client ID entered. See {SPOTIFY_DOCS_URL} for the full guide.")
         raise SystemExit("Spotify setup cancelled: empty Client ID.")
 
-    # Persist so subsequent `hermes auth spotify` runs skip the wizard.
-    save_env_value("HERMES_SPOTIFY_CLIENT_ID", raw)
+    # Persist so subsequent `fulilian auth spotify` runs skip the wizard.
+    save_env_value("FULILIAN_SPOTIFY_CLIENT_ID", raw)
     # Only persist the redirect URI if it's non-default, to avoid pinning
     # users to a value the default might later change to.
     if redirect_uri_hint and redirect_uri_hint != DEFAULT_SPOTIFY_REDIRECT_URI:
-        save_env_value("HERMES_SPOTIFY_REDIRECT_URI", redirect_uri_hint)
+        save_env_value("FULILIAN_SPOTIFY_REDIRECT_URI", redirect_uri_hint)
 
     print()
-    print("Saved HERMES_SPOTIFY_CLIENT_ID to ~/.hermes/.env")
+    print("Saved FULILIAN_SPOTIFY_CLIENT_ID to ~/.fulilian/.env")
     print()
     return raw
 
@@ -3535,7 +3535,7 @@ def login_spotify_command(args) -> None:
 
     # Interactive wizard: if no client_id is configured anywhere, walk the
     # user through creating the Spotify developer app instead of crashing
-    # with "HERMES_SPOTIFY_CLIENT_ID is required".
+    # with "FULILIAN_SPOTIFY_CLIENT_ID is required".
     explicit_client_id = getattr(args, "client_id", None)
     try:
         client_id = _spotify_client_id(explicit_client_id, existing_state)
@@ -3569,7 +3569,7 @@ def login_spotify_command(args) -> None:
     print(f"Redirect URI: {redirect_uri}")
     print("Make sure this redirect URI is allow-listed in your Spotify app settings.")
     print()
-    print("Open this URL to authorize Hermes:")
+    print("Open this URL to authorize Fulilian:")
     print(authorize_url)
     print()
     print(f"Full setup guide: {SPOTIFY_DOCS_URL}")
@@ -3778,7 +3778,7 @@ def _print_loopback_ssh_hint(redirect_uri: str, *, docs_url: str | None = None) 
     print(divider)
     print("Remote session detected — SSH tunnel required")
     print(divider)
-    print(f"Hermes is waiting for the OAuth callback on {redirect_uri}")
+    print(f"Fulilian is waiting for the OAuth callback on {redirect_uri}")
     print("but your browser is on a different machine. Run this command")
     print("in a NEW terminal on your local machine BEFORE opening the URL:")
     print()
@@ -3793,15 +3793,15 @@ def _print_loopback_ssh_hint(redirect_uri: str, *, docs_url: str | None = None) 
 
 
 # =============================================================================
-# OpenAI Codex auth — tokens stored in ~/.hermes/auth.json (not ~/.codex/)
+# OpenAI Codex auth — tokens stored in ~/.fulilian/auth.json (not ~/.codex/)
 #
-# Hermes maintains its own Codex OAuth session separate from the Codex CLI
+# Fulilian maintains its own Codex OAuth session separate from the Codex CLI
 # and VS Code extension. This prevents refresh token rotation conflicts
 # where one app's refresh invalidates the other's session.
 # =============================================================================
 
 def _read_codex_tokens(*, _lock: bool = True) -> Dict[str, Any]:
-    """Read Codex OAuth tokens from Hermes auth store (~/.hermes/auth.json).
+    """Read Codex OAuth tokens from Fulilian auth store (~/.fulilian/auth.json).
     
     Returns dict with 'tokens' (access_token, refresh_token) and 'last_refresh'.
     Raises AuthError if no Codex tokens are stored.
@@ -3814,7 +3814,7 @@ def _read_codex_tokens(*, _lock: bool = True) -> Dict[str, Any]:
     state = _load_provider_state(auth_store, "openai-codex")
     if not state:
         raise AuthError(
-            "No Codex credentials stored. Run `hermes auth` to authenticate.",
+            "No Codex credentials stored. Run `fulilian auth` to authenticate.",
             provider="openai-codex",
             code="codex_auth_missing",
             relogin_required=True,
@@ -3822,7 +3822,7 @@ def _read_codex_tokens(*, _lock: bool = True) -> Dict[str, Any]:
     tokens = state.get("tokens")
     if not isinstance(tokens, dict):
         raise AuthError(
-            "Codex auth state is missing tokens. Run `hermes auth` to re-authenticate.",
+            "Codex auth state is missing tokens. Run `fulilian auth` to re-authenticate.",
             provider="openai-codex",
             code="codex_auth_invalid_shape",
             relogin_required=True,
@@ -3831,14 +3831,14 @@ def _read_codex_tokens(*, _lock: bool = True) -> Dict[str, Any]:
     refresh_token = tokens.get("refresh_token")
     if not isinstance(access_token, str) or not access_token.strip():
         raise AuthError(
-            "Codex auth is missing access_token. Run `hermes auth` to re-authenticate.",
+            "Codex auth is missing access_token. Run `fulilian auth` to re-authenticate.",
             provider="openai-codex",
             code="codex_auth_missing_access_token",
             relogin_required=True,
         )
     if not isinstance(refresh_token, str) or not refresh_token.strip():
         raise AuthError(
-            "Codex auth is missing refresh_token. Run `hermes auth` to re-authenticate.",
+            "Codex auth is missing refresh_token. Run `fulilian auth` to re-authenticate.",
             provider="openai-codex",
             code="codex_auth_missing_refresh_token",
             relogin_required=True,
@@ -3866,15 +3866,15 @@ def _sync_codex_pool_entries(
     What gets refreshed:
 
     * ``device_code`` — the singleton-seeded entry written by the device-code
-      OAuth flow when the user logged in via ``hermes setup`` / the model
+      OAuth flow when the user logged in via ``fulilian setup`` / the model
       picker.  Always synced with the fresh tokens.
-    * ``manual:device_code`` — entries created by ``hermes auth add openai-codex``
+    * ``manual:device_code`` — entries created by ``fulilian auth add openai-codex``
       that use the same device-code OAuth mechanism.  ONLY synced if the
       entry's existing access_token matches the *previous* singleton
       access_token (i.e. the entry is a legacy singleton-alias from the
       #33000 workaround era).  Manual entries whose tokens never matched the
       singleton represent INDEPENDENT accounts added via
-      ``hermes auth add openai-codex`` and must not be overwritten by a
+      ``fulilian auth add openai-codex`` and must not be overwritten by a
       re-auth that targeted a different account (regression for #39236).
 
       The original #33538 fix refreshed every ``manual:device_code`` entry
@@ -3951,7 +3951,7 @@ def _sync_codex_pool_entries(
 
 
 def _save_codex_tokens(tokens: Dict[str, str], last_refresh: str = None, label: str = None) -> None:
-    """Save Codex OAuth tokens to Hermes auth store (~/.hermes/auth.json)."""
+    """Save Codex OAuth tokens to Fulilian auth store (~/.fulilian/auth.json)."""
     if last_refresh is None:
         last_refresh = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     with _auth_store_lock():
@@ -3960,7 +3960,7 @@ def _save_codex_tokens(tokens: Dict[str, str], last_refresh: str = None, label: 
         # Capture the previous singleton tokens BEFORE overwriting them.  The
         # pool-sync step uses this to distinguish legacy singleton-aliases
         # (which should be refreshed) from independent accounts that
-        # ``hermes auth add openai-codex`` created (which must not be
+        # ``fulilian auth add openai-codex`` created (which must not be
         # overwritten — see #39236).
         previous_singleton_tokens = state.get("tokens") if isinstance(state.get("tokens"), dict) else None
         state["tokens"] = tokens
@@ -3979,7 +3979,7 @@ def _save_codex_tokens(tokens: Dict[str, str], last_refresh: str = None, label: 
 
 
 def _recover_codex_tokens_from_cli(reason: str) -> Optional[Dict[str, str]]:
-    """Adopt a valid Codex CLI token pair into Hermes auth, if available."""
+    """Adopt a valid Codex CLI token pair into Fulilian auth, if available."""
     imported = _import_codex_cli_tokens()
     # Require BOTH tokens before adopting: persisting a payload without a
     # usable refresh_token would only break the next refresh cycle.
@@ -4000,11 +4000,11 @@ def refresh_codex_oauth_pure(
     *,
     timeout_seconds: float = 20.0,
 ) -> Dict[str, Any]:
-    """Refresh Codex OAuth tokens without mutating Hermes auth state."""
+    """Refresh Codex OAuth tokens without mutating Fulilian auth state."""
     del access_token  # Access token is only used by callers to decide whether to refresh.
     if not isinstance(refresh_token, str) or not refresh_token.strip():
         raise AuthError(
-            "Codex auth is missing refresh_token. Run `hermes auth` to re-authenticate.",
+            "Codex auth is missing refresh_token. Run `fulilian auth` to re-authenticate.",
             provider="openai-codex",
             code="codex_auth_missing_refresh_token",
             relogin_required=True,
@@ -4033,7 +4033,7 @@ def refresh_codex_oauth_pure(
         # The stored refresh token is still valid here — re-authenticating
         # cannot lift a quota cap. Classify distinctly from auth failures so
         # callers surface a "retry later" notice instead of a misleading
-        # "run hermes auth" prompt (see issue #32790).
+        # "run fulilian auth" prompt (see issue #32790).
         retry_after = _parse_retry_after_seconds(getattr(response, "headers", None))
         if retry_after is not None:
             message = (
@@ -4083,7 +4083,7 @@ def refresh_codex_oauth_pure(
                 "Codex refresh token was already consumed by another client "
                 "(e.g. Codex CLI or VS Code extension). "
                 "Run `codex` in your terminal to generate fresh tokens, "
-                "then run `hermes auth` to re-authenticate."
+                "then run `fulilian auth` to re-authenticate."
             )
             relogin_required = True
         # A 401/403 from the token endpoint always means the refresh token
@@ -4134,7 +4134,7 @@ def _refresh_codex_auth_tokens(
 ) -> Dict[str, str]:
     """Refresh Codex access token using the refresh token.
     
-    Saves the new tokens to Hermes auth store automatically.
+    Saves the new tokens to Fulilian auth store automatically.
     """
     try:
         refreshed = refresh_codex_oauth_pure(
@@ -4143,10 +4143,10 @@ def _refresh_codex_auth_tokens(
             timeout_seconds=timeout_seconds,
         )
     except AuthError as exc:
-        # Self-heal cross-store refresh_token rotation. Hermes keeps its OWN
+        # Self-heal cross-store refresh_token rotation. Fulilian keeps its OWN
         # Codex OAuth token (per profile + top-level), separate from the Codex
         # CLI's ~/.codex/auth.json. OAuth refresh_tokens are single-use, so when
-        # the Codex CLI (or another Hermes process) rotates the shared token,
+        # the Codex CLI (or another Fulilian process) rotates the shared token,
         # this frozen copy's refresh_token goes stale and the refresh fails with
         # a relogin-required error (invalid_grant / refresh_token_reused / 401).
         # Before surfacing that as a hard 401 to the turn, adopt the canonical
@@ -4212,7 +4212,7 @@ def resolve_codex_runtime_credentials(
     refresh_if_expiring: bool = True,
     refresh_skew_seconds: int = CODEX_ACCESS_TOKEN_REFRESH_SKEW_SECONDS,
 ) -> Dict[str, Any]:
-    """Resolve runtime credentials from Hermes's own Codex token store.
+    """Resolve runtime credentials from Fulilian's own Codex token store.
 
     Falls back to the credential pool when the singleton (``providers.openai-codex.tokens``)
     has no usable access_token but the pool (``credential_pool.openai-codex``) does. This
@@ -4245,7 +4245,7 @@ def resolve_codex_runtime_credentials(
         pool_token = _pool_codex_access_token()
         if pool_token:
             base_url = (
-                os.getenv("HERMES_CODEX_BASE_URL", "").strip().rstrip("/")
+                os.getenv("FULILIAN_CODEX_BASE_URL", "").strip().rstrip("/")
                 or DEFAULT_CODEX_BASE_URL
             )
             return {
@@ -4275,7 +4275,7 @@ def resolve_codex_runtime_credentials(
                 pool_token = _pool_codex_access_token()
                 if pool_token:
                     base_url = (
-                        os.getenv("HERMES_CODEX_BASE_URL", "").strip().rstrip("/")
+                        os.getenv("FULILIAN_CODEX_BASE_URL", "").strip().rstrip("/")
                         or DEFAULT_CODEX_BASE_URL
                     )
                     return {
@@ -4307,7 +4307,7 @@ def resolve_codex_runtime_credentials(
         if read_error is not None:
             raise read_error
         raise AuthError(
-            "No Codex credentials stored. Run `hermes auth` to authenticate.",
+            "No Codex credentials stored. Run `fulilian auth` to authenticate.",
             provider="openai-codex",
             code="codex_auth_missing",
             relogin_required=True,
@@ -4315,13 +4315,13 @@ def resolve_codex_runtime_credentials(
 
     tokens = dict(data["tokens"])
     access_token = str(tokens.get("access_token", "") or "").strip()
-    refresh_timeout_seconds = env_float("HERMES_CODEX_REFRESH_TIMEOUT_SECONDS", 20)
+    refresh_timeout_seconds = env_float("FULILIAN_CODEX_REFRESH_TIMEOUT_SECONDS", 20)
 
     should_refresh = bool(force_refresh)
     if (not should_refresh) and refresh_if_expiring:
         should_refresh = _codex_access_token_is_expiring(access_token, refresh_skew_seconds)
     if should_refresh:
-        # Re-read under lock to avoid racing with other Hermes processes
+        # Re-read under lock to avoid racing with other Fulilian processes
         with _auth_store_lock(timeout_seconds=max(float(AUTH_LOCK_TIMEOUT_SECONDS), refresh_timeout_seconds + 5.0)):
             data = _read_codex_tokens(_lock=False)
             tokens = dict(data["tokens"])
@@ -4336,7 +4336,7 @@ def resolve_codex_runtime_credentials(
                 access_token = str(tokens.get("access_token", "") or "").strip()
 
     base_url = (
-        os.getenv("HERMES_CODEX_BASE_URL", "").strip().rstrip("/")
+        os.getenv("FULILIAN_CODEX_BASE_URL", "").strip().rstrip("/")
         or DEFAULT_CODEX_BASE_URL
     )
 
@@ -4344,7 +4344,7 @@ def resolve_codex_runtime_credentials(
         "provider": "openai-codex",
         "base_url": base_url,
         "api_key": access_token,
-        "source": "hermes-auth-store",
+        "source": "fulilian-auth-store",
         "last_refresh": data.get("last_refresh"),
         "auth_mode": "chatgpt",
     }
@@ -4389,7 +4389,7 @@ def _codex_usage_probe_url(base_url: Optional[str]) -> str:
     normalized = str(base_url or "").strip().rstrip("/")
     if not normalized:
         normalized = (
-            os.getenv("HERMES_CODEX_BASE_URL", "").strip().rstrip("/")
+            os.getenv("FULILIAN_CODEX_BASE_URL", "").strip().rstrip("/")
             or DEFAULT_CODEX_BASE_URL
         )
     if normalized.endswith("/codex"):
@@ -4406,7 +4406,7 @@ def _probe_codex_quota_restored(
 ) -> Optional[bool]:
     """Ask the Codex usage endpoint whether this account's quota is usable again.
 
-    Hermes persists a Codex 429's ``reset_at`` locally and freezes the
+    Fulilian persists a Codex 429's ``reset_at`` locally and freezes the
     credential until it elapses — but the upstream window can reopen EARLY
     (the user redeems a banked rate-limit reset via the Codex CLI/ChatGPT UI,
     upgrades their plan, or OpenAI resets the window).  This probe detects
@@ -4650,7 +4650,7 @@ def _pool_codex_access_token() -> str:
 
 
 # =============================================================================
-# xAI Grok OAuth — tokens stored in ~/.hermes/auth.json
+# xAI Grok OAuth — tokens stored in ~/.fulilian/auth.json
 # =============================================================================
 
 def _xai_oauth_state_from_store(auth_store: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -4713,7 +4713,7 @@ def _read_xai_oauth_tokens(*, _lock: bool = True) -> Dict[str, Any]:
             state = global_state
     if not state:
         raise AuthError(
-            "No xAI OAuth credentials stored. Select xAI Grok OAuth (SuperGrok / Premium+) in `hermes model`.",
+            "No xAI OAuth credentials stored. Select xAI Grok OAuth (SuperGrok / Premium+) in `fulilian model`.",
             provider="xai-oauth",
             code="xai_auth_missing",
             relogin_required=True,
@@ -4721,7 +4721,7 @@ def _read_xai_oauth_tokens(*, _lock: bool = True) -> Dict[str, Any]:
     tokens = state.get("tokens")
     if not isinstance(tokens, dict):
         raise AuthError(
-            "xAI OAuth state is missing tokens. Re-authenticate with `hermes model`.",
+            "xAI OAuth state is missing tokens. Re-authenticate with `fulilian model`.",
             provider="xai-oauth",
             code="xai_auth_invalid_shape",
             relogin_required=True,
@@ -4730,14 +4730,14 @@ def _read_xai_oauth_tokens(*, _lock: bool = True) -> Dict[str, Any]:
     refresh_token = str(tokens.get("refresh_token", "") or "").strip()
     if not access_token:
         raise AuthError(
-            "xAI OAuth state is missing access_token. Re-authenticate with `hermes model`.",
+            "xAI OAuth state is missing access_token. Re-authenticate with `fulilian model`.",
             provider="xai-oauth",
             code="xai_auth_missing_access_token",
             relogin_required=True,
         )
     if not refresh_token:
         raise AuthError(
-            "xAI OAuth state is missing refresh_token. Re-authenticate with `hermes model`.",
+            "xAI OAuth state is missing refresh_token. Re-authenticate with `fulilian model`.",
             provider="xai-oauth",
             code="xai_auth_missing_refresh_token",
             relogin_required=True,
@@ -4781,13 +4781,13 @@ def _write_through_xai_oauth_to_global_root(state: Dict[str, Any]) -> None:
         # Classic mode (profile == root); the profile save already hit root.
         return
     # Seat belt: under pytest, refuse to write the real user's
-    # ~/.hermes/auth.json even when HERMES_HOME points at a profile path
+    # ~/.fulilian/auth.json even when FULILIAN_HOME points at a profile path
     # (mirrors the read-side guard in _load_global_auth_store). Uses the
     # unmodified HOME env, not Path.home() which fixtures may monkeypatch.
     if os.environ.get("PYTEST_CURRENT_TEST"):
         real_home_env = os.environ.get("HOME", "")
         if real_home_env:
-            real_root = Path(real_home_env) / ".hermes" / "auth.json"
+            real_root = Path(real_home_env) / ".fulilian" / "auth.json"
             try:
                 if global_path.resolve(strict=False) == real_root.resolve(strict=False):
                     return
@@ -4892,7 +4892,7 @@ def _xai_proactive_refresh_skew_seconds(access_token: str) -> int:
     gateway-oriented :data:`XAI_ACCESS_TOKEN_REFRESH_SKEW_SECONDS` window
     makes sense. Device-code logins often return ~15-minute JWTs; applying
     the full hour-long skew to those forces a refresh on *every* credential
-    resolution (chat turn, Imagine tool call, ``hermes auth status``, …),
+    resolution (chat turn, Imagine tool call, ``fulilian auth status``, …),
     which burns single-use refresh tokens and races concurrent callers into
     ``invalid_grant`` quarantine.
     """
@@ -4923,7 +4923,7 @@ def _xai_validate_oauth_endpoint(url: str, *, field: str) -> str:
     """Refuse any OIDC discovery endpoint that isn't HTTPS on the xAI origin.
 
     The OIDC discovery response is a long-lived, low-frequency request whose
-    output is cached in ``~/.hermes/auth.json``. A single MITM during initial
+    output is cached in ``~/.fulilian/auth.json``. A single MITM during initial
     login could substitute a malicious ``token_endpoint``; that URL would
     then receive the refresh_token on every subsequent refresh — a permanent
     credential leak from a one-time MITM. Validating scheme + host pins the
@@ -4953,7 +4953,7 @@ def _xai_validate_oauth_endpoint(url: str, *, field: str) -> str:
             f"xAI OIDC discovery {field} host {host!r} is not on the xAI origin "
             f"(expected x.ai or a *.x.ai subdomain). Refusing to use a cached "
             f"endpoint that may have been substituted by a MITM during initial "
-            f"discovery; re-authenticate with `hermes model` to re-fetch.",
+            f"discovery; re-authenticate with `fulilian model` to re-fetch.",
             provider="xai-oauth",
             code="xai_discovery_invalid",
         )
@@ -4964,7 +4964,7 @@ def _xai_validate_inference_base_url(value: str, *, fallback: str) -> str:
     """Refuse a non-xAI base_url for the OAuth-authenticated inference path.
 
     The xAI Grok OAuth bearer is a high-value, long-lived credential tied to
-    the user's SuperGrok subscription. ``XAI_BASE_URL`` / ``HERMES_XAI_BASE_URL``
+    the user's SuperGrok subscription. ``XAI_BASE_URL`` / ``FULILIAN_XAI_BASE_URL``
     let users repoint the inference endpoint (handy for staging or a local
     proxy), but the env override is also a credential-leak vector: a tampered
     ``.env`` or hostile shell init that sets
@@ -5075,17 +5075,17 @@ def refresh_xai_oauth_pure(
     del access_token
     if not isinstance(refresh_token, str) or not refresh_token.strip():
         raise AuthError(
-            "xAI OAuth is missing refresh_token. Re-authenticate with `hermes model`.",
+            "xAI OAuth is missing refresh_token. Re-authenticate with `fulilian model`.",
             provider="xai-oauth",
             code="xai_auth_missing_refresh_token",
             relogin_required=True,
         )
     endpoint = token_endpoint.strip() or _xai_oauth_discovery(timeout_seconds)["token_endpoint"]
     # Re-validate cached endpoints on the refresh hot path: an auth.json
-    # written by an older Hermes (or hand-edited) may carry a non-xAI
+    # written by an older Fulilian (or hand-edited) may carry a non-xAI
     # token_endpoint that would receive every future refresh_token in
     # plaintext if we trusted it blindly. Cheap suffix check; fast-fail
-    # with a clear error so the user can re-run `hermes model` to refetch.
+    # with a clear error so the user can re-run `fulilian model` to refetch.
     _xai_validate_oauth_endpoint(endpoint, field="token_endpoint")
     timeout = httpx.Timeout(max(5.0, float(timeout_seconds)))
     with httpx.Client(timeout=timeout, headers={"Accept": "application/json"}) as client:
@@ -5102,7 +5102,7 @@ def refresh_xai_oauth_pure(
         detail = response.text.strip()
         # ``403`` from xAI's token endpoint is almost always a tier /
         # entitlement gate (the OAuth grant exists but the account isn't
-        # on the allowlist for API access).  Re-running ``hermes model``
+        # on the allowlist for API access).  Re-running ``fulilian model``
         # won't fix that — surface a separate error code so
         # ``format_auth_error`` doesn't append a misleading
         # re-authenticate hint, and point users at the ``XAI_API_KEY``
@@ -5215,7 +5215,7 @@ def resolve_xai_oauth_runtime_credentials(
     data = _read_xai_oauth_tokens()
     tokens = dict(data["tokens"])
     access_token = str(tokens.get("access_token", "") or "").strip()
-    refresh_timeout_seconds = env_float("HERMES_XAI_REFRESH_TIMEOUT_SECONDS", 20)
+    refresh_timeout_seconds = env_float("FULILIAN_XAI_REFRESH_TIMEOUT_SECONDS", 20)
     discovery = dict(data.get("discovery") or {})
     token_endpoint = str(discovery.get("token_endpoint", "") or "").strip()
     redirect_uri = str(data.get("redirect_uri", "") or "").strip()
@@ -5284,7 +5284,7 @@ def resolve_xai_oauth_runtime_credentials(
                     raise
 
     base_url = _xai_validate_inference_base_url(
-        os.getenv("HERMES_XAI_BASE_URL", "").strip().rstrip("/")
+        os.getenv("FULILIAN_XAI_BASE_URL", "").strip().rstrip("/")
         or os.getenv("XAI_BASE_URL", "").strip().rstrip("/"),
         fallback=DEFAULT_XAI_OAUTH_BASE_URL,
     )
@@ -5292,7 +5292,7 @@ def resolve_xai_oauth_runtime_credentials(
         "provider": "xai-oauth",
         "base_url": base_url,
         "api_key": access_token,
-        "source": "hermes-auth-store",
+        "source": "fulilian-auth-store",
         "last_refresh": data.get("last_refresh"),
         # Display/telemetry only. Device-code is the only supported xAI OAuth
         # flow, so report it unconditionally — auth.json may still carry a
@@ -5339,7 +5339,7 @@ def _resolve_verify(
     effective_ca = (
         ca_bundle
         or tls_state.get("ca_bundle")
-        or os.getenv("HERMES_CA_BUNDLE")
+        or os.getenv("FULILIAN_CA_BUNDLE")
         or os.getenv("SSL_CERT_FILE")
         or os.getenv("REQUESTS_CA_BUNDLE")
     )
@@ -5403,7 +5403,7 @@ def _nous_device_auth_timeout_message(portal_base_url: str) -> str:
         "  Portal sign-in is required before the device code can be approved.\n"
         "  If the browser showed a CAPTCHA / 'You did not pass CAPTCHA' error,\n"
         "  finish signing in at the Portal in a normal browser tab, then retry:\n"
-        "    hermes portal\n"
+        "    fulilian portal\n"
         f"  Portal login: {portal}/login"
     )
 
@@ -5466,15 +5466,15 @@ def _poll_for_token(
 
 # -----------------------------------------------------------------------------
 # Shared Nous token store — lets OAuth credentials persist across profiles
-# so a new `hermes --profile <name> auth add nous --type oauth` can one-tap
+# so a new `fulilian --profile <name> auth add nous --type oauth` can one-tap
 # import instead of running the full device-code flow every time.
 #
-# File lives at ${HERMES_SHARED_AUTH_DIR}/nous_auth.json, defaulting to
-# ``<hermes-root>/shared/nous_auth.json`` where ``<hermes-root>`` is what
-# ``get_default_hermes_root()`` returns — ``~/.hermes`` on Linux/macOS,
-# ``%LOCALAPPDATA%\hermes`` on native Windows, or the Docker/custom root.
-# It is OUTSIDE any named profile's HERMES_HOME so named profiles (which
-# typically live under ``<hermes-root>/profiles/<name>/``) all see the
+# File lives at ${FULILIAN_SHARED_AUTH_DIR}/nous_auth.json, defaulting to
+# ``<fulilian-root>/shared/nous_auth.json`` where ``<fulilian-root>`` is what
+# ``get_default_fulilian_root()`` returns — ``~/.fulilian`` on Linux/macOS,
+# ``%LOCALAPPDATA%\fulilian`` on native Windows, or the Docker/custom root.
+# It is OUTSIDE any named profile's FULILIAN_HOME so named profiles (which
+# typically live under ``<fulilian-root>/profiles/<name>/``) all see the
 # same file.
 #
 # Written on successful login and on every runtime refresh so the stored
@@ -5490,35 +5490,35 @@ _nous_shared_lock_holder = threading.local()
 def _nous_shared_auth_dir() -> Path:
     """Resolve the directory that holds the shared Nous token store.
 
-    Honors ``HERMES_SHARED_AUTH_DIR`` so tests can redirect it to a tmp
+    Honors ``FULILIAN_SHARED_AUTH_DIR`` so tests can redirect it to a tmp
     path without touching the real user's home. Defaults to
-    ``<hermes-root>/shared/``, where ``<hermes-root>`` is what
-    :func:`hermes_constants.get_default_hermes_root` returns — so
-    Linux/macOS classic installs land at ``~/.hermes/shared/``, native
-    Windows installs at ``%LOCALAPPDATA%\\hermes\\shared\\``, and
-    Docker / custom ``HERMES_HOME`` deployments at
-    ``<HERMES_HOME>/shared/``. Sits outside any named profile so all
+    ``<fulilian-root>/shared/``, where ``<fulilian-root>`` is what
+    :func:`fulilian_constants.get_default_fulilian_root` returns — so
+    Linux/macOS classic installs land at ``~/.fulilian/shared/``, native
+    Windows installs at ``%LOCALAPPDATA%\\fulilian\\shared\\``, and
+    Docker / custom ``FULILIAN_HOME`` deployments at
+    ``<FULILIAN_HOME>/shared/``. Sits outside any named profile so all
     profiles under the same root share the store.
     """
-    override = os.getenv("HERMES_SHARED_AUTH_DIR", "").strip()
+    override = os.getenv("FULILIAN_SHARED_AUTH_DIR", "").strip()
     if override:
         return Path(override).expanduser()
-    from fulilian_constants import get_default_hermes_root
-    return get_default_hermes_root() / "shared"
+    from fulilian_constants import get_default_fulilian_root
+    return get_default_fulilian_root() / "shared"
 
 
 def _nous_shared_store_path() -> Path:
     path = _nous_shared_auth_dir() / NOUS_SHARED_STORE_FILENAME
     # Seat belt: if pytest is running and this resolves to a path under the
-    # real user's Hermes root, refuse rather than silently corrupt cross-profile
-    # state. Tests must set HERMES_SHARED_AUTH_DIR to a tmp_path (conftest
+    # real user's Fulilian root, refuse rather than silently corrupt cross-profile
+    # state. Tests must set FULILIAN_SHARED_AUTH_DIR to a tmp_path (conftest
     # does not do this automatically — mirror the _auth_file_path() guard
     # so forgetting to set it fails loudly instead of writing to the real
     # shared store).
     if os.environ.get("PYTEST_CURRENT_TEST"):
-        from fulilian_constants import get_default_hermes_root
+        from fulilian_constants import get_default_fulilian_root
         real_home_shared = (
-            get_default_hermes_root() / "shared" / NOUS_SHARED_STORE_FILENAME
+            get_default_fulilian_root() / "shared" / NOUS_SHARED_STORE_FILENAME
         ).resolve(strict=False)
         try:
             resolved = path.resolve(strict=False)
@@ -5527,7 +5527,7 @@ def _nous_shared_store_path() -> Path:
         if resolved == real_home_shared:
             raise RuntimeError(
                 f"Refusing to touch real user shared Nous auth store during test run: "
-                f"{path}. Set HERMES_SHARED_AUTH_DIR to a tmp_path in your test fixture."
+                f"{path}. Set FULILIAN_SHARED_AUTH_DIR to a tmp_path in your test fixture."
             )
     return path
 
@@ -5547,7 +5547,7 @@ def _nous_shared_store_lock(timeout_seconds: float = AUTH_LOCK_TIMEOUT_SECONDS):
     try:
         lock_path = _nous_shared_store_path().with_suffix(".lock")
     except RuntimeError:
-        # No HERMES_HOME yet (pre-setup): fall through without locking.
+        # No FULILIAN_HOME yet (pre-setup): fall through without locking.
         yield
         return
 
@@ -5631,7 +5631,7 @@ def _write_shared_nous_state(state: Dict[str, Any]) -> None:
             path = _nous_shared_store_path()
             path.parent.mkdir(parents=True, exist_ok=True)
             # secure_parent_dir refuses to chmod /, top-level dirs, or the
-            # hermes-agent install tree (#25821, #93050).
+            # fulilian-agent install tree (#25821, #93050).
             secure_parent_dir(path)
             tmp = path.with_name(f"{path.name}.tmp.{os.getpid()}.{uuid.uuid4().hex}")
             # Create with 0o600 atomically via os.open(O_EXCL) — closes the TOCTOU
@@ -5772,7 +5772,7 @@ def _quarantine_nous_oauth_state(
     #
     # Redaction safety: emit ONLY the 12-char SHA-256 hex prefix of the refresh
     # token (correlates to NAS's refreshTokenHash without leaking the secret) plus
-    # sizes/booleans. NEVER pass a raw token/agent_key into the log call — Hermes
+    # sizes/booleans. NEVER pass a raw token/agent_key into the log call — Fulilian
     # has a known bug class where credential-shaped literals get corrupted in logs.
     forensic: Dict[str, Any] = {
         "reason": reason,
@@ -5982,22 +5982,22 @@ def _refresh_access_token(
     # Detect the OAuth 2.1 "refresh token reuse" signal from the Nous portal
     # server and surface an actionable message.  This fires when an external
     # process (health-check script, monitoring tool, custom self-heal hook)
-    # called POST /api/oauth/token with Hermes's refresh_token without
+    # called POST /api/oauth/token with Fulilian's refresh_token without
     # persisting the rotated token back to auth.json — the server then
-    # retires the original RT, Hermes's next refresh uses it, and the whole
+    # retires the original RT, Fulilian's next refresh uses it, and the whole
     # session chain gets revoked as a token-theft signal (#15099).
     lowered = description.lower()
     if code == "refresh_token_reused" or "reuse" in lowered or "reuse detected" in lowered:
         description = (
             "Nous Portal detected refresh-token reuse and revoked this session.\n"
             "This usually means an external process (monitoring script, "
-            "custom self-heal hook, or another Hermes install sharing "
-            "~/.hermes/auth.json) called POST /api/oauth/token with Hermes's "
+            "custom self-heal hook, or another Fulilian install sharing "
+            "~/.fulilian/auth.json) called POST /api/oauth/token with Fulilian's "
             "refresh token without persisting the rotated token back.\n"
-            "Nous refresh tokens are single-use — only Hermes may call the "
-            "refresh endpoint. For health checks, use `hermes auth status` "
+            "Nous refresh tokens are single-use — only Fulilian may call the "
+            "refresh endpoint. For health checks, use `fulilian auth status` "
             "instead.\n"
-            "Re-authenticate with: hermes auth add nous"
+            "Re-authenticate with: fulilian auth add nous"
         )
         relogin = True
 
@@ -6040,8 +6040,8 @@ def fetch_nous_models(
         model_id = item.get("id")
         if isinstance(model_id, str) and model_id.strip():
             mid = model_id.strip()
-            # Skip Hermes models — they're not reliable for agentic tool-calling
-            if "hermes" in mid.lower():
+            # Skip Fulilian models — they're not reliable for agentic tool-calling
+            if "fulilian" in mid.lower():
                 continue
             model_ids.append(mid)
 
@@ -6111,12 +6111,12 @@ def resolve_nous_access_token(
 
         if not state:
             raise AuthError(
-                "Hermes is not logged into Nous Portal.",
+                "Fulilian is not logged into Nous Portal.",
                 provider="nous",
                 relogin_required=True,
             )
 
-        # HERMES_PORTAL_BASE_URL / NOUS_PORTAL_BASE_URL is the trusted
+        # FULILIAN_PORTAL_BASE_URL / NOUS_PORTAL_BASE_URL is the trusted
         # operator/deployment override (mirrors NOUS_INFERENCE_BASE_URL) and
         # must win OUTRIGHT — including over a stored value — and bypass the
         # host allowlist entirely, since the allowlist exists to reject an
@@ -6288,7 +6288,7 @@ def refresh_nous_oauth_pure(
                     raise AuthError(
                         "Nous Portal access token is not a usable inference JWT "
                         f"({current_invoke_jwt_status}) and no refresh token is available. "
-                        "Re-authenticate with: hermes auth add nous",
+                        "Re-authenticate with: fulilian auth add nous",
                         provider="nous",
                         code=current_invoke_jwt_status,
                         relogin_required=True,
@@ -6345,7 +6345,7 @@ def refresh_nous_oauth_from_state(
     return refresh_nous_oauth_pure(
         state.get("access_token", ""),
         state.get("refresh_token", ""),
-        state.get("client_id", "hermes-cli"),
+        state.get("client_id", "fulilian-cli"),
         state.get("portal_base_url", DEFAULT_NOUS_PORTAL_URL),
         state.get("inference_base_url", DEFAULT_NOUS_INFERENCE_URL),
         token_type=state.get("token_type", "Bearer"),
@@ -6377,7 +6377,7 @@ def persist_nous_credentials(
       ``_seed_from_singletons()`` during pool load.
     - ``credential_pool.nous``: used by the runtime ``pool.select()`` path.
 
-    Historically ``hermes auth add nous`` wrote a ``manual:device_code`` pool
+    Historically ``fulilian auth add nous`` wrote a ``manual:device_code`` pool
     entry only, skipping ``providers.nous``. When the runtime credential
     expired, the recovery path read the empty singleton state and raised
     ``AuthError`` silently (``logger.debug`` at INFO level).
@@ -6388,7 +6388,7 @@ def persist_nous_credentials(
     place; the pool never accumulates duplicate device_code rows.
 
     ``label`` is an optional user-chosen display name (from
-    ``hermes auth add nous --label <name>``).  It gets embedded in the
+    ``fulilian auth add nous --label <name>``).  It gets embedded in the
     singleton state so that ``_seed_from_singletons`` uses it as the pool
     entry's label on every subsequent ``load_pool("nous")`` instead of the
     auto-derived token fingerprint.  When ``None``, the auto-derived label
@@ -6409,7 +6409,7 @@ def persist_nous_credentials(
         _save_auth_store(auth_store)
 
     # Mirror to the shared store so a new profile can one-tap import
-    # these credentials via `hermes auth add nous --type oauth`. Best-
+    # these credentials via `fulilian auth add nous --type oauth`. Best-
     # effort: any I/O failure is logged and swallowed (the per-profile
     # auth.json is still the source of truth).
     _write_shared_nous_state(state)
@@ -6456,7 +6456,7 @@ def resolve_nous_runtime_credentials(
     ):
 
         if not state:
-            raise AuthError("Hermes is not logged into Nous Portal.",
+            raise AuthError("Fulilian is not logged into Nous Portal.",
                             provider="nous", relogin_required=True)
 
         persisted_state = dict(state)
@@ -6466,7 +6466,7 @@ def resolve_nous_runtime_credentials(
             """Resolve every routing value that shared OAuth state can replace."""
             portal_url = (
                 _optional_base_url(state.get("portal_base_url"))
-                or os.getenv("HERMES_PORTAL_BASE_URL")
+                or os.getenv("FULILIAN_PORTAL_BASE_URL")
                 or os.getenv("NOUS_PORTAL_BASE_URL")
                 or DEFAULT_NOUS_PORTAL_URL
             ).rstrip("/")
@@ -6628,7 +6628,7 @@ def resolve_nous_runtime_credentials(
                             raise AuthError(
                                 "Nous Portal access token is not a usable inference JWT "
                                 f"({reason}) and no refresh token is available. "
-                                "Re-authenticate with: hermes auth add nous",
+                                "Re-authenticate with: fulilian auth add nous",
                                 provider="nous",
                                 code=reason,
                                 relogin_required=True,
@@ -6836,12 +6836,12 @@ def _snapshot_nous_pool_status() -> Dict[str, Any]:
 # ── Process-level memo for get_nous_auth_status() ──
 # get_nous_auth_status() validates state by calling resolve_nous_runtime_credentials(),
 # which does a synchronous OAuth refresh POST to portal.nousresearch.com. That can take
-# ~350ms even on the failure path, and read-only UI surfaces (`hermes tools`, status panels,
-# subscription-feature checks) call it many times per render — `hermes tools` → "All Platforms"
+# ~350ms even on the failure path, and read-only UI surfaces (`fulilian tools`, status panels,
+# subscription-feature checks) call it many times per render — `fulilian tools` → "All Platforms"
 # was firing the refresh ~31× during one menu paint, racking up >13s of HTTP and burning
 # single-use refresh tokens. Cache the snapshot for a few seconds, keyed on the auth.json
 # path + mtime so that profile switches do not share a process memo and
-# `hermes auth login/logout/add/remove` invalidate naturally on the next call.
+# `fulilian auth login/logout/add/remove` invalidate naturally on the next call.
 _NOUS_AUTH_STATUS_CACHE_TTL = 15.0  # seconds
 _nous_auth_status_cache: Optional[Tuple[float, str, Optional[float], Dict[str, Any]]] = None
 
@@ -7094,11 +7094,11 @@ def get_nous_session_validity() -> str:
 def get_codex_auth_status() -> Dict[str, Any]:
     """Status snapshot for Codex auth.
     
-    Checks the credential pool first (where `hermes auth` stores credentials),
+    Checks the credential pool first (where `fulilian auth` stores credentials),
     then falls back to the legacy provider state.
     """
-    # Check credential pool first — this is where `hermes auth` and
-    # `hermes model` store device_code tokens.
+    # Check credential pool first — this is where `fulilian auth` and
+    # `fulilian model` store device_code tokens.
     try:
         from agent.credential_pool import load_pool
         pool = load_pool("openai-codex")
@@ -7209,11 +7209,11 @@ def get_api_key_provider_status(provider_id: str) -> Dict[str, Any]:
 
     # Keyless providers (opencode-free) are served anonymously: no credential
     # exists, so every install counts as configured/logged in. Derived from
-    # the HermesOverlay keyless flag — the same source the provider catalog
+    # the FulilianOverlay keyless flag — the same source the provider catalog
     # and GUI contract tests use.
     try:
-        from fulilian_cli.providers import HERMES_OVERLAYS
-        _overlay = HERMES_OVERLAYS.get(provider_id)
+        from fulilian_cli.providers import FULILIAN_OVERLAYS
+        _overlay = FULILIAN_OVERLAYS.get(provider_id)
     except Exception:
         _overlay = None
     if _overlay is not None and getattr(_overlay, "keyless", False):
@@ -7267,11 +7267,11 @@ def get_external_process_provider_status(provider_id: str) -> Dict[str, Any]:
         return {"configured": False}
 
     command = (
-        os.getenv("HERMES_COPILOT_ACP_COMMAND", "").strip()
+        os.getenv("FULILIAN_COPILOT_ACP_COMMAND", "").strip()
         or os.getenv("COPILOT_CLI_PATH", "").strip()
         or "copilot"
     )
-    raw_args = os.getenv("HERMES_COPILOT_ACP_ARGS", "").strip()
+    raw_args = os.getenv("FULILIAN_COPILOT_ACP_ARGS", "").strip()
     args = shlex.split(raw_args) if raw_args else ["--acp", "--stdio"]
     base_url = os.getenv(pconfig.base_url_env_var, "").strip() if pconfig.base_url_env_var else ""
     if not base_url:
@@ -7332,7 +7332,7 @@ def _get_azure_foundry_auth_status() -> Dict[str, Any]:
     checks:
 
       * ``auth_mode == "entra_id"`` AND ``azure-identity`` is importable
-        (we do NOT mint a token here; ``hermes doctor`` runs the live
+        (we do NOT mint a token here; ``fulilian doctor`` runs the live
         probe and reports whether the credential chain can acquire one).
       * ``auth_mode == "api_key"`` (default) AND ``AZURE_FOUNDRY_API_KEY``
         is set with a usable value.
@@ -7379,13 +7379,13 @@ def _get_azure_foundry_auth_status() -> Dict[str, Any]:
             if not installed:
                 info["hint"] = (
                     "azure-identity not installed. Install with: "
-                    "pip install azure-identity  (or rely on Hermes' "
+                    "pip install azure-identity  (or rely on Fulilian' "
                     "lazy-install at first use)."
                 )
             else:
                 info["hint"] = (
                     "azure-identity is installed; live credential validation "
-                    "is skipped here. Run `hermes doctor` to verify token acquisition."
+                    "is skipped here. Run `fulilian doctor` to verify token acquisition."
                 )
             return info
         except Exception as exc:
@@ -7498,17 +7498,17 @@ def resolve_external_process_provider_credentials(provider_id: str) -> Dict[str,
         base_url = pconfig.inference_base_url
 
     command = (
-        os.getenv("HERMES_COPILOT_ACP_COMMAND", "").strip()
+        os.getenv("FULILIAN_COPILOT_ACP_COMMAND", "").strip()
         or os.getenv("COPILOT_CLI_PATH", "").strip()
         or "copilot"
     )
-    raw_args = os.getenv("HERMES_COPILOT_ACP_ARGS", "").strip()
+    raw_args = os.getenv("FULILIAN_COPILOT_ACP_ARGS", "").strip()
     args = shlex.split(raw_args) if raw_args else ["--acp", "--stdio"]
     resolved_command = shutil.which(command) if command else None
     if not resolved_command and not base_url.startswith("acp+tcp://"):
         raise AuthError(
             f"Could not find the Copilot CLI command '{command}'. "
-            "Install GitHub Copilot CLI or set HERMES_COPILOT_ACP_COMMAND/COPILOT_CLI_PATH.",
+            "Install GitHub Copilot CLI or set FULILIAN_COPILOT_ACP_COMMAND/COPILOT_CLI_PATH.",
             provider=provider_id,
             code="missing_copilot_cli",
         )
@@ -7626,7 +7626,7 @@ def _should_reset_config_provider_on_logout(provider_id: Optional[str]) -> bool:
 def _logout_default_provider_from_config() -> Optional[str]:
     """Fallback logout target when auth.json has no active provider.
 
-    `hermes logout` historically keyed off auth.json.active_provider only.
+    `fulilian logout` historically keyed off auth.json.active_provider only.
     That left users stuck when auth state had already been cleared but
     config.yaml still selected an OAuth provider such as openai-codex for the
     agent model: there was no active auth provider to target, so logout printed
@@ -7669,7 +7669,7 @@ def _confirm_selection_guards(
     """Prompt before saving a model that trips any selection guard.
 
     Runs the unified guard registry (cost + data-policy + future guards) via
-    :mod:`hermes_cli.model_selection_guards` and shows one [y/N] confirm with
+    :mod:`fulilian_cli.model_selection_guards` and shows one [y/N] confirm with
     every warning that fired. Returns True to proceed, False to cancel.
     """
     try:
@@ -7735,7 +7735,7 @@ def _prompt_model_selection(
     def _confirmed_selection(mid: str) -> Optional[str]:
         if not mid:
             return None
-        # Unified guard registry (hermes_cli.model_selection_guards): the cost
+        # Unified guard registry (fulilian_cli.model_selection_guards): the cost
         # guard only runs when a provider is known (pricing lookups need one);
         # id-keyed guards like the data-policy guard always run — they must
         # fire even via a custom endpoint or gateway.
@@ -8018,10 +8018,10 @@ def _save_model_choice(model_id: str) -> None:
 
 
 def login_command(args) -> None:
-    """Deprecated: use 'hermes model' or 'hermes setup' instead."""
-    print("The 'hermes login' command has been removed.")
-    print("Use 'hermes auth' to manage credentials,")
-    print("'hermes model' to select a provider, or 'hermes setup' for full setup.")
+    """Deprecated: use 'fulilian model' or 'fulilian setup' instead."""
+    print("The 'fulilian login' command has been removed.")
+    print("Use 'fulilian auth' to manage credentials,")
+    print("'fulilian model' to select a provider, or 'fulilian setup' for full setup.")
     raise SystemExit(0)
 
 
@@ -8031,11 +8031,11 @@ def _login_openai_codex(
     *,
     force_new_login: bool = False,
 ) -> None:
-    """OpenAI Codex login via device code flow. Tokens stored in ~/.hermes/auth.json."""
+    """OpenAI Codex login via device code flow. Tokens stored in ~/.fulilian/auth.json."""
 
     del args, pconfig  # kept for parity with other provider login helpers
 
-    # Check for existing Hermes-owned credentials
+    # Check for existing Fulilian-owned credentials
     if not force_new_login:
         try:
             existing = resolve_codex_runtime_credentials()
@@ -8045,7 +8045,7 @@ def _login_openai_codex(
             # the user "Login successful!".
             _resolved_key = existing.get("api_key", "")
             if isinstance(_resolved_key, str) and _resolved_key and not _codex_access_token_is_expiring(_resolved_key, 60):
-                print("Existing Codex credentials found in Hermes auth store.")
+                print("Existing Codex credentials found in Fulilian auth store.")
                 try:
                     reuse = input("Use existing credentials? [Y/n]: ").strip().lower()
                 except (EOFError, KeyboardInterrupt):
@@ -8066,35 +8066,35 @@ def _login_openai_codex(
         cli_tokens = _import_codex_cli_tokens()
         if cli_tokens:
             print("Found existing Codex CLI credentials at ~/.codex/auth.json")
-            print("Hermes will create its own session to avoid conflicts with Codex CLI / VS Code.")
+            print("Fulilian will create its own session to avoid conflicts with Codex CLI / VS Code.")
             try:
                 do_import = input("Import these credentials? (a separate login is recommended) [y/N]: ").strip().lower()
             except (EOFError, KeyboardInterrupt):
                 do_import = "n"
             if do_import in {"y", "yes"}:
                 _save_codex_tokens(cli_tokens)
-                base_url = os.getenv("HERMES_CODEX_BASE_URL", "").strip().rstrip("/") or DEFAULT_CODEX_BASE_URL
+                base_url = os.getenv("FULILIAN_CODEX_BASE_URL", "").strip().rstrip("/") or DEFAULT_CODEX_BASE_URL
                 config_path = _update_config_for_provider("openai-codex", base_url)
                 print()
                 print("Credentials imported. Note: if Codex CLI refreshes its token,")
-                print("Hermes will keep working independently with its own session.")
+                print("Fulilian will keep working independently with its own session.")
                 print(f"  Config updated: {config_path} (model.provider=openai-codex)")
                 return
 
-    # Run a fresh device code flow — Hermes gets its own OAuth session
+    # Run a fresh device code flow — Fulilian gets its own OAuth session
     print()
     print("Signing in to OpenAI Codex...")
-    print("(Hermes creates its own session — won't affect Codex CLI or VS Code)")
+    print("(Fulilian creates its own session — won't affect Codex CLI or VS Code)")
     print()
 
     creds = _codex_device_code_login()
 
-    # Save tokens to Hermes auth store
+    # Save tokens to Fulilian auth store
     _save_codex_tokens(creds["tokens"], creds.get("last_refresh"))
     config_path = _update_config_for_provider("openai-codex", creds.get("base_url", DEFAULT_CODEX_BASE_URL))
     print()
     print("Login successful!")
-    from fulilian_constants import display_hermes_home as _dhh
+    from fulilian_constants import display_fulilian_home as _dhh
     print(f"  Auth state: {_dhh()}/auth.json")
     print(f"  Config updated: {config_path} (model.provider=openai-codex)")
 
@@ -8112,7 +8112,7 @@ def _login_xai_oauth(
             existing = resolve_xai_oauth_runtime_credentials()
             api_key = existing.get("api_key", "")
             if isinstance(api_key, str) and api_key and not _xai_access_token_is_expiring(api_key, 60):
-                print("Existing xAI OAuth credentials found in Hermes auth store.")
+                print("Existing xAI OAuth credentials found in Fulilian auth store.")
                 try:
                     reuse = input("Use existing credentials? [Y/n]: ").strip().lower()
                 except (EOFError, KeyboardInterrupt):
@@ -8131,7 +8131,7 @@ def _login_xai_oauth(
 
     print()
     print("Signing in to xAI Grok OAuth (SuperGrok / Premium+)...")
-    print("(Hermes creates its own local OAuth session)")
+    print("(Fulilian creates its own local OAuth session)")
     print()
 
     timeout_seconds = float(getattr(args, "timeout", None) or 20.0)
@@ -8151,9 +8151,9 @@ def _login_xai_oauth(
         auth_mode="oauth_device_code",
     )
     # An explicit interactive re-login is a strong signal the user wants the
-    # xAI credential re-enabled. ``hermes auth remove xai-oauth`` leaves a
+    # xAI credential re-enabled. ``fulilian auth remove xai-oauth`` leaves a
     # ``device_code`` suppression marker that otherwise stops the singleton
-    # seed from re-creating the pool entry, so ``hermes auth list`` would show
+    # seed from re-creating the pool entry, so ``fulilian auth list`` would show
     # nothing even though the agent still works via the singleton fallback.
     # Clear it here (same helper ``auth_add_command`` uses). This is kept OUT
     # of ``_save_xai_oauth_tokens`` on purpose — that helper is shared with the
@@ -8162,7 +8162,7 @@ def _login_xai_oauth(
     config_path = _update_config_for_provider("xai-oauth", creds.get("base_url", DEFAULT_XAI_OAUTH_BASE_URL))
     print()
     print("Login successful!")
-    from fulilian_constants import display_hermes_home as _dhh
+    from fulilian_constants import display_fulilian_home as _dhh
     print(f"  Auth state: {_dhh()}/auth.json")
     print(f"  Config updated: {config_path} (model.provider=xai-oauth)")
 
@@ -8332,7 +8332,7 @@ def _xai_oauth_device_code_login(
             code="xai_device_token_invalid",
         )
     base_url = _xai_validate_inference_base_url(
-        os.getenv("HERMES_XAI_BASE_URL", "").strip().rstrip("/")
+        os.getenv("FULILIAN_XAI_BASE_URL", "").strip().rstrip("/")
         or os.getenv("XAI_BASE_URL", "").strip().rstrip("/"),
         fallback=DEFAULT_XAI_OAUTH_BASE_URL,
     )
@@ -8535,7 +8535,7 @@ def _codex_device_code_login() -> Dict[str, Any]:
 
     # Return tokens for the caller to persist (no longer writes to ~/.codex/)
     base_url = (
-        os.getenv("HERMES_CODEX_BASE_URL", "").strip().rstrip("/")
+        os.getenv("FULILIAN_CODEX_BASE_URL", "").strip().rstrip("/")
         or DEFAULT_CODEX_BASE_URL
     )
 
@@ -8752,7 +8752,7 @@ def _minimax_poll_token(
 
 
 def _minimax_save_auth_state(auth_state: Dict[str, Any]) -> None:
-    """Persist MiniMax OAuth state to Hermes auth store (~/.hermes/auth.json)."""
+    """Persist MiniMax OAuth state to Fulilian auth store (~/.fulilian/auth.json)."""
     with _auth_store_lock():
         auth_store = _load_auth_store()
         _save_provider_state(auth_store, "minimax-oauth", auth_state)
@@ -8777,7 +8777,7 @@ def _minimax_oauth_login(
     if _is_remote_session():
         open_browser = False
 
-    print(f"Starting Hermes login via MiniMax ({region}) OAuth...")
+    print(f"Starting Fulilian login via MiniMax ({region}) OAuth...")
     print(f"Portal: {portal_base_url}")
 
     with httpx.Client(timeout=httpx.Timeout(timeout_seconds),
@@ -8966,7 +8966,7 @@ def build_minimax_oauth_token_provider() -> Callable[[], str]:
         state = get_provider_auth_state("minimax-oauth")
         if not state or not state.get("access_token"):
             raise AuthError(
-                "Not logged into MiniMax OAuth. Run `hermes model` and select "
+                "Not logged into MiniMax OAuth. Run `fulilian model` and select "
                 "MiniMax (OAuth).",
                 provider="minimax-oauth", code="not_logged_in", relogin_required=True,
             )
@@ -9000,13 +9000,13 @@ def resolve_minimax_oauth_runtime_credentials(
     :func:`build_minimax_oauth_token_provider` for the rationale.
 
     The default (string ``api_key``) preserves the historical contract for
-    diagnostic call sites like ``hermes status`` that just want to know
+    diagnostic call sites like ``fulilian status`` that just want to know
     whether a valid token exists right now.
     """
     state = get_provider_auth_state("minimax-oauth")
     if not state or not state.get("access_token"):
         raise AuthError(
-            "Not logged into MiniMax OAuth. Run `hermes model` and select "
+            "Not logged into MiniMax OAuth. Run `fulilian model` and select "
             "MiniMax (OAuth).",
             provider="minimax-oauth", code="not_logged_in", relogin_required=True,
         )
@@ -9075,7 +9075,7 @@ def _nous_device_code_login(
     pconfig = PROVIDER_REGISTRY["nous"]
     portal_base_url = (
         portal_base_url
-        or os.getenv("HERMES_PORTAL_BASE_URL")
+        or os.getenv("FULILIAN_PORTAL_BASE_URL")
         or os.getenv("NOUS_PORTAL_BASE_URL")
         or pconfig.portal_base_url
     ).rstrip("/")
@@ -9092,7 +9092,7 @@ def _nous_device_code_login(
     if _is_remote_session():
         open_browser = False
 
-    print(f"Starting Hermes login via {pconfig.name}...")
+    print(f"Starting Fulilian login via {pconfig.name}...")
     print(f"Portal: {portal_base_url}")
     if insecure:
         print("TLS verification: disabled (--insecure)")
@@ -9194,7 +9194,7 @@ def _nous_device_code_login(
             print(message)
             print(f"  Subscribe here: {portal_url}/billing")
             print()
-            print("After subscribing, run `hermes model` again to finish setup.")
+            print("After subscribing, run `fulilian model` again to finish setup.")
             raise SystemExit(1)
         raise
 
@@ -9233,7 +9233,7 @@ def step_up_nous_billing_scope(
     returns False.
 
     Reuses the held credential's portal/inference URLs + client_id so the step-up
-    targets the same deployment (incl. a preview via ``HERMES_PORTAL_BASE_URL`` set
+    targets the same deployment (incl. a preview via ``FULILIAN_PORTAL_BASE_URL`` set
     at the original login). Persists to the auth store + shared store + pool, exactly
     like ``_login_nous`` — but WITHOUT the model picker (this is a scope upgrade, not
     a fresh login).
@@ -9290,7 +9290,7 @@ def _login_nous(args, pconfig: ProviderConfig) -> None:
     insecure = bool(getattr(args, "insecure", False))
     ca_bundle = (
         getattr(args, "ca_bundle", None)
-        or os.getenv("HERMES_CA_BUNDLE")
+        or os.getenv("FULILIAN_CA_BUNDLE")
         or os.getenv("SSL_CERT_FILE")
     )
 
@@ -9411,7 +9411,7 @@ def _login_nous(args, pconfig: ProviderConfig) -> None:
                     # The Portal's freeRecommendedModels endpoint is the
                     # source of truth for what's free *right now*. Augment
                     # the curated list with anything new the Portal flags
-                    # as free so users on older Hermes builds still see
+                    # as free so users on older Fulilian builds still see
                     # newly-launched free models without a CLI release.
                     model_ids, pricing = union_with_portal_free_recommendations(
                         model_ids, pricing, _portal_for_recs,
@@ -9469,7 +9469,7 @@ def _login_nous(args, pconfig: ProviderConfig) -> None:
                 _save_auth_store(auth_store)
             print()
             print("No provider change. Nous credentials saved for future use.")
-            print("  Run `hermes model` again to switch to Nous Portal.")
+            print("  Run `fulilian model` again to switch to Nous Portal.")
             return
 
         config_path = _update_config_for_provider(
@@ -9511,9 +9511,9 @@ def logout_command(args) -> None:
             _reset_config_provider()
         print(f"Logged out of {provider_name}.")
         if should_reset_config and os.getenv("OPENROUTER_API_KEY"):
-            print("Hermes will use OpenRouter for inference.")
+            print("Fulilian will use OpenRouter for inference.")
         elif should_reset_config:
-            print("Run `hermes model` or configure an API key to use Hermes.")
+            print("Run `fulilian model` or configure an API key to use Fulilian.")
         else:
             print("Model provider configuration was unchanged.")
     else:

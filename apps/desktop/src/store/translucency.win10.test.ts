@@ -16,13 +16,13 @@ import { describe, expect, it, vi } from 'vitest'
 // isWindowsPlatform() instead, which is true on Win32 regardless of glass.
 vi.hoisted(() => {
   Object.defineProperty(globalThis.navigator, 'platform', { configurable: true, value: 'Win32' })
-  Object.defineProperty(globalThis.window, 'hermesDesktop', {
+  Object.defineProperty(globalThis.window, 'fulilianDesktop', {
     configurable: true,
     value: { glassSupported: false }
   })
 })
 
-import { defaultTranslucencyValues } from '@hermes/shared/translucency'
+import { defaultTranslucencyValues } from '@fulilian/shared/translucency'
 
 import { $translucency, $translucencyBook, GLASS_SUPPORTED, setAppearance } from './translucency'
 

@@ -2,11 +2,11 @@
 
 Scans four sources for memory provider plugins:
 
-1. Bundled providers: ``plugins/memory/<name>/`` (shipped with hermes-agent)
-2. User-installed providers: ``$HERMES_HOME/plugins/<name>/``
-3. Project-local providers: ``./.hermes/plugins/<name>/``, opt-in via
-   ``HERMES_ENABLE_PROJECT_PLUGINS``
-4. Pip-installed providers: ``hermes_agent.memory_providers`` entry points
+1. Bundled providers: ``plugins/memory/<name>/`` (shipped with fulilian-agent)
+2. User-installed providers: ``$FULILIAN_HOME/plugins/<name>/``
+3. Project-local providers: ``./.fulilian/plugins/<name>/``, opt-in via
+   ``FULILIAN_ENABLE_PROJECT_PLUGINS``
+4. Pip-installed providers: ``fulilian_agent.memory_providers`` entry points
 
 Directory providers must contain ``__init__.py`` with a class implementing
 the MemoryProvider ABC. Pip packages expose a provider or ``register(ctx)``
@@ -47,22 +47,22 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _MEMORY_PLUGINS_DIR = Path(__file__).parent
-ENTRY_POINTS_GROUP = "hermes_agent.memory_providers"
+ENTRY_POINTS_GROUP = "fulilian_agent.memory_providers"
 _REGISTERED_MEMORY_PROVIDER_SKILLS: dict[str, Path] = {}
 
 # Synthetic parent package for user-installed providers, so they don't
 # collide with bundled providers in sys.modules.
-_USER_NAMESPACE = "_hermes_user_memory"
+_USER_NAMESPACE = "_fulilian_user_memory"
 
 
 def _register_synthetic_package(name: str, search_locations: List[str]) -> None:
     """Register an empty package shell in sys.modules.
 
-    User-installed providers import as ``_hermes_user_memory.<name>``, a
+    User-installed providers import as ``_fulilian_user_memory.<name>``, a
     dotted name whose parents exist nowhere on disk.  Unless those parents
     are present in ``sys.modules``, any relative import inside the plugin
     (``from . import config``) fails with
-    ``ModuleNotFoundError: No module named '_hermes_user_memory'`` — the
+    ``ModuleNotFoundError: No module named '_fulilian_user_memory'`` — the
     same reason the loader already registers ``plugins`` and
     ``plugins.memory`` for bundled providers.
     """
@@ -78,28 +78,28 @@ def _register_synthetic_package(name: str, search_locations: List[str]) -> None:
 # ---------------------------------------------------------------------------
 
 def _get_user_plugins_dir() -> Optional[Path]:
-    """Return ``$HERMES_HOME/plugins/`` or None if unavailable."""
+    """Return ``$FULILIAN_HOME/plugins/`` or None if unavailable."""
     try:
-        from fulilian_constants import get_hermes_home
-        d = get_hermes_home() / "plugins"
+        from fulilian_constants import get_fulilian_home
+        d = get_fulilian_home() / "plugins"
         return d if d.is_dir() else None
     except Exception:
         return None
 
 
 def _get_project_plugins_dir() -> Optional[Path]:
-    """Return ``./.hermes/plugins/`` or None if unavailable or not opted in.
+    """Return ``./.fulilian/plugins/`` or None if unavailable or not opted in.
 
-    Gated on ``HERMES_ENABLE_PROJECT_PLUGINS`` exactly as the general
+    Gated on ``FULILIAN_ENABLE_PROJECT_PLUGINS`` exactly as the general
     ``PluginManager`` gates its own project scan — a repository you merely
     ``cd`` into must not be able to offer the agent a memory backend.
     """
     try:
         from fulilian_cli.plugins import _env_enabled
 
-        if not _env_enabled("HERMES_ENABLE_PROJECT_PLUGINS"):
+        if not _env_enabled("FULILIAN_ENABLE_PROJECT_PLUGINS"):
             return None
-        d = Path.cwd() / ".hermes" / "plugins"
+        d = Path.cwd() / ".fulilian" / "plugins"
         return d if d.is_dir() else None
     except Exception:
         return None
@@ -140,8 +140,8 @@ def _iter_provider_dirs() -> List[Tuple[str, Path]]:
             seen.add(child.name)
             dirs.append((child.name, child))
 
-    # 2. User-installed providers ($HERMES_HOME/plugins/<name>/)
-    # 3. Project-local providers (./.hermes/plugins/<name>/), opt-in
+    # 2. User-installed providers ($FULILIAN_HOME/plugins/<name>/)
+    # 3. Project-local providers (./.fulilian/plugins/<name>/), opt-in
     for source_dir in (_get_user_plugins_dir(), _get_project_plugins_dir()):
         if not source_dir:
             continue
@@ -184,7 +184,7 @@ def find_provider_dir(name: str) -> Optional[Path]:
     ``plugins/memory/config_schema.py``) and ``cli.py`` (loaded by
     ``discover_plugin_cli_commands`` at argparse time). Without a directory, a
     pip-installed provider silently loses its dashboard config panel and its
-    ``hermes <provider>`` subcommands — working, but a second-class citizen next
+    ``fulilian <provider>`` subcommands — working, but a second-class citizen next
     to a directory install.
     """
     # Bundled
@@ -327,7 +327,7 @@ def load_memory_provider(
     """Load and return a MemoryProvider instance by name.
 
     Checks bundled (``plugins/memory/<name>/``), user-installed
-    (``$HERMES_HOME/plugins/<name>/``), and pip entry-point providers.
+    (``$FULILIAN_HOME/plugins/<name>/``), and pip entry-point providers.
     Bundled providers take precedence on name collisions.
 
     Skills register only when *name* is the configured active provider unless
@@ -569,7 +569,7 @@ class _ProviderCollector:
         and resolved path recorded here.
 
         Gated on ``register_skills`` so merely *inspecting* an inactive
-        provider — ``hermes memory status``, the setup picker — leaves no
+        provider — ``fulilian memory status``, the setup picker — leaves no
         registry side effects behind.
         """
         if not self._register_skills:
@@ -633,7 +633,7 @@ class _ProviderCollector:
 
         Lazy because the common case — a provider that only calls
         ``register_memory_provider`` — must not pay for importing the general
-        plugin manager, which discovery touches on every hermes startup.
+        plugin manager, which discovery touches on every fulilian startup.
         """
         if self._context is None:
             from fulilian_cli.plugins import PluginContext, PluginManifest, get_plugin_manager
@@ -721,7 +721,7 @@ def discover_plugin_cli_commands() -> List[dict]:
             cli_mod = sys.modules[module_name]
         else:
             if not _is_bundled:
-                # cli.py imports as _hermes_user_memory.<name>.cli, usually
+                # cli.py imports as _fulilian_user_memory.<name>.cli, usually
                 # before the provider itself is loaded.  Register its parent
                 # packages so relative imports inside cli.py
                 # ("from . import config") resolve without executing the

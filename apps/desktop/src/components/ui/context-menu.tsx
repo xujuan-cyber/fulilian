@@ -15,11 +15,11 @@ function ContextMenuPortal({ ...props }: React.ComponentProps<typeof ContextMenu
 /** Coordinator marker that survives Radix `asChild` Slot merges.
  * `data-slot` is overwritten when the child sets its own `data-slot`
  * (status bar footer); this attribute is not. */
-export const HERMES_CONTEXT_MENU_TRIGGER_ATTR = 'data-hermes-context-menu-trigger'
+export const FULILIAN_CONTEXT_MENU_TRIGGER_ATTR = 'data-fulilian-context-menu-trigger'
 
 function ContextMenuTrigger({ ...props }: React.ComponentProps<typeof ContextMenuPrimitive.Trigger>) {
   return (
-    <ContextMenuPrimitive.Trigger data-slot="context-menu-trigger" {...props} data-hermes-context-menu-trigger="" />
+    <ContextMenuPrimitive.Trigger data-slot="context-menu-trigger" {...props} data-fulilian-context-menu-trigger="" />
   )
 }
 

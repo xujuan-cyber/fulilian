@@ -1,4 +1,4 @@
-"""POSIX advisory locks must survive Hermes' own database inspection.
+"""POSIX advisory locks must survive Fulilian' own database inspection.
 
 close() on ANY file descriptor for a SQLite database cancels every POSIX
 advisory lock the process holds on that file -- including a running VACUUM's
@@ -6,14 +6,14 @@ EXCLUSIVE lock and an in-flight BEGIN IMMEDIATE's RESERVED lock:
 
     https://sqlite.org/howtocorrupt.html#_posix_advisory_locks_canceled_by_a_separate_thread_doing_close_
 
-Hermes used to byte-probe live databases in several places (kanban's
+Fulilian used to byte-probe live databases in several places (kanban's
 post-commit page-count check, the zeroed-state.db detector run on every
-SessionDB construction, backup header verification). Under `hermes sessions
+SessionDB construction, backup header verification). Under `fulilian sessions
 optimize` this let an external process write into a database while VACUUM was
 rewriting it, producing "database disk image is malformed".
 
 These tests pin the behavioural contract: an external process must stay locked
-out across Hermes' inspection calls.
+out across Fulilian' inspection calls.
 """
 
 from __future__ import annotations
@@ -173,7 +173,7 @@ def test_failed_close_keeps_connection_tracked(tmp_path, clean_registry):
 
     class ControllableConnection(sqlite3.Connection):
         def close(self):
-            if getattr(self, "_hermes_fail_close", False):
+            if getattr(self, "_fulilian_fail_close", False):
                 raise sqlite3.ProgrammingError(
                     "SQLite objects created in a thread can only be used in "
                     "that same thread"
@@ -187,14 +187,14 @@ def test_failed_close_keeps_connection_tracked(tmp_path, clean_registry):
     assert has_live_connection(db)
     assert read_header_bytes_preopen(db, length=16) is None
 
-    conn._hermes_fail_close = True
+    conn._fulilian_fail_close = True
     with pytest.raises(sqlite3.ProgrammingError):
         conn.close()
 
     assert has_live_connection(db), "failed close must leave the registry entry"
     assert read_header_bytes_preopen(db, length=16) is None
 
-    conn._hermes_fail_close = False
+    conn._fulilian_fail_close = False
     conn.close()
     assert not has_live_connection(db)
     assert read_header_bytes_preopen(db, length=16) is not None
@@ -266,8 +266,8 @@ def test_probe_and_connect_do_not_race(tmp_path, clean_registry, monkeypatch):
 
 def test_session_db_read_only_is_tracked(tmp_path, clean_registry, monkeypatch):
     """End-to-end: a real read-only SessionDB blocks byte-probes."""
-    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
-    from hermes_state import SessionDB
+    monkeypatch.setenv("FULILIAN_HOME", str(tmp_path))
+    from fulilian_state import SessionDB
 
     db_path = tmp_path / "state.db"
     seed = SessionDB(db_path=db_path)

@@ -75,14 +75,14 @@ class TestCacheRoundTrip:
 
 
 class TestCacheFileLocation:
-    def test_cache_lives_under_hermes_home_cache_dir_with_0600(
+    def test_cache_lives_under_fulilian_home_cache_dir_with_0600(
         self, monkeypatch, tmp_path
     ):
-        # Real path (no _cache_path monkeypatch): HERMES_HOME/cache/…, 0o600,
+        # Real path (no _cache_path monkeypatch): FULILIAN_HOME/cache/…, 0o600,
         # matching the discovery-cache precedent in tools/registry.py.
         import fulilian_constants
 
-        monkeypatch.setattr(hermes_constants, "get_hermes_home", lambda: tmp_path)
+        monkeypatch.setattr(fulilian_constants, "get_fulilian_home", lambda: tmp_path)
         path = msc._cache_path()
         assert path == tmp_path / "cache" / "mcp_schema_cache.json"
         msc.write_cache_entry("srv", "fp", tools=[], utility_tools=[])

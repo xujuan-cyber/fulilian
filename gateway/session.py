@@ -33,7 +33,7 @@ def _now() -> datetime:
 # ``get_or_create_session`` — while it stays within this window of when
 # ``resume_pending`` was marked.  ``gateway/run.py`` bridges
 # ``config.yaml`` ``agent.gateway_auto_continue_freshness`` into
-# ``HERMES_AUTO_CONTINUE_FRESHNESS`` at startup.
+# ``FULILIAN_AUTO_CONTINUE_FRESHNESS`` at startup.
 _AUTO_CONTINUE_FRESHNESS_SECS_DEFAULT = 60 * 60
 
 
@@ -42,13 +42,13 @@ def auto_continue_freshness_window() -> float:
 
     Single source of truth for both the resume scheduler (``gateway/run.py``)
     and the routing-time zombie gate in ``get_or_create_session``.  Reads
-    ``HERMES_AUTO_CONTINUE_FRESHNESS`` (bridged from ``config.yaml``
+    ``FULILIAN_AUTO_CONTINUE_FRESHNESS`` (bridged from ``config.yaml``
     ``agent.gateway_auto_continue_freshness`` at gateway startup) and falls
     back to the module default when unset or malformed.  A non-positive value
     disables the freshness gate (restores the pre-fix "always fresh" behaviour
     for users who want to opt out).
     """
-    raw = os.environ.get("HERMES_AUTO_CONTINUE_FRESHNESS")
+    raw = os.environ.get("FULILIAN_AUTO_CONTINUE_FRESHNESS")
     if raw is None or raw == "":
         return float(_AUTO_CONTINUE_FRESHNESS_SECS_DEFAULT)
     try:
@@ -98,7 +98,7 @@ from utils import atomic_replace
 from agent.turn_context import extract_api_content_sidecar
 
 # Session keys/ids flow into filesystem paths downstream (e.g.
-# ``sessions_dir / f"{session_id}.json"`` in hermes_state, request-dump
+# ``sessions_dir / f"{session_id}.json"`` in fulilian_state, request-dump
 # filenames in agent_runtime_helpers). Any value that could escape the
 # sessions directory as a path must be rejected at the entry boundary.
 # Rejects: parent traversal (``..``), a path separator anywhere (``/`` or
@@ -364,7 +364,7 @@ def _slack_tools_loaded() -> bool:
     """True iff the agent will actually have Slack tools this session.
 
     Two independent paths grant Slack capability:
-      1. Native `slack` toolset enabled via `hermes tools` (opt-in, default
+      1. Native `slack` toolset enabled via `fulilian tools` (opt-in, default
          OFF) AND `SLACK_BOT_TOKEN` set — the tool's `check_fn` gates on it
          at registry time, so config alone isn't enough.
       2. An MCP server that has ACTUALLY registered tools into the live
@@ -423,7 +423,7 @@ def _discord_tools_loaded() -> bool:
 
     Two conditions must hold:
       1. The `discord` or `discord_admin` toolset is enabled for the
-         Discord platform via `hermes tools` (opt-in, default OFF).
+         Discord platform via `fulilian tools` (opt-in, default OFF).
       2. `DISCORD_BOT_TOKEN` is set — the tool's `check_fn` gates on it
          at registry time, so the toolset being enabled in config is not
          enough if the token isn't configured.
@@ -630,7 +630,7 @@ def build_session_context_prompt(
     elif context.source.platform == Platform.DISCORD:
         # Inject the Discord IDs block only when the agent actually has
         # Discord tools loaded this session — i.e. the user opted into
-        # `discord` / `discord_admin` via `hermes tools` AND the bot
+        # `discord` / `discord_admin` via `fulilian tools` AND the bot
         # token is configured.  Otherwise keep the stale-API disclaimer
         # honest so we never promise tools the agent lacks.
         if _discord_tools_loaded():
@@ -719,7 +719,7 @@ def build_session_context_prompt(
     lines.append("")
     lines.append("**Delivery options for scheduled tasks:**")
 
-    from fulilian_constants import display_hermes_home
+    from fulilian_constants import display_fulilian_home
 
     # Origin delivery
     if context.source.platform == Platform.LOCAL:
@@ -733,7 +733,7 @@ def build_session_context_prompt(
 
     # Local always available
     lines.append(
-        f"- `\"local\"` → Save to local files only ({display_hermes_home()}/cron/output/)"
+        f"- `\"local\"` → Save to local files only ({display_fulilian_home()}/cron/output/)"
     )
 
     # Platform home channels
@@ -1037,7 +1037,7 @@ def build_channel_continuity_note(
 
     where = "thread" if source.thread_id else "channel"
     return (
-        f"[System note: This {where} had an earlier Hermes session "
+        f"[System note: This {where} had an earlier Fulilian session "
         f"(session_id: {prev}) that was auto-reset. If the user refers to "
         f"earlier work here, or the request depends on this {where}'s history, "
         f"use the session_search tool to recall that prior session before "
@@ -1304,7 +1304,7 @@ class SessionStore:
         # a handle bound during __init__ is frozen to the process's own root
         # home; every profile's rows then land in the root state.db even
         # though ``_profile_runtime_scope`` has already redirected
-        # ``get_hermes_home()`` for the turn (its docstring lists "sessions"
+        # ``get_fulilian_home()`` for the turn (its docstring lists "sessions"
         # among what it scopes).  The row still carries the right
         # ``profile_name``, so the damage is invisible in the data and shows
         # up only as the desktop listing a profile's session under the
@@ -1331,7 +1331,7 @@ class SessionStore:
         """Return the SessionDB for the profile scope active on this task.
 
         ``SessionDB(db_path=None)`` resolves ``_default_db_path()`` at call
-        time, and that helper follows the context-local HERMES_HOME override
+        time, and that helper follows the context-local FULILIAN_HOME override
         installed by ``_profile_runtime_scope``.  Resolving here rather than
         once in ``__init__`` is the whole fix for #88532: it lets the
         scoping that the multiplexed inbound path already performs actually
@@ -1343,7 +1343,7 @@ class SessionStore:
         once it expires, one caller reopens while concurrent callers keep
         using the JSONL fallback.
         """
-        from hermes_state import SessionDB, _default_db_path
+        from fulilian_state import SessionDB, _default_db_path
 
         path = Path(_default_db_path())
         def _open():
@@ -1794,11 +1794,11 @@ class SessionStore:
         data = {
             "_README": (
                 "LEGACY MIRROR of the gateway routing index (the primary copy "
-                "lives in the gateway_routing table in ~/.hermes/state.db). "
+                "lives in the gateway_routing table in ~/.fulilian/state.db). "
                 "Maps messaging session keys (agent:main:<platform>:...) to "
                 "active session IDs. This is NOT the session list. ALL "
-                "sessions (CLI, TUI, and gateway) live in ~/.hermes/state.db "
-                "and are shown by `hermes sessions list` and `/sessions`. "
+                "sessions (CLI, TUI, and gateway) live in ~/.fulilian/state.db "
+                "and are shown by `fulilian sessions list` and `/sessions`. "
                 "Disable this file with `gateway.write_sessions_json: false` "
                 "in config.yaml."
             ),
@@ -3756,7 +3756,7 @@ class SessionStore:
             try:
                 self._append_transcript_message(session_id, msg)
             except Exception as exc:
-                from hermes_state import CompressionSessionClosedError
+                from fulilian_state import CompressionSessionClosedError
 
                 if isinstance(exc, CompressionSessionClosedError):
                     # Resolve the full continuation chain via the canonical

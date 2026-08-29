@@ -7,7 +7,7 @@ import {
   useSelection,
   useStdout,
   useTerminalTitle
-} from '@hermes/ink'
+} from '@fulilian/ink'
 import { useStore } from '@nanostores/react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
@@ -641,7 +641,7 @@ export function useMainApp(gw: GatewayClient) {
           tab: composeTabTitle(marker, ui.sessionTitle, '', ''),
           window: composeTabTitle(marker, ui.sessionTitle, model, tabCwd ? shortCwd(tabCwd, 24) : '')
         }
-      : 'Hermes'
+      : 'Fulilian'
   )
 
   useEffect(() => {
@@ -1229,7 +1229,7 @@ export function useMainApp(gw: GatewayClient) {
   // randomly disappear when the live tail scrolls offscreen.
   const appProgress = useMemo(() => ({ showProgressArea }), [showProgressArea])
 
-  const cwd = ui.info?.cwd || process.env.HERMES_CWD || process.cwd()
+  const cwd = ui.info?.cwd || process.env.FULILIAN_CWD || process.cwd()
   const gitBranch = useGitBranch(cwd)
 
   const appStatus = useMemo(

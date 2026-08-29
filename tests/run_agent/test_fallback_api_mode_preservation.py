@@ -61,7 +61,7 @@ def _activate(agent, resolved_base_url, resolved_model, build_anthropic=None):
             ),
         ),
         patch(
-            "hermes_cli.model_normalize.normalize_model_for_provider",
+            "fulilian_cli.model_normalize.normalize_model_for_provider",
             side_effect=lambda m, p: m,
         ),
         patch(

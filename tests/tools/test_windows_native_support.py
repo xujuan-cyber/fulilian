@@ -2,7 +2,7 @@
 
 Complements ``tests/tools/test_windows_compat.py`` (which does source-level
 pattern linting) with cross-platform-mocked tests that exercise the actual
-code paths Hermes takes on native Windows.
+code paths Fulilian takes on native Windows.
 
 Runs on Linux CI — every test mocks ``sys.platform``, ``subprocess.run``,
 and ``os.kill`` as needed to simulate Windows behavior without requiring a
@@ -29,7 +29,7 @@ import pytest
 
 
 class TestConfigureWindowsStdio:
-    """``hermes_cli.stdio.configure_windows_stdio`` wiring.
+    """``fulilian_cli.stdio.configure_windows_stdio`` wiring.
 
     The function must:
     - be a no-op on non-Windows
@@ -37,20 +37,20 @@ class TestConfigureWindowsStdio:
     - set PYTHONIOENCODING / PYTHONUTF8 without overriding explicit user settings
     - reconfigure sys.stdout/stderr/stdin to UTF-8 on Windows
     - flip the console code page to CP_UTF8 (65001) via ctypes
-    - respect HERMES_DISABLE_WINDOWS_UTF8 opt-out
+    - respect FULILIAN_DISABLE_WINDOWS_UTF8 opt-out
     """
 
     @pytest.fixture(autouse=True)
     def _reset_configured(self, monkeypatch):
         """Reload the module before each test so the _CONFIGURED flag resets."""
         # Remove from sys.modules so import triggers a fresh load
-        sys.modules.pop("hermes_cli.stdio", None)
+        sys.modules.pop("fulilian_cli.stdio", None)
         # Fresh import now; tests import from fulilian_cli.stdio themselves,
         # but this guarantees the module they get is a brand-new copy.
         import fulilian_cli.stdio as _s
         _s._CONFIGURED = False
         yield
-        sys.modules.pop("hermes_cli.stdio", None)
+        sys.modules.pop("fulilian_cli.stdio", None)
 
     def test_no_op_on_posix(self, monkeypatch):
         from fulilian_cli import stdio
@@ -193,7 +193,7 @@ class TestSigkillFallback:
     @pytest.mark.parametrize(
         "module_path, line_pattern",
         [
-            ("hermes_cli.kanban_db", 'getattr(signal, "SIGKILL", signal.SIGTERM)'),
+            ("fulilian_cli.kanban_db", 'getattr(signal, "SIGKILL", signal.SIGTERM)'),
         ],
     )
     def test_module_uses_getattr_fallback(self, module_path, line_pattern):
@@ -363,7 +363,7 @@ class TestWebServerPtyBridgeGuard:
 
     def test_import_guard_present_in_source(self):
         root = Path(__file__).resolve().parents[2]
-        source = (root / "hermes_cli" / "web_server.py").read_text(encoding="utf-8")
+        source = (root / "fulilian_cli" / "web_server.py").read_text(encoding="utf-8")
         assert "_PTY_BRIDGE_AVAILABLE" in source
         assert "except ImportError" in source, (
             "web_server.py must wrap the pty_bridge import in try/except ImportError"
@@ -372,7 +372,7 @@ class TestWebServerPtyBridgeGuard:
     def test_pty_handler_checks_availability_flag(self):
         """The /api/pty handler must short-circuit when the bridge is unavailable."""
         root = Path(__file__).resolve().parents[2]
-        source = (root / "hermes_cli" / "web_server.py").read_text(encoding="utf-8")
+        source = (root / "fulilian_cli" / "web_server.py").read_text(encoding="utf-8")
         assert "if not _PTY_BRIDGE_AVAILABLE" in source, (
             "/api/pty handler must return a friendly error when PTY is unavailable"
         )
@@ -384,17 +384,17 @@ class TestWebServerPtyBridgeGuard:
 
 
 class TestEntryPointsConfigureStdio:
-    """cli.py, hermes_cli/main.py, gateway/run.py must call configure_windows_stdio."""
+    """cli.py, fulilian_cli/main.py, gateway/run.py must call configure_windows_stdio."""
 
     @pytest.mark.parametrize(
         "relpath",
-        ["cli.py", "hermes_cli/main.py", "gateway/run.py"],
+        ["cli.py", "fulilian_cli/main.py", "gateway/run.py"],
     )
     def test_entry_point_calls_configure_stdio(self, relpath):
         root = Path(__file__).resolve().parents[2]
         source = (root / relpath).read_text(encoding="utf-8")
         assert "configure_windows_stdio" in source, (
-            f"{relpath} must call hermes_cli.stdio.configure_windows_stdio() "
+            f"{relpath} must call fulilian_cli.stdio.configure_windows_stdio() "
             "early in startup so Windows consoles render Unicode without crashing"
         )
 
@@ -405,7 +405,7 @@ class TestEntryPointsConfigureStdio:
 
 
 class TestSubprocessCompatHelpers:
-    """hermes_cli/_subprocess_compat.py POSIX + Windows behaviour."""
+    """fulilian_cli/_subprocess_compat.py POSIX + Windows behaviour."""
 
     def test_is_windows_matches_sys_platform(self):
         from fulilian_cli import _subprocess_compat as sc
@@ -455,8 +455,8 @@ class TestSubprocessCompatHelpers:
     def test_windows_detach_flags_includes_breakaway_from_job(self):
         """CREATE_BREAKAWAY_FROM_JOB is load-bearing for the GUI-driven update path.
 
-        Without it, the gateway-respawn watcher spawned by ``hermes update``
-        (which runs under hermes-setup.exe, itself a grandchild of the
+        Without it, the gateway-respawn watcher spawned by ``fulilian update``
+        (which runs under fulilian-setup.exe, itself a grandchild of the
         Electron Desktop app) gets reaped when Electron exits and its
         Win32 job object is torn down by the OS.  Result: gateway dies
         during update and never comes back.
@@ -538,7 +538,7 @@ class TestTuiGatewayEntrySignalGuards:
 
 
 # ---------------------------------------------------------------------------
-# hermes_cli/kanban_db.py waitpid guard
+# fulilian_cli/kanban_db.py waitpid guard
 # ---------------------------------------------------------------------------
 
 
@@ -548,7 +548,7 @@ class TestKanbanWaitpidWindowsGuard:
 
     def test_source_gates_waitpid_loop(self):
         root = Path(__file__).resolve().parents[2]
-        source = (root / "hermes_cli" / "kanban_db.py").read_text(encoding="utf-8")
+        source = (root / "fulilian_cli" / "kanban_db.py").read_text(encoding="utf-8")
         # Find the waitpid call and confirm it's inside a POSIX gate.
         idx = source.find("os.waitpid(-1, os.WNOHANG)")
         assert idx > 0, "waitpid call must exist"
@@ -580,7 +580,7 @@ class TestCodeExecutionTransportTcpFallback:
 
     We can't easily execute the sandbox on Linux CI in Windows mode, but we
     CAN assert that the generated client module supports both AF_UNIX and
-    AF_INET endpoints based on the HERMES_RPC_SOCKET format.
+    AF_INET endpoints based on the FULILIAN_RPC_SOCKET format.
     """
 
     def test_generated_client_handles_tcp_endpoint(self):
@@ -636,14 +636,14 @@ class TestCronSchedulerBashResolution:
 
 class TestNpmBareSpawnsResolved:
     """Every spawn site that launches ``npm``/``npx`` must resolve via
-    shutil.which / hermes_cli._subprocess_compat.resolve_node_command
+    shutil.which / fulilian_cli._subprocess_compat.resolve_node_command
     so Windows can execute the .cmd batch shims."""
 
     @pytest.mark.parametrize(
         "relpath",
         [
-            "hermes_cli/tools_config.py",
-            "hermes_cli/doctor.py",
+            "fulilian_cli/tools_config.py",
+            "fulilian_cli/doctor.py",
             "plugins/platforms/whatsapp/adapter.py",
             "tools/browser_tool.py",
         ],
@@ -710,12 +710,12 @@ class TestLocalEnvironmentWindowsTempDir:
                 f"POSIX temp dir must start with '/'; got {tmp_dir!r}"
             )
 
-    def test_source_has_windows_branch_using_hermes_home(self):
+    def test_source_has_windows_branch_using_fulilian_home(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "tools" / "environments" / "local.py").read_text(encoding="utf-8")
         assert "if _IS_WINDOWS:" in source
-        assert "get_hermes_home" in source
-        assert 'cache_dir = get_hermes_home() / "cache" / "terminal"' in source
+        assert "get_fulilian_home" in source
+        assert 'cache_dir = get_fulilian_home() / "cache" / "terminal"' in source
 
 
 class TestLocalEnvironmentPathInjectionGated:
@@ -797,11 +797,11 @@ class TestGatewayDetachedWatcherWindowsFlags:
     launcher must use CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS on
     Windows, not silent start_new_session=True."""
 
-    def test_hermes_cli_gateway_uses_compat_kwargs(self):
+    def test_fulilian_cli_gateway_uses_compat_kwargs(self):
         root = Path(__file__).resolve().parents[2]
-        source = (root / "hermes_cli" / "gateway.py").read_text(encoding="utf-8")
+        source = (root / "fulilian_cli" / "gateway.py").read_text(encoding="utf-8")
         assert "windows_detach_popen_kwargs" in source, (
-            "hermes_cli/gateway.py must use the platform-aware detach helper"
+            "fulilian_cli/gateway.py must use the platform-aware detach helper"
         )
         # The legacy start_new_session=True on the outer Popen should be
         # replaced by **windows_detach_popen_kwargs(). Inside the watcher
@@ -816,14 +816,14 @@ class TestGatewayDetachedWatcherWindowsFlags:
 
         Static check — the watcher source is built at import time and embedded
         verbatim in the module text.  The literal Win32 bits live in
-        hermes_cli._subprocess_compat; the watcher must call that helper from
+        fulilian_cli._subprocess_compat; the watcher must call that helper from
         inside the inlined payload so runtime behavior keeps the breakaway bit.
 
         The bit was added to the inlined payload by PR #40909.  This test
         ensures a future refactor of the dedent block doesn't silently drop it.
         """
         root = Path(__file__).resolve().parents[2]
-        text = (root / "hermes_cli" / "gateway.py").read_text(encoding="utf-8")
+        text = (root / "fulilian_cli" / "gateway.py").read_text(encoding="utf-8")
         marker = "watcher = textwrap.dedent("
         idx = text.find(marker)
         assert idx != -1, "watcher block not found in gateway.py"
@@ -864,7 +864,7 @@ class TestGatewayDetachedWatcherWindowsFlags:
         is the regression guard.
         """
         root = Path(__file__).resolve().parents[2]
-        text = (root / "hermes_cli" / "gateway.py").read_text(encoding="utf-8")
+        text = (root / "fulilian_cli" / "gateway.py").read_text(encoding="utf-8")
         assert "windows_detach_flags_without_breakaway" in text, (
             "launch_detached_profile_gateway_restart must import "
             "windows_detach_flags_without_breakaway so it can retry a "
@@ -888,7 +888,7 @@ class TestGatewayDetachedWatcherWindowsFlags:
         """The post-update respawn must route through
         ``gateway_windows.windowless_gateway_restart_spec``.
 
-        The spec supplies the stable cwd + env overlay (HERMES_HOME,
+        The spec supplies the stable cwd + env overlay (FULILIAN_HOME,
         VIRTUAL_ENV, PYTHONPATH) so the respawned gateway doesn't depend on
         the watcher's transient working directory. (The interpreter itself
         stays the venv's console ``python.exe``, launched hidden via
@@ -900,7 +900,7 @@ class TestGatewayDetachedWatcherWindowsFlags:
         the inlined respawn ``Popen``.
         """
         root = Path(__file__).resolve().parents[2]
-        text = (root / "hermes_cli" / "gateway.py").read_text(encoding="utf-8")
+        text = (root / "fulilian_cli" / "gateway.py").read_text(encoding="utf-8")
         assert "windowless_gateway_restart_spec" in text, (
             "_spawn_gateway_restart_watcher must build the respawn via "
             "gateway_windows.windowless_gateway_restart_spec so the gateway "
@@ -919,7 +919,7 @@ class TestGatewayDetachedWatcherWindowsFlags:
         )
         assert '_popen_kwargs["env"]' in block, (
             "Inlined respawn must overlay env (VIRTUAL_ENV / PYTHONPATH / "
-            "HERMES_HOME) from the restart spec."
+            "FULILIAN_HOME) from the restart spec."
         )
 
 
@@ -931,7 +931,7 @@ class TestWindowlessGatewayRestartSpec:
     def test_noop_on_non_windows(self):
         import fulilian_cli.gateway_windows as gw
 
-        argv = ["/path/venv/bin/python", "-m", "hermes_cli.main", "gateway", "run"]
+        argv = ["/path/venv/bin/python", "-m", "fulilian_cli.main", "gateway", "run"]
         new_argv, cwd, env = gw.windowless_gateway_restart_spec(list(argv))
         assert new_argv == argv
         assert cwd == ""
@@ -952,9 +952,9 @@ class TestWindowlessGatewayRestartSpec:
         is preserved verbatim.
 
         ``windows_only``: faking this on Linux needed two more fakes to hold
-        it up — a pre-import so the lazy ``hermes_cli.gateway`` import didn't
+        it up — a pre-import so the lazy ``fulilian_cli.gateway`` import didn't
         re-run ``gateway/status``'s ``import msvcrt`` branch, and a mock of
-        ``get_hermes_home`` because the real one's ``Path.resolve()`` consults
+        ``get_fulilian_home`` because the real one's ``Path.resolve()`` consults
         sysconfig and blew up under the platform patch. Both workarounds were
         symptoms of testing Windows on a host that isn't Windows; on the
         Windows runner neither is needed.
@@ -964,7 +964,7 @@ class TestWindowlessGatewayRestartSpec:
         argv = [
             "C:/venv/Scripts/python.exe",
             "-m",
-            "hermes_cli.main",
+            "fulilian_cli.main",
             "--profile",
             "work",
             "gateway",
@@ -975,9 +975,9 @@ class TestWindowlessGatewayRestartSpec:
         # Only the environment-dependent lookups are stubbed — the host is
         # genuinely Windows here.
         with mock.patch.object(
-            gw, "_stable_gateway_working_dir", return_value="C:/hermes"
+            gw, "_stable_gateway_working_dir", return_value="C:/fulilian"
         ), mock.patch(
-            "hermes_cli.config.get_hermes_home", return_value="C:/hermes"
+            "fulilian_cli.config.get_fulilian_home", return_value="C:/fulilian"
         ):
             new_argv, cwd, env = gw.windowless_gateway_restart_spec(list(argv))
 
@@ -986,7 +986,7 @@ class TestWindowlessGatewayRestartSpec:
         assert new_argv[0] == "C:/venv/Scripts/python.exe"
         # Everything after the interpreter is byte-for-byte preserved.
         assert new_argv[1:] == argv[1:]
-        assert cwd == "C:/hermes"
+        assert cwd == "C:/fulilian"
         assert env["VIRTUAL_ENV"] == str(Path("C:/venv"))
         assert "PYTHONPATH" in env
 
@@ -1040,7 +1040,7 @@ class TestGatewayRunRestartWatcherOuterPopenFallback:
             windows_detach_popen_kwargs,
         )
 
-        monkeypatch.setattr(gr, "_resolve_hermes_bin", lambda: ["hermes"])
+        monkeypatch.setattr(gr, "_resolve_fulilian_bin", lambda: ["fulilian"])
 
         calls = []
 
@@ -1068,7 +1068,7 @@ class TestGatewayRunRestartWatcherOuterPopenFallback:
 
         # Scrubbed env preserved and identical on both calls.
         assert kw1["env"] is kw2["env"]
-        assert "_HERMES_GATEWAY" not in kw1["env"]
+        assert "_FULILIAN_GATEWAY" not in kw1["env"]
 
         # Stable, non-flag spawn configuration preserved across both attempts.
         assert kw1["stdout"] is subprocess.DEVNULL
@@ -1099,7 +1099,7 @@ class TestGatewayRunRestartWatcherOuterPopenFallback:
     def test_outer_watcher_happy_path_spawns_once(self, monkeypatch):
         import gateway.run as gr
 
-        monkeypatch.setattr(gr, "_resolve_hermes_bin", lambda: ["hermes"])
+        monkeypatch.setattr(gr, "_resolve_fulilian_bin", lambda: ["fulilian"])
 
         calls = []
         monkeypatch.setattr(
@@ -1119,7 +1119,7 @@ class TestGatewayRunRestartWatcherOuterPopenFallback:
     ):
         import gateway.run as gr
 
-        monkeypatch.setattr(gr, "_resolve_hermes_bin", lambda: ["hermes"])
+        monkeypatch.setattr(gr, "_resolve_fulilian_bin", lambda: ["fulilian"])
 
         calls = []
 
@@ -1134,7 +1134,7 @@ class TestGatewayRunRestartWatcherOuterPopenFallback:
         # Deterministic sentinel in the environment the watcher inherits
         # (watcher_env = os.environ.copy()); the warning must never echo it.
         secret = "maxwell-do-not-log-this-secret-42993"
-        monkeypatch.setenv("HERMES_TEST_SECRET", secret)
+        monkeypatch.setenv("FULILIAN_TEST_SECRET", secret)
 
         # Dual failure must NOT propagate — the user's CLI still exits cleanly.
         self._drive(gr)
@@ -1156,7 +1156,7 @@ class TestGatewayRunRestartWatcherOuterPopenFallback:
             assert not isinstance(arg, (OSError, list, dict))
 
         # The watcher's env carried the sentinel; the rendered warning must not.
-        assert secret in (kwargs_used.get("env") or {}).get("HERMES_TEST_SECRET", "")
+        assert secret in (kwargs_used.get("env") or {}).get("FULILIAN_TEST_SECRET", "")
         rendered = fmt % tuple(log_args)
         assert secret not in rendered
         assert argv_used[2] not in rendered  # watcher script body

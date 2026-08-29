@@ -17,7 +17,7 @@ Setup::
     # Option 2: Docker
     docker run -p 9377:9377 -e CAMOFOX_PORT=9377 jo-inc/camofox-browser
 
-Then set ``CAMOFOX_URL=http://localhost:9377`` in ``~/.hermes/.env``.
+Then set ``CAMOFOX_URL=http://localhost:9377`` in ``~/.fulilian/.env``.
 For Docker Camofox, optionally set ``CAMOFOX_REWRITE_LOOPBACK_URLS=true``
 so page URLs like ``http://127.0.0.1:3000`` are opened inside the
 container as ``http://host.docker.internal:3000``.
@@ -116,7 +116,7 @@ def is_camofox_mode() -> bool:
     """True when the Camofox backend is selected and no CDP override is active.
 
     Camofox is a selection: ``browser.cloud_provider: camofox`` (set via
-    ``hermes tools``). ``CAMOFOX_URL`` is the server ADDRESS only — its
+    ``fulilian tools``). ``CAMOFOX_URL`` is the server ADDRESS only — its
     presence no longer selects the backend when a different
     ``browser.cloud_provider`` is stored. Legacy read-time interpretation:
     when NO cloud provider selection was ever written, a set ``CAMOFOX_URL``
@@ -192,7 +192,7 @@ def _get_camofox_config() -> Dict[str, Any]:
 
 
 def _managed_persistence_enabled() -> bool:
-    """Return whether Hermes-managed persistence is enabled for Camofox.
+    """Return whether Fulilian-managed persistence is enabled for Camofox.
 
     When enabled, sessions use a stable profile-scoped userId so the
     Camofox server can map it to a persistent browser profile directory.
@@ -207,7 +207,7 @@ def _camofox_identity_override(task_id: Optional[str], camofox_cfg: Dict[str, An
     """Return an externally configured Camofox identity, if one is set.
 
     Integrations that own the visible Camofox browser can set a shared user ID
-    so Hermes operates in the same browser profile instead of creating a
+    so Fulilian operates in the same browser profile instead of creating a
     separate private session.
     """
     user_id = (
@@ -238,7 +238,7 @@ def _env_flag(name: str) -> Optional[bool]:
 
 
 def _adopt_existing_tab_enabled(camofox_cfg: Dict[str, Any]) -> bool:
-    """Return whether Hermes should recover an existing Camofox tab ID."""
+    """Return whether Fulilian should recover an existing Camofox tab ID."""
     env_value = _env_flag("CAMOFOX_ADOPT_EXISTING_TAB")
     if env_value is not None:
         return env_value
@@ -249,7 +249,7 @@ def _loopback_rewrite_enabled(camofox_cfg: Dict[str, Any]) -> bool:
     """Return whether loopback navigation URLs should be rewritten for Docker.
 
     ``CAMOFOX_URL`` itself often points at a host-published Docker port such as
-    ``http://127.0.0.1:9377``.  That is correct for Hermes talking to the
+    ``http://127.0.0.1:9377``.  That is correct for Fulilian talking to the
     Camofox control API, but a page URL like ``http://127.0.0.1:3000`` is opened
     by the browser *inside* the Docker container.  In that context loopback
     points at the container, not the host running the web app.
@@ -339,7 +339,7 @@ _sessions_lock = threading.Lock()
 def _adopt_existing_tab(session: Dict[str, Any]) -> Dict[str, Any]:
     """Attach process-local state to an already-open managed Camofox tab.
 
-    Some integrations own the visible Camofox tab outside Hermes. Gateway
+    Some integrations own the visible Camofox tab outside Fulilian. Gateway
     restarts can leave this module's in-memory session cache empty even though
     Camofox still has that tab, so rehydrate tab_id before creating a new tab.
     """
@@ -378,7 +378,7 @@ def _get_session(task_id: Optional[str]) -> Dict[str, Any]:
     """Get or create a camofox session for the given task.
 
     When managed persistence is enabled, uses a deterministic userId
-    derived from the Hermes profile so the Camofox server can map it
+    derived from the Fulilian profile so the Camofox server can map it
     to the same persistent browser profile across restarts.
     """
     task_id = task_id or "default"
@@ -407,7 +407,7 @@ def _get_session(task_id: Optional[str]) -> Dict[str, Any]:
             }
         else:
             session = {
-                "user_id": f"hermes_{uuid.uuid4().hex[:10]}",
+                "user_id": f"fulilian_{uuid.uuid4().hex[:10]}",
                 "tab_id": None,
                 "session_key": f"task_{task_id[:16]}",
                 "managed": False,
@@ -877,8 +877,8 @@ def camofox_vision(question: str, annotate: bool = False,
         )
 
         # Save screenshot to cache
-        from fulilian_constants import get_hermes_home
-        screenshots_dir = get_hermes_home() / "browser_screenshots"
+        from fulilian_constants import get_fulilian_home
+        screenshots_dir = get_fulilian_home() / "browser_screenshots"
         screenshots_dir.mkdir(parents=True, exist_ok=True)
         screenshot_path = str(screenshots_dir / f"browser_screenshot_{uuid.uuid4().hex[:8]}.png")
 

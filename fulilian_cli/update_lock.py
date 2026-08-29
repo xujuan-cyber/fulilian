@@ -1,19 +1,19 @@
-"""Cross-process mutual exclusion for in-flight Hermes updates.
+"""Cross-process mutual exclusion for in-flight Fulilian updates.
 
 Three different surfaces can start an update of the same install tree:
 
-* ``hermes update`` from a terminal,
-* the dashboard's Update button (``POST /api/hermes/update`` →
-  ``_spawn_hermes_action(["update"])``, detached),
+* ``fulilian update`` from a terminal,
+* the dashboard's Update button (``POST /api/fulilian/update`` →
+  ``_spawn_fulilian_action(["update"])``, detached),
 * the desktop's Update button, which hands off to the Tauri
-  ``hermes-setup --update`` and, on its failure screen, to install-mode
+  ``fulilian-setup --update`` and, on its failure screen, to install-mode
   bootstrap (``install.ps1`` / ``install.sh``).
 
 Until now only the Tauri updater published an "update in progress" marker
 (``UpdateMarkerGuard`` in ``apps/bootstrap-installer/src-tauri/src/update.rs``),
 and only the Electron desktop consumed it (``electron/update-marker.ts``, to
 gate local backend startup). Nothing stopped two *updaters* from running at
-once — so a dashboard-spawned ``hermes update`` and an installer-driven
+once — so a dashboard-spawned ``fulilian update`` and an installer-driven
 ``git checkout`` could mutate the same checkout concurrently, rewriting source
 under a live interpreter and leaving the tree half-updated.
 
@@ -21,7 +21,7 @@ This module makes that same marker the single lock for **all** update
 entrypoints instead of adding a fourth mechanism. Format and location are
 unchanged and remain byte-compatible with the Rust and Electron readers:
 
-    <HERMES_HOME>/.hermes-update-in-progress   body: "<pid>\\n<started_at_unix>"
+    <FULILIAN_HOME>/.fulilian-update-in-progress   body: "<pid>\\n<started_at_unix>"
 
 A marker only counts as a live update when its pid is alive AND it is younger
 than :data:`UPDATE_MARKER_MAX_AGE_MS` — mirroring ``readLiveUpdateMarker`` so a
@@ -29,9 +29,9 @@ crashed updater self-heals instead of wedging every future update. A stale
 marker is removed on read by whoever notices it first.
 
 One layering wrinkle: the Tauri updater holds this marker for its WHOLE run and
-then spawns ``hermes update`` as a child stage. Without a handoff the child
+then spawns ``fulilian update`` as a child stage. Without a handoff the child
 sees its own parent's live marker and refuses — the GUI update deadlocks
-against itself on every attempt ("Hermes is still running", retry forever).
+against itself on every attempt ("Fulilian is still running", retry forever).
 Two mechanisms recognize the orchestrating parent, and either suffices:
 
 * The updater exports :data:`HANDOFF_PID_ENV` naming its own pid, and
@@ -40,12 +40,12 @@ Two mechanisms recognize the orchestrating parent, and either suffices:
   be the live marker owner, so a stale or forged value cannot bypass the lock.
 * A live holder that is a *process ancestor* of ours is likewise our own
   orchestrator. This is the load-bearing path for the fleet: the staged
-  ``hermes-setup`` binary under ``~/.hermes`` is only refreshed by a full
-  installer run (``copy_self_to_hermes_home`` deliberately no-ops during
+  ``fulilian-setup`` binary under ``~/.fulilian`` is only refreshed by a full
+  installer run (``copy_self_to_fulilian_home`` deliberately no-ops during
   ``--update``), so every desktop whose staged updater predates the
   HANDOFF_PID_ENV export runs an old parent against a new child. Without the
-  ancestry check those users get exit 2 ("Hermes is still running") on every
-  GUI update forever, with no Hermes process actually running.
+  ancestry check those users get exit 2 ("Fulilian is still running") on every
+  GUI update forever, with no Fulilian process actually running.
 """
 
 from __future__ import annotations
@@ -64,20 +64,20 @@ logger = logging.getLogger(__name__)
 # live. A full update (git pull + uv sync + desktop rebuild) is minutes.
 UPDATE_MARKER_MAX_AGE_SECONDS = 20 * 60
 
-MARKER_NAME = ".hermes-update-in-progress"
+MARKER_NAME = ".fulilian-update-in-progress"
 
-# Set by an orchestrating updater (the Tauri `hermes-setup --update` flow) to
-# its own pid before spawning `hermes update` as a child stage. The parent
+# Set by an orchestrating updater (the Tauri `fulilian-setup --update` flow) to
+# its own pid before spawning `fulilian update` as a child stage. The parent
 # holds the marker for its whole run, so without this the child refuses its
 # own parent's lock and the GUI update can never complete. See update_child_env
 # in apps/bootstrap-installer/src-tauri/src/update.rs — keep the name in sync.
-HANDOFF_PID_ENV = "HERMES_UPDATE_HANDOFF_PID"
+HANDOFF_PID_ENV = "FULILIAN_UPDATE_HANDOFF_PID"
 
 # Exit code meaning "another updater/instance owns this install right now".
 # Already the de-facto contract: the Windows shim + venv-holder guards in
 # _cmd_update_impl exit 2, and the Tauri updater matches on it
 # (UPDATE_EXIT_CONCURRENT in apps/bootstrap-installer/src-tauri/src/update.rs)
-# to show "Hermes is still running" instead of a generic failure. Naming it
+# to show "Fulilian is still running" instead of a generic failure. Naming it
 # here keeps the concurrent-update refusal on that same understood contract.
 UPDATE_EXIT_CONCURRENT = 2
 
@@ -85,14 +85,14 @@ UPDATE_EXIT_CONCURRENT = 2
 def update_marker_path() -> Path:
     """Path of the shared update marker.
 
-    Uses the *process* Hermes home (never the context-local profile override):
-    the Rust updater resolves ``$HERMES_HOME`` or the platform default, and the
+    Uses the *process* Fulilian home (never the context-local profile override):
+    the Rust updater resolves ``$FULILIAN_HOME`` or the platform default, and the
     desktop pins that same value into the updater's env. A profile-scoped path
     here would put the lock somewhere the other two owners never look.
     """
-    from fulilian_constants import get_process_hermes_home
+    from fulilian_constants import get_process_fulilian_home
 
-    return get_process_hermes_home() / MARKER_NAME
+    return get_process_fulilian_home() / MARKER_NAME
 
 
 def _pid_alive(pid: int) -> bool:
@@ -140,10 +140,10 @@ def _handoff_pid() -> int | None:
 def _is_ancestor_pid(pid: int) -> bool:
     """True when ``pid`` is a live ancestor (parent chain) of this process.
 
-    The orchestrating updater spawns ``hermes update`` as a (grand)child, so a
+    The orchestrating updater spawns ``fulilian update`` as a (grand)child, so a
     live marker owned by one of our ancestors can only be the claim we are
     already running under — an unrelated concurrent updater is never in our
-    parent chain. This heals the fleet of staged ``hermes-setup`` binaries
+    parent chain. This heals the fleet of staged ``fulilian-setup`` binaries
     that predate the HANDOFF_PID_ENV export and can never send it.
 
     Never includes our own pid, and any failure counts as "not an ancestor":
@@ -208,7 +208,7 @@ def describe_holder(holder: UpdateHolder) -> str:
     minutes, seconds = divmod(int(max(holder.age_seconds, 0)), 60)
     elapsed = f"{minutes}m {seconds}s" if minutes else f"{seconds}s"
     return (
-        f"✗ Another Hermes update is already running (PID {holder.pid}, "
+        f"✗ Another Fulilian update is already running (PID {holder.pid}, "
         f"started {elapsed} ago).\n"
         "\n"
         "  Two updates mutating the same checkout corrupt it: one rewrites\n"
@@ -237,7 +237,7 @@ class UpdateLock:
 
         A live holder whose pid matches :data:`HANDOFF_PID_ENV` — or is a
         process ancestor of ours — is our own orchestrating parent (the Tauri
-        updater spawning `hermes update` as a stage): we run under ITS claim
+        updater spawning `fulilian update` as a stage): we run under ITS claim
         rather than refusing or re-writing the marker, and ``release`` leaves
         the parent's marker untouched. The ancestry path exists because staged
         updaters older than the HANDOFF_PID_ENV export never send the env var.

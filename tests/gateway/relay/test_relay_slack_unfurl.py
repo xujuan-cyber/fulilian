@@ -89,7 +89,7 @@ class TestUnfurlHints:
         assert a._slack_unfurl_hints("slack") is None
 
     def test_string_bools_from_config_set_are_coerced(self):
-        # Railway knobs / `hermes config set` persist YAML strings.
+        # Railway knobs / `fulilian config set` persist YAML strings.
         a = _slack_adapter({"slack": {"unfurl_links": "true", "unfurl_media": "false"}})
         assert a._slack_unfurl_hints("slack") == {
             "unfurl_links": True,

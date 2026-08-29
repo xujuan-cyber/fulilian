@@ -1,6 +1,6 @@
 """Regression tests for #88583 — one-shot resumed-session turns must persist.
 
-Bot Mode's bot-to-bot send (``hermes -p <bot> chat --in ~ -c "Bot Chat"
+Bot Mode's bot-to-bot send (``fulilian -p <bot> chat --in ~ -c "Bot Chat"
 --create-if-missing -Q -q "..."``) runs exactly one turn and exits. The
 receiving agent replied, the CLI banner said it resumed the titled session,
 but nothing landed in state.db when the turn's in-loop transcript flush
@@ -76,7 +76,7 @@ class TestOneShotDurableFlush:
         ``_finalize_single_query`` performs no durable write and the turn
         evaporates — this test fails.
         """
-        from hermes_state import SessionDB
+        from fulilian_state import SessionDB
 
         with tempfile.TemporaryDirectory() as tmpdir:
             db = SessionDB(db_path=Path(tmpdir) / "state.db")
@@ -109,7 +109,7 @@ class TestOneShotDurableFlush:
 
     def test_finalize_single_query_ends_session_row(self, monkeypatch):
         """The resumed/created one-shot session row is finalized on exit."""
-        from hermes_state import SessionDB
+        from fulilian_state import SessionDB
 
         with tempfile.TemporaryDirectory() as tmpdir:
             db = SessionDB(db_path=Path(tmpdir) / "state.db")
@@ -135,7 +135,7 @@ class TestOneShotDurableFlush:
 
     def test_flush_is_idempotent_for_already_persisted_turns(self, monkeypatch):
         """A turn the in-loop flush already wrote is not duplicated."""
-        from hermes_state import SessionDB
+        from fulilian_state import SessionDB
 
         with tempfile.TemporaryDirectory() as tmpdir:
             db = SessionDB(db_path=Path(tmpdir) / "state.db")
@@ -159,7 +159,7 @@ class TestOneShotDurableFlush:
 
     def test_flush_skips_handed_off_sessions(self):
         """A session handed off to the gateway is owned there (#88234)."""
-        from hermes_state import SessionDB
+        from fulilian_state import SessionDB
 
         with tempfile.TemporaryDirectory() as tmpdir:
             db = SessionDB(db_path=Path(tmpdir) / "state.db")
@@ -180,7 +180,7 @@ class TestOneShotDurableFlush:
 
     def test_flush_skips_persist_disabled_agents(self):
         """Persistence-isolated forks must never write the canonical store."""
-        from hermes_state import SessionDB
+        from fulilian_state import SessionDB
 
         with tempfile.TemporaryDirectory() as tmpdir:
             db = SessionDB(db_path=Path(tmpdir) / "state.db")

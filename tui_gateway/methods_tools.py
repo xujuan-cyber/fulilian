@@ -233,8 +233,8 @@ def _(rid, params: dict) -> dict:
 
 @method("reload.env")
 def _(rid, params: dict) -> dict:
-    """Re-read ``~/.hermes/.env`` into the gateway process via
-    ``hermes_cli.config.reload_env``, matching classic CLI's ``/reload``
+    """Re-read ``~/.fulilian/.env`` into the gateway process via
+    ``fulilian_cli.config.reload_env``, matching classic CLI's ``/reload``
     handler.  Newly added API keys take effect on the next agent call
     without restarting the TUI.
 
@@ -407,7 +407,7 @@ def _(rid, params: dict) -> dict:
 
 @method("cli.exec")
 def _(rid, params: dict) -> dict:
-    """Run `python -m hermes_cli.main` with argv; capture stdout/stderr (non-interactive only)."""
+    """Run `python -m fulilian_cli.main` with argv; capture stdout/stderr (non-interactive only)."""
     argv = params.get("argv", [])
     if not isinstance(argv, list) or not all(isinstance(x, str) for x in argv):
         return _err(rid, 4003, "argv must be list[str]")
@@ -420,7 +420,7 @@ def _(rid, params: dict) -> dict:
         from fulilian_cli._subprocess_compat import windows_hide_flags
 
         r = subprocess.run(
-            [sys.executable, "-m", "hermes_cli.main", *argv],
+            [sys.executable, "-m", "fulilian_cli.main", *argv],
             capture_output=True,
             text=True,
             # Force UTF-8 + lossy decode so non-UTF-8 child output can't crash
@@ -429,9 +429,9 @@ def _(rid, params: dict) -> dict:
             errors="replace",
             timeout=min(int(params.get("timeout", 240)), 600),
             cwd=os.getcwd(),
-            # cli.exec runs `python -m hermes_cli.main` (can drive the agent) →
+            # cli.exec runs `python -m fulilian_cli.main` (can drive the agent) →
             # needs provider credentials. Tier-1 secrets still stripped (#29157).
-            env=hermes_subprocess_env(inherit_credentials=True),
+            env=fulilian_subprocess_env(inherit_credentials=True),
             stdin=subprocess.DEVNULL,
             creationflags=windows_hide_flags(),
         )
@@ -1226,16 +1226,16 @@ def _(rid, params: dict) -> dict:
 
     try:
         from agent.skill_commands import get_skill_commands
-        from fulilian_constants import reset_hermes_home_override, set_hermes_home_override
+        from fulilian_constants import reset_fulilian_home_override, set_fulilian_home_override
 
-        # Re-bind HERMES_HOME to the session's profile so get_skill_commands()
+        # Re-bind FULILIAN_HOME to the session's profile so get_skill_commands()
         # sees that profile's skills.external_dirs rather than whatever the
         # process-level env happens to carry (#88023): dispatch() runs this
         # handler on the pool with a copied context, and nothing upstream of
         # here binds the override for slash.exec.
         _profile_home = session.get("profile_home")
         _home_token = (
-            set_hermes_home_override(_profile_home) if _profile_home else None
+            set_fulilian_home_override(_profile_home) if _profile_home else None
         )
         try:
             _cmd_key = f"/{_cmd_base}"
@@ -1245,7 +1245,7 @@ def _(rid, params: dict) -> dict:
                 )
         finally:
             if _home_token is not None:
-                reset_hermes_home_override(_home_token)
+                reset_fulilian_home_override(_home_token)
     except Exception:
         pass
 
@@ -1491,9 +1491,9 @@ def _(rid, params: dict) -> dict:
         model = _resolve_model()
         from agent.secret_scope import get_secret
 
-        api_key = get_secret("HERMES_API_KEY", "") or cfg.get("api_key", "")
+        api_key = get_secret("FULILIAN_API_KEY", "") or cfg.get("api_key", "")
         masked = f"****{api_key[-4:]}" if len(api_key) > 4 else "(not set)"
-        base_url = os.environ.get("HERMES_BASE_URL", "") or cfg.get("base_url", "")
+        base_url = os.environ.get("FULILIAN_BASE_URL", "") or cfg.get("base_url", "")
 
         sections = [
             {
@@ -1516,7 +1516,7 @@ def _(rid, params: dict) -> dict:
                 "title": "Environment",
                 "rows": [
                     ["Working Dir", os.getcwd()],
-                    ["Config File", str(_hermes_home / "config.yaml")],
+                    ["Config File", str(_fulilian_home / "config.yaml")],
                 ],
             },
         ]
@@ -1725,7 +1725,7 @@ def _(rid, params: dict) -> dict:
 @method("cron.manage")
 def _(rid, params: dict) -> dict:
     action, jid = params.get("action", "list"), params.get("name", "")
-    # Optional profile scoping: cronjob() keys off HERMES_HOME, so scoping the
+    # Optional profile scoping: cronjob() keys off FULILIAN_HOME, so scoping the
     # env override lets a per-profile cron store be listed/mutated even when
     # that profile runs a separate gateway. Omitted/None = the launch profile.
     # Mirrors ``skills.manage`` / ``mcp.catalog``.
@@ -1734,12 +1734,12 @@ def _(rid, params: dict) -> dict:
     if profile:
         try:
             from fulilian_cli.profiles import get_profile_dir
-            from fulilian_constants import set_hermes_home_override
+            from fulilian_constants import set_fulilian_home_override
 
             profile_dir = get_profile_dir(profile)
             if not profile_dir or not profile_dir.is_dir():
                 return _err(rid, 4064, f"profile '{profile}' not found")
-            token = set_hermes_home_override(str(profile_dir))
+            token = set_fulilian_home_override(str(profile_dir))
         except Exception as e:
             return _err(rid, 5023, str(e))
     try:
@@ -1802,9 +1802,9 @@ def _(rid, params: dict) -> dict:
     finally:
         if token is not None:
             try:
-                from fulilian_constants import reset_hermes_home_override
+                from fulilian_constants import reset_fulilian_home_override
 
-                reset_hermes_home_override(token)
+                reset_fulilian_home_override(token)
             except Exception:
                 pass
 
@@ -1815,7 +1815,7 @@ def _(rid, params: dict) -> dict:
 
     Returns ``frames`` (reveal 0→1) plus static legend/summary/bucket metadata,
     so Ink can render and walk the tree locally without round-tripping the
-    gateway. Shares its renderer with the ``hermes journey`` CLI.
+    gateway. Shares its renderer with the ``fulilian journey`` CLI.
     """
     try:
         cols = int(params.get("cols", 80) or 80)
@@ -1878,12 +1878,12 @@ def _(rid, params: dict) -> dict:
     if profile:
         try:
             from fulilian_cli.profiles import get_profile_dir
-            from fulilian_constants import set_hermes_home_override
+            from fulilian_constants import set_fulilian_home_override
 
             profile_dir = get_profile_dir(profile)
             if not profile_dir or not profile_dir.is_dir():
                 return _err(rid, 4064, f"profile '{profile}' not found")
-            token = set_hermes_home_override(str(profile_dir))
+            token = set_fulilian_home_override(str(profile_dir))
         except Exception as e:
             return _err(rid, 5024, str(e))
     try:
@@ -1943,9 +1943,9 @@ def _(rid, params: dict) -> dict:
     finally:
         if token is not None:
             try:
-                from fulilian_constants import reset_hermes_home_override
+                from fulilian_constants import reset_fulilian_home_override
 
-                reset_hermes_home_override(token)
+                reset_fulilian_home_override(token)
             except Exception:
                 pass
 
@@ -1956,7 +1956,7 @@ def _(rid, params: dict) -> dict:
 
     Params: optional ``profile`` (defaults to the launch profile). Result:
     ``{servers: [{name, description, installed, enabled, requires: [env
-    keys], transport}]}`` — the same catalog `hermes mcp` offers, so
+    keys], transport}]}`` — the same catalog `fulilian mcp` offers, so
     capability UIs can present the full menu and know which entries need
     setup (missing requires) before they'll work.
     """
@@ -1965,12 +1965,12 @@ def _(rid, params: dict) -> dict:
     try:
         if profile:
             from fulilian_cli.profiles import get_profile_dir
-            from fulilian_constants import set_hermes_home_override
+            from fulilian_constants import set_fulilian_home_override
 
             profile_dir = get_profile_dir(profile)
             if not profile_dir or not profile_dir.is_dir():
                 return _err(rid, 4064, f"profile '{profile}' not found")
-            token = set_hermes_home_override(str(profile_dir))
+            token = set_fulilian_home_override(str(profile_dir))
 
         from fulilian_cli import mcp_catalog
 
@@ -2001,9 +2001,9 @@ def _(rid, params: dict) -> dict:
     finally:
         if token is not None:
             try:
-                from fulilian_constants import reset_hermes_home_override
+                from fulilian_constants import reset_fulilian_home_override
 
-                reset_hermes_home_override(token)
+                reset_fulilian_home_override(token)
             except Exception:
                 pass
 
@@ -2011,11 +2011,11 @@ def _(rid, params: dict) -> dict:
 # ─── Per-profile MCP server lifecycle (mcp.servers.*) ────────────────────────
 #
 # Gateway RPCs mirroring the dashboard's REST surface
-# (hermes_cli/web_routers/mcp.py) so a desktop plugin can manage MCP servers for
+# (fulilian_cli/web_routers/mcp.py) so a desktop plugin can manage MCP servers for
 # ANY profile, not just the launch profile. Each accepts an optional ``profile``
-# param that scopes HERMES_HOME via set_hermes_home_override (omitted/None = the
+# param that scopes FULILIAN_HOME via set_fulilian_home_override (omitted/None = the
 # launch profile) in a try/finally, exactly like ``skills.manage`` / ``mcp.catalog``.
-# All persistence reuses hermes_cli/mcp_config.py helpers — no logic is duplicated.
+# All persistence reuses fulilian_cli/mcp_config.py helpers — no logic is duplicated.
 # Shared helpers (resolve_profile / reset_profile / summarize_server) live in
 # tui_gateway.mcp_rpc_helpers and are imported at call time: these handlers are
 # rebound onto server.py's globals at install time, so a plain module-level def
@@ -2318,11 +2318,11 @@ def _(rid, params: dict) -> dict:
     ``{ok: true, session_id, auth_url, flow: "pkce"}``.
 
     The client (desktop) opens ``auth_url`` in the native browser
-    (``window.hermesDesktop.openExternal``) and then polls
+    (``window.fulilianDesktop.openExternal``) and then polls
     ``mcp.servers.oauth.poll`` with the returned ``session_id`` until
     ``status == "approved"``. This mirrors the provider-OAuth start/poll model
     (``/api/providers/oauth/{id}/start`` + ``/poll``): a background worker drives
-    the SAME interactive MCP OAuth machinery ``hermes mcp login`` uses
+    the SAME interactive MCP OAuth machinery ``fulilian mcp login`` uses
     (``_probe_single_server`` under ``force_interactive_oauth``), and a loopback
     listener captures the browser redirect — no FastAPI request object needed.
 
@@ -2337,7 +2337,7 @@ def _(rid, params: dict) -> dict:
         return err
     try:
         from fulilian_cli.mcp_config import _get_mcp_servers
-        from fulilian_constants import get_hermes_home
+        from fulilian_constants import get_fulilian_home
         from tui_gateway import mcp_oauth_sessions
 
         servers = _get_mcp_servers()
@@ -2354,8 +2354,8 @@ def _(rid, params: dict) -> dict:
             )
         cfg["auth"] = "oauth"
 
-        hermes_home = str(get_hermes_home().expanduser().resolve(strict=False))
-        result = mcp_oauth_sessions.start_flow(hermes_home, name, cfg)
+        fulilian_home = str(get_fulilian_home().expanduser().resolve(strict=False))
+        result = mcp_oauth_sessions.start_flow(fulilian_home, name, cfg)
         return _ok(
             rid,
             {
@@ -2434,7 +2434,7 @@ def _(rid, params: dict) -> dict:
     """List installed plugins with activation state, or toggle one on/off.
 
     Backs the TUI Plugins Hub. Uses the same disk-discovery + enable/disable
-    primitives as ``hermes plugins`` / the dashboard, so the three surfaces
+    primitives as ``fulilian plugins`` / the dashboard, so the three surfaces
     agree on what's installed and what's enabled.
 
     Actions:
@@ -2442,12 +2442,12 @@ def _(rid, params: dict) -> dict:
                        status, portable}], "user_count": N, "bundled_count": M}
       - ``toggle`` → flip ``key`` (or ``name``) based on ``enable`` (bool).
                        Returns the refreshed row plus {"ok", "unchanged"}.
-      - ``install`` → git-clone into ``~/.hermes/plugins/`` (non-interactive).
+      - ``install`` → git-clone into ``~/.fulilian/plugins/`` (non-interactive).
                        Params: ``identifier`` or ``repo``, optional ``force``,
                        ``enable`` (default True). Returns dashboard install dict.
 
     Accepts an optional ``profile`` param (same contract as mcp.servers.*):
-    plugins live under each profile's HERMES_HOME, so a client can list or
+    plugins live under each profile's FULILIAN_HOME, so a client can list or
     toggle another profile's plugins without switching the whole app.
     """
     action = params.get("action", "list")
@@ -2494,7 +2494,7 @@ def _(rid, params: dict) -> dict:
                         "source": source,
                         "status": status,
                         # Agent Plugins v1 package (plugin.json — the portable
-                        # skills/MCP format) vs a native Hermes plugin.
+                        # skills/MCP format) vs a native Fulilian plugin.
                         "portable": _is_portable_plugin_dir(_dir),
                     }
                 )

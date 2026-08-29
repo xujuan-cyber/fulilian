@@ -1,4 +1,4 @@
-"""Regression test: hermes update must not load cryptography eagerly."""
+"""Regression test: fulilian update must not load cryptography eagerly."""
 
 import sys
 import subprocess
@@ -61,7 +61,7 @@ assert 'cryptography.hazmat.bindings._rust' not in sys.modules, \\
 # We can't easily run the actual dispatch without mocking argparse,
 # but we can at least verify the import inside _dispatch_secrets works
 # by checking that secrets_cli is not yet in sys.modules
-assert 'hermes_cli.secrets_cli' not in sys.modules, \\
+assert 'fulilian_cli.secrets_cli' not in sys.modules, \\
     'secrets_cli already loaded before dispatch'
 
 print('PASS: secrets_cli and cryptography not loaded until dispatch')
@@ -75,15 +75,15 @@ sys.exit(0)
         )
 
     def test_update_check_no_cryptography(self) -> None:
-        """Running hermes update --check should NOT load cryptography._rust."""
-        # Write a small script in the repo root so hermes_cli is importable,
+        """Running fulilian update --check should NOT load cryptography._rust."""
+        # Write a small script in the repo root so fulilian_cli is importable,
         # and use a filename that doesn't trigger the live-system guard.
         repo_root = Path(__file__).parent.parent
         script = repo_root / "_test_lazy_secrets_check.py"
         script.write_text(
             """
 import sys
-sys.argv = ['hermes', 'update', '--check']
+sys.argv = ['fulilian', 'update', '--check']
 
 import fulilian_cli.main
 from fulilian_cli.update_cmd import _cmd_update_check

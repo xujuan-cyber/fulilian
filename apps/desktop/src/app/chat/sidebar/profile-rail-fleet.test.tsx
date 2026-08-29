@@ -105,7 +105,7 @@ vi.mock('./use-profile-rail-refresh-on-active', () => ({
   useProfileRailRefreshOnActive: () => undefined
 }))
 
-vi.mock('@/hermes', () => ({
+vi.mock('@/fulilian', () => ({
   getProfileSoul: vi.fn().mockResolvedValue({ content: '' }),
   updateProfileSoul: vi.fn()
 }))
@@ -147,7 +147,7 @@ const roster: DesktopAgentRoster = {
       connectionKind: 'remote',
       connectionLabel: 'Pandora',
       profile: 'default',
-      handle: 'hermes-pandora'
+      handle: 'fulilian-pandora'
     },
     {
       connectionId: 'pandora',
@@ -161,7 +161,7 @@ const roster: DesktopAgentRoster = {
       connectionKind: 'local',
       connectionLabel: 'This device',
       profile: 'default',
-      handle: 'hermes'
+      handle: 'fulilian'
     },
     { connectionId: 'local', connectionKind: 'local', connectionLabel: 'This device', profile: 'omer', handle: 'omer' }
   ],
@@ -197,7 +197,7 @@ async function renderFleet() {
 beforeEach(() => {
   getAgentRoster.mockResolvedValue(roster)
   selectConnection.mockResolvedValue(undefined)
-  ;(window as { hermesDesktop?: unknown }).hermesDesktop = { getAgentRoster }
+  ;(window as { fulilianDesktop?: unknown }).fulilianDesktop = { getAgentRoster }
 })
 
 afterEach(() => {
@@ -209,7 +209,7 @@ afterEach(() => {
   activeConnectionId.set(null)
   profileScope.set('default')
   profiles.set([{ is_default: true, name: 'default' }])
-  delete (window as { hermesDesktop?: unknown }).hermesDesktop
+  delete (window as { fulilianDesktop?: unknown }).fulilianDesktop
 })
 
 describe('ProfileRail fleet mode', () => {

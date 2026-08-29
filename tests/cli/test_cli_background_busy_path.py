@@ -26,7 +26,7 @@ from unittest.mock import MagicMock, patch
 
 
 def _make_cli():
-    """Create a HermesCLI instance with prompt_toolkit stubbed out."""
+    """Create a FulilianCLI instance with prompt_toolkit stubbed out."""
     _clean_config = {
         "model": {
             "default": "anthropic/claude-opus-4.6",
@@ -37,7 +37,7 @@ def _make_cli():
         "agent": {},
         "terminal": {"env_type": "local"},
     }
-    clean_env = {"LLM_MODEL": "", "HERMES_MAX_ITERATIONS": ""}
+    clean_env = {"LLM_MODEL": "", "FULILIAN_MAX_ITERATIONS": ""}
     prompt_toolkit_stubs = {
         "prompt_toolkit": MagicMock(),
         "prompt_toolkit.history": MagicMock(),
@@ -64,7 +64,7 @@ def _make_cli():
         with patch.object(_cli_mod, "get_tool_definitions", return_value=[]), patch.dict(
             _cli_mod.__dict__, {"CLI_CONFIG": _clean_config}
         ):
-            return _cli_mod.HermesCLI()
+            return _cli_mod.FulilianCLI()
 
 
 class TestBackgroundInlineDetector:

@@ -1,8 +1,8 @@
 """Tests for CLI resume model restoration and /model session persistence.
 
 Covers _restore_session_model, _persist_model_switch_to_session (cli.py) and
-SessionDB.session_gateway_runtime (hermes_state.py) — the round trip that
-makes `hermes --resume` reopen a session on the model/provider it actually
+SessionDB.session_gateway_runtime (fulilian_state.py) — the round trip that
+makes `fulilian --resume` reopen a session on the model/provider it actually
 used instead of the ambient config default (#57588-class, #79536).
 """
 
@@ -11,12 +11,12 @@ import json
 import pytest
 
 import cli as cli_mod
-from hermes_state import SessionDB
+from fulilian_state import SessionDB
 
 
 def _make_stub(**overrides):
-    """Bare HermesCLI the way resume paths see it (no __init__)."""
-    stub = object.__new__(cli_mod.HermesCLI)
+    """Bare FulilianCLI the way resume paths see it (no __init__)."""
+    stub = object.__new__(cli_mod.FulilianCLI)
     stub.model = "ambient-model"
     stub.provider = "openrouter"
     stub.requested_provider = "openrouter"
@@ -162,7 +162,7 @@ def test_persist_model_switch_clears_stale_route_keys(tmp_path, monkeypatch):
     api_mode (e.g. anthropic_messages) alive under the SECOND switch's
     provider, corrupting the wire protocol on TUI/desktop resume.
     """
-    monkeypatch.setenv("HERMES_HOME", str(tmp_path / ".hermes"))
+    monkeypatch.setenv("FULILIAN_HOME", str(tmp_path / ".fulilian"))
     db = SessionDB(db_path=tmp_path / "state.db")
     db.create_session(session_id="stale1", source="cli", model="m0")
     stub = _make_stub(_session_db=db, session_id="stale1")
@@ -265,7 +265,7 @@ def test_restore_session_model_heals_bare_custom_stored_rows(monkeypatch):
 
 
 def test_round_trip_persist_then_restore(tmp_path, monkeypatch):
-    monkeypatch.setenv("HERMES_HOME", str(tmp_path / ".hermes"))
+    monkeypatch.setenv("FULILIAN_HOME", str(tmp_path / ".fulilian"))
     db = SessionDB(db_path=tmp_path / "state.db")
     db.create_session(session_id="rt1", source="cli", model="ambient-model")
 
@@ -285,7 +285,7 @@ def test_round_trip_persist_then_restore(tmp_path, monkeypatch):
 
 def test_update_session_model_persists_provider(tmp_path, monkeypatch):
     """update_session_model writes $.model + $.provider into model_config."""
-    monkeypatch.setenv("HERMES_HOME", str(tmp_path / ".hermes"))
+    monkeypatch.setenv("FULILIAN_HOME", str(tmp_path / ".fulilian"))
     db = SessionDB(db_path=tmp_path / "state.db")
     db.create_session(session_id="s1", source="cli", model="m0")
     db.update_session_model("s1", "claude-x", provider="custom:feather")
@@ -298,7 +298,7 @@ def test_update_session_model_persists_provider(tmp_path, monkeypatch):
 
 def test_update_session_model_without_provider_preserves_existing(tmp_path, monkeypatch):
     """Without provider, existing $.provider is left untouched."""
-    monkeypatch.setenv("HERMES_HOME", str(tmp_path / ".hermes"))
+    monkeypatch.setenv("FULILIAN_HOME", str(tmp_path / ".fulilian"))
     db = SessionDB(db_path=tmp_path / "state.db")
     db.create_session(session_id="s2", source="cli", model="m0")
     db.update_session_model("s2", "claude-x", provider="custom:feather")
@@ -311,7 +311,7 @@ def test_update_session_model_without_provider_preserves_existing(tmp_path, monk
 
 def test_update_session_model_null_model_config_with_provider(tmp_path, monkeypatch):
     """Provider persistence works when model_config starts as NULL."""
-    monkeypatch.setenv("HERMES_HOME", str(tmp_path / ".hermes"))
+    monkeypatch.setenv("FULILIAN_HOME", str(tmp_path / ".fulilian"))
     db = SessionDB(db_path=tmp_path / "state.db")
     db.create_session(session_id="s3", source="cli", model="m0")
     # model_config is NULL at creation — update_session_model must create it

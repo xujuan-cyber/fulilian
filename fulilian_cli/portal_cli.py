@@ -1,10 +1,10 @@
-"""``hermes portal`` — the human-readable entry point for Nous Portal.
+"""``fulilian portal`` — the human-readable entry point for Nous Portal.
 
-Running ``hermes portal`` with no subcommand performs the one-shot Portal
+Running ``fulilian portal`` with no subcommand performs the one-shot Portal
 onboarding: OAuth login, pick a Nous model, switch the inference provider to
 Nous, and offer to enable the Tool Gateway. It is the friendly alias for
-``hermes auth add nous --type oauth`` (which still works), is identical to
-``hermes setup --portal``, and runs the same Nous flow as the first-time quick
+``fulilian auth add nous --type oauth`` (which still works), is identical to
+``fulilian setup --portal``, and runs the same Nous flow as the first-time quick
 setup.
 
 Subcommands:
@@ -15,7 +15,7 @@ Subcommands:
   tools    List Tool Gateway tools and which are active in the current config.
 
 This command is intentionally minimal — it does not duplicate functionality
-already in ``hermes auth`` or ``hermes tools``. It's the onboarding + discovery
+already in ``fulilian auth`` or ``fulilian tools``. It's the onboarding + discovery
 surface for the Portal subscription itself.
 """
 from __future__ import annotations
@@ -59,7 +59,7 @@ def _cmd_status(args) -> int:
     else:
         print(f"  Auth:    {color('not logged in', Colors.YELLOW)}")
         print(f"  Sign up: {SUBSCRIPTION_URL}")
-        print("  Login:   hermes portal")
+        print("  Login:   fulilian portal")
 
     # Provider selection (independent of auth)
     model_cfg = config.get("model") if isinstance(config.get("model"), dict) else {}
@@ -67,7 +67,7 @@ def _cmd_status(args) -> int:
     if provider == "nous":
         print(f"  Model:   {color('✓ using Nous as inference provider', Colors.GREEN)}")
     elif provider:
-        print(f"  Model:   currently {provider} (switch with `hermes model`)")
+        print(f"  Model:   currently {provider} (switch with `fulilian model`)")
 
     # Tool Gateway routing
     print()
@@ -144,7 +144,7 @@ def _cmd_tools(args) -> int:
     print(color("  ────────────────────", Colors.MAGENTA))
 
     if not features.nous_auth_present:
-        print(color("  Not logged into Nous Portal — sign in with `hermes portal`.", Colors.YELLOW))
+        print(color("  Not logged into Nous Portal — sign in with `fulilian portal`.", Colors.YELLOW))
         print()
 
     label_width = max(len(label) for _, label, _ in catalog)
@@ -171,8 +171,8 @@ def _cmd_tools(args) -> int:
 def _cmd_login(args) -> int:
     """Run the one-shot Nous Portal onboarding (login + model + provider + tools).
 
-    This is the human-readable front door for `hermes auth add nous --type
-    oauth`. It reuses the exact wiring behind `hermes setup --portal` (which in
+    This is the human-readable front door for `fulilian auth add nous --type
+    oauth`. It reuses the exact wiring behind `fulilian setup --portal` (which in
     turn runs the same Nous flow as the first-time quick setup), so the
     commands stay in lockstep: device-code login, pick a Nous model, switch the
     inference provider to Nous, then offer the Tool Gateway opt-in.
@@ -190,12 +190,12 @@ def _cmd_login(args) -> int:
 
 
 def portal_command(args) -> int:
-    """Top-level dispatch for `hermes portal <subcommand>`."""
+    """Top-level dispatch for `fulilian portal <subcommand>`."""
     sub = getattr(args, "portal_command", None)
     if sub in {None, "", "login"}:
-        # Default to the one-shot onboarding — `hermes portal` is the
-        # human-readable alias for `hermes auth add nous --type oauth` /
-        # `hermes setup --portal`.
+        # Default to the one-shot onboarding — `fulilian portal` is the
+        # human-readable alias for `fulilian auth add nous --type oauth` /
+        # `fulilian setup --portal`.
         return _cmd_login(args)
     if sub in {"info", "status"}:
         # `status` kept as a back-compat alias for the prior default.
@@ -205,20 +205,20 @@ def portal_command(args) -> int:
     if sub == "tools":
         return _cmd_tools(args)
     print(f"Unknown portal subcommand: {sub}", file=sys.stderr)
-    print("Run `hermes portal -h` for usage.", file=sys.stderr)
+    print("Run `fulilian portal -h` for usage.", file=sys.stderr)
     return 1
 
 
 def add_parser(subparsers) -> None:
-    """Register `hermes portal` on the given argparse subparsers object."""
+    """Register `fulilian portal` on the given argparse subparsers object."""
     portal_parser = subparsers.add_parser(
         "portal",
         help="Set up Nous Portal (login, model pick, Tool Gateway); see also `portal info`",
         description=(
-            "Run `hermes portal` with no subcommand to log in to Nous Portal "
+            "Run `fulilian portal` with no subcommand to log in to Nous Portal "
             "and set it up — pick a model, set Nous as your provider, and offer "
-            "the Tool Gateway (the human-readable alias for `hermes auth add "
-            "nous --type oauth`, identical to `hermes setup --portal`). "
+            "the Tool Gateway (the human-readable alias for `fulilian auth add "
+            "nous --type oauth`, identical to `fulilian setup --portal`). "
             "Subcommands: login (default), info, open, tools."
         ),
     )

@@ -4,7 +4,7 @@ Provides the agent with the ability to interact with Discord servers
 when running on the Discord gateway. Uses Discord REST API directly
 with the bot token — no dependency on the gateway adapter's client.
 
-Only included in the hermes-discord toolset, so it has zero cost
+Only included in the fulilian-discord toolset, so it has zero cost
 for users on other platforms.
 
 The schema exposed to the model is filtered by two gates:
@@ -100,7 +100,7 @@ def _discord_request(
         headers={
             "Authorization": f"Bot {token}",
             "Content-Type": "application/json",
-            "User-Agent": "Hermes-Agent (https://github.com/NousResearch/hermes-agent)",
+            "User-Agent": "Fulilian-Agent (https://github.com/NousResearch/hermes-agent)",
         },
     )
 
@@ -173,9 +173,9 @@ _capability_bg_lock = threading.Lock()
 
 def _capability_disk_cache_path() -> "Path":
 
-    from fulilian_constants import get_hermes_home
+    from fulilian_constants import get_fulilian_home
 
-    return get_hermes_home() / "cache" / "discord_capabilities.json"
+    return get_fulilian_home() / "cache" / "discord_capabilities.json"
 
 
 def _token_cache_key(token: str) -> str:

@@ -35,15 +35,15 @@ class FakeAgent:
 
 @pytest.fixture
 def worker_home(tmp_path, monkeypatch):
-    home = tmp_path / "hermes_home"
+    home = tmp_path / "fulilian_home"
     home.mkdir()
-    monkeypatch.setenv("HERMES_HOME", str(home))
+    monkeypatch.setenv("FULILIAN_HOME", str(home))
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    for var in ("HERMES_KANBAN_DB", "HERMES_KANBAN_WORKSPACES_ROOT", "HERMES_KANBAN_HOME", "HERMES_KANBAN_BOARD"):
+    for var in ("FULILIAN_KANBAN_DB", "FULILIAN_KANBAN_WORKSPACES_ROOT", "FULILIAN_KANBAN_HOME", "FULILIAN_KANBAN_BOARD"):
         monkeypatch.delenv(var, raising=False)
     try:
         import fulilian_constants
-        hermes_constants._cached_default_hermes_root = None  # type: ignore[attr-defined]
+        fulilian_constants._cached_default_fulilian_root = None  # type: ignore[attr-defined]
     except Exception:
         pass
     kb._INITIALIZED_PATHS.clear()
@@ -59,7 +59,7 @@ def _unthrottle():
 
 
 def test_noop_without_worker_env(worker_home, monkeypatch):
-    monkeypatch.delenv("HERMES_KANBAN_TASK", raising=False)
+    monkeypatch.delenv("FULILIAN_KANBAN_TASK", raising=False)
     agent = FakeAgent()
     assert kt.inject_new_comments_from_env(agent) is False
     assert agent.steers == []
@@ -73,8 +73,8 @@ def test_seed_then_inject_new_comment(worker_home, monkeypatch):
     finally:
         conn.close()
 
-    monkeypatch.setenv("HERMES_KANBAN_TASK", tid)
-    monkeypatch.setenv("HERMES_PROFILE", "worker-bot")
+    monkeypatch.setenv("FULILIAN_KANBAN_TASK", tid)
+    monkeypatch.setenv("FULILIAN_PROFILE", "worker-bot")
     agent = FakeAgent()
 
     # First poll seeds the watermark past the existing thread — no injection.
@@ -106,8 +106,8 @@ def test_skips_own_authored_comments(worker_home, monkeypatch):
     finally:
         conn.close()
 
-    monkeypatch.setenv("HERMES_KANBAN_TASK", tid)
-    monkeypatch.setenv("HERMES_PROFILE", "worker-bot")
+    monkeypatch.setenv("FULILIAN_KANBAN_TASK", tid)
+    monkeypatch.setenv("FULILIAN_PROFILE", "worker-bot")
     agent = FakeAgent()
 
     _unthrottle()

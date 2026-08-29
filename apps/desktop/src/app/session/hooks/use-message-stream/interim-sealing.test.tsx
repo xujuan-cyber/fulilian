@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ClientSessionState } from '@/app/types'
 import { chatMessageText } from '@/lib/chat-messages'
 import { clearSessionTodos } from '@/store/todos'
-import type { RpcEvent } from '@/types/hermes'
+import type { RpcEvent } from '@/types/fulilian'
 
 import { type MessageStreamHarness, renderMessageStream } from './test-harness'
 

@@ -1,4 +1,4 @@
-"""AWS Bedrock Converse API adapter for Hermes Agent.
+"""AWS Bedrock Converse API adapter for FuLiLian.
 
 Provides native integration with Amazon Bedrock using the Converse API,
 bypassing the OpenAI-compatible endpoint in favor of direct AWS SDK calls.
@@ -91,10 +91,10 @@ def _require_boto3():
         raise ImportError(
             "The 'boto3' package is required for the AWS Bedrock provider. "
             "Install it with: pip install boto3\n"
-            "Or install Hermes with Bedrock support: pip install -e '.[bedrock]'"
+            "Or install Fulilian with Bedrock support: pip install -e '.[bedrock]'"
         )
     # converse() / converse_stream() were added in boto3 1.34.59.
-    # When Hermes is installed editable into system Python, the system boto3
+    # When Fulilian is installed editable into system Python, the system boto3
     # (e.g. Ubuntu 24.04 ships 1.34.46) may take precedence over the venv
     # version pinned in pyproject.toml.
     try:
@@ -547,7 +547,7 @@ def resolve_bedrock_runtime_region(config: Optional[Dict[str, Any]] = None) -> s
     """Resolve the Bedrock region with the same priority as the main runtime.
 
     Priority (matches the runtime provider resolver in
-    ``hermes_cli/runtime_provider.py``):
+    ``fulilian_cli/runtime_provider.py``):
       1. ``bedrock.region`` in config.yaml
       2. ``resolve_bedrock_region()`` (AWS_REGION / AWS_DEFAULT_REGION /
          botocore profile / us-east-1)

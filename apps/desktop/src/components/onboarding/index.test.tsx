@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { $desktopOnboarding, type DesktopOnboardingState, type OnboardingContext } from '@/store/onboarding'
 import { makeOAuthProvider } from '@/test/oauth-provider'
-import type { OAuthProvider } from '@/types/hermes'
+import type { OAuthProvider } from '@/types/fulilian'
 
 import { Picker } from '.'
 
@@ -108,7 +108,7 @@ describe('onboarding Picker', () => {
     fireEvent.click(skip)
 
     expect($desktopOnboarding.get().firstRunSkipped).toBe(true)
-    expect(window.localStorage.getItem('hermes-onboarding-skipped-v1')).toBe('1')
+    expect(window.localStorage.getItem('fulilian-onboarding-skipped-v1')).toBe('1')
   })
 
   it('hides "choose later" in manual (add-provider) mode', () => {

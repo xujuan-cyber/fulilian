@@ -21,7 +21,7 @@ import {
   type McpCatalogEntry,
   removeMcpServer,
   setMcpServerEnabled
-} from '@/hermes'
+} from '@/fulilian'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
 import { AlertCircle, CheckCircle2, Loader2 } from '@/lib/icons'
@@ -278,7 +278,7 @@ function McpSetupPending({ args }: ToolCallMessagePartProps) {
           status: getMcpOAuthFlow,
           cancelled: () => cancelRef.current,
           cancel: cancelMcpOAuthFlow,
-          openExternal: url => window.hermesDesktop.openExternal(url)
+          openExternal: url => window.fulilianDesktop.openExternal(url)
         })
 
         triggerHaptic('submit')
@@ -325,7 +325,7 @@ function McpSetupPending({ args }: ToolCallMessagePartProps) {
             status: getMcpOAuthFlow,
             cancelled: () => cancelRef.current,
             cancel: cancelMcpOAuthFlow,
-            openExternal: url => window.hermesDesktop.openExternal(url)
+            openExternal: url => window.fulilianDesktop.openExternal(url)
           })
         } catch (error) {
           await removeMcpServer(known.name).catch(() => {

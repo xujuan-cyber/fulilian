@@ -1,7 +1,7 @@
 """Regressions for the context-engine host contract.
 
 These tests pin the five generic host-side guarantees that external context
-engine plugins (e.g. hermes-lcm) rely on:
+engine plugins (e.g. fulilian-lcm) rely on:
 
 1. ``_transition_context_engine_session`` drives the full lifecycle
    (on_session_end → on_session_reset → on_session_start → optional
@@ -29,7 +29,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 from agent.context_compressor import ContextCompressor
-from hermes_state import SessionDB
+from fulilian_state import SessionDB
 from run_agent import AIAgent
 
 

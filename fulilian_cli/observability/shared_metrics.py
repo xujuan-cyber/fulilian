@@ -1,4 +1,4 @@
-"""Durable aggregation and local export for Hermes shared metrics."""
+"""Durable aggregation and local export for Fulilian shared metrics."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from fulilian_cli.sqlite_util import write_txn
-from fulilian_constants import get_hermes_home
+from fulilian_constants import get_fulilian_home
 from utils import atomic_json_write
 
 from .shared_metrics_contract import (
@@ -25,7 +25,7 @@ from .shared_metrics_contract import (
 )
 
 
-_PACKAGE_SCHEMA_VERSION = "hermes.shared_metrics.v2"
+_PACKAGE_SCHEMA_VERSION = "fulilian.shared_metrics.v2"
 _STORE_SCHEMA_VERSION = "2"
 _BUSY_TIMEOUT_MS = 250
 _SCHEMA_BUSY_TIMEOUT_MS = 5_000
@@ -52,7 +52,7 @@ class SharedMetricsStore:
         database_path: Path | None = None,
         outbox_directory: Path | None = None,
     ) -> None:
-        root = get_hermes_home() / "telemetry" / "shared_metrics"
+        root = get_fulilian_home() / "telemetry" / "shared_metrics"
         self.database_path = database_path or root / "metrics.sqlite3"
         self.outbox_directory = outbox_directory or root / "outbox"
         self._ensure_private_directory(self.database_path.parent)
@@ -166,7 +166,7 @@ class SharedMetricsStore:
             INSERT INTO counter_aggregates(
                 period_start,
                 metric_name,
-                hermes_version,
+                fulilian_version,
                 os_family,
                 architecture,
                 install_method,
@@ -177,7 +177,7 @@ class SharedMetricsStore:
             ON CONFLICT(
                 period_start,
                 metric_name,
-                hermes_version,
+                fulilian_version,
                 os_family,
                 architecture,
                 install_method,
@@ -188,7 +188,7 @@ class SharedMetricsStore:
             (
                 period_start,
                 metric_name,
-                resource["hermes_version"],
+                resource["fulilian_version"],
                 resource["os_family"],
                 resource["architecture"],
                 resource["install_method"],
@@ -228,7 +228,7 @@ class SharedMetricsStore:
                 SELECT
                     period_start,
                     metric_name,
-                    hermes_version,
+                    fulilian_version,
                     os_family,
                     architecture,
                     install_method,
@@ -238,7 +238,7 @@ class SharedMetricsStore:
                 FROM counter_aggregates
                 ORDER BY
                     period_start,
-                    hermes_version,
+                    fulilian_version,
                     os_family,
                     architecture,
                     install_method,
@@ -251,7 +251,7 @@ class SharedMetricsStore:
                 "period_start": row["period_start"],
                 "metric_name": row["metric_name"],
                 "resource": {
-                    "hermes_version": row["hermes_version"],
+                    "fulilian_version": row["fulilian_version"],
                     "os_family": row["os_family"],
                     "architecture": row["architecture"],
                     "install_method": row["install_method"],
@@ -299,7 +299,7 @@ class SharedMetricsStore:
 
     def _ensure_schema(self) -> None:
         with self._connection(busy_timeout_ms=_SCHEMA_BUSY_TIMEOUT_MS) as connection:
-            # Serialize first-run creation and upgrades across Hermes processes.
+            # Serialize first-run creation and upgrades across Fulilian processes.
             with write_txn(connection):
                 self._ensure_schema_in_transaction(connection)
 
@@ -353,7 +353,7 @@ class SharedMetricsStore:
             CREATE TABLE IF NOT EXISTS counter_aggregates (
                 period_start TEXT NOT NULL,
                 metric_name TEXT NOT NULL,
-                hermes_version TEXT NOT NULL,
+                fulilian_version TEXT NOT NULL,
                 os_family TEXT NOT NULL,
                 architecture TEXT NOT NULL,
                 install_method TEXT NOT NULL,
@@ -363,7 +363,7 @@ class SharedMetricsStore:
                 PRIMARY KEY (
                     period_start,
                     metric_name,
-                    hermes_version,
+                    fulilian_version,
                     os_family,
                     architecture,
                     install_method,
@@ -384,7 +384,7 @@ class SharedMetricsStore:
             INSERT INTO counter_aggregates(
                 period_start,
                 metric_name,
-                hermes_version,
+                fulilian_version,
                 os_family,
                 architecture,
                 install_method,
@@ -395,7 +395,7 @@ class SharedMetricsStore:
             SELECT
                 period_start,
                 metric_name,
-                hermes_version,
+                fulilian_version,
                 'unknown',
                 'unknown',
                 'unknown',
@@ -443,7 +443,7 @@ class SharedMetricsStore:
                 FROM (
                     SELECT
                         period_start,
-                        hermes_version,
+                        fulilian_version,
                         os_family,
                         architecture,
                         install_method
@@ -451,7 +451,7 @@ class SharedMetricsStore:
                     WHERE value > packaged_value
                     GROUP BY
                         period_start,
-                        hermes_version,
+                        fulilian_version,
                         os_family,
                         architecture,
                         install_method
@@ -495,7 +495,7 @@ class SharedMetricsStore:
             """
                 SELECT
                     period_start,
-                    hermes_version,
+                    fulilian_version,
                     os_family,
                     architecture,
                     install_method
@@ -503,7 +503,7 @@ class SharedMetricsStore:
                 WHERE value > packaged_value
                 ORDER BY
                     period_start,
-                    hermes_version,
+                    fulilian_version,
                     os_family,
                     architecture,
                     install_method
@@ -519,7 +519,7 @@ class SharedMetricsStore:
                 SELECT metric_name, dimensions_json, value, packaged_value
                 FROM counter_aggregates
                 WHERE period_start = ?
-                  AND hermes_version = ?
+                  AND fulilian_version = ?
                   AND os_family = ?
                   AND architecture = ?
                   AND install_method = ?
@@ -528,7 +528,7 @@ class SharedMetricsStore:
                 """,
             (
                 period_value,
-                period_row["hermes_version"],
+                period_row["fulilian_version"],
                 period_row["os_family"],
                 period_row["architecture"],
                 period_row["install_method"],
@@ -540,7 +540,7 @@ class SharedMetricsStore:
         period_end = period_start + timedelta(days=1)
         package_id = str(uuid.uuid4())
         resource = {
-            "hermes_version": period_row["hermes_version"],
+            "fulilian_version": period_row["fulilian_version"],
             "os_family": period_row["os_family"],
             "architecture": period_row["architecture"],
             "install_method": period_row["install_method"],
@@ -587,7 +587,7 @@ class SharedMetricsStore:
                     SET packaged_value = value
                     WHERE period_start = ?
                       AND metric_name = ?
-                      AND hermes_version = ?
+                      AND fulilian_version = ?
                       AND os_family = ?
                       AND architecture = ?
                       AND install_method = ?
@@ -596,7 +596,7 @@ class SharedMetricsStore:
                 (
                     period_value,
                     row["metric_name"],
-                    period_row["hermes_version"],
+                    period_row["fulilian_version"],
                     period_row["os_family"],
                     period_row["architecture"],
                     period_row["install_method"],

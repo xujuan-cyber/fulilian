@@ -1,6 +1,6 @@
 """Dead-owner cron claim reclaim + one-shot CLI `cron run` sync gate (#86721).
 
-A one-shot ``hermes cron run <job_id>`` used to background-dispatch the run
+A one-shot ``fulilian cron run <job_id>`` used to background-dispatch the run
 onto a daemon thread of the calling process when the CLI inherited a
 gateway/desktop session env. The process exited immediately, the runner died
 mid-LLM-call, and the job's execution row stayed ``claimed`` forever —
@@ -8,7 +8,7 @@ blocking every future run.
 
 Two-part fix under test here:
 
-1. ``hermes_cli.cron._job_action("run", ...)`` declares the channel stateless
+1. ``fulilian_cli.cron._job_action("run", ...)`` declares the channel stateless
    before invoking the cron API, so the background-dispatch path is gated off
    and the run executes synchronously to completion in the CLI process.
 2. ``cron.scheduler.tick`` periodically reaps execution rows whose owner
@@ -59,7 +59,7 @@ def _dead_pid() -> int:
 def _orphan_claimed_row(executions, job_id: str) -> str:
     """Persist a claimed execution owned by a process that no longer exists.
 
-    Mirrors what a one-shot ``hermes cron run`` leaves behind: a row stuck in
+    Mirrors what a one-shot ``fulilian cron run`` leaves behind: a row stuck in
     ``claimed`` whose owner pid is dead.
     """
     record = executions.create_execution(job_id, source="direct")
@@ -155,7 +155,7 @@ class TestOneShotCliRunIsSynchronous:
         _SESSION_ASYNC_DELIVERY.reset(token)
 
     def test_cli_run_declares_stateless_channel_before_dispatch(self, monkeypatch):
-        """`hermes cron run` must gate off async delivery so the run executes
+        """`fulilian cron run` must gate off async delivery so the run executes
         synchronously in the CLI process instead of on a doomed daemon thread."""
         from gateway.session_context import async_delivery_supported
         from fulilian_cli import cron as cron_cli
@@ -197,7 +197,7 @@ class TestOneShotCliRunIsSynchronous:
         from tools.cronjob_tools import _try_dispatch_background_run
 
         declare_stateless_channel()
-        monkeypatch.setenv("HERMES_SESSION_KEY", "inherited-gateway-session")
+        monkeypatch.setenv("FULILIAN_SESSION_KEY", "inherited-gateway-session")
 
         result = _try_dispatch_background_run(
             {"id": "job-x", "name": "job-x"}, session_id="sess-1"

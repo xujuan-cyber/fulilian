@@ -21,7 +21,7 @@ export interface FleetGroup {
   kind: DesktopConnectionKind
   label: string
   reachable: boolean
-  /** The gateway's default profile — every Hermes home has one, so a group
+  /** The gateway's default profile — every Fulilian home has one, so a group
    *  always carries it even before the roster has been enumerated. */
   defaultAgent: FleetAgent
   /** Named (non-default) profiles, alphabetical for a stable strip. */

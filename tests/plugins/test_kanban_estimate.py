@@ -22,7 +22,7 @@ from fulilian_cli import kanban_db as kb
 def _load_plugin_router():
     repo_root = Path(__file__).resolve().parents[2]
     plugin_file = repo_root / "plugins" / "kanban" / "dashboard" / "plugin_api.py"
-    spec = importlib.util.spec_from_file_location("hermes_kanban_plugin_est_test", plugin_file)
+    spec = importlib.util.spec_from_file_location("fulilian_kanban_plugin_est_test", plugin_file)
     mod = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = mod
     spec.loader.exec_module(mod)
@@ -31,9 +31,9 @@ def _load_plugin_router():
 
 @pytest.fixture
 def kanban_home(tmp_path, monkeypatch):
-    home = tmp_path / ".hermes"
+    home = tmp_path / ".fulilian"
     home.mkdir()
-    monkeypatch.setenv("HERMES_HOME", str(home))
+    monkeypatch.setenv("FULILIAN_HOME", str(home))
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     kb.init_db()
     return home

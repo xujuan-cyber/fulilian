@@ -1,7 +1,7 @@
 """Cross-process admission for full structural FTS rebuilds (PR #93200 class).
 
-Several independent Hermes processes routinely share one state.db (gateway,
-Desktop's ``hermes serve`` backend, CLI sessions, the TUI slash worker). Two
+Several independent Fulilian processes routinely share one state.db (gateway,
+Desktop's ``fulilian serve`` backend, CLI sessions, the TUI slash worker). Two
 of them detecting FTS corruption at once each ran the full FTS5 'rebuild' on
 the same file in parallel, colliding on write and structurally corrupting
 state.db (two documented production incidents, 2026-08-15 and 2026-08-23).
@@ -9,7 +9,7 @@ state.db (two documented production incidents, 2026-08-15 and 2026-08-23).
 The fix: every full structural rebuild entry point — ``rebuild_fts()``, the
 ``_init_schema`` trigger-repair rebuilds, and ``_recover_stale_fts`` — admits
 through one cross-process file lock (``fts_rebuild_admission`` in
-hermes_state_common) and FAILS CLOSED: a process that cannot acquire the
+fulilian_state_common) and FAILS CLOSED: a process that cannot acquire the
 authority defers the rebuild instead of racing the holder. These tests use
 real spawned processes holding the real lock file, per the review contract
 on PR #93200 — the bug is cross-process ownership, so monkeypatched helpers
@@ -24,8 +24,8 @@ from pathlib import Path
 
 import pytest
 
-import hermes_state_common
-from hermes_state import FTS_STALE_KEY, SessionDB, _FTS_TRIGGERS
+import fulilian_state_common
+from fulilian_state import FTS_STALE_KEY, SessionDB, _FTS_TRIGGERS
 
 pytestmark = pytest.mark.skipif(
     sys.platform == "win32", reason="POSIX flock child-process harness"
@@ -98,7 +98,7 @@ def _meta_value(db_path: Path, key: str):
 @pytest.fixture
 def fast_timeout(monkeypatch):
     monkeypatch.setattr(
-        hermes_state_common, "_FTS_REBUILD_LOCK_TIMEOUT_SECONDS", 0.5
+        fulilian_state_common, "_FTS_REBUILD_LOCK_TIMEOUT_SECONDS", 0.5
     )
 
 
@@ -136,7 +136,7 @@ class TestRebuildFtsAdmission:
     def test_rebuild_waits_out_a_short_holder(self, db, monkeypatch):
         """A holder that releases within the bounded wait does not cause deferral."""
         monkeypatch.setattr(
-            hermes_state_common, "_FTS_REBUILD_LOCK_TIMEOUT_SECONDS", 10.0
+            fulilian_state_common, "_FTS_REBUILD_LOCK_TIMEOUT_SECONDS", 10.0
         )
         with _rebuild_lock_held_by_other_process(db.db_path, hold_seconds=1.0):
             # Child exits after 1s; deadline is 10s — this must acquire and rebuild.
@@ -144,7 +144,7 @@ class TestRebuildFtsAdmission:
 
     def test_admission_yields_true_for_pathless_db(self):
         """In-memory / pathless stores have no cross-process surface."""
-        with hermes_state_common.fts_rebuild_admission(None) as admitted:
+        with fulilian_state_common.fts_rebuild_admission(None) as admitted:
             assert admitted is True
 
 

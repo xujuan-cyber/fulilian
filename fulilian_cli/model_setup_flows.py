@@ -1,7 +1,7 @@
-"""Per-provider model-selection wizard flows for ``hermes setup`` / ``hermes model``.
+"""Per-provider model-selection wizard flows for ``fulilian setup`` / ``fulilian model``.
 
-Extracted from ``hermes_cli/main.py`` as part of the god-file decomposition
-campaign (``~/.hermes/plans/god-file-decomposition.md``, Phase 2 — splitting
+Extracted from ``fulilian_cli/main.py`` as part of the god-file decomposition
+campaign (``~/.fulilian/plans/god-file-decomposition.md``, Phase 2 — splitting
 main.py handler/flow bodies out of the module). These 18 ``_model_flow_*``
 functions are the interactive provider-setup branches dispatched by
 ``select_provider_and_model`` (which stays in main.py).
@@ -9,13 +9,13 @@ functions are the interactive provider-setup branches dispatched by
 Behavior-neutral: each function is lifted verbatim. ``select_provider_and_model``
 in main.py re-imports them (``from fulilian_cli.model_setup_flows import *``-style
 explicit import) so existing call sites — and test monkeypatches that target
-``hermes_cli.main._model_flow_*`` — keep resolving against main.py's namespace.
+``fulilian_cli.main._model_flow_*`` — keep resolving against main.py's namespace.
 
 main.py-internal helpers the flows call (``_prompt_api_key``, ``_save_custom_provider``,
 the reasoning-effort/stepfun/qwen helpers, ``_run_anthropic_oauth_flow``, …) are
 imported lazily inside the flows (``from fulilian_cli.main import ...`` resolves at
 call time, when main.py is fully loaded) so this module never imports
-``hermes_cli.main`` at import time -> no import cycle.
+``fulilian_cli.main`` at import time -> no import cycle.
 """
 
 from __future__ import annotations
@@ -187,9 +187,9 @@ def _model_flow_openrouter(config, current_model=""):
         deactivate_provider,
     )
     # Route through _prompt_api_key so users can replace a stale/broken key
-    # in-flow (K/R/C) instead of having to edit ~/.hermes/.env by hand. The
+    # in-flow (K/R/C) instead of having to edit ~/.fulilian/.env by hand. The
     # previous bypass-when-key-exists branch left no way to recover from a
-    # bad paste short of re-running `hermes setup` from scratch. OpenRouter
+    # bad paste short of re-running `fulilian setup` from scratch. OpenRouter
     # isn't in PROVIDER_REGISTRY so we synthesize a minimal pconfig.
     pconfig = ProviderConfig(
         id="openrouter",
@@ -270,7 +270,7 @@ def _model_flow_ai_gateway(config, current_model=""):
     from fulilian_cli.config import get_env_value
 
     # Route through _prompt_api_key so users can replace a stale/broken key
-    # in-flow (K/R/C) instead of having to edit ~/.hermes/.env by hand.
+    # in-flow (K/R/C) instead of having to edit ~/.fulilian/.env by hand.
     pconfig = PROVIDER_REGISTRY["ai-gateway"]
     existing_key = get_env_value("AI_GATEWAY_API_KEY") or ""
     if not existing_key:
@@ -326,7 +326,7 @@ def _model_flow_moa(config, current_model=""):
     moa = normalize_moa_config(config.get("moa") if isinstance(config, dict) else {})
     presets = moa.get("presets") or {}
     if not presets:
-        print("No MoA presets configured. Run `hermes moa configure <name>` first.")
+        print("No MoA presets configured. Run `fulilian moa configure <name>` first.")
         return
 
     names = list(presets.keys())
@@ -676,7 +676,7 @@ def _model_flow_openai_codex(config, current_model=""):
             return
 
     _codex_token = None
-    # Prefer credential pool (where `hermes auth` stores device_code tokens),
+    # Prefer credential pool (where `fulilian auth` stores device_code tokens),
     # fall back to legacy provider state.
     try:
         _codex_status = get_codex_auth_status()
@@ -770,7 +770,7 @@ def _model_flow_xai_oauth(_config, current_model="", *, args=None):
 
     # Resolve a usable base URL.  ``resolve_xai_oauth_runtime_credentials``
     # only reads from the auth.json singleton — but credentials may legitimately
-    # live only in the pool (e.g. after ``hermes auth add xai-oauth``).  Fall
+    # live only in the pool (e.g. after ``fulilian auth add xai-oauth``).  Fall
     # back to the default base URL in that case so the model picker still
     # completes successfully instead of bailing out with
     # ``Could not resolve xAI OAuth credentials``.
@@ -985,7 +985,7 @@ def _model_flow_custom(config):
     else:
         print(
             f"Warning: could not verify this endpoint via {probe.get('probed_url')}. "
-            f"Hermes will still save it."
+            f"Fulilian will still save it."
         )
         if probe.get("suggested_base_url"):
             suggested = probe["suggested_base_url"]
@@ -1117,7 +1117,7 @@ def _model_flow_custom(config):
         else:
             _caller_model.pop("api_mode", None)
         config["model"] = _caller_model
-        print("Endpoint saved. Use `/model` in chat or `hermes model` to set a model.")
+        print("Endpoint saved. Use `/model` in chat or `fulilian model` to set a model.")
 
     # Auto-save to custom_providers so it appears in the menu next time
     _save_custom_provider(
@@ -1198,7 +1198,7 @@ def _model_flow_azure_foundry(config, current_model=""):
     print("=" * 50)
     print()
     print("Azure Foundry can host models with either OpenAI-style or")
-    print("Anthropic-style API endpoints.  Hermes will probe your")
+    print("Anthropic-style API endpoints.  Fulilian will probe your")
     print("endpoint to auto-detect the transport and the deployed")
     print("models when possible.")
     print()
@@ -1286,7 +1286,7 @@ def _model_flow_azure_foundry(config, current_model=""):
         if not has_azure_identity_installed():
             print("◐ The 'azure-identity' package is not installed yet.")
             print(
-                "  Hermes will install it now (the preflight below "
+                "  Fulilian will install it now (the preflight below "
                 "triggers the lazy-install). To skip lazy installs, "
                 "run:  pip install azure-identity"
             )
@@ -2025,9 +2025,9 @@ def _model_flow_copilot_acp(config, current_model=""):
     )
     effective_base = status.get("base_url") or pconfig.inference_base_url
 
-    print("  GitHub Copilot ACP delegates Hermes turns to `copilot --acp`.")
-    print("  Hermes currently starts its own ACP subprocess for each request.")
-    print("  Hermes uses your selected model as a hint for the Copilot ACP session.")
+    print("  GitHub Copilot ACP delegates Fulilian turns to `copilot --acp`.")
+    print("  Fulilian currently starts its own ACP subprocess for each request.")
+    print("  Fulilian uses your selected model as a hint for the Copilot ACP session.")
     print(f"  Command: {resolved_command}")
     print(f"  Backend marker: {effective_base}")
     print()
@@ -2037,7 +2037,7 @@ def _model_flow_copilot_acp(config, current_model=""):
     except Exception as exc:
         print(f"  ⚠ {exc}")
         print(
-            "  Set HERMES_COPILOT_ACP_COMMAND or COPILOT_CLI_PATH if Copilot CLI is installed elsewhere."
+            "  Set FULILIAN_COPILOT_ACP_COMMAND or COPILOT_CLI_PATH if Copilot CLI is installed elsewhere."
         )
         return
 
@@ -2336,7 +2336,7 @@ def _model_flow_bedrock_api_key(config, region, current_model=""):
 
     mantle_base_url = f"https://bedrock-mantle.{region}.api.aws/v1"
 
-    # Check env var and credential pool (keys added via `hermes auth`)
+    # Check env var and credential pool (keys added via `fulilian auth`)
     from fulilian_cli.auth import _resolve_api_key_provider_secret, ProviderConfig
     bedrock_pconfig = ProviderConfig(
         id="bedrock",
@@ -2667,7 +2667,7 @@ def _model_flow_vertex(config, current_model=""):
         print("  Vertex credentials: Application Default Credentials (ADC)")
         print("    Vertex uses OAuth2, not a static API key. Either:")
         print("      • run 'gcloud auth application-default login', or")
-        print("      • set VERTEX_CREDENTIALS_PATH in ~/.hermes/.env to a service account JSON")
+        print("      • set VERTEX_CREDENTIALS_PATH in ~/.fulilian/.env to a service account JSON")
     print()
 
     cfg = load_config()
@@ -2747,7 +2747,7 @@ def _select_zai_endpoint(current_base: str) -> str:
 
     Offers the four official Z.AI endpoints (Global, China, Coding Plan
     Global, Coding Plan China) plus a custom-proxy option.  The list is
-    sourced from ``ZAI_ENDPOINTS`` in ``hermes_cli.auth`` so it stays in
+    sourced from ``ZAI_ENDPOINTS`` in ``fulilian_cli.auth`` so it stays in
     sync with the probe list.
 
     Returns the selected base URL.  Falls back to *current_base* on cancel
@@ -2868,7 +2868,7 @@ def _model_flow_api_key_provider(config, provider_id, current_model=""):
                     "(<= 250 requests/day for gemini-2.5-flash)."
                 )
                 print(
-                    "   Hermes typically makes 3-10 API calls per user turn "
+                    "   Fulilian typically makes 3-10 API calls per user turn "
                     "(tool iterations + auxiliary tasks),"
                 )
                 print(
@@ -2878,7 +2878,7 @@ def _model_flow_api_key_provider(config, provider_id, current_model=""):
                 print("   an agent session.")
                 print()
                 print(
-                    "   To use Gemini with Hermes, enable billing on your "
+                    "   To use Gemini with Fulilian, enable billing on your "
                     "Google Cloud project and regenerate"
                 )
                 print(
@@ -3264,7 +3264,7 @@ def _model_flow_anthropic(config, current_model=""):
         # Update config with provider — clear base_url since
         # resolve_runtime_provider() always hardcodes Anthropic's URL.
         # Leaving a stale base_url in config can contaminate other
-        # providers if the user switches without running 'hermes model'.
+        # providers if the user switches without running 'fulilian model'.
         cfg = load_config()
         model = cfg.get("model")
         if not isinstance(model, dict):

@@ -5,7 +5,7 @@ import {
   fetchStoredTranscriptAcrossBackends,
   getLatestSessionMessages,
   PROMPT_SUBMIT_REQUEST_TIMEOUT_MS
-} from '@/hermes'
+} from '@/fulilian'
 import { translateNow } from '@/i18n/runtime'
 import { type ChatMessage, toChatMessages } from '@/lib/chat-messages'
 import { notify } from '@/store/notifications'
@@ -18,7 +18,7 @@ import { knownSessionOwner, ownerLookupSessionRows } from '@/store/session'
 import { assertSessionOwnerResolved } from '@/store/session-owner-resolution'
 import { requestForSessionProfile, type SessionOwnerScope } from '@/store/session-request-router'
 import { publishSessionState, sessionTileOwnerRoute, setSessionTileDelegate } from '@/store/session-states'
-import type { SessionResumeResponse } from '@/types/hermes'
+import type { SessionResumeResponse } from '@/types/fulilian'
 
 import type { usePromptActions } from '../../session/hooks/use-prompt-actions'
 import { singleFlightSessionResume } from '../../session/hooks/use-prompt-actions/single-flight-resume'

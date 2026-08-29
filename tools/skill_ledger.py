@@ -1,9 +1,9 @@
 """Per-mutation skill audit ledger + single-edit rollback (tracker #79686 P3).
 
 Every skill mutation — regardless of actor — appends one JSONL entry to
-``~/.hermes/skills/.curator_ledger.jsonl`` describing who changed what, with
+``~/.fulilian/skills/.curator_ledger.jsonl`` describing who changed what, with
 before/after file manifests whose contents are stored content-addressed
-(sha256-deduped) under ``~/.hermes/.curator_backups/blobs/``.
+(sha256-deduped) under ``~/.fulilian/.curator_backups/blobs/``.
 
 Design decisions (Teknium-approved):
   - JSONL, not the state DB: the ledger is a durable, human-greppable audit
@@ -12,7 +12,7 @@ Design decisions (Teknium-approved):
     The curator *invariant* (never hard-delete autonomously) is unchanged and
     applies only to autonomous actors; foreground user deletes stay
     hard-delete — but they are still ledgered so they're recoverable via
-    ``hermes curator rollback <entry-id>``.
+    ``fulilian curator rollback <entry-id>``.
   - Per-file content-addressed blobs (not tarballs): a mutation typically
     touches one file, so a whole-tree tarball per mutation would be wasteful,
     and identical content across entries dedupes to a single blob.
@@ -36,7 +36,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from fulilian_constants import get_hermes_home
+from fulilian_constants import get_fulilian_home
 
 logger = logging.getLogger(__name__)
 
@@ -88,11 +88,11 @@ def derive_actor() -> str:
 # ---------------------------------------------------------------------------
 
 def ledger_path() -> Path:
-    return get_hermes_home() / "skills" / ".curator_ledger.jsonl"
+    return get_fulilian_home() / "skills" / ".curator_ledger.jsonl"
 
 
 def blobs_dir() -> Path:
-    return get_hermes_home() / ".curator_backups" / "blobs"
+    return get_fulilian_home() / ".curator_backups" / "blobs"
 
 
 def ledger_enabled() -> bool:
@@ -286,9 +286,9 @@ def _is_within(root: Path, path: Path) -> bool:
 
 
 def _validate_entry_paths(entry: Dict[str, Any]) -> Optional[str]:
-    """All paths in an entry must live under HERMES_HOME. Defense in depth —
+    """All paths in an entry must live under FULILIAN_HOME. Defense in depth —
     a hand-edited ledger must not become a write-anywhere primitive."""
-    home = get_hermes_home()
+    home = get_fulilian_home()
     for section in ("before", "after"):
         for item in entry.get(section) or []:
             p = Path(str(item.get("path", "")))

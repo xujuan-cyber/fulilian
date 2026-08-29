@@ -1,7 +1,7 @@
 """Slash-command handlers for the interactive CLI (god-file decomposition Phase 4).
 
 This module hosts the ``_handle_*_command`` slash-command handlers lifted out of
-``cli.py``'s ``HermesCLI`` class. ``HermesCLI`` inherits ``CLICommandsMixin`` so
+``cli.py``'s ``FulilianCLI`` class. ``FulilianCLI`` inherits ``CLICommandsMixin`` so
 every ``self.<handler>`` call resolves unchanged via the MRO — behavior-neutral.
 
 Import discipline (mirrors gateway/slash_commands.py, PR #41886):
@@ -27,7 +27,7 @@ from rich import box as rich_box
 from rich.markup import escape as _escape
 from rich.panel import Panel
 
-from fulilian_constants import display_hermes_home, is_termux as _is_termux_environment
+from fulilian_constants import display_fulilian_home, is_termux as _is_termux_environment
 from agent.turn_context import extract_api_content_sidecar
 from fulilian_cli.browser_connect import (
     DEFAULT_BROWSER_CDP_URL,
@@ -45,7 +45,7 @@ class CLICommandsMixin:
 
     All methods use only ``self`` state plus the imports above and per-method
     lazy ``from cli import ...`` lines, so they compose cleanly onto
-    ``HermesCLI`` via the MRO.
+    ``FulilianCLI`` via the MRO.
     """
 
     def _handle_rollback_command(self, command: str):
@@ -56,7 +56,7 @@ class CLICommandsMixin:
             /rollback <N>             — restore checkpoint N, preserving user
                                         hand-edits (also undoes last chat turn)
             /rollback <N> --all       — classic full restore (may overwrite
-                                        files you edited after Hermes did)
+                                        files you edited after Fulilian did)
             /rollback diff <N>        — preview changes since checkpoint N
             /rollback <N> <file>      — restore a single file from checkpoint N
         """
@@ -69,7 +69,7 @@ class CLICommandsMixin:
         mgr = self.agent._checkpoint_mgr
         if not mgr.enabled:
             print("  Checkpoints are not enabled.")
-            print("  Enable with: hermes --checkpoints")
+            print("  Enable with: fulilian --checkpoints")
             print("  Or in config.yaml: checkpoints: { enabled: true }")
             return
 
@@ -192,7 +192,7 @@ class CLICommandsMixin:
             /diff                  — unstaged changes + untracked files
             /diff staged           — staged changes (git diff --cached)
             /diff all              — staged + unstaged + untracked (vs HEAD)
-            /diff session          — everything Hermes changed (checkpoint baseline)
+            /diff session          — everything Fulilian changed (checkpoint baseline)
             /diff [mode] --stat    — summary only (changed files + counts)
             /diff [mode] <path...> — restrict to specific paths
         """
@@ -272,7 +272,7 @@ class CLICommandsMixin:
         mgr = self.agent._checkpoint_mgr
         if not mgr.enabled:
             print("  Checkpoints are not enabled, so there's no session baseline.")
-            print("  Enable with: hermes --checkpoints")
+            print("  Enable with: fulilian --checkpoints")
             print("  Or in config.yaml: checkpoints: { enabled: true }")
             print("  (Plain /diff still works — it uses git directly.)")
             return
@@ -285,7 +285,7 @@ class CLICommandsMixin:
         stat = result.get("stat", "")
         diff = result.get("diff", "")
         if result.get("empty") or (not stat and not diff):
-            print("  No changes — Hermes hasn't edited any files here yet.")
+            print("  No changes — Fulilian hasn't edited any files here yet.")
             return
 
         if stat:
@@ -320,7 +320,7 @@ class CLICommandsMixin:
         print(text)
 
     def _handle_snapshot_command(self, command: str):
-        """Handle /snapshot — lightweight state snapshots for Hermes config/state.
+        """Handle /snapshot — lightweight state snapshots for Fulilian config/state.
 
         Syntax:
             /snapshot                  — list recent snapshots
@@ -332,7 +332,7 @@ class CLICommandsMixin:
             create_quick_snapshot, list_quick_snapshots,
             restore_quick_snapshot, prune_quick_snapshots,
         )
-        from fulilian_constants import display_hermes_home
+        from fulilian_constants import display_fulilian_home
 
         parts = command.split()
         subcmd = parts[1].lower() if len(parts) > 1 else "list"
@@ -343,7 +343,7 @@ class CLICommandsMixin:
                 print("  No state snapshots yet.")
                 print("  Create one: /snapshot create [label]")
                 return
-            print(f"  State snapshots ({display_hermes_home()}/state-snapshots/):\n")
+            print(f"  State snapshots ({display_fulilian_home()}/state-snapshots/):\n")
             print(f"  {'#':>3}  {'ID':<35} {'Files':>5} {'Size':>10} {'Label'}")
             print(f"  {'─'*3}  {'─'*35} {'─'*5} {'─'*10} {'─'*20}")
             for i, s in enumerate(snaps, 1):
@@ -448,7 +448,7 @@ class CLICommandsMixin:
         try:
             result = export_profile(name, output)
             print(f"  ✓ Exported '{name}' to {result}")
-            print("  Share it: the other user runs /import or `hermes profile import <archive>`.")
+            print("  Share it: the other user runs /import or `fulilian profile import <archive>`.")
         except (ValueError, FileNotFoundError) as e:
             print(f"  Error: {e}")
 
@@ -493,7 +493,7 @@ class CLICommandsMixin:
                     print(f"  Wrapper created: {wrapper_path}")
         except Exception:
             pass
-        print(f"  Use it: hermes -p {imported}")
+        print(f"  Use it: fulilian -p {imported}")
 
     def _handle_stop_command(self):
         """Handle /stop — kill all running background processes and
@@ -595,7 +595,7 @@ class CLICommandsMixin:
         _cprint(f"  Agent: {'running' if agent_running else 'idle'}")
 
     def _handle_journey_command(self, cmd_original: str) -> None:
-        """Handle /journey — the learning timeline (see `hermes journey`).
+        """Handle /journey — the learning timeline (see `fulilian journey`).
 
         The read-only views (default + ``list``) render Rich color, which
         patch_stdout would swallow as raw escapes; capture with forced ANSI and
@@ -741,7 +741,7 @@ class CLICommandsMixin:
         if _remainder:
             _cprint(f"  {_DIM}Now type your prompt (or use --image in single-query mode): {_remainder}{_RST}")
         elif _is_termux_environment():
-            _cprint(f"  {_DIM}Tip: type your next message, or run hermes chat -q --image {_termux_example_image_path(image_path.name)} \"What do you see?\"{_RST}")
+            _cprint(f"  {_DIM}Tip: type your next message, or run fulilian chat -q --image {_termux_example_image_path(image_path.name)} \"What do you see?\"{_RST}")
 
     def _handle_tools_command(self, cmd: str):
         """Handle /tools [list|disable|enable] slash commands.
@@ -773,7 +773,7 @@ class CLICommandsMixin:
                 tools_disable_enable_command(ns)
                 return
 
-            # Buffer reports isatty()=True so color() in hermes_cli/colors.py
+            # Buffer reports isatty()=True so color() in fulilian_cli/colors.py
             # still emits ANSI escapes. StringIO.isatty() is False, which
             # would otherwise strip all colors before we re-render them.
             class _TTYBuf(StringIO):
@@ -854,7 +854,7 @@ class CLICommandsMixin:
             False to signal CLI exit, True to keep going.
         """
         from cli import _cprint
-        from hermes_state import format_session_db_unavailable
+        from fulilian_state import format_session_db_unavailable
 
         parts = cmd_original.split(maxsplit=1)
         if len(parts) < 2 or not parts[1].strip():
@@ -922,7 +922,7 @@ class CLICommandsMixin:
         # Make sure we have a SessionDB handle.
         if not self._session_db:
             try:
-                from hermes_state import SessionDB
+                from fulilian_state import SessionDB
                 self._session_db = SessionDB()
             except Exception:
                 pass
@@ -1009,7 +1009,7 @@ class CLICommandsMixin:
             self._session_db.fail_handoff(self.session_id, "timed out waiting for gateway")
         except Exception:
             pass
-        _cprint("  Timed out waiting for the gateway. Is `hermes gateway` running?")
+        _cprint("  Timed out waiting for the gateway. Is `fulilian gateway` running?")
         _cprint("  Your CLI session is intact.")
         return True
 
@@ -1043,7 +1043,7 @@ class CLICommandsMixin:
                 # #34584.
                 self._pending_resume_sessions = self._list_recent_sessions(limit=10)
                 return
-            _cprint("  Tip:   Use /history or `hermes sessions list` to find sessions.")
+            _cprint("  Tip:   Use /history or `fulilian sessions list` to find sessions.")
             return
 
         # Any explicit /resume <target> supersedes a previously-armed bare
@@ -1051,7 +1051,7 @@ class CLICommandsMixin:
         self._pending_resume_sessions = None
 
         if not self._session_db:
-            from hermes_state import format_session_db_unavailable
+            from fulilian_state import format_session_db_unavailable
             _cprint(f"  {format_session_db_unavailable()}")
             return
 
@@ -1073,7 +1073,7 @@ class CLICommandsMixin:
         session_meta = self._session_db.get_session(target_id)
         if not session_meta:
             _cprint(f"  Session not found: {target}")
-            _cprint("  Use /sessions or `hermes sessions list` to see available sessions.")
+            _cprint("  Use /sessions or `fulilian sessions list` to see available sessions.")
             return
 
         # If the target is the empty head of a compression chain, redirect to
@@ -1193,7 +1193,7 @@ class CLICommandsMixin:
 
         # Retarget the process + tool cwd to where the session was started, so a
         # mid-chat /resume (and /sessions <id>, which delegates here) lands in the
-        # same directory as a startup `hermes -c`/`--resume`. The startup resume
+        # same directory as a startup `fulilian -c`/`--resume`. The startup resume
         # paths already call this; without it, the terminal/code-exec tools and
         # relative-path resolution keep operating in the wrong repo. Idempotent
         # and a no-op when the session recorded no cwd. See #38562.
@@ -1233,7 +1233,7 @@ class CLICommandsMixin:
         # Bare /sessions or /sessions list — show recent sessions inline.
         if not arg or sub in {"list", "ls", "browse"}:
             if not self._session_db:
-                from hermes_state import format_session_db_unavailable
+                from fulilian_state import format_session_db_unavailable
                 _cprint(f"  {format_session_db_unavailable()}")
                 return
             if not self._show_recent_sessions(reason="sessions"):
@@ -1256,10 +1256,10 @@ class CLICommandsMixin:
         fresh worktree without leaving the session. Creating one retargets the
         terminal/file tools (``TERMINAL_CWD`` + process cwd) at the new tree;
         the launcher's exit cleanup applies (kept only when it has unpushed
-        commits, same as ``hermes -w``).
+        commits, same as ``fulilian -w``).
 
-        ``prune`` is the same attended reclaim as ``hermes worktree prune``
-        (hermes_cli/worktree_gc.py): never deletes tracked changes, unique
+        ``prune`` is the same attended reclaim as ``fulilian worktree prune``
+        (fulilian_cli/worktree_gc.py): never deletes tracked changes, unique
         unpushed commits, or in-use trees; archives untracked-only scratch.
         """
         import subprocess
@@ -1360,13 +1360,13 @@ class CLICommandsMixin:
             if not wt_info:
                 return  # _setup_worktree already printed the failure
             # Retarget the session's terminal/file tools at the new tree, the
-            # same way `hermes -w` and session-resume cwd restore do.
+            # same way `fulilian -w` and session-resume cwd restore do.
             try:
                 os.chdir(wt_info["path"])
             except OSError as e:
                 print(f"  ⚠ Created worktree but could not enter it: {e}")
             os.environ["TERMINAL_CWD"] = wt_info["path"]
-            # Register for the same keep-if-unpushed cleanup as `hermes -w`.
+            # Register for the same keep-if-unpushed cleanup as `fulilian -w`.
             # Only one worktree is tracked as "active" per process; an earlier
             # one keeps its own atexit registration (explicit info arg).
             import atexit
@@ -1393,7 +1393,7 @@ class CLICommandsMixin:
             return
 
         if not self._session_db:
-            from hermes_state import format_session_db_unavailable
+            from fulilian_state import format_session_db_unavailable
             _cprint(f"  {format_session_db_unavailable()}")
             return
 
@@ -1444,7 +1444,7 @@ class CLICommandsMixin:
         try:
             self._session_db.create_session(
                 session_id=new_session_id,
-                source=os.environ.get("HERMES_SESSION_SOURCE", "cli"),
+                source=os.environ.get("FULILIAN_SESSION_SOURCE", "cli"),
                 model=self.model,
                 model_config={
                     "max_iterations": self.max_turns,
@@ -1544,7 +1544,7 @@ class CLICommandsMixin:
     def _handle_personality_command(self, cmd: str):
         """Handle the /personality command to set predefined personalities.
 
-        All resolution/persistence goes through hermes_cli.personality —
+        All resolution/persistence goes through fulilian_cli.personality —
         the single owner of personality state on every surface.
         """
         from fulilian_cli.personality import (
@@ -2056,7 +2056,7 @@ class CLICommandsMixin:
     def _handle_curator_command(self, cmd: str):
         """Handle /curator slash command.
 
-        Delegates to hermes_cli.curator so the CLI and the `hermes curator`
+        Delegates to fulilian_cli.curator so the CLI and the `fulilian curator`
         subcommand share the same handler set.
         """
         import shlex
@@ -2097,7 +2097,7 @@ class CLICommandsMixin:
             print(output)
 
     def _handle_skills_command(self, cmd: str):
-        """Handle /skills slash command — delegates to hermes_cli.skills_hub."""
+        """Handle /skills slash command — delegates to fulilian_cli.skills_hub."""
         from cli import ChatConsole
         # Intercept write-approval review subcommands first (pending/approve/
         # reject/diff/mode); everything else goes to the skills hub.
@@ -2305,11 +2305,11 @@ class CLICommandsMixin:
                     try:
                         from fulilian_cli.skin_engine import get_active_skin
                         _skin = get_active_skin()
-                        label = _skin.get_branding("response_label", "⚕ Hermes")
+                        label = _skin.get_branding("response_label", "⚕ Fulilian")
                         _resp_color = _maybe_remap_for_light_mode(_skin.get_color("response_border", "#CD7F32"))
                         _resp_text = _maybe_remap_for_light_mode(_skin.get_color("banner_text", "#FFF8DC"))
                     except Exception:
-                        label = "⚕ Hermes"
+                        label = "⚕ Fulilian"
                         _resp_color = "#CD7F32"
                         _resp_text = "#FFF8DC"
 
@@ -2360,7 +2360,7 @@ class CLICommandsMixin:
     def _handle_bundles_command(self, cmd: str) -> None:
         """In-session ``/bundles`` — show installed skill bundles.
 
-        Mirrors ``hermes bundles list`` but renders inside the running
+        Mirrors ``fulilian bundles list`` but renders inside the running
         CLI so users can discover what's available without dropping out
         of their session. Bundles are loaded via ``/<bundle-name>``.
         """
@@ -2376,7 +2376,7 @@ class CLICommandsMixin:
         if not bundles:
             _cprint("  No skill bundles installed.")
             _cprint(
-                f"  {_DIM}Create one with: hermes bundles create "
+                f"  {_DIM}Create one with: fulilian bundles create "
                 f"<name> --skill <s1> --skill <s2>{_RST}"
             )
             _cprint(f"  {_DIM}Directory: {reply.data['dir']}{_RST}")
@@ -2394,7 +2394,7 @@ class CLICommandsMixin:
                 ChatConsole().print(f"        [dim]· {_escape(s)}[/]")
         _cprint(
             f"\n  {_DIM}Invoke a bundle with /<slug>. "
-            f"Manage with `hermes bundles`.{_RST}"
+            f"Manage with `fulilian bundles`.{_RST}"
         )
 
     def _handle_browser_command(self, cmd: str):
@@ -2576,7 +2576,7 @@ class CLICommandsMixin:
                     "Your browser_navigate, browser_snapshot, browser_click, and other browser tools now "
                     "control that CDP browser. The command itself is a signal that using browser tools for "
                     "their current browser-related request is expected; do not wait for separate permission "
-                    "just because CDP is connected. This is typically a Hermes-managed isolated debug "
+                    "just because CDP is connected. This is typically a Fulilian-managed isolated debug "
                     "profile, not the user's main everyday browser. It is still user-visible and may contain "
                     "pages, logged-in sessions, or cookies in that debug profile, so avoid destructive actions, "
                     "closing tabs, or navigating away unless the user's task calls for it.]"
@@ -2683,7 +2683,7 @@ class CLICommandsMixin:
         ``/heartbeat every 10m Check the deployment`` sets the session's one
         recurring instruction; the idle watchdog injects it as a normal user
         turn whenever due. Session-scoped and in-process — for durable
-        cross-process schedules use `hermes cron`.
+        cross-process schedules use `fulilian cron`.
         """
         from cli import _DIM, _RST, _cprint
         from fulilian_cli.heartbeat import parse_interval, format_interval
@@ -2758,7 +2758,7 @@ class CLICommandsMixin:
         _cprint(
             f"  {_DIM}Fires as a normal turn whenever the session is idle and the "
             f"interval has elapsed. /heartbeat pause | resume | clear to manage; "
-            f"lives only while this Hermes process runs — use `hermes cron` for "
+            f"lives only while this Fulilian process runs — use `fulilian cron` for "
             f"durable schedules.{_RST}"
         )
 
@@ -3012,7 +3012,7 @@ class CLICommandsMixin:
         _cprint(
             f"  {_DIM}After each turn, a judge model checks if the goal is done"
             f"{' against the contract above' if state.has_contract() else ''}. "
-            f"Hermes keeps working until it is, you pause/clear it, or the budget is "
+            f"Fulilian keeps working until it is, you pause/clear it, or the budget is "
             f"exhausted. Use /goal status, /goal show, /goal pause, /goal resume, /goal clear.{_RST}"
         )
         # Kick the loop off immediately so the user doesn't have to send a
@@ -3198,7 +3198,7 @@ class CLICommandsMixin:
                 source = f" ({s['source']})" if s["source"] == "user" else ""
                 print(f"   {marker} {s['name']}{source} — {s['description']}")
             print("\n  Usage: /skin <name>")
-            print(f"  Custom skins: drop a YAML file in {display_hermes_home()}/skins/\n")
+            print(f"  Custom skins: drop a YAML file in {display_fulilian_home()}/skins/\n")
             return
 
         new_skin = parts[1].strip().lower()
@@ -3241,7 +3241,7 @@ class CLICommandsMixin:
             "#! Compose your prompt below. Lines starting with '#!' are ignored.\n"
             "#! Save and quit to send; leave empty to cancel.\n\n"
         )
-        fd, path = tempfile.mkstemp(suffix=".md", prefix="hermes_prompt_")
+        fd, path = tempfile.mkstemp(suffix=".md", prefix="fulilian_prompt_")
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as fh:
                 fh.write(header)
@@ -3658,7 +3658,7 @@ class CLICommandsMixin:
             _cprint(f"  {_ACCENT}✓ Reasoning effort set to '{arg}' (this session — use --global to persist){_RST}")
 
     def _handle_busy_command(self, cmd: str):
-        """Handle /busy — control what Enter does while Hermes is working.
+        """Handle /busy — control what Enter does while Fulilian is working.
 
         Usage:
             /busy               Show current busy input mode
@@ -3690,11 +3690,11 @@ class CLICommandsMixin:
         self.busy_input_mode = arg
         if save_config_value("display.busy_input_mode", arg):
             if arg == "queue":
-                behavior = "Enter will queue follow-up input while Hermes is busy."
+                behavior = "Enter will queue follow-up input while Fulilian is busy."
             elif arg == "steer":
                 behavior = "Enter will steer your message into the current run (after the next tool call)."
             else:
-                behavior = "Enter will redirect the current run while Hermes is busy; /stop still cancels it."
+                behavior = "Enter will redirect the current run while Fulilian is busy; /stop still cancels it."
             _cprint(f"  {_ACCENT}✓ Busy input mode set to '{arg}' (saved to config){_RST}")
             _cprint(f"  {_DIM}{behavior}{_RST}")
         else:
@@ -3822,10 +3822,10 @@ class CLICommandsMixin:
         run_debug_share(args)
 
     def _handle_update_command(self) -> bool:
-        """Handle /update — update Hermes Agent to the latest version.
+        """Handle /update — update FuLiLian to the latest version.
 
         In the classic CLI this exits the session and relaunches as
-        ``hermes update`` so the user sees update output directly and gets
+        ``fulilian update`` so the user sees update output directly and gets
         the new version on next launch.
 
         Returns ``True`` when the update was confirmed (caller should trigger
@@ -3836,7 +3836,7 @@ class CLICommandsMixin:
         from fulilian_cli.config import is_managed, format_managed_message
 
         if is_managed():
-            print(f"  ✗ {format_managed_message('update Hermes Agent')}")
+            print(f"  ✗ {format_managed_message('update FuLiLian')}")
             return False
 
         # Use the prompt_toolkit-native modal so the confirmation panel
@@ -3844,12 +3844,12 @@ class CLICommandsMixin:
         # with the prompt_toolkit event loop (same pattern as
         # _confirm_destructive_slash).
         choices = [
-            ("once", "Update Now", "exit the current session and update Hermes Agent"),
+            ("once", "Update Now", "exit the current session and update FuLiLian"),
             ("cancel", "Cancel", "keep the current session"),
         ]
         raw = self._prompt_text_input_modal(
-            title="⚕  Update Hermes Agent",
-            detail="This will exit the current session and run `hermes update`.",
+            title="⚕  Update FuLiLian",
+            detail="This will exit the current session and run `fulilian update`.",
             choices=choices,
         )
         if raw is None:
@@ -3898,7 +3898,7 @@ class CLICommandsMixin:
             _cprint("Usage: /voice [on|off|tts|status]")
 
     def _handle_wake_command(self, command: str):
-        """Handle /wake [on|off|status] — the 'Hey Hermes' hotword listener.
+        """Handle /wake [on|off|status] — the 'Hey Fulilian' hotword listener.
 
         The toggle IS the config: an explicit on/off (or bare toggle) also
         writes ``wake_word.enabled`` to config.yaml so the choice persists

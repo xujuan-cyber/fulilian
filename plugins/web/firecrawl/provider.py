@@ -256,11 +256,11 @@ def _has_direct_firecrawl_config() -> bool:
 
 
 def check_firecrawl_api_key() -> bool:
-    """Return True when the Firecrawl backend selected via `hermes tools`
+    """Return True when the Firecrawl backend selected via `fulilian tools`
     (or, on a never-configured install, either route) is usable.
 
     Re-exported by :mod:`tools.web_tools` for backward compatibility with
-    existing tests and the ``hermes tools`` setup flow.
+    existing tests and the ``fulilian tools`` setup flow.
     """
     from tools.tool_backend_helpers import (
         NOUS_MANAGED_PROVIDER,
@@ -299,7 +299,7 @@ def _raise_web_backend_configuration_error() -> "NoReturn":
     if _wt.managed_nous_tools_enabled():
         message += (
             " With your Nous subscription you can also use the Tool Gateway. "
-            "run `hermes tools` and select Nous Subscription as the web provider."
+            "run `fulilian tools` and select Nous Subscription as the web provider."
         )
     else:
         message += " " + _wt.nous_tool_gateway_unavailable_message(

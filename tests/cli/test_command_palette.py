@@ -2,12 +2,12 @@
 
 from types import SimpleNamespace
 
-from cli import HermesCLI
+from cli import FulilianCLI
 from fulilian_cli.commands import HELP_SESSION_SUBGROUPS
 
 
 def _bare_cli():
-    cli = HermesCLI.__new__(HermesCLI)
+    cli = FulilianCLI.__new__(FulilianCLI)
     return cli
 
 

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { HermesReviewFile, HermesReviewShipInfo } from '@/global'
+import type { FulilianReviewFile, FulilianReviewShipInfo } from '@/global'
 
 import {
   $reviewCommitDefault,
@@ -42,7 +42,7 @@ import {
 import { $currentCwd } from './session'
 
 // requestOneShot is the only cross-module dependency that must be faked (it
-// reaches the gateway); everything else routes through window.hermesDesktop.git,
+// reaches the gateway); everything else routes through window.fulilianDesktop.git,
 // which we stub per-test like the sibling coding-status.test.ts does.
 const requestOneShot = vi.fn(async (_args: unknown) => 'generated message')
 vi.mock('@/lib/oneshot', () => ({ requestOneShot: (args: unknown) => requestOneShot(args) }))
@@ -52,13 +52,13 @@ vi.mock('@/lib/oneshot', () => ({ requestOneShot: (args: unknown) => requestOneS
 // branch either.
 vi.mock('./coding-status', () => ({ refreshRepoStatus: vi.fn(), repoStatusForCwd: () => ({ get: () => null }) }))
 
-function file(path: string, over: Partial<HermesReviewFile> = {}): HermesReviewFile {
-  return { path, status: 'modified', staged: false, added: 1, removed: 0, ...over } as HermesReviewFile
+function file(path: string, over: Partial<FulilianReviewFile> = {}): FulilianReviewFile {
+  return { path, status: 'modified', staged: false, added: 1, removed: 0, ...over } as FulilianReviewFile
 }
 
 type ReviewStub = Record<string, ReturnType<typeof vi.fn>>
 
-// Install a review bridge on window.hermesDesktop. Any op not supplied defaults
+// Install a review bridge on window.fulilianDesktop. Any op not supplied defaults
 // to a resolved no-op so a test only declares what it exercises.
 function stubReview(over: ReviewStub = {}) {
   const review: ReviewStub = {
@@ -75,7 +75,7 @@ function stubReview(over: ReviewStub = {}) {
     ...over
   }
 
-  ;(window as unknown as { hermesDesktop?: unknown }).hermesDesktop = {
+  ;(window as unknown as { fulilianDesktop?: unknown }).fulilianDesktop = {
     git: { review },
     openExternal: vi.fn()
   }
@@ -104,7 +104,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  delete (window as unknown as { hermesDesktop?: unknown }).hermesDesktop
+  delete (window as unknown as { fulilianDesktop?: unknown }).fulilianDesktop
 })
 
 describe('refreshReview', () => {
@@ -121,7 +121,7 @@ describe('refreshReview', () => {
   })
 
   it('flags not-a-repo (and clears loading) when there is no bridge/cwd', async () => {
-    delete (window as unknown as { hermesDesktop?: unknown }).hermesDesktop
+    delete (window as unknown as { fulilianDesktop?: unknown }).fulilianDesktop
     $reviewOpen.set(true)
     $reviewLoading.set(true)
 
@@ -213,7 +213,7 @@ describe('selectReviewFile / clearReviewSelection', () => {
   })
 
   it('sets diff null when there is no bridge', async () => {
-    delete (window as unknown as { hermesDesktop?: unknown }).hermesDesktop
+    delete (window as unknown as { fulilianDesktop?: unknown }).fulilianDesktop
 
     await selectReviewFile(file('a.ts'))
 
@@ -431,13 +431,13 @@ describe('ship flow', () => {
 
   it('createOrOpenPr opens the existing PR without creating a new one', async () => {
     const review = stubReview()
-    $reviewShipInfo.set({ ghReady: true, pr: { url: 'https://example.com/pr/9' } } as HermesReviewShipInfo)
+    $reviewShipInfo.set({ ghReady: true, pr: { url: 'https://example.com/pr/9' } } as FulilianReviewShipInfo)
 
     await createOrOpenPr()
 
     expect(review.createPr).not.toHaveBeenCalled()
     expect(
-      (window.hermesDesktop as unknown as { openExternal: ReturnType<typeof vi.fn> }).openExternal
+      (window.fulilianDesktop as unknown as { openExternal: ReturnType<typeof vi.fn> }).openExternal
     ).toHaveBeenCalledWith('https://example.com/pr/9')
   })
 
@@ -449,17 +449,17 @@ describe('ship flow', () => {
 
     expect(review.createPr).toHaveBeenCalledWith('/repo')
     expect(
-      (window.hermesDesktop as unknown as { openExternal: ReturnType<typeof vi.fn> }).openExternal
+      (window.fulilianDesktop as unknown as { openExternal: ReturnType<typeof vi.fn> }).openExternal
     ).toHaveBeenCalledWith('https://example.com/pr/new')
   })
 })
 
 describe('refreshShipInfo', () => {
   it('populates ship info from the bridge', async () => {
-    const info: HermesReviewShipInfo = {
+    const info: FulilianReviewShipInfo = {
       ghReady: true,
       pr: { url: 'https://example.com/pr/3' }
-    } as HermesReviewShipInfo
+    } as FulilianReviewShipInfo
 
     stubReview({ shipInfo: vi.fn(async () => info) })
 
@@ -469,8 +469,8 @@ describe('refreshShipInfo', () => {
   })
 
   it('resets ship info when there is no bridge', async () => {
-    delete (window as unknown as { hermesDesktop?: unknown }).hermesDesktop
-    $reviewShipInfo.set({ ghReady: true, pr: { url: 'x' } } as HermesReviewShipInfo)
+    delete (window as unknown as { fulilianDesktop?: unknown }).fulilianDesktop
+    $reviewShipInfo.set({ ghReady: true, pr: { url: 'x' } } as FulilianReviewShipInfo)
 
     await refreshShipInfo()
 
@@ -483,7 +483,7 @@ describe('refreshShipInfo', () => {
         throw new Error('gh missing')
       })
     })
-    $reviewShipInfo.set({ ghReady: true, pr: { url: 'x' } } as HermesReviewShipInfo)
+    $reviewShipInfo.set({ ghReady: true, pr: { url: 'x' } } as FulilianReviewShipInfo)
 
     await refreshShipInfo()
 

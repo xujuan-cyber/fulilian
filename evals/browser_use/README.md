@@ -12,7 +12,7 @@ web tasks.
   `browser_*` tools from a merge-base checkout; `pr` runs `browser_exec`
   (`browser.backend: browser-use`) from the branch checkout; `prns` is `pr`
   with the schema's helpers digest stripped to the header (isolates the
-  digest's value). Each cell gets a throwaway `HERMES_HOME`; web-fetch
+  digest's value). Each cell gets a throwaway `FULILIAN_HOME`; web-fetch
   credentials are stripped so every arm must actually drive the browser.
 - **Tasks are oracle-checked.** toscrape-family sites (stable content, no
   anti-bot), regex oracles over the final answer. `tasks/easy.json` (5 tasks:

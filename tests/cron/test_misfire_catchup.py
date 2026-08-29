@@ -13,7 +13,7 @@ from datetime import timedelta
 
 import pytest
 
-from cron.jobs import _hermes_now, create_job, get_job, load_jobs, save_jobs
+from cron.jobs import _fulilian_now, create_job, get_job, load_jobs, save_jobs
 from cron.scheduler_provider import (
     CronScheduler,
     InProcessCronScheduler,
@@ -61,7 +61,7 @@ def _park_in_past(job_id, minutes):
     for j in jobs:
         if j["id"] == job_id:
             j["next_run_at"] = (
-                _hermes_now() - timedelta(minutes=minutes)
+                _fulilian_now() - timedelta(minutes=minutes)
             ).isoformat()
     save_jobs(jobs)
 
@@ -139,7 +139,7 @@ class TestFireOverdueJobs:
         assert provider.wait_fired()
 
         stamped = get_job(job["id"])
-        assert stamped["next_run_at"] > _hermes_now().isoformat()
+        assert stamped["next_run_at"] > _fulilian_now().isoformat()
 
         provider2 = RecordingProvider()
         assert fire_overdue_jobs(provider2) == 0

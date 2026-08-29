@@ -11,7 +11,7 @@ import { formatMessageTimestamp } from '@/components/assistant-ui/thread/timesta
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { OverflowTip, Tip } from '@/components/ui/tooltip'
-import type { SessionInfo } from '@/hermes'
+import type { SessionInfo } from '@/fulilian'
 import { type Translations, useI18n } from '@/i18n'
 import { sessionTitle } from '@/lib/chat-runtime'
 import { pathLeaf } from '@/lib/display-path'

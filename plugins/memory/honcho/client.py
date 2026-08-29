@@ -1,7 +1,7 @@
 """Honcho client initialization and configuration.
 
 Resolution order for config file:
-  1. $HERMES_HOME/honcho.json  (instance-local, enables isolated Hermes instances)
+  1. $FULILIAN_HOME/honcho.json  (instance-local, enables isolated Fulilian instances)
   2. ~/.honcho/config.json     (global, shared across all Honcho-enabled apps)
   3. Environment variables     (HONCHO_API_KEY, HONCHO_ENVIRONMENT)
 
@@ -23,8 +23,8 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from agent.secret_scope import get_secret
-from fulilian_constants import get_hermes_home
-from fulilian_cli.profiles import _get_default_hermes_home
+from fulilian_constants import get_fulilian_home
+from fulilian_cli.profiles import _get_default_fulilian_home
 from plugins.plugin_utils import SingletonSlot
 from typing import Any, TYPE_CHECKING
 
@@ -53,11 +53,11 @@ def _sanitize_url(url: str | None) -> str | None:
     return None
 
 
-HOST = "hermes"
+HOST = "fulilian"
 
 
 def profile_host_key(profile: str | None) -> str:
-    """Return the safe Honcho host key for a Hermes profile."""
+    """Return the safe Honcho host key for a Fulilian profile."""
     if not profile or profile in {"default", "custom"}:
         return HOST
     sanitized = "".join(c if c.isalnum() or c in "_-" else "_" for c in profile).strip("_")
@@ -75,15 +75,15 @@ def _host_block(raw: dict, host: str) -> dict:
 
 
 def resolve_active_host() -> str:
-    """Derive the Honcho host key from the active Hermes profile.
+    """Derive the Honcho host key from the active Fulilian profile.
 
     Resolution order:
-      1. HERMES_HONCHO_HOST env var (explicit override)
-      2. Active profile name via profiles system -> ``hermes_<profile>``
+      1. FULILIAN_HONCHO_HOST env var (explicit override)
+      2. Active profile name via profiles system -> ``fulilian_<profile>``
       3. defaultHost from the active config, but only for the default profile
-      4. Fallback: ``"hermes"`` (default profile)
+      4. Fallback: ``"fulilian"`` (default profile)
     """
-    explicit = os.environ.get("HERMES_HONCHO_HOST", "").strip()
+    explicit = os.environ.get("FULILIAN_HONCHO_HOST", "").strip()
     if explicit:
         return explicit
 
@@ -95,9 +95,9 @@ def resolve_active_host() -> str:
         profile_host = HOST
 
     # Honcho's generic config can carry a defaultHost (for example "local"),
-    # but applying it before profile resolution makes every named Hermes
+    # but applying it before profile resolution makes every named Fulilian
     # profile share that same host.  Keep named profiles isolated; only the
-    # default Hermes profile may opt into the config's default host.
+    # default Fulilian profile may opt into the config's default host.
     if profile_host == HOST:
         try:
             path = resolve_config_path()
@@ -121,18 +121,18 @@ def resolve_config_path() -> Path:
     """Return the active Honcho config path.
 
     Resolution order:
-      1. $HERMES_HOME/honcho.json      (profile-local, if it exists)
-      2. ~/.hermes/honcho.json          (default profile — shared host blocks live here)
+      1. $FULILIAN_HOME/honcho.json      (profile-local, if it exists)
+      2. ~/.fulilian/honcho.json          (default profile — shared host blocks live here)
       3. ~/.honcho/config.json          (global, cross-app interop)
 
     Returns the global path if none exist (for first-time setup writes).
     """
-    local_path = get_hermes_home() / "honcho.json"
+    local_path = get_fulilian_home() / "honcho.json"
     if local_path.exists():
         return local_path
 
     # Default profile's config — host blocks accumulate here via setup/clone
-    default_path = _get_default_hermes_home() / "honcho.json"
+    default_path = _get_default_fulilian_home() / "honcho.json"
     if default_path != local_path and default_path.exists():
         return default_path
 
@@ -382,7 +382,7 @@ class HonchoClientConfig:
     """Configuration for Honcho client, resolved for a specific host."""
 
     host: str = HOST
-    workspace_id: str = "hermes"
+    workspace_id: str = "fulilian"
     api_key: str | None = None
     environment: str = "production"
     # Optional base URL for self-hosted Honcho (overrides environment mapping)
@@ -391,7 +391,7 @@ class HonchoClientConfig:
     timeout: float | None = None
     # Identity
     peer_name: str | None = None
-    ai_peer: str = "hermes"
+    ai_peer: str = "fulilian"
     # When True, ``peer_name`` wins over any gateway-supplied runtime
     # identity (Telegram UID, Discord ID, …) when resolving the user peer.
     # This keeps memory unified across platforms for single-user deployments
@@ -477,18 +477,18 @@ class HonchoClientConfig:
     sessions: dict[str, str] = field(default_factory=dict)
     # Raw global config for anything else consumers need
     raw: dict[str, Any] = field(default_factory=dict)
-    # True when Honcho was explicitly configured for this host (hosts.hermes
+    # True when Honcho was explicitly configured for this host (hosts.fulilian
     # block exists or enabled was set explicitly), vs auto-enabled from a
     # stray HONCHO_API_KEY env var.
     explicitly_configured: bool = False
     # Provenance: WHERE this config was resolved from, captured at resolution
     # time (inside the caller's profile scope). Bound consumers (session
     # manager, OAuth refresh paths) use these instead of re-resolving
-    # resolve_config_path()/get_hermes_home() later — those resolvers read a
+    # resolve_config_path()/get_fulilian_home() later — those resolvers read a
     # ContextVar that background threads cannot see, so re-resolution from a
     # daemon thread silently lands on the DEFAULT profile (#69123, #74065).
     config_path: Path | None = None
-    hermes_home: Path | None = None
+    fulilian_home: Path | None = None
 
     def bound_config_path(self) -> Path:
         """Return the config path this config was resolved from.
@@ -503,7 +503,7 @@ class HonchoClientConfig:
     @classmethod
     def from_env(
         cls,
-        workspace_id: str = "hermes",
+        workspace_id: str = "fulilian",
         host: str | None = None,
     ) -> HonchoClientConfig:
         """Create config from environment variables (fallback)."""
@@ -531,7 +531,7 @@ class HonchoClientConfig:
             ai_peer=resolved_host,
             enabled=bool(api_key or base_url),
             config_path=_resolved_path,
-            hermes_home=get_hermes_home(),
+            fulilian_home=get_fulilian_home(),
         )
 
     @classmethod
@@ -542,8 +542,8 @@ class HonchoClientConfig:
     ) -> HonchoClientConfig:
         """Create config from the resolved Honcho config path.
 
-        Resolution: $HERMES_HOME/honcho.json -> ~/.honcho/config.json -> env vars.
-        When host is None, derives it from the active Hermes profile.
+        Resolution: $FULILIAN_HOME/honcho.json -> ~/.honcho/config.json -> env vars.
+        When host is None, derives it from the active Fulilian profile.
         """
         resolved_host = host or resolve_active_host()
         path = config_path or resolve_config_path()
@@ -558,7 +558,7 @@ class HonchoClientConfig:
             return cls.from_env(host=resolved_host)
 
         host_block = _host_block(raw, resolved_host)
-        # A hosts.hermes block or explicit enabled flag means the user
+        # A hosts.fulilian block or explicit enabled flag means the user
         # intentionally configured Honcho for this host.
         _explicitly_configured = bool(host_block) or raw.get("enabled") is True
 
@@ -604,7 +604,7 @@ class HonchoClientConfig:
         # The Honcho SDK's native config format — and what Claude Desktop
         # writes — nests the URL at endpoint.baseUrl. Read it first: a user
         # who has that block set almost certainly means it, and the flat
-        # baseUrl / base_url keys below are the Hermes-specific spelling.
+        # baseUrl / base_url keys below are the Fulilian-specific spelling.
         endpoint_block = raw.get("endpoint")
         native_base_url = (
             endpoint_block.get("baseUrl")
@@ -815,7 +815,7 @@ class HonchoClientConfig:
             raw=raw,
             explicitly_configured=_explicitly_configured,
             config_path=path,
-            hermes_home=get_hermes_home(),
+            fulilian_home=get_fulilian_home(),
         )
 
     @staticmethod
@@ -879,10 +879,10 @@ class HonchoClientConfig:
 
         Resolution order:
           1. Gateway session key (stable per-chat identifier from gateway platforms)
-          2. per-session strategy — Hermes session_id ({timestamp}_{hex}); authoritative,
+          2. per-session strategy — Fulilian session_id ({timestamp}_{hex}); authoritative,
              so a generated title never remaps a live conversation
           3. Manual directory override from sessions map
-          4. Hermes session title (from /title command; non-per-session)
+          4. Fulilian session title (from /title command; non-per-session)
           5. per-repo strategy — git repo root directory name
           6. per-directory strategy — directory basename
           7. global strategy — workspace name
@@ -960,9 +960,9 @@ def spawn_context_thread(
     """Spawn a thread that inherits the caller's contextvars.
 
     Profile isolation in multi-profile processes is a ContextVar
-    (set_hermes_home_override); plain threading.Thread targets start with an
+    (set_fulilian_home_override); plain threading.Thread targets start with an
     EMPTY context, so any ambient resolution on the thread
-    (resolve_config_path, resolve_active_host, get_hermes_home) silently
+    (resolve_config_path, resolve_active_host, get_fulilian_home) silently
     lands on the default profile. Copying the caller's context at spawn time
     makes the thread see the profile scope it was created under.
     """
@@ -984,7 +984,7 @@ def _credential_fingerprint(config: HonchoClientConfig | None) -> str:
     so the fingerprint must NOT change on rotation — it hashes the REFRESH
     token, which is stable across access-token rotation but changes on
     re-auth or account switch. Static keys hash the key itself. This is what
-    makes 'hermes honcho setup' account switches produce a NEW cache identity
+    makes 'fulilian honcho setup' account switches produce a NEW cache identity
     instead of silently reusing the old account's client (a first-config-wins
     hole that per-path keys alone cannot close).
     """
@@ -1043,7 +1043,7 @@ def _client_cache_key(config: HonchoClientConfig | None) -> tuple:
             config.base_url or "",
             config.environment,
             str(config.config_path) if config.config_path is not None else "",
-            str(config.hermes_home) if config.hermes_home is not None else "",
+            str(config.fulilian_home) if config.fulilian_home is not None else "",
             _resolve_timeout_from_sources(config),
             _credential_fingerprint(config),
         )
@@ -1059,7 +1059,7 @@ def _client_cache_key(config: HonchoClientConfig | None) -> tuple:
 def _slot_for(key: tuple) -> SingletonSlot:
     """Return the slot for ``key``, evicting stale same-identity slots.
 
-    When a (kind, host, config_path/hermes_home) identity reappears with a
+    When a (kind, host, config_path/fulilian_home) identity reappears with a
     DIFFERENT credential fingerprint or timeout, the old slot is dropped so
     the replaced client stops being served and its pools can close once the
     last holder releases it. Without eviction, credential churn leaks one
@@ -1247,7 +1247,7 @@ def get_honcho_client(config: HonchoClientConfig | None = None) -> Honcho:
         raise ValueError(
             "Honcho API key not found. "
             "Get your API key at https://app.honcho.dev, "
-            "then run 'hermes honcho setup' or set HONCHO_API_KEY. "
+            "then run 'fulilian honcho setup' or set HONCHO_API_KEY. "
             "For local instances, set HONCHO_BASE_URL instead."
         )
 
@@ -1271,7 +1271,7 @@ def get_honcho_client(config: HonchoClientConfig | None = None) -> Honcho:
             raise ImportError(
                 "honcho-ai is required for Honcho integration. "
                 "Install it with: pip install honcho-ai  "
-                "(or run `hermes honcho setup` to configure)."
+                "(or run `fulilian honcho setup` to configure)."
             )
 
         # Allow config.yaml honcho.base_url to override the SDK's environment
@@ -1282,8 +1282,8 @@ def get_honcho_client(config: HonchoClientConfig | None = None) -> Honcho:
         if not resolved_base_url or resolved_timeout is None:
             try:
                 from fulilian_cli.config import load_config
-                hermes_cfg = load_config()
-                honcho_cfg = hermes_cfg.get("honcho", {})
+                fulilian_cfg = load_config()
+                honcho_cfg = fulilian_cfg.get("honcho", {})
                 if isinstance(honcho_cfg, dict):
                     if not resolved_base_url:
                         resolved_base_url = _sanitize_url(honcho_cfg.get("base_url", "").strip() or None)

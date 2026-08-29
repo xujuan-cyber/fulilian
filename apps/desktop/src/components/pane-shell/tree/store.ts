@@ -47,9 +47,9 @@ import { rootChildSide } from './renderer/track-model'
 
 // v2: v1 trees were saved against placeholder panes with index-order zone
 // assignment (chat could land in a corner cell). Retire them wholesale.
-const STORAGE_KEY = 'hermes.desktop.layoutTree.v2'
+const STORAGE_KEY = 'fulilian.desktop.layoutTree.v2'
 
-writeKey('hermes.desktop.layoutTree.v1', null)
+writeKey('fulilian.desktop.layoutTree.v1', null)
 
 let defaultTree: LayoutNode | null = null
 
@@ -82,11 +82,11 @@ export const $layoutTree = atom<LayoutNode | null>(isSecondaryWindow() || isBrow
  * Which layout preset the current tree came from; `'custom'` after the user
  * rearranges anything. Drives the picker's active highlight.
  */
-export const $activePresetId = atom<string>(readKey('hermes.desktop.layoutPreset.active') ?? 'default')
+export const $activePresetId = atom<string>(readKey('fulilian.desktop.layoutPreset.active') ?? 'default')
 
 export function markActivePreset(id: string) {
   $activePresetId.set(id)
-  writeKey('hermes.desktop.layoutPreset.active', id)
+  writeKey('fulilian.desktop.layoutPreset.active', id)
 }
 
 /** Pane id being dragged (tree drag session), null when idle. Also set to the
@@ -183,7 +183,7 @@ function frontPaneInGroup(paneId: string) {
  *  - closing the sole pane from a plugin disables that plugin, preserving the
  *    discoverable Settings → Plugins recovery path for single-pane plugins.
  */
-const DISMISSED_KEY = 'hermes.desktop.dismissedPanes.v1'
+const DISMISSED_KEY = 'fulilian.desktop.dismissedPanes.v1'
 
 function loadDismissed(): ReadonlySet<string> {
   return new Set(readJson<string[]>(DISMISSED_KEY) ?? [])
@@ -209,7 +209,7 @@ function setDismissed(paneId: string, dismissed: boolean) {
 // re-opening it docks at the size the user left it. Without this every
 // re-open split the anchor zone [1, 1] again: each agent-triggered browser
 // open re-took half the chat, whatever the user had resized it to.
-const PANE_SHARE_KEY = 'hermes.desktop.paneShare.v1'
+const PANE_SHARE_KEY = 'fulilian.desktop.paneShare.v1'
 
 const paneShares: Record<string, number> = readJson<Record<string, number>>(PANE_SHARE_KEY) ?? {}
 
@@ -259,7 +259,7 @@ function recalledEdgeWeights(paneId: string): [number, number] | undefined {
 // Persisted separately from `$hiddenTreePanes` (whose persistence each side
 // binding owns) so a hidden Bots tab stays hidden across launches even though
 // dock enforcement re-adopts the pane into the sessions zone every boot.
-const HIDDEN_STRIP_TAB_KEY = 'hermes.desktop.hiddenStripTabs.v1'
+const HIDDEN_STRIP_TAB_KEY = 'fulilian.desktop.hiddenStripTabs.v1'
 
 export const $hiddenStripTabs = atom<ReadonlySet<string>>(new Set(readJson<string[]>(HIDDEN_STRIP_TAB_KEY) ?? []))
 
@@ -1233,7 +1233,7 @@ interface PaneDockHint {
 // (token burned even when the heal was skipped; $userPlacedPanes exempt) left
 // exactly the users who had fought the old stacked layout stuck with it —
 // enforced docks (`enforce: true`) replaced it. Drop the stale key.
-writeKey('hermes.desktop.paneDockHeals.v1', null)
+writeKey('fulilian.desktop.paneDockHeals.v1', null)
 
 // Panes already enforced THIS boot: the invariant re-asserts at boot, not
 // against a live user — a mid-session drag out of the anchor strip sticks
@@ -1416,7 +1416,7 @@ function commit(next: LayoutNode | null) {
 // Presets and resets hand placement back to the app.
 // ---------------------------------------------------------------------------
 
-const USER_PLACED_KEY = 'hermes.desktop.userPlacedPanes.v1'
+const USER_PLACED_KEY = 'fulilian.desktop.userPlacedPanes.v1'
 
 export const $userPlacedPanes = atom<ReadonlySet<string>>(new Set(readJson<string[]>(USER_PLACED_KEY) ?? []))
 
@@ -1979,7 +1979,7 @@ export function resetLayoutTree() {
 
 // Dev hook for automation.
 if ((import.meta.env.DEV || import.meta.env.VITE_PERF_PROBE === '1') && typeof window !== 'undefined') {
-  ;(window as unknown as Record<string, unknown>).__HERMES_LAYOUT_TREE__ = {
+  ;(window as unknown as Record<string, unknown>).__FULILIAN_LAYOUT_TREE__ = {
     close: closeTreePane,
     dismissed: () => $dismissedPanes.get(),
     get: () => $layoutTree.get(),

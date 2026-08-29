@@ -1,6 +1,6 @@
 """CTF 危险命令检查表（F4-003）。
 
-硬拦截清单：命中即 block（Hermes hardline/approval 层在其之外仍生效，
+硬拦截清单：命中即 block（Fulilian hardline/approval 层在其之外仍生效，
 两者互补——这里管 CTF 场景特有模式，那里管通用系统破坏）。
 """
 

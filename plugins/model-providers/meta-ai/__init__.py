@@ -1,9 +1,9 @@
-"""Meta Model API (Muse Spark) provider plugin for Hermes Agent.
+"""Meta Model API (Muse Spark) provider plugin for FuLiLian.
 
 Provider profile for Meta Superintelligence Labs' Muse Spark family, served
 via the OpenAI-compatible Meta Model API at ``https://api.meta.ai/v1``.
 
-Bundled from https://github.com/albertodepaola/hermes-meta-provider. Hermes'
+Bundled from https://github.com/albertodepaola/fulilian-meta-provider. Fulilian'
 provider discovery (``providers/__init__.py``) imports it on first
 ``get_provider_profile()`` / ``list_providers()`` call, and the module-level
 ``register_provider()`` below wires it into the registry.
@@ -11,7 +11,7 @@ provider discovery (``providers/__init__.py``) imports it on first
 Design notes
 ------------
 * **Zero core edits.** Everything rides on ``ProviderProfile`` hooks. No changes
-  to hermes' ``model_metadata.py`` / ``models.py`` / ``run_agent.py`` are needed:
+  to fulilian' ``model_metadata.py`` / ``models.py`` / ``run_agent.py`` are needed:
   - Context window (1M), reasoning and vision capabilities already resolve from
     models.dev for the muse-spark family, so no static ctx table entry is required.
   - The reasoning dial is emitted as a **top-level ``reasoning_effort``** kwarg
@@ -36,7 +36,7 @@ from providers.base import ProviderProfile
 
 
 def _resolve_effort(reasoning_config: dict | None) -> str:
-    """Map Hermes' reasoning_config to a Meta-safe ``reasoning_effort`` value.
+    """Map Fulilian' reasoning_config to a Meta-safe ``reasoning_effort`` value.
 
     Meta's vocabulary (minimal..xhigh; rejects ``none``) is declared in
     agent.reasoning_effort. Disabled/"none" maps to ``minimal`` (the closest
@@ -93,7 +93,7 @@ meta_ai = MetaAIProfile(
     # Responses API is the wire that engages Muse prompt caching: measured
     # 0 cached tokens on /v1/chat/completions vs 93-99% cache hits on
     # /v1/responses with prompt_cache_retention (see host_mandated_api_mode
-    # in hermes_cli/providers.py and the retention hint in
+    # in fulilian_cli/providers.py and the retention hint in
     # agent/transports/codex.py). The MetaAIProfile chat-completions hook
     # above still covers custom OpenAI-compatible endpoints configured with
     # a non-api.meta.ai base URL, which fall through to chat_completions.

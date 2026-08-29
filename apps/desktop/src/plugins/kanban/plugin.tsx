@@ -14,7 +14,7 @@ import './kanban.css'
 import {
   cn,
   Codicon,
-  type HermesPlugin,
+  type FulilianPlugin,
   host,
   type KeybindContribution,
   KEYBINDS_AREA,
@@ -28,7 +28,7 @@ import {
   Tip,
   useQuery,
   useValue
-} from '@hermes/plugin-sdk'
+} from '@fulilian/plugin-sdk'
 
 import { $boardSlug, bindApi, boardKey, fetchBoard } from './api'
 import { KanbanBoardPage } from './board'
@@ -77,7 +77,7 @@ function KanbanCount() {
   )
 }
 
-const plugin: HermesPlugin = {
+const plugin: FulilianPlugin = {
   id: 'kanban',
   name: 'Kanban',
   description: 'Multi-agent task board — board page, sidebar entry, and a live in-flight count in the status bar.',

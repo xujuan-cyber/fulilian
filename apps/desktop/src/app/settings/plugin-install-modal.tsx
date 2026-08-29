@@ -31,7 +31,7 @@ import {
 import { $activeGatewayProfile, $profileScope } from '@/store/profile'
 import { $connection } from '@/store/session'
 
-type ProbeResult = Awaited<ReturnType<NonNullable<NonNullable<Window['hermesDesktop']>['probePluginRepo']>>>
+type ProbeResult = Awaited<ReturnType<NonNullable<NonNullable<Window['fulilianDesktop']>['probePluginRepo']>>>
 
 type ProbePhase = 'idle' | 'probing' | 'ready' | 'error'
 
@@ -90,7 +90,7 @@ export function PluginInstallModal() {
       setEnableAgent(payload.enable ?? true)
       setForceReinstall(payload.force ?? false)
 
-      const probeFn = window.hermesDesktop?.probePluginRepo
+      const probeFn = window.fulilianDesktop?.probePluginRepo
 
       if (!probeFn) {
         if (token !== probeToken.current) {
@@ -205,7 +205,7 @@ export function PluginInstallModal() {
       }
 
       if (installDesktop && probe.desktop) {
-        const installFn = window.hermesDesktop?.installDesktopPlugin
+        const installFn = window.fulilianDesktop?.installDesktopPlugin
 
         if (!installFn) {
           errors.push(m.desktopUnavailable)

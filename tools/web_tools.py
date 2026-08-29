@@ -3,8 +3,8 @@
 Standalone Web Tools Module
 
 This module provides generic web tools that work with multiple backend providers.
-Backend is selected during ``hermes tools`` setup (web.backend in config.yaml).
-When available, Hermes can route Firecrawl calls through a Nous-hosted tool-gateway
+Backend is selected during ``fulilian tools`` setup (web.backend in config.yaml).
+When available, Fulilian can route Firecrawl calls through a Nous-hosted tool-gateway
 for Nous Subscribers only.
 
 Available tools:
@@ -121,10 +121,10 @@ def _web_extract_url(value: Any) -> Optional[str]:
 # ─── Backend Selection ────────────────────────────────────────────────────────
 
 def _env_value(name: str) -> str:
-    """Resolve ``name`` via Hermes config-aware env, falling back to process env.
+    """Resolve ``name`` via Fulilian config-aware env, falling back to process env.
 
     Mirrors the SearXNG provider's ``_searxng_url()`` so that values set
-    through Hermes' config/.env layer (``hermes config set``, ``hermes tools``)
+    through Fulilian' config/.env layer (``fulilian config set``, ``fulilian tools``)
     are honored here too — not just raw process-env exports. Without this,
     a config-only ``SEARXNG_URL`` (or any provider key) leaves the backend
     auto-detect cascade and ``check_web_api_key()`` blind to it. See #34290.
@@ -144,7 +144,7 @@ def _has_env(name: str) -> bool:
     return bool(_env_value(name))
 
 def _load_web_config() -> dict:
-    """Load the ``web:`` section from ~/.hermes/config.yaml."""
+    """Load the ``web:`` section from ~/.fulilian/config.yaml."""
     try:
         from fulilian_cli.config import load_config
         # ``or {}``: a present-but-null ``web:`` section (YAML ``web:`` with no
@@ -223,7 +223,7 @@ def _list_registered_web_providers():
 def _get_backend() -> str:
     """Determine which web backend to use (shared fallback).
 
-    Reads ``web.backend`` from config.yaml (set by ``hermes tools``). A
+    Reads ``web.backend`` from config.yaml (set by ``fulilian tools``). A
     stored backend name is returned as-is — no availability probe, no
     fallback — so the vendor path can raise its own honest error when the
     selection is broken. The credential/entitlement autodetect ladder runs
@@ -404,7 +404,7 @@ def _is_backend_available(backend: str) -> bool:
         # Cheap probe — env var OR auth.json has OAuth tokens. Must not
         # call resolve_xai_http_credentials() here because the OAuth path
         # can trigger a network token refresh, and _is_backend_available
-        # runs on every web_search dispatch + every `hermes tools` repaint.
+        # runs on every web_search dispatch + every `fulilian tools` repaint.
         try:
             from tools.xai_http import has_xai_credentials
             return has_xai_credentials()
@@ -701,9 +701,9 @@ def _store_full_text(url: str, content: str) -> Optional[str]:
     try:
         import hashlib
         from urllib.parse import urlparse
-        from fulilian_constants import get_hermes_dir
+        from fulilian_constants import get_fulilian_dir
 
-        cache_dir = get_hermes_dir("cache/web", "web_cache")
+        cache_dir = get_fulilian_dir("cache/web", "web_cache")
         cache_dir.mkdir(parents=True, exist_ok=True)
 
         host = (urlparse(url).hostname or "page").replace(":", "_")
@@ -917,7 +917,7 @@ def web_search_tool(query: str, limit: int = 5) -> str:
                     error_text = (
                         f"web.search_backend is set to '{_vendor}', but its "
                         f"plugin ('{disabled_key}') is disabled in config. "
-                        f"Re-enable it with `hermes plugins enable {disabled_key}` "
+                        f"Re-enable it with `fulilian plugins enable {disabled_key}` "
                         "(or remove it from plugins.disabled)."
                     )
                 else:
@@ -948,7 +948,7 @@ def web_search_tool(query: str, limit: int = 5) -> str:
                     "error": (
                         f"web.search_backend is set to '{_vendor}', but its "
                         f"plugin ('{disabled_key}') is disabled in config. "
-                        f"Re-enable it with `hermes plugins enable {disabled_key}` "
+                        f"Re-enable it with `fulilian plugins enable {disabled_key}` "
                         "(or remove it from plugins.disabled)."
                     ),
                 }
@@ -957,7 +957,7 @@ def web_search_tool(query: str, limit: int = 5) -> str:
                     "success": False,
                     "error": (
                         "No web search provider configured. "
-                        "Run `hermes tools` to set one up."
+                        "Run `fulilian tools` to set one up."
                     ),
                 }
         else:
@@ -1212,7 +1212,7 @@ async def web_extract_tool(
                         error_text = (
                             f"web.extract_backend is set to '{_vendor}', but "
                             f"its plugin ('{disabled_key}') is disabled in "
-                            f"config. Re-enable it with `hermes plugins "
+                            f"config. Re-enable it with `fulilian plugins "
                             f"enable {disabled_key}` (or remove it from "
                             "plugins.disabled)."
                         )
@@ -1243,7 +1243,7 @@ async def web_extract_tool(
                                     f"web.extract_backend is set to '{_vendor}', "
                                     f"but its plugin ('{disabled_key}') is disabled "
                                     "in config. Re-enable it with "
-                                    f"`hermes plugins enable {disabled_key}` "
+                                    f"`fulilian plugins enable {disabled_key}` "
                                     "(or remove it from plugins.disabled)."
                                 ),
                             },
@@ -1495,7 +1495,7 @@ def _provider_is_ready(provider) -> bool:
     ``get_active_*_provider()`` intentionally returns an explicitly configured
     backend even when ``is_available()`` is False so the dispatcher can emit a
     precise missing-credential error. Tool/doctor readiness gates must still
-    require a true availability probe — otherwise ``hermes doctor`` paints a
+    require a true availability probe — otherwise ``fulilian doctor`` paints a
     green ✓ for a backend that cannot run (issue #78412).
 
     A provider that can serve anonymously (``is_keyless_available()`` — the

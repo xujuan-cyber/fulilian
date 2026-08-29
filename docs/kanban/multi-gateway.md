@@ -1,6 +1,6 @@
 # Multi-gateway deployment
 
-Hermes supports multiple gateway processes running concurrently — one per profile
+Fulilian supports multiple gateway processes running concurrently — one per profile
 (default, writer, admin, coder, researcher). Each gateway opens its own connection
 to platform APIs and delivers messages for its profile's subscribers.
 
@@ -26,14 +26,14 @@ processes.
 ## Configuration
 
 On the dispatch-owning gateway (typically the `default` profile), no change is
-needed. On every other profile gateway, add to `~/.hermes/config.yaml`:
+needed. On every other profile gateway, add to `~/.fulilian/config.yaml`:
 
 ```yaml
 kanban:
   dispatch_in_gateway: false
 ```
 
-Or set the env var: `HERMES_KANBAN_DISPATCH_IN_GATEWAY=false`
+Or set the env var: `FULILIAN_KANBAN_DISPATCH_IN_GATEWAY=false`
 
 ## What each gateway does
 

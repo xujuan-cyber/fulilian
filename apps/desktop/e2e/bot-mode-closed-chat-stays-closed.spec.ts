@@ -90,8 +90,8 @@ const mainTabs = (page: Page) =>
  *  in-app creation and the intro turn it fires out of a scenario that is
  *  about the row click. With the row present, the click takes the open-as-
  *  tab path; without it, it would mint the chat into the workspace pane. */
-async function seedBot(hermesHome: string, mockUrl: string, name: string): Promise<void> {
-  const dir = path.join(hermesHome, 'profiles', name)
+async function seedBot(fulilianHome: string, mockUrl: string, name: string): Promise<void> {
+  const dir = path.join(fulilianHome, 'profiles', name)
   fs.mkdirSync(dir, { recursive: true })
   writeMockProviderConfig(dir, mockUrl)
   writeEnvFile(dir)
@@ -108,10 +108,10 @@ async function seedBot(hermesHome: string, mockUrl: string, name: string): Promi
 test.beforeAll(async () => {
   const mock = await startMockServer()
   const sandbox = createSandbox('bots')
-  writeMockProviderConfig(sandbox.hermesHome, mock.url)
-  writeEnvFile(sandbox.hermesHome)
-  await seedBot(sandbox.hermesHome, mock.url, 'alpha')
-  await seedBot(sandbox.hermesHome, mock.url, 'beta')
+  writeMockProviderConfig(sandbox.fulilianHome, mock.url)
+  writeEnvFile(sandbox.fulilianHome)
+  await seedBot(sandbox.fulilianHome, mock.url, 'alpha')
+  await seedBot(sandbox.fulilianHome, mock.url, 'beta')
 
   const { app, page } = await launchDesktop(buildAppEnv(sandbox))
 

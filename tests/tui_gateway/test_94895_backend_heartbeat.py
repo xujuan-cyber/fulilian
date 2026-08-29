@@ -10,7 +10,7 @@ refreshes it periodically.  This file verifies:
   existing orphan-sweep wiring pattern).
 * Failure to start the refresher is swallowed so a malformed DB
   never breaks gateway startup.
-* ``HERMES_GATEWAY_HEARTBEAT_REFRESH_S=0`` disables the refresher.
+* ``FULILIAN_GATEWAY_HEARTBEAT_REFRESH_S=0`` disables the refresher.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ import os
 
 import pytest
 
-from hermes_state import SessionDB
+from fulilian_state import SessionDB
 
 
 IDLE_S = 6 * 3600

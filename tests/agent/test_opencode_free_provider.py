@@ -3,7 +3,7 @@
 The provider is KEYLESS: OpenCode's free tier is served anonymously and
 rejects any unrecognized Authorization bearer with 401, so the provider
 declares no env vars and every request goes out with an empty Authorization
-header (see hermes_cli.models.opencode_zen_free_runtime).
+header (see fulilian_cli.models.opencode_zen_free_runtime).
 """
 
 import os

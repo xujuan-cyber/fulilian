@@ -1,12 +1,12 @@
-"""``hermes verify`` — detect a project's run recipe and smoke-test it.
+"""``fulilian verify`` — detect a project's run recipe and smoke-test it.
 
 Scoped port of superagent-ai/grok-cli's verify subsystem entrypoint.
 Statically detects the project kind (or loads the saved manifest at
-``.hermes/environment.json``), then runs bootstrap/build/test phases and an
+``.fulilian/environment.json``), then runs bootstrap/build/test phases and an
 optional background start + readiness poll, printing an evidence summary.
 
 Completed runs are recorded into the coding verification evidence ledger
-(:mod:`agent.verification_evidence`), so a passing ``hermes verify`` satisfies
+(:mod:`agent.verification_evidence`), so a passing ``fulilian verify`` satisfies
 the verify-on-stop guard the same way a passing canonical test command does.
 """
 
@@ -138,9 +138,9 @@ def _record_evidence(root: Path, recipe, result, *, partial: bool) -> None:
             tails.append(readiness_line)
         record_verify_run(
             root=root,
-            session_id=os.environ.get("HERMES_SESSION_ID"),
+            session_id=os.environ.get("FULILIAN_SESSION_ID"),
             ok=result.ok,
-            command="hermes verify",
+            command="fulilian verify",
             scope="targeted" if partial else "full",
             output="\n".join(tails),
         )

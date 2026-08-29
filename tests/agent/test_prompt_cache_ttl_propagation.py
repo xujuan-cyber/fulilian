@@ -329,12 +329,12 @@ class TestAuxFallbackReplanThreadsTtl:
         import agent.agent_runtime_helpers as arh
 
         monkeypatch.setattr(
-            "hermes_cli.config.load_config_readonly",
+            "fulilian_cli.config.load_config_readonly",
             lambda: {"prompt_caching": {"cache_ttl": "1h"}},
         )
         assert arh.configured_cache_ttl() == "1h"
         monkeypatch.setattr(
-            "hermes_cli.config.load_config_readonly",
+            "fulilian_cli.config.load_config_readonly",
             lambda: {"prompt_caching": {"cache_ttl": "5m"}},
         )
         assert arh.configured_cache_ttl() == "5m"
@@ -344,7 +344,7 @@ class TestAuxFallbackReplanThreadsTtl:
 
         for value in ("off", False, None, "2h"):
             monkeypatch.setattr(
-                "hermes_cli.config.load_config_readonly",
+                "fulilian_cli.config.load_config_readonly",
                 lambda value=value: {"prompt_caching": {"cache_ttl": value}},
             )
             assert arh.configured_cache_ttl() is None, value
@@ -353,7 +353,7 @@ class TestAuxFallbackReplanThreadsTtl:
         from agent import auxiliary_client
 
         monkeypatch.setattr(
-            "hermes_cli.config.load_config_readonly",
+            "fulilian_cli.config.load_config_readonly",
             lambda: {"prompt_caching": {"cache_ttl": "1h"}},
         )
         destination = auxiliary_client._FallbackDestination(

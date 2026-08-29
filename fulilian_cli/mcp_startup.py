@@ -63,7 +63,7 @@ def start_background_mcp_discovery(*, logger, thread_name: str) -> None:
         if not _has_configured_mcp_servers():
             return
 
-        # Capture the caller's context-local HERMES_HOME override (profile
+        # Capture the caller's context-local FULILIAN_HOME override (profile
         # scoping in multi-profile processes like the dashboard/desktop
         # backend) and re-install it inside the discovery thread. ContextVars
         # do not propagate into bare threads, so without this a session
@@ -71,18 +71,18 @@ def start_background_mcp_discovery(*, logger, thread_name: str) -> None:
         # mcp_servers instead (#67605). The config gate above already runs on
         # the caller's thread, so it sees the same override.
         try:
-            from fulilian_constants import get_hermes_home_override
+            from fulilian_constants import get_fulilian_home_override
 
-            home_override = get_hermes_home_override()
+            home_override = get_fulilian_home_override()
         except Exception:
             home_override = None
 
         def _discover() -> None:
             token = None
             try:
-                from fulilian_constants import set_hermes_home_override
+                from fulilian_constants import set_fulilian_home_override
 
-                token = set_hermes_home_override(home_override)
+                token = set_fulilian_home_override(home_override)
             except Exception:
                 token = None
             try:
@@ -101,9 +101,9 @@ def start_background_mcp_discovery(*, logger, thread_name: str) -> None:
             finally:
                 if token is not None:
                     try:
-                        from fulilian_constants import reset_hermes_home_override
+                        from fulilian_constants import reset_fulilian_home_override
 
-                        reset_hermes_home_override(token)
+                        reset_fulilian_home_override(token)
                     except Exception:
                         pass
                 with _mcp_discovery_lock:
@@ -129,7 +129,7 @@ def _resolve_discovery_timeout(
     and fail-safe — a missing/invalid value or a broken config falls back to a
     short safe bound so startup can never hang or crash.
 
-    When ``single_query`` is True (``hermes -z "..."`` / ``-q``), the larger
+    When ``single_query`` is True (``fulilian -z "..."`` / ``-q``), the larger
     ``mcp_single_query_discovery_timeout`` bound is used instead. In single-query
     mode there is only ONE turn, so the between-turns late-binding refresh never
     runs — a server that misses the small interactive bound would be invisible to
@@ -200,7 +200,7 @@ def mcp_discovery_in_flight() -> bool:
     Mirrors ``tui_gateway.entry.mcp_discovery_in_flight`` for the surfaces that
     start discovery through ``start_background_mcp_discovery`` here (the desktop
     app + dashboard WebSocket sidecar via ``tui_gateway/ws.py``, and
-    ``hermes dashboard``).  Those processes populate THIS module's
+    ``fulilian dashboard``).  Those processes populate THIS module's
     ``_mcp_discovery_thread``, not ``tui_gateway.entry``'s, so the late-refresh
     scheduler must consult both to decide whether a slow server's tools are
     still pending (see #51587).
@@ -233,7 +233,7 @@ def ensure_mcp_discovery_before_agent_build(
 ) -> None:
     """Give configured MCP tools a bounded chance to register before AIAgent.
 
-    Non-interactive first turns (``chat -q``, ``hermes -z``) can construct
+    Non-interactive first turns (``chat -q``, ``fulilian -z``) can construct
     ``AIAgent`` before the normal banner or tool-list paths touch
     ``get_tool_definitions()``.  Because the agent snapshots its tool
     registry at construction time, the first and only model turn can miss

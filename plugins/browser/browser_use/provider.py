@@ -7,7 +7,7 @@ is now the canonical implementation.
 
 Browser Use is the only browser backend with dual auth: a direct
 ``BROWSER_USE_API_KEY`` for self-billed users, or the managed Nous tool
-gateway (which Hermes uses to bill Browser Use sessions to a Nous
+gateway (which Fulilian uses to bill Browser Use sessions to a Nous
 subscription). The dispatch order — direct API key first, managed gateway
 second — preserves the pre-migration behaviour in
 ``tools.browser_providers.browser_use.BrowserUseProvider._get_config_or_none``.
@@ -23,7 +23,7 @@ Config keys this provider responds to::
 Auth env vars (one of)::
 
     BROWSER_USE_API_KEY=...           # https://browser-use.com
-    # OR a managed Nous gateway entry (configured via 'hermes setup')
+    # OR a managed Nous gateway entry (configured via 'fulilian setup')
 """
 
 from __future__ import annotations
@@ -232,7 +232,7 @@ class BrowserUseBrowserProvider(BrowserProvider):
             headers["X-Idempotency-Key"] = _get_or_create_pending_create_key(task_id)
 
         # Keep gateway-backed sessions short so billing authorization does not
-        # default to a long Browser-Use timeout when Hermes only needs a task-
+        # default to a long Browser-Use timeout when Fulilian only needs a task-
         # scoped ephemeral browser.
         payload = (
             {
@@ -271,7 +271,7 @@ class BrowserUseBrowserProvider(BrowserProvider):
         session_data = response.json()
         if managed_mode:
             _clear_pending_create_key(task_id)
-        session_name = f"hermes_{task_id}_{uuid.uuid4().hex[:8]}"
+        session_name = f"fulilian_{task_id}_{uuid.uuid4().hex[:8]}"
         external_call_id = (
             response.headers.get("x-external-call-id") if managed_mode else None
         )
@@ -344,7 +344,7 @@ class BrowserUseBrowserProvider(BrowserProvider):
             )
 
     def get_setup_schema(self) -> Optional[Dict[str, Any]]:
-        # Hidden from the hermes tools picker: the "Browser Use" row now
+        # Hidden from the fulilian tools picker: the "Browser Use" row now
         # activates the CLI-based backend (tools/browser_use_cli.py). This
         # provider stays registered for the Nous gateway path and un-migrated
         # legacy cloud_provider configs.

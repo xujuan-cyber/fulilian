@@ -1,4 +1,4 @@
-"""Tests for HermesCLI initialization -- catches configuration bugs
+"""Tests for FulilianCLI initialization -- catches configuration bugs
 that only manifest at runtime (not in mocked unit tests)."""
 
 import os
@@ -11,7 +11,7 @@ import pytest
 
 
 def _make_cli(env_overrides=None, config_overrides=None, **kwargs):
-    """Create a HermesCLI instance with minimal mocking."""
+    """Create a FulilianCLI instance with minimal mocking."""
     import importlib
 
     _clean_config = {
@@ -26,7 +26,7 @@ def _make_cli(env_overrides=None, config_overrides=None, **kwargs):
     }
     if config_overrides:
         _clean_config.update(config_overrides)
-    clean_env = {"LLM_MODEL": "", "HERMES_MAX_ITERATIONS": ""}
+    clean_env = {"LLM_MODEL": "", "FULILIAN_MAX_ITERATIONS": ""}
     if env_overrides:
         clean_env.update(env_overrides)
     prompt_toolkit_stubs = {
@@ -53,7 +53,7 @@ def _make_cli(env_overrides=None, config_overrides=None, **kwargs):
             _cli_mod = importlib.reload(_cli_mod)
             with patch.object(_cli_mod, "get_tool_definitions", return_value=[]), \
                  patch.dict(_cli_mod.__dict__, {"CLI_CONFIG": _clean_config}):
-                return _cli_mod.HermesCLI(**kwargs)
+                return _cli_mod.FulilianCLI(**kwargs)
     finally:
         # The reload above re-executed cli.py while prompt_toolkit was stubbed
         # with MagicMocks, permanently rebinding cli's module globals
@@ -302,11 +302,11 @@ class TestHistoryDisplay:
         output = capsys.readouterr().out
 
         assert "[You #1]" in output
-        assert "[Hermes #2]" in output
+        assert "[Fulilian #2]" in output
         assert "(requested 2 tool calls)" in output
         assert "[Tools]" in output
         assert "(2 tool messages hidden)" in output
-        assert "[Hermes #3]" in output
+        assert "[Fulilian #3]" in output
         assert "[You #4]" in output
         assert "[You #5]" not in output
         assert "A" * 250 in output
@@ -326,8 +326,8 @@ class TestHistoryDisplay:
             },
             {
                 "id": "20260401_201329_d85961",
-                "title": "Checking Running Hermes Agent",
-                "preview": "check running gateways for hermes agent",
+                "title": "Checking Running FuLiLian",
+                "preview": "check running gateways for fulilian agent",
                 "last_active": 0,
             },
         ]
@@ -336,7 +336,7 @@ class TestHistoryDisplay:
         output = capsys.readouterr().out
 
         assert "Recent sessions" in output
-        assert "Checking Running Hermes Agent" in output
+        assert "Checking Running FuLiLian" in output
         assert "Use /resume" in output
         assert "session title" in output
 
@@ -356,8 +356,8 @@ class TestHistoryDisplay:
         cli._session_db.list_sessions_rich.return_value = [
             {
                 "id": "20260401_201329_d85961",
-                "title": "Checking Running Hermes Agent",
-                "preview": "check running gateways for hermes agent",
+                "title": "Checking Running FuLiLian",
+                "preview": "check running gateways for fulilian agent",
                 "last_active": 0,
             },
         ]
@@ -369,7 +369,7 @@ class TestHistoryDisplay:
 
         assert "Unknown command" not in output
         assert "Recent sessions" in output
-        assert "Checking Running Hermes Agent" in output
+        assert "Checking Running FuLiLian" in output
         assert "20260401_201329_d85961" in output
 
 
@@ -382,10 +382,10 @@ class TestHistoryDisplay:
         """
         cli = _make_cli()
         with patch.object(cli, "_handle_resume_command") as mock_resume:
-            cli.process_command("/sessions Checking Running Hermes Agent")
+            cli.process_command("/sessions Checking Running FuLiLian")
 
         mock_resume.assert_called_once_with(
-            "/resume Checking Running Hermes Agent"
+            "/resume Checking Running FuLiLian"
         )
 
 
@@ -393,7 +393,7 @@ class TestNestedDictModelDefaultPairing:
     """A dict-valued ``model.default`` must keep its nested provider paired.
 
     ``model.default: {provider: ..., model: ...}`` canonicalizes to the string
-    model AND the nested provider, so ``HermesCLI`` routes the model through
+    model AND the nested provider, so ``FulilianCLI`` routes the model through
     that provider instead of discarding it and falling back to the outer
     merged ``model.provider`` (``"auto"`` — authoritative at runtime
     resolution, which would route the model through the wrong active
@@ -473,11 +473,11 @@ class TestRootLevelProviderOverride:
         """model.provider takes priority — root-level provider is only a fallback."""
         import yaml
 
-        hermes_home = tmp_path / ".hermes"
-        hermes_home.mkdir()
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        fulilian_home = tmp_path / ".fulilian"
+        fulilian_home.mkdir()
+        monkeypatch.setenv("FULILIAN_HOME", str(fulilian_home))
 
-        config_path = hermes_home / "config.yaml"
+        config_path = fulilian_home / "config.yaml"
         config_path.write_text(yaml.safe_dump({
             "provider": "opencode-go",  # stale root-level key
             "model": {
@@ -487,7 +487,7 @@ class TestRootLevelProviderOverride:
         }))
 
         import cli
-        monkeypatch.setattr(cli, "_hermes_home", hermes_home)
+        monkeypatch.setattr(cli, "_fulilian_home", fulilian_home)
         cfg = cli.load_cli_config()
 
         assert cfg["model"]["provider"] == "openrouter"
@@ -496,11 +496,11 @@ class TestRootLevelProviderOverride:
         """Legacy root-level provider still populates model.provider in the CLI loader."""
         import yaml
 
-        hermes_home = tmp_path / ".hermes"
-        hermes_home.mkdir()
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        fulilian_home = tmp_path / ".fulilian"
+        fulilian_home.mkdir()
+        monkeypatch.setenv("FULILIAN_HOME", str(fulilian_home))
 
-        config_path = hermes_home / "config.yaml"
+        config_path = fulilian_home / "config.yaml"
         config_path.write_text(yaml.safe_dump({
             "provider": "opencode-go",  # stale root key
             "model": {
@@ -510,7 +510,7 @@ class TestRootLevelProviderOverride:
         }))
 
         import cli
-        monkeypatch.setattr(cli, "_hermes_home", hermes_home)
+        monkeypatch.setattr(cli, "_fulilian_home", fulilian_home)
         cfg = cli.load_cli_config()
 
         assert cfg["model"]["provider"] == "opencode-go"
@@ -519,11 +519,11 @@ class TestRootLevelProviderOverride:
         """Legacy root-level base_url still populates model.base_url in the CLI loader."""
         import yaml
 
-        hermes_home = tmp_path / ".hermes"
-        hermes_home.mkdir()
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        fulilian_home = tmp_path / ".fulilian"
+        fulilian_home.mkdir()
+        monkeypatch.setenv("FULILIAN_HOME", str(fulilian_home))
 
-        config_path = hermes_home / "config.yaml"
+        config_path = fulilian_home / "config.yaml"
         config_path.write_text(yaml.safe_dump({
             "base_url": "https://example.com/v1",
             "model": {
@@ -532,7 +532,7 @@ class TestRootLevelProviderOverride:
         }))
 
         import cli
-        monkeypatch.setattr(cli, "_hermes_home", hermes_home)
+        monkeypatch.setattr(cli, "_fulilian_home", fulilian_home)
         cfg = cli.load_cli_config()
 
         assert cfg["model"]["base_url"] == "https://example.com/v1"
@@ -541,12 +541,12 @@ class TestRootLevelProviderOverride:
         """Classic CLI must expose terminal.vercel_runtime to terminal_tool.py."""
         import yaml
 
-        hermes_home = tmp_path / ".hermes"
-        hermes_home.mkdir()
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        fulilian_home = tmp_path / ".fulilian"
+        fulilian_home.mkdir()
+        monkeypatch.setenv("FULILIAN_HOME", str(fulilian_home))
         monkeypatch.delenv("TERMINAL_VERCEL_RUNTIME", raising=False)
 
-        config_path = hermes_home / "config.yaml"
+        config_path = fulilian_home / "config.yaml"
         config_path.write_text(yaml.safe_dump({
             "terminal": {
                 "backend": "vercel_sandbox",
@@ -555,7 +555,7 @@ class TestRootLevelProviderOverride:
         }))
 
         import cli
-        monkeypatch.setattr(cli, "_hermes_home", hermes_home)
+        monkeypatch.setattr(cli, "_fulilian_home", fulilian_home)
         cfg = cli.load_cli_config()
 
         assert cfg["terminal"]["vercel_runtime"] == "python3.13"

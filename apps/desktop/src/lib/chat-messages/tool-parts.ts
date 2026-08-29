@@ -1,6 +1,6 @@
 import { firstStringField, normalize } from '@/lib/text'
 import { parseTodos } from '@/lib/todos'
-import type { SessionMessage } from '@/types/hermes'
+import type { SessionMessage } from '@/types/fulilian'
 
 import type { ChatMessage, ChatMessagePart, GatewayEventPayload } from './types'
 

@@ -1,13 +1,13 @@
 ---
 title: Image Generation
-description: Generate images via FAL.ai — 11 models including FLUX 2, GPT Image (1.5 & 2), Nano Banana Pro, Ideogram, Recraft V4 Pro, Krea 2, and more, selectable via `hermes tools`.
+description: Generate images via FAL.ai — 11 models including FLUX 2, GPT Image (1.5 & 2), Nano Banana Pro, Ideogram, Recraft V4 Pro, Krea 2, and more, selectable via `fulilian tools`.
 sidebar_label: Image Generation
 sidebar_position: 6
 ---
 
 # Image Generation
 
-Hermes Agent generates images from text prompts via FAL.ai. Eleven models are supported out of the box, each with different speed, quality, and cost tradeoffs. The active model is user-configurable via `hermes tools` and persists in `config.yaml`.
+FuLiLian generates images from text prompts via FAL.ai. Eleven models are supported out of the box, each with different speed, quality, and cost tradeoffs. The active model is user-configurable via `fulilian tools` and persists in `config.yaml`.
 
 ## Supported Models
 
@@ -30,9 +30,9 @@ Prices are FAL's pricing at time of writing; check [fal.ai](https://fal.ai/) for
 ## Setup
 
 :::tip Nous Subscribers
-If you have a paid [Nous Portal](https://portal.nousresearch.com) subscription, you can use image generation through the **[Tool Gateway](tool-gateway.md)** without a FAL API key. Your model selection persists across both paths. New installs can run `hermes setup --portal` to log in and turn on every gateway tool at once; existing installs can pick **Nous Subscription** as the image-gen backend via `hermes tools`.
+If you have a paid [Nous Portal](https://portal.nousresearch.com) subscription, you can use image generation through the **[Tool Gateway](tool-gateway.md)** without a FAL API key. Your model selection persists across both paths. New installs can run `fulilian setup --portal` to log in and turn on every gateway tool at once; existing installs can pick **Nous Subscription** as the image-gen backend via `fulilian tools`.
 
-If the managed gateway returns `HTTP 4xx` for a specific model, that model isn't yet proxied on the portal side — the agent will tell you so, with remediation steps (switch to FAL.ai in `hermes tools` with your own `FAL_KEY` for direct access, or pick a different model).
+If the managed gateway returns `HTTP 4xx` for a specific model, that model isn't yet proxied on the portal side — the agent will tell you so, with remediation steps (switch to FAL.ai in `fulilian tools` with your own `FAL_KEY` for direct access, or pick a different model).
 :::
 
 ### Get a FAL API Key
@@ -45,7 +45,7 @@ If the managed gateway returns `HTTP 4xx` for a specific model, that model isn't
 Run the tools command:
 
 ```bash
-hermes tools
+fulilian tools
 ```
 
 Navigate to **🎨 Image Generation**, pick your backend (Nous Subscription or FAL.ai), then the picker shows all supported models in a column-aligned table — arrow keys to navigate, Enter to select:
@@ -67,9 +67,9 @@ image_gen:
   max_parallel_requests: 4      # concurrent images in one tool-call batch
 ```
 
-`image_gen.provider` is the single selection key: `nous` routes through the managed Tool Gateway; a vendor name (`fal`, `openai`, `xai`, `krea`, ...) goes direct with your own key. The runtime always follows this stored selection — a `FAL_KEY` in `.env` is ignored while `provider: nous`, and `provider: fal` without `FAL_KEY` errors with `image_gen is configured to use fal (set via hermes tools), but FAL_KEY is not set. Run 'hermes tools' to change it.` rather than silently rerouting. Change providers via `hermes tools`, not by adding/removing keys. (The old `use_gateway` boolean is legacy — still read as `nous` when `true`, but never written anymore.)
+`image_gen.provider` is the single selection key: `nous` routes through the managed Tool Gateway; a vendor name (`fal`, `openai`, `xai`, `krea`, ...) goes direct with your own key. The runtime always follows this stored selection — a `FAL_KEY` in `.env` is ignored while `provider: nous`, and `provider: fal` without `FAL_KEY` errors with `image_gen is configured to use fal (set via fulilian tools), but FAL_KEY is not set. Run 'fulilian tools' to change it.` rather than silently rerouting. Change providers via `fulilian tools`, not by adding/removing keys. (The old `use_gateway` boolean is legacy — still read as `nous` when `true`, but never written anymore.)
 
-`max_parallel_requests` defaults to `4`. Hermes clamps it to at least one and
+`max_parallel_requests` defaults to `4`. Fulilian clamps it to at least one and
 to the global tool-worker limit, so image providers receive bounded parallel
 requests without allowing an image batch to bypass the agent's concurrency cap.
 
@@ -81,7 +81,7 @@ entire live image catalog — the dedicated
 models (Seedream, FLUX.2, Recraft, Qwen Image, MAI, Krea, Riverflow, Grok
 Imagine, and more — 40+ ids) merged with the chat-completions image models.
 The catalog is fetched live from `GET /images/models` and `GET /models`, so
-new models appear in the picker as soon as OpenRouter serves them; no Hermes
+new models appear in the picker as soon as OpenRouter serves them; no Fulilian
 update needed. Generation routes each model to the surface that serves it
 (dedicated `POST /images/generations` vs chat-completions) automatically.
 Nous Portal proxies the chat-completions protocol only, so its picker offers
@@ -160,7 +160,7 @@ edit-capable model.
 :::note OpenAI (Codex auth) is best-effort
 
 The Codex surface (`chatgpt.com/backend-api/codex`) hosts `image_generation`
-as a tool the chat model may call, and Hermes cannot force the call — the
+as a tool the chat model may call, and Fulilian cannot force the call — the
 backend rejects every `tool_choice` shape for hosted tools, so the request
 relies on instructions to steer the model. When the host model declines to
 invoke the tool, the call fails with `empty_response`. Whether the hosted
@@ -258,5 +258,5 @@ Debug logs go to `./logs/image_tools_debug_<session_id>.json` with per-call deta
 
 - **Requires credentials** for the active backend (FAL `FAL_KEY` / Nous Subscription, `OPENAI_API_KEY`, xAI OAuth, `KREA_API_KEY`)
 - **Editing is model-dependent** — image-to-image works only on edit-capable models (see the table above); text-to-image-only models reject image inputs with a clear error
-- **Temporary URLs** — backends return hosted URLs that expire after hours/days; Hermes materializes them to the local cache so delivery still works after expiry
+- **Temporary URLs** — backends return hosted URLs that expire after hours/days; Fulilian materializes them to the local cache so delivery still works after expiry
 - **Per-model constraints** — some models don't support `seed`, `num_inference_steps`, etc. The `supports` / `edit_supports` filter silently drops unsupported params; this is expected behavior

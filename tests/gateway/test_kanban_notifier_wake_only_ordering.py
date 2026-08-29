@@ -109,7 +109,7 @@ def _subs(tid):
 
 def test_wake_only_success_advances_cursor_single_wake(tmp_path, monkeypatch):
     """Wake succeeds: exactly one wake, no text ping, cursor advanced."""
-    monkeypatch.setenv("HERMES_KANBAN_DB", str(tmp_path / "wake-ok.db"))
+    monkeypatch.setenv("FULILIAN_KANBAN_DB", str(tmp_path / "wake-ok.db"))
     kb.init_db()
     tid = _make_completed_task("wake")
 
@@ -127,7 +127,7 @@ def test_wake_only_success_advances_cursor_single_wake(tmp_path, monkeypatch):
 
 def test_wake_only_failure_rewinds_and_redelivers(tmp_path, monkeypatch):
     """Wake fails: cursor rewound, counter bumped, event retried next tick."""
-    monkeypatch.setenv("HERMES_KANBAN_DB", str(tmp_path / "wake-fail.db"))
+    monkeypatch.setenv("FULILIAN_KANBAN_DB", str(tmp_path / "wake-fail.db"))
     kb.init_db()
     tid = _make_completed_task("wake")
 
@@ -157,7 +157,7 @@ def test_wake_only_failure_rewinds_and_redelivers(tmp_path, monkeypatch):
 
 def test_notify_wake_failure_stays_best_effort(tmp_path, monkeypatch):
     """notify+wake: text ping IS the delivery; failed wake must NOT rewind."""
-    monkeypatch.setenv("HERMES_KANBAN_DB", str(tmp_path / "notify-wake.db"))
+    monkeypatch.setenv("FULILIAN_KANBAN_DB", str(tmp_path / "notify-wake.db"))
     kb.init_db()
     tid = _make_completed_task("notify+wake")
 
@@ -180,7 +180,7 @@ def test_notify_wake_failure_stays_best_effort(tmp_path, monkeypatch):
 
 def test_wake_only_failure_cap_drops_subscription(tmp_path, monkeypatch):
     """After MAX_SEND_FAILURES consecutive wake failures the sub is dropped."""
-    monkeypatch.setenv("HERMES_KANBAN_DB", str(tmp_path / "wake-cap.db"))
+    monkeypatch.setenv("FULILIAN_KANBAN_DB", str(tmp_path / "wake-cap.db"))
     kb.init_db()
     tid = _make_completed_task("wake")
 

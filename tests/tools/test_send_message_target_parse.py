@@ -131,7 +131,7 @@ def test_unresolved_plugin_target_requires_explicit_parser() -> None:
     )
     platform_registry.register(entry)
     platform = Platform(platform_name)
-    # Simulate a fresh `hermes send` process: the dynamic Platform member
+    # Simulate a fresh `fulilian send` process: the dynamic Platform member
     # is known from config, but plugin discovery has not registered its
     # adapter entry yet.
     platform_registry.unregister(platform_name)
@@ -148,7 +148,7 @@ def test_unresolved_plugin_target_requires_explicit_parser() -> None:
                  return_value=None,
              ), \
              patch(
-                 "hermes_cli.plugins.discover_plugins",
+                 "fulilian_cli.plugins.discover_plugins",
                  side_effect=lambda: platform_registry.register(entry),
              ) as discover_mock, \
              patch("model_tools._run_async", side_effect=_run_async_immediately), \

@@ -6,10 +6,10 @@ import socket
 
 
 def _reload_constants():
-    """Reload hermes_constants to get a fresh apply_ipv4_preference."""
+    """Reload fulilian_constants to get a fresh apply_ipv4_preference."""
     import fulilian_constants
-    importlib.reload(hermes_constants)
-    return hermes_constants
+    importlib.reload(fulilian_constants)
+    return fulilian_constants
 
 
 class TestApplyIPv4Preference:
@@ -30,7 +30,7 @@ class TestApplyIPv4Preference:
         original = socket.getaddrinfo
         apply_ipv4_preference(force=True)
         assert socket.getaddrinfo is not original
-        assert getattr(socket.getaddrinfo, "_hermes_ipv4_patched", False) is True
+        assert getattr(socket.getaddrinfo, "_fulilian_ipv4_patched", False) is True
 
     def test_double_patch_is_safe(self):
         """Calling apply twice doesn't double-wrap."""

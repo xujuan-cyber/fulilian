@@ -2,7 +2,7 @@
 
 This module holds the per-version migration steps that used to live as a
 768-line ladder of ``if current_ver < N:`` blocks inside
-``hermes_cli.config.migrate_config``. Each step is a function
+``fulilian_cli.config.migrate_config``. Each step is a function
 ``_migrate_to_N(results, quiet)`` whose body is copied verbatim from the
 original block; only the shared skeleton (the version gate and the strict
 ascending ordering) lives in the :func:`run_migrations` driver.
@@ -23,14 +23,14 @@ Semantics preserved exactly from the original ladder:
 
 Import direction / cycle avoidance:
 
-``hermes_cli.config`` imports :func:`run_migrations` lazily (inside
+``fulilian_cli.config`` imports :func:`run_migrations` lazily (inside
 ``migrate_config``), and every step function here resolves its helpers
 (``read_raw_config``, ``_persist_migration``, ``get_env_value``, …) lazily
-through the live ``hermes_cli.config`` module object at call time via
+through the live ``fulilian_cli.config`` module object at call time via
 :func:`_cfg`. There is deliberately NO module-level import of
-``hermes_cli.config`` here, so no circular import can form — and, just as
-importantly, tests that monkeypatch helpers on ``hermes_cli.config`` (e.g.
-``patch("hermes_cli.config.read_raw_config", ...)``) keep working, because
+``fulilian_cli.config`` here, so no circular import can form — and, just as
+importantly, tests that monkeypatch helpers on ``fulilian_cli.config`` (e.g.
+``patch("fulilian_cli.config.read_raw_config", ...)``) keep working, because
 the steps always go through the module attribute rather than a bound-early
 reference.
 """
@@ -44,7 +44,7 @@ from typing import Any, Callable, Dict, List, Tuple
 #: below this are NOT auto-migrated any more (policy decision, July 2026):
 #: v12 predates roughly two years of releases, and carrying the sub-v12
 #: migration steps (plus the env bridges they consumed, e.g.
-#: HERMES_TOOL_PROGRESS*) forever is not worth it. Below-floor configs are
+#: FULILIAN_TOOL_PROGRESS*) forever is not worth it. Below-floor configs are
 #: left byte-for-byte untouched — the process continues with the config as-is
 #: (defaults deep-merged at read time, matching the non-fatal posture used
 #: for unparseable configs) and a clear message tells the user how to
@@ -55,19 +55,19 @@ SUPPORT_FLOOR_VERSION = 12
 
 def support_floor_message() -> str:
     """Human-facing explanation shown when a config is below the floor."""
-    from fulilian_constants import display_hermes_home
+    from fulilian_constants import display_fulilian_home
 
     return (
         f"This config predates version {SUPPORT_FLOOR_VERSION} (~2 years old) "
         "and can no longer be auto-migrated. Back up "
-        f"{display_hermes_home()}/config.yaml and run `hermes setup` to "
+        f"{display_fulilian_home()}/config.yaml and run `fulilian setup` to "
         f"regenerate, or manually set _config_version: {SUPPORT_FLOOR_VERSION} "
         "after reviewing the changelog."
     )
 
 
 def _cfg():
-    """Return the live ``hermes_cli.config`` module (lazy, cycle-free)."""
+    """Return the live ``fulilian_cli.config`` module (lazy, cycle-free)."""
     from fulilian_cli import config
 
     return config
@@ -303,7 +303,7 @@ def _migrate_to_21(results: Dict[str, Any], quiet: bool) -> None:
     _c = _cfg()
     read_raw_config = _c.read_raw_config
     _persist_migration = _c._persist_migration
-    get_hermes_home = _c.get_hermes_home
+    get_fulilian_home = _c.get_fulilian_home
     fast_safe_load = _c.fast_safe_load
 
     config = read_raw_config()
@@ -317,10 +317,10 @@ def _migrate_to_21(results: Dict[str, Any], quiet: bool) -> None:
             disabled = []
         disabled_set = set(disabled)
 
-        # Scan ``$HERMES_HOME/plugins/`` for currently installed user plugins.
+        # Scan ``$FULILIAN_HOME/plugins/`` for currently installed user plugins.
         grandfathered: List[str] = []
         try:
-            user_plugins_dir = get_hermes_home() / "plugins"
+            user_plugins_dir = get_fulilian_home() / "plugins"
             if user_plugins_dir.is_dir():
                 for child in sorted(user_plugins_dir.iterdir()):
                     if not child.is_dir():
@@ -357,7 +357,7 @@ def _migrate_to_21(results: Dict[str, Any], quiet: bool) -> None:
             else:
                 print(
                     "  ✓ Plugins now opt-in: no existing plugins to grandfather. "
-                    "Use `hermes plugins enable <name>` to activate."
+                    "Use `fulilian plugins enable <name>` to activate."
                 )
 
 
@@ -368,7 +368,7 @@ def _migrate_to_23(results: Dict[str, Any], quiet: bool) -> None:
     # unification under `auxiliary.curator`) never wrote the curator section
     # to disk. The runtime deep-merge in `load_config()` fills defaults at
     # read time, so the curator *functions*; but users can't see/edit the
-    # settings in their `config.yaml`, and `hermes curator status` has no
+    # settings in their `config.yaml`, and `fulilian curator status` has no
     # stable logs dir to point at until the first run mkdir's it.
     #
     # This migration:
@@ -378,17 +378,17 @@ def _migrate_to_23(results: Dict[str, Any], quiet: bool) -> None:
     #   2. Writes the `auxiliary.curator` aux-task slot (provider, model,
     #      base_url, api_key, timeout, extra_body) — canonical slot for
     #      routing the curator fork to a cheaper aux model.
-    #   3. Creates `~/.hermes/logs/curator/` if missing (belt-and-suspenders
-    #      on top of ensure_hermes_home() — old profiles that predate this
+    #   3. Creates `~/.fulilian/logs/curator/` if missing (belt-and-suspenders
+    #      on top of ensure_fulilian_home() — old profiles that predate this
     #      migration still benefit).
     _c = _cfg()
     read_raw_config = _c.read_raw_config
     _persist_migration = _c._persist_migration
-    get_hermes_home = _c.get_hermes_home
+    get_fulilian_home = _c.get_fulilian_home
     DEFAULT_CONFIG = _c.DEFAULT_CONFIG
 
     try:
-        curator_dir = get_hermes_home() / "logs" / "curator"
+        curator_dir = get_fulilian_home() / "logs" / "curator"
         curator_dir.mkdir(parents=True, exist_ok=True)
     except Exception as e:
         results["warnings"].append(f"Could not create {curator_dir}: {e}")
@@ -439,7 +439,7 @@ def _migrate_to_23(results: Dict[str, Any], quiet: bool) -> None:
             if not quiet:
                 print(
                     "  ✓ Curator settings now available "
-                    f"({', '.join(added_curator)}) — edit via `hermes config set`"
+                    f"({', '.join(added_curator)}) — edit via `fulilian config set`"
                 )
         if added_aux:
             results["config_added"].append(
@@ -448,7 +448,7 @@ def _migrate_to_23(results: Dict[str, Any], quiet: bool) -> None:
             if not quiet:
                 print(
                     "  ✓ auxiliary.curator settings now available "
-                    f"({', '.join(added_aux)}) — edit via `hermes config set`"
+                    f"({', '.join(added_aux)}) — edit via `fulilian config set`"
                 )
 
 
@@ -513,7 +513,7 @@ def _migrate_to_29(results: Dict[str, Any], quiet: bool) -> None:
 # is supplied by load_config()'s deep-merge at read time, and persisting a
 # default-valued key would only bloat a lean config (it gets stripped on
 # save anyway). Existing installs that WANT the old always-consolidate
-# behavior set it to true explicitly via `hermes config set`.
+# behavior set it to true explicitly via `fulilian config set`.
 # (No registry entry: this version bump has no migration step.)
 
 
@@ -820,7 +820,7 @@ def _migrate_to_38(results: Dict[str, Any], quiet: bool) -> None:
     message = (
         "Removed legacy Relay plugin from plugins.enabled: "
         f"{', '.join(removed)}. Configure native Relay plugins with "
-        "HERMES_NEMO_RELAY_PLUGINS_TOML."
+        "FULILIAN_NEMO_RELAY_PLUGINS_TOML."
     )
     results["warnings"].append(message)
     if not quiet:
@@ -833,7 +833,7 @@ def _migrate_to_39(results: Dict[str, Any], quiet: bool) -> None:
     # period that has since ended server-side, leaving every Nous-signed-in
     # install paying ~2.7K tokens of schema per API call for tools that can
     # only refuse. They were removed in favor of the standard video_gen
-    # provider surface (`video_generate`, `hermes tools` → Video Generation).
+    # provider surface (`video_generate`, `fulilian tools` → Video Generation).
     # Strip the toolset key wherever the auto-backfill or a picker save wrote
     # it, so stale config can't resurrect an unknown toolset.
     _c = _cfg()
@@ -858,7 +858,7 @@ def _migrate_to_39(results: Dict[str, Any], quiet: bool) -> None:
         if not quiet:
             print(
                 "  ✓ Removed the retired BFL FLUX 3 toolset from saved toolset "
-                "lists — video generation now lives under `hermes tools` → "
+                "lists — video generation now lives under `fulilian tools` → "
                 "Video Generation (Nous Subscription or FAL)."
             )
 

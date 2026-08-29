@@ -239,7 +239,7 @@ class TestCommandCodeModelFiltering:
 class TestCommandCodeFetchModelsPickerContract:
     """``fetch_models`` must accept the kwargs the model picker passes.
 
-    Regression: the generic live-fetch path in ``hermes_cli/models.py``
+    Regression: the generic live-fetch path in ``fulilian_cli/models.py``
     (``provider_model_ids``) calls ``profile.fetch_models(api_key=...,
     base_url=...)``. The original CommandCode overrides only accepted
     ``api_key``/``timeout``, so every picker open raised TypeError, which

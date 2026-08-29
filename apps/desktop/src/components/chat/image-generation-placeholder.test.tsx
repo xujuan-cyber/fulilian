@@ -80,7 +80,7 @@ describe('DiffusionCanvas scheduling', () => {
   afterEach(() => {
     cleanup()
     vi.restoreAllMocks()
-    delete (window as unknown as { hermesDesktop?: unknown }).hermesDesktop
+    delete (window as unknown as { fulilianDesktop?: unknown }).fulilianDesktop
   })
 
   it('cancels its loop while inactive and resumes only when the window is observable', () => {
@@ -160,7 +160,7 @@ describe('DiffusionCanvas frame budget', () => {
   afterEach(() => {
     cleanup()
     vi.restoreAllMocks()
-    delete (window as unknown as { hermesDesktop?: unknown }).hermesDesktop
+    delete (window as unknown as { fulilianDesktop?: unknown }).fulilianDesktop
   })
 
   it('paints at most ~15fps: frames inside the interval reschedule without redrawing', () => {

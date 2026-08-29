@@ -17,7 +17,7 @@ from agent import relay_llm, relay_runtime
 
 @pytest.fixture()
 def relay_turn(tmp_path, monkeypatch):
-    monkeypatch.setenv("HERMES_HOME", str(tmp_path / "profile"))
+    monkeypatch.setenv("FULILIAN_HOME", str(tmp_path / "profile"))
     relay_runtime._reset_for_tests()
     lease = relay_runtime.SESSION_COORDINATOR.acquire_conversation(
         profile_key=relay_runtime.current_profile_key(),
@@ -198,12 +198,12 @@ def test_relay_protocol_drives_operation_and_codec(
 
 
 def test_relay_metadata_preserves_provider_name():
-    metadata = {"api_mode": "chat_completions", "hermes.provider": "explicit"}
+    metadata = {"api_mode": "chat_completions", "fulilian.provider": "explicit"}
 
     assert relay_llm._relay_metadata("openrouter", metadata) == metadata
     assert relay_llm._relay_metadata("openrouter", {"api_mode": "chat_completions"}) == {
         "api_mode": "chat_completions",
-        "hermes.provider": "openrouter",
+        "fulilian.provider": "openrouter",
     }
 
 
@@ -313,13 +313,13 @@ def test_stream_uses_rewritten_request_and_post_intercept_chunks(relay_turn):
         ])
 
     relay.intercepts.register_llm_request(
-        "hermes-test-request",
+        "fulilian-test-request",
         1,
         False,
         rewrite_request,
     )
     relay.intercepts.register_llm_stream_execution(
-        "hermes-test-stream",
+        "fulilian-test-stream",
         1,
         rewrite_stream,
     )
@@ -351,8 +351,8 @@ def test_stream_uses_rewritten_request_and_post_intercept_chunks(relay_turn):
         )
         chunks = list(stream)
     finally:
-        relay.intercepts.deregister_llm_stream_execution("hermes-test-stream")
-        relay.intercepts.deregister_llm_request("hermes-test-request")
+        relay.intercepts.deregister_llm_stream_execution("fulilian-test-stream")
+        relay.intercepts.deregister_llm_request("fulilian-test-request")
 
     assert captured_requests[0]["temperature"] == 0.25
     assert captured_requests[0]["extra_headers"] == {
@@ -367,7 +367,7 @@ def test_live_stream_defers_runtime_shutdown_until_exhaustion(
     tmp_path,
     monkeypatch,
 ):
-    monkeypatch.setenv("HERMES_HOME", str(tmp_path / "stream-shutdown-profile"))
+    monkeypatch.setenv("FULILIAN_HOME", str(tmp_path / "stream-shutdown-profile"))
     relay_runtime._reset_for_tests()
     host = relay_runtime.get_runtime()
     assert host is not None
@@ -794,7 +794,7 @@ def test_anthropic_codec_preserves_tool_history_and_cached_system_blocks(relay_t
         "system": [
             {
                 "type": "text",
-                "text": "You are Hermes.",
+                "text": "You are Fulilian.",
                 "cache_control": {"type": "ephemeral"},
             }
         ],
@@ -979,7 +979,7 @@ def test_stream_current_unwraps_completed_response(tmp_path, monkeypatch):
     without threading ``completed_response_predicate``, regressing that path
     into ``TypeError: 'types.SimpleNamespace' object is not iterable``.
     """
-    monkeypatch.setenv("HERMES_HOME", str(tmp_path / "profile"))
+    monkeypatch.setenv("FULILIAN_HOME", str(tmp_path / "profile"))
     relay_runtime._reset_for_tests()
     lease = relay_runtime.SESSION_COORDINATOR.acquire_conversation(
         profile_key=relay_runtime.current_profile_key(),
@@ -1021,7 +1021,7 @@ def test_stream_current_unwraps_completed_response(tmp_path, monkeypatch):
 def test_stream_current_streams_iterators_with_predicate(tmp_path, monkeypatch):
     """A genuine chunk iterator still flows through as a stream when the
     completed-response predicate is supplied."""
-    monkeypatch.setenv("HERMES_HOME", str(tmp_path / "profile"))
+    monkeypatch.setenv("FULILIAN_HOME", str(tmp_path / "profile"))
     relay_runtime._reset_for_tests()
     lease = relay_runtime.SESSION_COORDINATOR.acquire_conversation(
         profile_key=relay_runtime.current_profile_key(),
@@ -1050,7 +1050,7 @@ def test_stream_current_streams_iterators_with_predicate(tmp_path, monkeypatch):
 
 
 def test_stream_current_primes_lazy_completed_response(relay_turn, monkeypatch):
-    """A lazy Relay stream must run once before Hermes decides its shape."""
+    """A lazy Relay stream must run once before Fulilian decides its shape."""
     _relay, _turn = relay_turn
     completed = _completed_response()
 
@@ -1084,7 +1084,7 @@ def test_stream_current_unwraps_completed_response_with_real_interceptor(relay_t
         return await next_call(request)
 
     relay.intercepts.register_llm_stream_execution(
-        "hermes-test-prime-completed",
+        "fulilian-test-prime-completed",
         1,
         identity_stream,
     )
@@ -1101,7 +1101,7 @@ def test_stream_current_unwraps_completed_response_with_real_interceptor(relay_t
         assert result is completed
     finally:
         relay.intercepts.deregister_llm_stream_execution(
-            "hermes-test-prime-completed"
+            "fulilian-test-prime-completed"
         )
 
 
@@ -1118,7 +1118,7 @@ def test_stream_current_preserves_real_relay_interceptor_chunks(relay_turn):
         return generate()
 
     relay.intercepts.register_llm_stream_execution(
-        "hermes-test-prime-stream",
+        "fulilian-test-prime-stream",
         1,
         rewrite_stream,
     )
@@ -1139,7 +1139,7 @@ def test_stream_current_preserves_real_relay_interceptor_chunks(relay_turn):
         assert result.output_modified is True
     finally:
         relay.intercepts.deregister_llm_stream_execution(
-            "hermes-test-prime-stream"
+            "fulilian-test-prime-stream"
         )
 
 

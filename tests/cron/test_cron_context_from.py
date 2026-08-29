@@ -11,20 +11,20 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 @pytest.fixture
 def cron_env(tmp_path, monkeypatch):
-    """Isolated cron environment with temp HERMES_HOME."""
-    hermes_home = tmp_path / ".hermes"
-    hermes_home.mkdir()
-    (hermes_home / "cron").mkdir()
-    (hermes_home / "cron" / "output").mkdir()
-    monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+    """Isolated cron environment with temp FULILIAN_HOME."""
+    fulilian_home = tmp_path / ".fulilian"
+    fulilian_home.mkdir()
+    (fulilian_home / "cron").mkdir()
+    (fulilian_home / "cron" / "output").mkdir()
+    monkeypatch.setenv("FULILIAN_HOME", str(fulilian_home))
 
     import cron.jobs as jobs_mod
-    monkeypatch.setattr(jobs_mod, "HERMES_DIR", hermes_home)
-    monkeypatch.setattr(jobs_mod, "CRON_DIR", hermes_home / "cron")
-    monkeypatch.setattr(jobs_mod, "JOBS_FILE", hermes_home / "cron" / "jobs.json")
-    monkeypatch.setattr(jobs_mod, "OUTPUT_DIR", hermes_home / "cron" / "output")
+    monkeypatch.setattr(jobs_mod, "FULILIAN_DIR", fulilian_home)
+    monkeypatch.setattr(jobs_mod, "CRON_DIR", fulilian_home / "cron")
+    monkeypatch.setattr(jobs_mod, "JOBS_FILE", fulilian_home / "cron" / "jobs.json")
+    monkeypatch.setattr(jobs_mod, "OUTPUT_DIR", fulilian_home / "cron" / "output")
 
-    return hermes_home
+    return fulilian_home
 
 
 class TestJobContextFromField:

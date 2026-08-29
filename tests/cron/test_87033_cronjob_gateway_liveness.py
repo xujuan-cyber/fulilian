@@ -4,7 +4,7 @@ The builtin cron ticker only runs inside the gateway process. Before the
 fix, ``cronjob(action="create")`` returned a clean success even with no
 gateway running, so the agent confidently told the user a recurring task
 was scheduled while the job could never fire. The CLI already warned
-(``hermes cron list`` / ``hermes cron status``); the agent path did not.
+(``fulilian cron list`` / ``fulilian cron status``); the agent path did not.
 
 Contract pinned here:
 
@@ -24,17 +24,17 @@ import pytest
 
 
 @pytest.fixture
-def hermes_env(tmp_path, monkeypatch):
-    """Isolate HERMES_HOME for each test so jobs don't leak."""
-    home = tmp_path / ".hermes"
+def fulilian_env(tmp_path, monkeypatch):
+    """Isolate FULILIAN_HOME for each test so jobs don't leak."""
+    home = tmp_path / ".fulilian"
     home.mkdir()
     (home / "cron").mkdir()
-    monkeypatch.setenv("HERMES_HOME", str(home))
+    monkeypatch.setenv("FULILIAN_HOME", str(home))
 
     import importlib
 
     import fulilian_constants
-    importlib.reload(hermes_constants)
+    importlib.reload(fulilian_constants)
     import cron.jobs
     importlib.reload(cron.jobs)
     import cron.scheduler
@@ -58,7 +58,7 @@ def _create_job() -> dict:
 
 
 class TestCreateSurfacesGatewayLiveness:
-    def test_create_with_gateway_running_has_no_warning(self, hermes_env):
+    def test_create_with_gateway_running_has_no_warning(self, fulilian_env):
         with patch_liveness(provider="builtin", pids=[12345]) as patches:
             result = _create_job()
 
@@ -66,7 +66,7 @@ class TestCreateSurfacesGatewayLiveness:
         assert result["gateway_running"] is True
         assert "warning" not in result
 
-    def test_create_without_gateway_warns_not_scheduled(self, hermes_env):
+    def test_create_without_gateway_warns_not_scheduled(self, fulilian_env):
         with (
             patch_liveness(provider="builtin", pids=[]),
         ):
@@ -83,7 +83,7 @@ class TestCreateSurfacesGatewayLiveness:
         )
         assert "gateway" in warning.lower()
 
-    def test_non_builtin_provider_is_exempt(self, hermes_env):
+    def test_non_builtin_provider_is_exempt(self, fulilian_env):
         """External schedulers (e.g. Chronos) fire without the gateway —
         no false alarm may be raised for them."""
         with patch_liveness(provider="chronos", pids=[]):
@@ -93,7 +93,7 @@ class TestCreateSurfacesGatewayLiveness:
         assert result["gateway_running"] is True
         assert "warning" not in result
 
-    def test_failed_probe_stays_neutral(self, hermes_env):
+    def test_failed_probe_stays_neutral(self, fulilian_env):
         """If liveness cannot be determined, say nothing either way."""
         with patch_liveness(provider=None, pids=[]):  # probe raises → None
             result = _create_job()
@@ -113,7 +113,7 @@ class TestListSurfacesGatewayLiveness:
 
         return json.loads(cronjob(action="list"))
 
-    def test_list_with_gateway_running_has_no_warning(self, hermes_env):
+    def test_list_with_gateway_running_has_no_warning(self, fulilian_env):
         _create_job()  # ensure at least one job exists
         with patch_liveness(provider="builtin", pids=[12345]):
             result = self._list_jobs()
@@ -123,7 +123,7 @@ class TestListSurfacesGatewayLiveness:
         assert result["gateway_running"] is True
         assert "warning" not in result
 
-    def test_list_without_gateway_warns_jobs_inert(self, hermes_env):
+    def test_list_without_gateway_warns_jobs_inert(self, fulilian_env):
         _create_job()
         with patch_liveness(provider="builtin", pids=[]):
             result = self._list_jobs()
@@ -136,7 +136,7 @@ class TestListSurfacesGatewayLiveness:
         )
         assert "these jobs" in warning
 
-    def test_list_empty_without_gateway_stays_quiet(self, hermes_env):
+    def test_list_empty_without_gateway_stays_quiet(self, fulilian_env):
         """Nothing scheduled + no gateway → no alarm; there is nothing inert."""
         with patch_liveness(provider="builtin", pids=[]):
             result = self._list_jobs()
@@ -145,7 +145,7 @@ class TestListSurfacesGatewayLiveness:
         assert result["count"] == 0
         assert "warning" not in result
 
-    def test_list_non_builtin_provider_is_exempt(self, hermes_env):
+    def test_list_non_builtin_provider_is_exempt(self, fulilian_env):
         _create_job()
         with patch_liveness(provider="chronos", pids=[]):
             result = self._list_jobs()
@@ -189,13 +189,13 @@ class _LivenessPatches:
 
         self._stack.enter_context(
             patch(
-                "hermes_cli.cron._active_cron_provider_name",
+                "fulilian_cli.cron._active_cron_provider_name",
                 side_effect=_fake_provider_name,
             )
         )
         self._stack.enter_context(
             patch(
-                "hermes_cli.gateway.find_gateway_pids",
+                "fulilian_cli.gateway.find_gateway_pids",
                 return_value=list(self._pids),
             )
         )
@@ -225,7 +225,7 @@ class TestRuntimeLockFirstLiveness:
     gateway's lifetime and short-circuits to True before the pid scan.
     """
 
-    def test_lock_active_reports_alive_despite_empty_pid_scan(self, hermes_env):
+    def test_lock_active_reports_alive_despite_empty_pid_scan(self, fulilian_env):
         """The reported false alarm: lock held, pid scan empty → alive."""
         _create_job()
         with patch_liveness(provider="builtin", pids=[], lock_active=True):
@@ -243,9 +243,9 @@ class TestRuntimeLockFirstLiveness:
         import fulilian_cli.cron as cron_cli
 
         with (
-            patch("hermes_cli.cron._active_cron_provider_name", return_value="builtin"),
+            patch("fulilian_cli.cron._active_cron_provider_name", return_value="builtin"),
             patch("gateway.status.is_gateway_runtime_lock_active", return_value=False),
-            patch("hermes_cli.gateway.find_gateway_pids", return_value=[424242]),
+            patch("fulilian_cli.gateway.find_gateway_pids", return_value=[424242]),
         ):
             assert cron_cli._builtin_gateway_liveness() is True
 
@@ -255,9 +255,9 @@ class TestRuntimeLockFirstLiveness:
         import fulilian_cli.cron as cron_cli
 
         with (
-            patch("hermes_cli.cron._active_cron_provider_name", return_value="builtin"),
+            patch("fulilian_cli.cron._active_cron_provider_name", return_value="builtin"),
             patch("gateway.status.is_gateway_runtime_lock_active", return_value=False),
-            patch("hermes_cli.gateway.find_gateway_pids", return_value=[]),
+            patch("fulilian_cli.gateway.find_gateway_pids", return_value=[]),
         ):
             assert cron_cli._builtin_gateway_liveness() is False
 
@@ -270,18 +270,18 @@ class TestRuntimeLockFirstLiveness:
         import fulilian_cli.cron as cron_cli
 
         with (
-            patch("hermes_cli.cron._active_cron_provider_name", return_value="builtin"),
+            patch("fulilian_cli.cron._active_cron_provider_name", return_value="builtin"),
             patch(
                 "gateway.status.is_gateway_runtime_lock_active",
                 side_effect=OSError("lock probe failed"),
             ),
-            patch("hermes_cli.gateway.find_gateway_pids", return_value=[424242]),
+            patch("fulilian_cli.gateway.find_gateway_pids", return_value=[424242]),
         ):
             assert cron_cli._builtin_gateway_liveness() is True
 
 
 class TestCronStatusLockFirst:
-    """`hermes cron status` shares the lock-first false-alarm fix (#95947).
+    """`fulilian cron status` shares the lock-first false-alarm fix (#95947).
 
     Sibling site of `_builtin_gateway_liveness`: it previously declared
     "Gateway is not running — cron jobs will NOT fire" from a bare
@@ -298,8 +298,8 @@ class TestCronStatusLockFirst:
 
         out = io.StringIO()
         with (
-            patch("hermes_cli.cron._active_cron_provider_name", return_value="builtin"),
-            patch("hermes_cli.gateway.find_gateway_pids", return_value=list(pids)),
+            patch("fulilian_cli.cron._active_cron_provider_name", return_value="builtin"),
+            patch("fulilian_cli.gateway.find_gateway_pids", return_value=list(pids)),
             patch(
                 "gateway.status.is_gateway_runtime_lock_active",
                 return_value=lock_active,
@@ -310,11 +310,11 @@ class TestCronStatusLockFirst:
             cron_cli.cron_status()
         return out.getvalue()
 
-    def test_lock_active_suppresses_not_running_false_alarm(self, hermes_env):
+    def test_lock_active_suppresses_not_running_false_alarm(self, fulilian_env):
         text = self._run_status(pids=[], lock_active=True, lock_pid=4242)
         assert "NOT fire" not in text
         assert "Gateway is running" in text or "running" in text
 
-    def test_no_lock_no_pids_still_warns(self, hermes_env):
+    def test_no_lock_no_pids_still_warns(self, fulilian_env):
         text = self._run_status(pids=[], lock_active=False)
         assert "NOT fire" in text

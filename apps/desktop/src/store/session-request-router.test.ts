@@ -20,8 +20,8 @@ const secondaryGateways: Array<{
 
 let promptAckStatus: null | string = null
 
-vi.mock('@/hermes', () => ({
-  HermesGateway: class {
+vi.mock('@/fulilian', () => ({
+  FulilianGateway: class {
     connectionState = 'closed'
     eventHandler: ((event: { payload?: Record<string, unknown>; session_id?: string; type: string }) => void) | null =
       null
@@ -81,7 +81,7 @@ const { requestForSessionProfile, sessionRpcNeedsProfileRoute } = await import('
 const { $connectionsRegistry } = await import('./connection-registry-state')
 
 function installDesktop(): void {
-  ;(window as unknown as { hermesDesktop: unknown }).hermesDesktop = {
+  ;(window as unknown as { fulilianDesktop: unknown }).fulilianDesktop = {
     getConnection: vi.fn(async (profile: null | string) =>
       profile ? { port: 5151, profile, token: 'secondary-token' } : { port: 4242, token: 'primary-token' }
     ),
@@ -112,7 +112,7 @@ beforeEach(() => {
 afterEach(() => {
   closeSecondaryGateways()
   vi.clearAllMocks()
-  delete (window as unknown as { hermesDesktop?: unknown }).hermesDesktop
+  delete (window as unknown as { fulilianDesktop?: unknown }).fulilianDesktop
 })
 
 describe('$activeGatewayRoute (registry-owned active profile)', () => {
@@ -193,7 +193,7 @@ describe('requestForSessionProfile', () => {
     await expect(
       requestForSessionProfile('loki', ambient as never, 'session.resume', { session_id: 'stored-a' })
     ).resolves.toEqual({ method: 'session.resume', params: { session_id: 'stored-a' } })
-    expect(window.hermesDesktop!.getConnection).toHaveBeenCalledWith('loki')
+    expect(window.fulilianDesktop!.getConnection).toHaveBeenCalledWith('loki')
     expect(secondaryGateways).toHaveLength(1)
     expect(primary.request).not.toHaveBeenCalled()
     expect(ambient).not.toHaveBeenCalled()
@@ -207,9 +207,9 @@ describe('requestForSessionProfile', () => {
 
     const desktop = (
       window as unknown as {
-        hermesDesktop: { getConnectionFor: ReturnType<typeof vi.fn> }
+        fulilianDesktop: { getConnectionFor: ReturnType<typeof vi.fn> }
       }
-    ).hermesDesktop
+    ).fulilianDesktop
 
     const ambient = vi.fn(async () => ({ ambient: true }))
 

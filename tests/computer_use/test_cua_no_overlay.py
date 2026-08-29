@@ -2,7 +2,7 @@
 
 cua-driver's cursor overlay rendering loop can consume CPU indefinitely when
 idle (#28152, #47032), and on Linux/X11 its fullscreen always-on-top overlay
-window can wedge the desktop when a session ends uncleanly. Hermes passes
+window can wedge the desktop when a session ends uncleanly. Fulilian passes
 ``--no-overlay`` to suppress it when the ``computer_use.no_overlay`` config is
 enabled (or auto-detected on macOS, headless Linux / WSL2, and Linux X11).
 
@@ -25,7 +25,7 @@ class TestNoOverlayFlag:
 
 
     def test_explicit_true_overrides(self):
-        with patch("hermes_cli.config.load_config",
+        with patch("fulilian_cli.config.load_config",
                    return_value={"computer_use": {"no_overlay": True}}):
             assert cua_backend._cua_no_overlay() is True
 
@@ -37,7 +37,7 @@ class TestNoOverlayFlag:
         macOS-only: the auto-detect verdict IS ``sys.platform == "darwin"``,
         so a patched platform would only re-assert the patch.
         """
-        with patch("hermes_cli.config.load_config",
+        with patch("fulilian_cli.config.load_config",
                    side_effect=RuntimeError("boom")):
             assert cua_backend._cua_no_overlay() is True
 
@@ -49,7 +49,7 @@ class TestNoOverlayFlag:
         ``/proc/version``, neither of which exists to be probed elsewhere.
         """
         monkeypatch.delenv("DISPLAY", raising=False)
-        with patch("hermes_cli.config.load_config",
+        with patch("fulilian_cli.config.load_config",
                    side_effect=RuntimeError("boom")):
             assert cua_backend._cua_no_overlay() is True
 
@@ -65,7 +65,7 @@ class TestNoOverlayFlag:
         monkeypatch.setenv("DISPLAY", ":0")
         monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
         monkeypatch.delenv("XDG_SESSION_TYPE", raising=False)
-        with patch("hermes_cli.config.load_config", return_value={}):
+        with patch("fulilian_cli.config.load_config", return_value={}):
             assert cua_backend._cua_no_overlay() is True
 
     @pytest.mark.linux_only
@@ -74,7 +74,7 @@ class TestNoOverlayFlag:
         monkeypatch.setenv("DISPLAY", ":0")
         monkeypatch.setenv("XDG_SESSION_TYPE", "x11")
         monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
-        with patch("hermes_cli.config.load_config", return_value={}):
+        with patch("fulilian_cli.config.load_config", return_value={}):
             assert cua_backend._cua_no_overlay() is True
 
     @pytest.mark.linux_only
@@ -85,7 +85,7 @@ class TestNoOverlayFlag:
         monkeypatch.setenv("DISPLAY", ":0")
         monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
         monkeypatch.setenv("XDG_SESSION_TYPE", "wayland")
-        with patch("hermes_cli.config.load_config", return_value={}):
+        with patch("fulilian_cli.config.load_config", return_value={}):
             assert cua_backend._cua_no_overlay() is False
 
     @pytest.mark.linux_only
@@ -95,7 +95,7 @@ class TestNoOverlayFlag:
         monkeypatch.setenv("DISPLAY", ":0")
         monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
         monkeypatch.delenv("XDG_SESSION_TYPE", raising=False)
-        with patch("hermes_cli.config.load_config",
+        with patch("fulilian_cli.config.load_config",
                    return_value={"computer_use": {"no_overlay": False}}):
             assert cua_backend._cua_no_overlay() is False
 

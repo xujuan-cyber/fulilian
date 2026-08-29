@@ -1,6 +1,6 @@
 import { type MutableRefObject, useCallback } from 'react'
 
-import { PROMPT_SUBMIT_REQUEST_TIMEOUT_MS } from '@/hermes'
+import { PROMPT_SUBMIT_REQUEST_TIMEOUT_MS } from '@/fulilian'
 import type { Translations } from '@/i18n'
 import { type ChatMessage, textPart } from '@/lib/chat-messages'
 import { optimisticAttachmentRef } from '@/lib/chat-runtime'
@@ -761,7 +761,7 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
           // row display_kind=hidden so no client renders it as a bubble.
           ...(options?.displayKind === 'hidden' && { display_kind: 'hidden' }),
           // Typed into the floating HUD, so the user is looking at another app
-          // rather than at Hermes. The gateway turns this into a per-turn hint
+          // rather than at Fulilian. The gateway turns this into a per-turn hint
           // to read the window underneath and work in it.
           ...($hudMode.get() && { surface: 'hud' }),
           // A queue drain is a "run after" message, never a live-turn

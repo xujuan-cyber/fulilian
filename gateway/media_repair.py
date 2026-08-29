@@ -1,6 +1,6 @@
 """Repair model-mangled ``computer_use`` screenshot paths in final responses.
 
-``computer_use`` persists a bounded screenshot into the Hermes image cache and
+``computer_use`` persists a bounded screenshot into the Fulilian image cache and
 tells the model its absolute path.  Some models rewrite a Windows path into a
 POSIX-looking one (``C:\\Users\\Alice\\...`` -> ``/Users/Alice/...``) when
 emitting an explicit ``MEDIA:`` directive, so delivery-path validation rejects

@@ -8,7 +8,7 @@ description: "Spawn isolated child agents for parallel workstreams with delegate
 
 The `delegate_task` tool spawns child AIAgent instances with isolated context, inherited tool access, and their own terminal sessions. Each child gets a fresh conversation and works independently — only its final summary enters the parent's context.
 
-Top-level model calls run in the background automatically. Hermes returns a handle immediately so the conversation can continue, then posts the result back as a new message. An orchestrator subagent waits for its own workers so it can synthesize their results before returning.
+Top-level model calls run in the background automatically. Fulilian returns a handle immediately so the conversation can continue, then posts the result back as a new message. An orchestrator subagent waits for its own workers so it can synthesize their results before returning.
 
 ## Single Task
 
@@ -37,7 +37,7 @@ delegate_task(tasks=[
 Subagents start with a **completely fresh conversation**. They have zero knowledge of the parent's conversation history, prior tool calls, or anything discussed before delegation. The subagent's only context comes from the `goal` and `context` fields the parent agent populates when it calls `delegate_task`.
 :::
 
-One exception: when the parent has a resolved workspace directory, every subagent's system prompt embeds that workspace's **project context files** (`.hermes.md` > AGENTS.md chain > CLAUDE.md > `.cursorrules` — the same discovery, priority, and size caps as the main agent's system prompt; SOUL.md is excluded). Subagents working in a repo operate under the repo's own conventions without having to rediscover them.
+One exception: when the parent has a resolved workspace directory, every subagent's system prompt embeds that workspace's **project context files** (`.fulilian.md` > AGENTS.md chain > CLAUDE.md > `.cursorrules` — the same discovery, priority, and size caps as the main agent's system prompt; SOUL.md is excluded). Subagents working in a repo operate under the repo's own conventions without having to rediscover them.
 
 This means the parent agent must pass **everything** the subagent needs in the call:
 
@@ -117,7 +117,7 @@ delegate_task(
 
 ## Batch Mode Details
 
-When a top-level agent provides a `tasks` array, Hermes returns one background handle, runs the subagents in parallel, and posts one consolidated result after every child finishes. An orchestrator subagent waits for its batch in the current turn so it can synthesize the results.
+When a top-level agent provides a `tasks` array, Fulilian returns one background handle, runs the subagents in parallel, and posts one consolidated result after every child finishes. An orchestrator subagent waits for its batch in the current turn so it can synthesize the results.
 
 - **Maximum concurrency:** 3 tasks by default (configurable via `delegation.max_concurrent_children` or the `DELEGATION_MAX_CONCURRENT_CHILDREN` env var; floor of 1, no hard ceiling). Batches larger than the limit return a tool error rather than being silently truncated.
 - **Thread pool:** Uses `ThreadPoolExecutor` with the configured concurrency limit as max workers
@@ -129,9 +129,9 @@ Synchronous single-task delegation from an orchestrator runs directly without th
 
 ### Durable background completions
 
-When a background delegation finishes, Hermes stores its completion event in
+When a background delegation finishes, Fulilian stores its completion event in
 the active profile's `state.db` before publishing it to the normal fresh-turn
-queue. If Hermes restarts after completion but before delivery, the pending
+queue. If Fulilian restarts after completion but before delivery, the pending
 event is restored and routed through the same ownership checks. Competing
 consumers use a durable claim, so only the consumer that successfully accepts
 the synthetic turn acknowledges delivery; failed attempts release the claim for
@@ -139,7 +139,7 @@ retry.
 
 This does not resume child execution after a crash. A delegation whose owner
 process disappears while it is still running is recorded as `unknown`, because
-Hermes cannot prove whether its external side effects happened. Pending and
+Fulilian cannot prove whether its external side effects happened. Pending and
 delivered records are bounded and profile-local.
 
 ### Child background-process notifications
@@ -167,7 +167,7 @@ delegation:
 You can configure a different model for subagents via `config.yaml` — useful for delegating simple tasks to cheaper/faster models:
 
 ```yaml
-# In ~/.hermes/config.yaml
+# In ~/.fulilian/config.yaml
 delegation:
   model: "google/gemini-flash-2.0"    # Cheaper model for subagents
   provider: "openrouter"              # Optional: route subagents to a different provider
@@ -180,7 +180,7 @@ If omitted, subagents use the same model as the parent.
 Decomposing a problem into well-specified subtasks takes frontier-level judgment; executing a subtask that already comes with a clear goal, full context, and an output contract usually doesn't. Meanwhile the children are where the tokens go — a parallel batch of subagents typically burns the large majority of a run's total tokens, so the worker model is where the cost actually lives. Pinning `delegation.model` to an inexpensive model while your main session stays on a frontier model keeps the planning quality where it matters and cuts spend where the volume is:
 
 ```yaml
-# ~/.hermes/config.yaml
+# ~/.fulilian/config.yaml
 model:
   default: "your-frontier-model"     # parent (planner) stays on the frontier model
 delegation:
@@ -275,7 +275,7 @@ first request, `after_llm_calls` otherwise). All three are `null` on
 non-timeout errors.
 
 :::tip Diagnostic dump on zero-call timeout
-With a hard cap configured, if a subagent times out having made **zero** API calls (usually: provider unreachable, auth failure, or tool-schema rejection), `delegate_task` writes a structured diagnostic to `~/.hermes/logs/subagent-timeout-<session>-<timestamp>.log` containing the subagent's config snapshot, credential-resolution trace, any early error messages, and stack traces for **all** live threads (not just the child's own) — a child parked waiting on a nested helper thread is indistinguishable from a slow provider without the full picture.
+With a hard cap configured, if a subagent times out having made **zero** API calls (usually: provider unreachable, auth failure, or tool-schema rejection), `delegate_task` writes a structured diagnostic to `~/.fulilian/logs/subagent-timeout-<session>-<timestamp>.log` containing the subagent's config snapshot, credential-resolution trace, any early error messages, and stack traces for **all** live threads (not just the child's own) — a child parked waiting on a nested helper thread is indistinguishable from a slow provider without the full picture.
 :::
 
 ## Stall Detection for Background Subagents
@@ -384,13 +384,13 @@ So the parent (or the operator driving it) can tell a steered child from one tha
 Every `delegate_task` dispatch also creates one **append-only, human-readable log per task** so you (or the parent agent) can watch a subagent work in real time instead of waiting for the consolidated summary:
 
 ```
-<hermes_home>/cache/delegation/live/<delegation_id>/task-<n>.log
+<fulilian_home>/cache/delegation/live/<delegation_id>/task-<n>.log
 ```
 
 The dispatch response includes the paths as `live_transcripts`, and the files are pre-created at dispatch time, so this works immediately:
 
 ```bash
-tail -f ~/.hermes/cache/delegation/live/deleg_ab12cd34/task-0.log
+tail -f ~/.fulilian/cache/delegation/live/deleg_ab12cd34/task-0.log
 ```
 
 Each line is timestamped and shows the child's assistant text, thinking snippets, tool calls (`-> tool_name({args})`), tool results, and a final status marker. A `manifest.json` in the same directory describes the batch (goals, task count, per-task status). The logs persist after completion — they double as the full-fidelity operational record alongside the summary — and directories older than 7 days are pruned automatically on new dispatches. Because they live under `cache/delegation`, they are also readable from remote terminal backends (Docker/Modal/SSH).
@@ -418,11 +418,11 @@ delegate_task(
 ## Lifetime and Durability
 
 :::warning Background completion durability is not durable execution
-Top-level model-facing `delegate_task` calls run in the background automatically where the session supports later delivery. Hermes returns a handle immediately, and the result re-enters the conversation after the child or batch finishes. Orchestrator subagents wait for their workers in the current turn because they must synthesize those results before returning. Stateless request/response endpoints fall back to synchronous execution when they cannot deliver a detached result later.
+Top-level model-facing `delegate_task` calls run in the background automatically where the session supports later delivery. Fulilian returns a handle immediately, and the result re-enters the conversation after the child or batch finishes. Orchestrator subagents wait for their workers in the current turn because they must synthesize those results before returning. Stateless request/response endpoints fall back to synchronous execution when they cannot deliver a detached result later.
 
 - Normal follow-up messages do not cancel background children. `/stop` cancels running background delegations, and closing or resetting the owning session discards its active children.
 - Explicit session close/reset interrupts that session's background children. Closing a TUI viewer of a gateway-owned session does not kill the gateway's work.
-- A Hermes process restart does **not** resume a running child. Its attempt becomes `unknown` because Hermes cannot prove which side effects happened.
+- A Fulilian process restart does **not** resume a running child. Its attempt becomes `unknown` because Fulilian cannot prove which side effects happened.
 - A child that completed before restart but whose result was not delivered is restored and routed back through the owning session's normal checks.
 - Cancelled children return a structured result (`status="interrupted"`, `exit_reason="interrupted"`), but because the parent was interrupted too, that result often never makes it into a user-visible reply.
 
@@ -458,7 +458,7 @@ delegation:
 With isolation on:
 
 - Each child starts its terminal in `<repo>/.worktrees/subagent-<id>` on its
-  own branch `hermes-subagent/subagent-<id>`, and its goal message tells it to
+  own branch `fulilian-subagent/subagent-<id>`, and its goal message tells it to
   work and commit there.
 - The parent's checkout stays untouched; children can't clobber each other's
   edits.
@@ -495,7 +495,7 @@ error.
 ## Configuration
 
 ```yaml
-# In ~/.hermes/config.yaml
+# In ~/.fulilian/config.yaml
 delegation:
   max_iterations: 50                        # Max turns per child (default: 50)
   # max_concurrent_children: 3              # Parallel children per batch (default: 3)

@@ -5,13 +5,13 @@ import type {
   SkillHubSourcesResponse,
   SkillInfo,
   StarmapGraph
-} from '@/types/hermes'
-import type { ActionResponse } from '@/types/hermes'
+} from '@/types/fulilian'
+import type { ActionResponse } from '@/types/fulilian'
 
-import { capabilityScoped, hermesApi, type ProfileScope, profileScoped } from './client'
+import { capabilityScoped, fulilianApi, type ProfileScope, profileScoped } from './client'
 
 export function getSkills(profile?: ProfileScope): Promise<SkillInfo[]> {
-  return window.hermesDesktop.api<SkillInfo[]>({
+  return window.fulilianDesktop.api<SkillInfo[]>({
     ...capabilityScoped(profile),
     path: '/api/skills'
   })
@@ -23,7 +23,7 @@ export function getSkillContent(
   name: string,
   profile?: ProfileScope
 ): Promise<{ content: string; name: string; path: string }> {
-  return window.hermesDesktop.api<{ content: string; name: string; path: string }>({
+  return window.fulilianDesktop.api<{ content: string; name: string; path: string }>({
     ...capabilityScoped(profile),
     path: `/api/skills/content?name=${encodeURIComponent(name)}`
   })
@@ -34,7 +34,7 @@ export function setSkillEnabled(
   enabled: boolean,
   profile?: ProfileScope
 ): Promise<{ ok: boolean; name: string; enabled: boolean }> {
-  return window.hermesDesktop.api<{ ok: boolean; name: string; enabled: boolean }>({
+  return window.fulilianDesktop.api<{ ok: boolean; name: string; enabled: boolean }>({
     ...capabilityScoped(profile),
     path: '/api/skills/toggle',
     method: 'PUT',
@@ -43,7 +43,7 @@ export function setSkillEnabled(
 }
 
 export function getStarmapGraph(): Promise<StarmapGraph> {
-  return hermesApi<StarmapGraph>({
+  return fulilianApi<StarmapGraph>({
     ...profileScoped(),
     // Backend REST contract — stays /api/learning even though the UI feature is
     // now "star map". Renaming this would break against an un-upgraded backend.
@@ -59,14 +59,14 @@ export interface LearningNodeDetail {
 }
 
 export function getLearningNode(id: string, profile?: ProfileScope): Promise<LearningNodeDetail> {
-  return window.hermesDesktop.api<LearningNodeDetail>({
+  return window.fulilianDesktop.api<LearningNodeDetail>({
     ...capabilityScoped(profile),
     path: `/api/learning/node?id=${encodeURIComponent(id)}`
   })
 }
 
 export function deleteLearningNode(id: string, profile?: ProfileScope): Promise<{ message: string; ok: boolean }> {
-  return window.hermesDesktop.api<{ message: string; ok: boolean }>({
+  return window.fulilianDesktop.api<{ message: string; ok: boolean }>({
     ...capabilityScoped(profile),
     path: '/api/learning/node',
     method: 'DELETE',
@@ -79,7 +79,7 @@ export function editLearningNode(
   content: string,
   profile?: ProfileScope
 ): Promise<{ message: string; ok: boolean }> {
-  return window.hermesDesktop.api<{ message: string; ok: boolean }>({
+  return window.fulilianDesktop.api<{ message: string; ok: boolean }>({
     ...capabilityScoped(profile),
     path: '/api/learning/node',
     method: 'PUT',
@@ -88,7 +88,7 @@ export function editLearningNode(
 }
 
 // ---------------------------------------------------------------------------
-// Skills hub — search / preview / scan / install (parity with `hermes skills`
+// Skills hub — search / preview / scan / install (parity with `fulilian skills`
 // and the dashboard's Browse-hub tab). Installs spawn background actions whose
 // logs are tailed via getActionStatus().
 // ---------------------------------------------------------------------------
@@ -96,7 +96,7 @@ export function editLearningNode(
 const HUB_REQUEST_TIMEOUT_MS = 45_000
 
 export function getSkillHubSources(profile?: null | string): Promise<SkillHubSourcesResponse> {
-  return hermesApi<SkillHubSourcesResponse>({
+  return fulilianApi<SkillHubSourcesResponse>({
     ...profileScoped(profile),
     path: '/api/skills/hub/sources',
     timeoutMs: HUB_REQUEST_TIMEOUT_MS
@@ -111,7 +111,7 @@ export function searchSkillsHub(
 ): Promise<SkillHubSearchResponse> {
   const params = new URLSearchParams({ q: query, source, limit: String(limit) })
 
-  return hermesApi<SkillHubSearchResponse>({
+  return fulilianApi<SkillHubSearchResponse>({
     ...profileScoped(profile),
     path: `/api/skills/hub/search?${params.toString()}`,
     timeoutMs: HUB_REQUEST_TIMEOUT_MS
@@ -119,7 +119,7 @@ export function searchSkillsHub(
 }
 
 export function previewSkillHub(identifier: string, profile?: null | string): Promise<SkillHubPreview> {
-  return hermesApi<SkillHubPreview>({
+  return fulilianApi<SkillHubPreview>({
     ...profileScoped(profile),
     path: `/api/skills/hub/preview?identifier=${encodeURIComponent(identifier)}`,
     timeoutMs: HUB_REQUEST_TIMEOUT_MS
@@ -127,7 +127,7 @@ export function previewSkillHub(identifier: string, profile?: null | string): Pr
 }
 
 export function scanSkillHub(identifier: string, profile?: null | string): Promise<SkillHubScanResult> {
-  return hermesApi<SkillHubScanResult>({
+  return fulilianApi<SkillHubScanResult>({
     ...profileScoped(profile),
     path: `/api/skills/hub/scan?identifier=${encodeURIComponent(identifier)}`,
     timeoutMs: HUB_REQUEST_TIMEOUT_MS
@@ -135,7 +135,7 @@ export function scanSkillHub(identifier: string, profile?: null | string): Promi
 }
 
 export function installSkillFromHub(identifier: string, profile?: ProfileScope): Promise<ActionResponse> {
-  return window.hermesDesktop.api<ActionResponse>({
+  return window.fulilianDesktop.api<ActionResponse>({
     ...capabilityScoped(profile),
     path: '/api/skills/hub/install',
     method: 'POST',
@@ -144,7 +144,7 @@ export function installSkillFromHub(identifier: string, profile?: ProfileScope):
 }
 
 export function uninstallSkillFromHub(name: string, profile?: ProfileScope): Promise<ActionResponse> {
-  return window.hermesDesktop.api<ActionResponse>({
+  return window.fulilianDesktop.api<ActionResponse>({
     ...capabilityScoped(profile),
     path: '/api/skills/hub/uninstall',
     method: 'POST',
@@ -153,7 +153,7 @@ export function uninstallSkillFromHub(name: string, profile?: ProfileScope): Pro
 }
 
 export function updateSkillsFromHub(profile?: ProfileScope): Promise<ActionResponse> {
-  return window.hermesDesktop.api<ActionResponse>({
+  return window.fulilianDesktop.api<ActionResponse>({
     ...capabilityScoped(profile),
     path: '/api/skills/hub/update',
     method: 'POST',

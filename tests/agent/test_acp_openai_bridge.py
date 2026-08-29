@@ -1,4 +1,4 @@
-"""The ACP text bridge is what makes Hermes' own tools reachable on an ACP provider.
+"""The ACP text bridge is what makes Fulilian' own tools reachable on an ACP provider.
 
 ACP has no OpenAI ``tools``/``tool_calls`` channel, so ``memory``,
 ``skill_manage``, ``todo`` and friends only work if the schemas travel into the
@@ -46,7 +46,7 @@ def test_specs_are_flattened_and_malformed_entries_skipped():
 
 def test_allowlist_forwards_only_the_named_tools():
     """An agent-as-provider runs its own read/edit tools; re-offering them would
-    make Hermes re-run finished work, so those clients forward an allowlist."""
+    make Fulilian re-run finished work, so those clients forward an allowlist."""
     specs = tool_specs_from_openai_tools(_TOOLS, allowlist=["memory"])
     assert [s["name"] for s in specs] == ["memory"]
     # No allowlist at all means "forward everything" — not "forward nothing".
@@ -168,14 +168,14 @@ def test_stream_chunks_carry_the_delta_then_the_usage():
 
 
 def test_response_level_extras_survive_the_stream_conversion():
-    """Hermes reads provider extras off the returned object; a plain list would
+    """Fulilian reads provider extras off the returned object; a plain list would
     drop them and silently disable the projection on stream=True."""
     chunks = completion_to_stream_chunks(
-        _completion(hermes_projected_messages=[{"role": "tool", "content": "x"}])
+        _completion(fulilian_projected_messages=[{"role": "tool", "content": "x"}])
     )
     assert isinstance(chunks, StreamChunks)
     assert isinstance(chunks, list)
-    assert chunks.hermes_projected_messages == [{"role": "tool", "content": "x"}]
+    assert chunks.fulilian_projected_messages == [{"role": "tool", "content": "x"}]
 
 
 def test_a_text_only_completion_streams_without_tool_call_deltas():
@@ -200,7 +200,7 @@ def test_copilot_prompt_still_carries_the_contract_and_the_tools():
     assert "<tool_call>{...}</tool_call>" in prompt
     assert '"name": "memory"' in prompt
     assert '"name": "read_file"' in prompt  # copilot forwards everything
-    assert "Hermes requested model hint: gpt-5" in prompt
+    assert "Fulilian requested model hint: gpt-5" in prompt
     assert "hi" in prompt
 
 

@@ -51,7 +51,7 @@ def _(rid, params: dict) -> dict:
             if ref.startswith(("http://", "https://")):
                 import urllib.request
 
-                req = urllib.request.Request(ref, headers={"User-Agent": "hermes-agent"})
+                req = urllib.request.Request(ref, headers={"User-Agent": "fulilian-agent"})
                 with urllib.request.urlopen(req, timeout=60) as resp:
                     if resp.length is not None and resp.length > cap:
                         return None
@@ -82,7 +82,7 @@ def _(rid, params: dict) -> dict:
             {
                 "available": False,
                 "success": False,
-                "error": "No image generation backend configured (run `hermes tools` to enable one).",
+                "error": "No image generation backend configured (run `fulilian tools` to enable one).",
             },
         )
 

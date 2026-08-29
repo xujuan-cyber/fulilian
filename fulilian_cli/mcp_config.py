@@ -1,11 +1,11 @@
 """
-MCP Server Management CLI — ``hermes mcp`` subcommand.
+MCP Server Management CLI — ``fulilian mcp`` subcommand.
 
-Implements ``hermes mcp add/remove/list/test/configure`` for interactive
+Implements ``fulilian mcp add/remove/list/test/configure`` for interactive
 MCP server lifecycle management (issue #690 Phase 2).
 
 Relies on tools/mcp_tool.py for connection/discovery and keeps
-configuration in ~/.hermes/config.yaml under the ``mcp_servers`` key.
+configuration in ~/.fulilian/config.yaml under the ``mcp_servers`` key.
 """
 
 import asyncio
@@ -21,10 +21,10 @@ from fulilian_cli.config import (
     save_config,
     get_env_value,
     save_env_value,
-    get_hermes_home,  # noqa: F401 — used by test mocks
+    get_fulilian_home,  # noqa: F401 — used by test mocks
 )
 from fulilian_cli.colors import Colors, color
-from fulilian_constants import display_hermes_home
+from fulilian_constants import display_fulilian_home
 from fulilian_cli.mcp_security import validate_mcp_server_entry
 from tools.mcp_tool import _ENV_VAR_PATTERN, _env_ref_name
 
@@ -255,7 +255,7 @@ def _resolve_mcp_server_config(config: dict) -> dict:
     """Resolve ``${ENV}`` placeholders in a server config before connecting.
 
     Mirrors ``_load_mcp_config()`` in ``tools/mcp_tool.py``: load
-    ``~/.hermes/.env`` into ``os.environ`` and recursively interpolate any
+    ``~/.fulilian/.env`` into ``os.environ`` and recursively interpolate any
     ``${VAR}`` placeholders. The CLI builds header templates like
     ``Authorization: Bearer ${MCP_X_API_KEY}`` but the probe path never
     resolved them, so the discovery probe sent the literal placeholder and
@@ -268,8 +268,8 @@ def _resolve_mcp_server_config(config: dict) -> dict:
 
     if current_secret_scope() is None:
         try:
-            from fulilian_cli.env_loader import load_hermes_dotenv
-            load_hermes_dotenv()
+            from fulilian_cli.env_loader import load_fulilian_dotenv
+            load_fulilian_dotenv()
         except Exception:  # pragma: no cover — defensive
             pass
     return _interpolate_env_vars(config)
@@ -404,13 +404,13 @@ def _probe_single_server(
 def _oauth_tokens_present(name: str) -> bool:
     """Return True if an OAuth token file exists on disk for ``name``.
 
-    Used after ``hermes mcp login`` to distinguish a genuine authentication
+    Used after ``fulilian mcp login`` to distinguish a genuine authentication
     from a probe that succeeded only because the server allowed
     initialize/tools-list without auth (so no token was ever acquired).
     """
     try:
-        from tools.mcp_oauth import HermesTokenStorage
-        return HermesTokenStorage(name).has_cached_tokens()
+        from tools.mcp_oauth import FulilianTokenStorage
+        return FulilianTokenStorage(name).has_cached_tokens()
     except Exception as exc:  # pragma: no cover — defensive
         logger.debug("Could not check OAuth tokens for '%s': %s", name, exc)
         # Be permissive on unexpected errors: don't block a real success.
@@ -433,7 +433,7 @@ def _unwrap_exception_group(exc: BaseException) -> Exception:
     return RuntimeError(str(exc))
 
 
-# ─── hermes mcp add ──────────────────────────────────────────────────────────
+# ─── fulilian mcp add ──────────────────────────────────────────────────────────
 
 def cmd_mcp_add(args):
     """Add a new MCP server with discovery-first tool selection."""
@@ -441,7 +441,7 @@ def cmd_mcp_add(args):
     url = getattr(args, "url", None)
     # Read from `mcp_command` (set by --command via explicit dest) — see
     # mcp_add_p.add_argument("--command", dest="mcp_command", ...) in
-    # hermes_cli/main.py for why the dest is renamed.
+    # fulilian_cli/main.py for why the dest is renamed.
     command = getattr(args, "mcp_command", None)
     cmd_args = getattr(args, "args", None) or []
     if cmd_args and cmd_args[0] == "--":
@@ -474,9 +474,9 @@ def cmd_mcp_add(args):
     if not url and not command:
         _error("Must specify --url <endpoint>, --command <cmd>, or --preset <name>")
         _info("Examples:")
-        _info('  hermes mcp add ink --url "https://mcp.ml.ink/mcp"')
-        _info('  hermes mcp add github --command npx --args @modelcontextprotocol/server-github')
-        _info('  hermes mcp add myserver --preset mypreset')
+        _info('  fulilian mcp add ink --url "https://mcp.ml.ink/mcp"')
+        _info('  fulilian mcp add github --command npx --args @modelcontextprotocol/server-github')
+        _info('  fulilian mcp add myserver --preset mypreset')
         return
 
     # Check if server already exists
@@ -551,7 +551,7 @@ def cmd_mcp_add(args):
                         server_config["headers"] = _save_bearer_auth_token(
                             name, api_key
                         )
-                        _success(f"Saved to {display_hermes_home()}/.env as {env_key}")
+                        _success(f"Saved to {display_fulilian_home()}/.env as {env_key}")
 
                 # Set header with env var interpolation
                 if existing_key:
@@ -570,7 +570,7 @@ def cmd_mcp_add(args):
             server_config["enabled"] = False
             if _save_mcp_server(name, server_config):
                 _success(f"Saved '{name}' to config (disabled)")
-                _info("Fix the issue, then: hermes mcp test " + name)
+                _info("Fix the issue, then: fulilian mcp test " + name)
         return
 
     if not tools:
@@ -636,11 +636,11 @@ def cmd_mcp_add(args):
     server_config["enabled"] = True
     if _save_mcp_server(name, server_config):
         print()
-        _success(f"Saved '{name}' to {display_hermes_home()}/config.yaml ({tool_count}/{total} tools enabled)")
+        _success(f"Saved '{name}' to {display_fulilian_home()}/config.yaml ({tool_count}/{total} tools enabled)")
         _info("Start a new session to use these tools.")
 
 
-# ─── hermes mcp remove ───────────────────────────────────────────────────────
+# ─── fulilian mcp remove ───────────────────────────────────────────────────────
 
 def cmd_mcp_remove(args):
     """Remove an MCP server from config."""
@@ -663,7 +663,7 @@ def cmd_mcp_remove(args):
 
     # Clean up OAuth tokens if they exist — route through MCPOAuthManager so
     # any provider instance cached in the current process (e.g. from an
-    # earlier `hermes mcp test` in the same session) is evicted too.
+    # earlier `fulilian mcp test` in the same session) is evicted too.
     try:
         from tools.mcp_oauth_manager import get_manager
         get_manager().remove(name)
@@ -672,7 +672,7 @@ def cmd_mcp_remove(args):
         pass
 
 
-# ─── hermes mcp list ──────────────────────────────────────────────────────────
+# ─── fulilian mcp list ──────────────────────────────────────────────────────────
 
 def cmd_mcp_list(args=None):
     """List all configured MCP servers."""
@@ -683,8 +683,8 @@ def cmd_mcp_list(args=None):
         _info("No MCP servers configured.")
         print()
         _info("Add one with:")
-        _info('  hermes mcp add <name> --url <endpoint>')
-        _info('  hermes mcp add <name> --command <cmd> --args <args...>')
+        _info('  fulilian mcp add <name> --url <endpoint>')
+        _info('  fulilian mcp add <name> --command <cmd> --args <args...>')
         print()
         return
 
@@ -741,7 +741,7 @@ def cmd_mcp_list(args=None):
     print()
 
 
-# ─── hermes mcp test ──────────────────────────────────────────────────────────
+# ─── fulilian mcp test ──────────────────────────────────────────────────────────
 
 def cmd_mcp_test(args):
     """Test connection to an MCP server."""
@@ -805,15 +805,15 @@ def cmd_mcp_test(args):
     print()
 
 
-# ─── hermes mcp login ────────────────────────────────────────────────────────
+# ─── fulilian mcp login ────────────────────────────────────────────────────────
 
 def _reauth_oauth_server(name: str, server_config: dict) -> bool:
     """Force a fresh OAuth flow for one server. Returns True on success.
 
     Wipes cached OAuth state (disk + in-process MCPOAuthManager cache),
     re-probes to trigger the browser flow, and verifies a token actually
-    landed before reporting success. Shared by ``hermes mcp login`` and
-    ``hermes mcp reauth`` so both behave identically for a single server.
+    landed before reporting success. Shared by ``fulilian mcp login`` and
+    ``fulilian mcp reauth`` so both behave identically for a single server.
     """
     url = server_config.get("url")
     if not url:
@@ -821,7 +821,7 @@ def _reauth_oauth_server(name: str, server_config: dict) -> bool:
         return False
     if server_config.get("auth") != "oauth":
         _error(f"Server '{name}' is not configured for OAuth (auth={server_config.get('auth')})")
-        _info("Use `hermes mcp remove` + `hermes mcp add` to reconfigure auth.")
+        _info("Use `fulilian mcp remove` + `fulilian mcp add` to reconfigure auth.")
         return False
 
     # Wipe both disk and in-memory cache so the next probe forces a fresh
@@ -842,8 +842,8 @@ def _reauth_oauth_server(name: str, server_config: dict) -> bool:
     # window (300s in mcp_oauth) plus headroom — matching the GUI re-auth
     # path in web_server.py so CLI and dashboard behave identically.
     #
-    # force_interactive_oauth: `hermes mcp login` is *explicitly* user-
-    # initiated even when stdin isn't a TTY (Hermes desktop / agent-
+    # force_interactive_oauth: `fulilian mcp login` is *explicitly* user-
+    # initiated even when stdin isn't a TTY (Fulilian desktop / agent-
     # spawned terminals). Without this, OAuth refuses before opening a
     # browser because _is_interactive() only checks sys.stdin.isatty().
     try:
@@ -887,7 +887,7 @@ def _reauth_oauth_server(name: str, server_config: dict) -> bool:
             print(color("          client_id: \"<your-oauth-client-id>\"", Colors.DIM))
             print(color("          client_secret: \"<your-oauth-client-secret>\"", Colors.DIM))
             print()
-            _info("Then re-run `hermes mcp login " + name + "`.")
+            _info("Then re-run `fulilian mcp login " + name + "`.")
             return False
         if tools:
             _success(f"Authenticated — {len(tools)} tool(s) available")
@@ -935,8 +935,8 @@ def cmd_mcp_login(args):
 def cmd_mcp_reauth(args):
     """Re-authenticate one OAuth MCP server, or all of them sequentially.
 
-    ``hermes mcp reauth <name>`` re-auths a single server (same as ``login``).
-    ``hermes mcp reauth --all`` discovers every ``auth: oauth`` server in
+    ``fulilian mcp reauth <name>`` re-auths a single server (same as ``login``).
+    ``fulilian mcp reauth --all`` discovers every ``auth: oauth`` server in
     config and re-auths them ONE AT A TIME.
 
     Serial-by-design: a human can only complete one browser OAuth flow at a
@@ -971,7 +971,7 @@ def cmd_mcp_reauth(args):
 
     if not name:
         _error("Specify a server name, or use --all to re-auth every OAuth server.")
-        _info("Usage: hermes mcp reauth <name>   |   hermes mcp reauth --all")
+        _info("Usage: fulilian mcp reauth <name>   |   fulilian mcp reauth --all")
         return
     if name not in servers:
         _error(f"Server '{name}' not found in config.")
@@ -982,13 +982,13 @@ def cmd_mcp_reauth(args):
     _reauth_oauth_server(name, servers[name])
 
 
-# ─── hermes mcp configure ────────────────────────────────────────────────────
+# ─── fulilian mcp configure ────────────────────────────────────────────────────
 
 def cmd_mcp_configure(args):
     """Reconfigure which tools are enabled for an existing MCP server."""
     import sys as _sys
     if not _sys.stdin.isatty():
-        print("Error: 'hermes mcp configure' requires an interactive terminal.", file=_sys.stderr)
+        print("Error: 'fulilian mcp configure' requires an interactive terminal.", file=_sys.stderr)
         _sys.exit(1)
     name = args.name
     servers = _get_mcp_servers()
@@ -1140,7 +1140,7 @@ def cmd_mcp_configure(args):
 # ─── Dispatcher ───────────────────────────────────────────────────────────────
 
 def mcp_command(args):
-    """Main dispatcher for ``hermes mcp`` subcommands."""
+    """Main dispatcher for ``fulilian mcp`` subcommands."""
     action = getattr(args, "mcp_action", None)
 
     if action == "serve":
@@ -1184,21 +1184,21 @@ def mcp_command(args):
         handler(args)
     else:
         # No subcommand — drop the user into the catalog picker. This is the
-        # "try enabling and it flows you into setup" UX matching `hermes plugin`.
+        # "try enabling and it flows you into setup" UX matching `fulilian plugin`.
         from fulilian_cli.mcp_picker import run_picker
         run_picker()
         print(color("  Commands:", Colors.CYAN))
-        _info("hermes mcp                                    Open the catalog picker (default)")
-        _info("hermes mcp catalog                            List Nous-approved MCPs")
-        _info("hermes mcp install <name>                     Install a catalog MCP")
-        _info("hermes mcp serve                              Run as MCP server")
-        _info("hermes mcp add <name> --url <endpoint>        Add a custom MCP server")
-        _info("hermes mcp add <name> --command <cmd>         Add a stdio server")
-        _info("hermes mcp add <name> --preset <preset>       Add from a known preset")
-        _info("hermes mcp remove <name>                      Remove a server")
-        _info("hermes mcp list                               List configured servers")
-        _info("hermes mcp test <name>                        Test connection")
-        _info("hermes mcp configure <name>                   Toggle tools")
-        _info("hermes mcp login <name>                       Re-authenticate OAuth")
-        _info("hermes mcp reauth <name> | --all              Re-auth one or all OAuth servers")
+        _info("fulilian mcp                                    Open the catalog picker (default)")
+        _info("fulilian mcp catalog                            List Nous-approved MCPs")
+        _info("fulilian mcp install <name>                     Install a catalog MCP")
+        _info("fulilian mcp serve                              Run as MCP server")
+        _info("fulilian mcp add <name> --url <endpoint>        Add a custom MCP server")
+        _info("fulilian mcp add <name> --command <cmd>         Add a stdio server")
+        _info("fulilian mcp add <name> --preset <preset>       Add from a known preset")
+        _info("fulilian mcp remove <name>                      Remove a server")
+        _info("fulilian mcp list                               List configured servers")
+        _info("fulilian mcp test <name>                        Test connection")
+        _info("fulilian mcp configure <name>                   Toggle tools")
+        _info("fulilian mcp login <name>                       Re-authenticate OAuth")
+        _info("fulilian mcp reauth <name> | --all              Re-auth one or all OAuth servers")
         print()

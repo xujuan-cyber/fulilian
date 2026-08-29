@@ -13,7 +13,7 @@ process stayed alive, so the supervisor's restart-on-exit never fired.
 Worse, those connections were opened WITHOUT ``check_same_thread=False`` (both
 writer opens pass it), so ``close()`` on them raised ``ProgrammingError`` from
 a different thread and the bare ``except Exception: pass`` hid it -- leaving
-``hermes_cli.sqlite_safe_read``'s registry permanently over-counted as well.
+``fulilian_cli.sqlite_safe_read``'s registry permanently over-counted as well.
 
 The contract pinned here: reads borrow from a BOUNDED pool, connections are
 returned and reused, surplus connections are closed rather than dropped, and
@@ -39,7 +39,7 @@ import threading
 
 import pytest
 
-from hermes_state import SessionDB
+from fulilian_state import SessionDB
 
 
 def _live_count(path) -> int:
@@ -191,7 +191,7 @@ def test_read_open_failure_backs_off_but_recovers(db):
     """
     import time as _time
 
-    from hermes_state import _READ_OPEN_RETRY_SECONDS
+    from fulilian_state import _READ_OPEN_RETRY_SECONDS
 
     baseline = db._get_read_conn()
     assert baseline is not None, "baseline read open should succeed"
@@ -260,7 +260,7 @@ def test_peak_live_connections_bounded_under_simultaneous_burst(db):
     of them have checked out, so the count below IS the simultaneous peak
     rather than a sample of it.
     """
-    from hermes_state import _READ_POOL_MAX
+    from fulilian_state import _READ_POOL_MAX
 
     n = 64
     assert n > _READ_POOL_MAX, "burst must exceed the ceiling to test anything"
@@ -312,7 +312,7 @@ def test_exhausted_permits_fall_back_to_the_writer_connection(db):
     connection. Blocking instead would convert descriptor exhaustion into a
     stall -- the same outage with a different stack trace.
     """
-    from hermes_state import _READ_POOL_MAX
+    from fulilian_state import _READ_POOL_MAX
 
     held = [db._checkout_read_conn() for _ in range(_READ_POOL_MAX)]
     assert all(c is not None for c in held), "the first _READ_POOL_MAX must succeed"
@@ -341,8 +341,8 @@ def test_permits_are_not_stranded_by_a_failed_open(db, monkeypatch):
     """
     import sqlite3 as _sqlite3
 
-    import hermes_state as _hs
-    from hermes_state import _READ_POOL_MAX
+    import fulilian_state as _hs
+    from fulilian_state import _READ_POOL_MAX
 
     def boom(*a, **kw):
         raise _sqlite3.OperationalError("simulated open failure")
@@ -368,7 +368,7 @@ def test_permits_are_not_stranded_by_a_failed_open(db, monkeypatch):
 @pytest.mark.requires_wal
 def test_close_returns_every_permit(db):
     """close() must release the permits its drained connections held."""
-    from hermes_state import _READ_POOL_MAX
+    from fulilian_state import _READ_POOL_MAX
 
     held = [db._checkout_read_conn() for _ in range(_READ_POOL_MAX)]
     for c in held:

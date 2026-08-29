@@ -4,7 +4,7 @@ Cron job scheduler - executes due jobs.
 Provides tick() which checks for due jobs and runs them. The gateway
 calls this every 60 seconds from a background thread.
 
-Uses a file-based lock (~/.hermes/cron/.tick.lock) so only one tick
+Uses a file-based lock (~/.fulilian/cron/.tick.lock) so only one tick
 runs at a time if multiple processes overlap.
 """
 
@@ -40,11 +40,11 @@ from pathlib import Path
 from typing import Any, List, Optional, Protocol
 
 # Add parent directory to path for imports BEFORE repo-level imports.
-# Without this, standalone invocations (e.g. after `hermes update` reloads
-# the module) fail with ModuleNotFoundError for hermes_time et al.
+# Without this, standalone invocations (e.g. after `fulilian update` reloads
+# the module) fail with ModuleNotFoundError for fulilian_time et al.
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from fulilian_constants import get_hermes_home
+from fulilian_constants import get_fulilian_home
 from fulilian_cli._subprocess_compat import windows_hide_flags
 from fulilian_cli.config import (
     _expand_env_vars,
@@ -54,7 +54,7 @@ from fulilian_cli.config import (
     resolve_cron_model_drift_defaults,
 )
 from fulilian_cli.fallback_config import get_fallback_chain
-from hermes_time import now as _hermes_now
+from fulilian_time import now as _fulilian_now
 from agent.interrupt_compat import request_hard_interrupt
 from agent.delegation_context import (
     enter_non_dispatcher_owned_context,
@@ -143,7 +143,7 @@ def _fallback_chain_phrase() -> str:
     if chain:
         return "Fallback chain was exhausted or unavailable."
     return (
-        "No fallback chain configured — add one with `hermes fallback add`, "
+        "No fallback chain configured — add one with `fulilian fallback add`, "
         "or set a cron fleet default via `cron.model` + `cron.model_provider` "
         "in config.yaml."
     )
@@ -186,7 +186,7 @@ def _failure_streak_nudge(job: dict) -> str:
     job_ref = job.get("name") or job.get("id") or "this job"
     return (
         f"\nThis job has failed {streak} runs in a row — worth a review. "
-        f"Fix its prompt/config, or pause it with `hermes cron pause {job_ref}` "
+        f"Fix its prompt/config, or pause it with `fulilian cron pause {job_ref}` "
         "(resume/remove also available) to stop the noise."
     )
 
@@ -226,8 +226,8 @@ def _summarize_cron_failure_for_delivery(job: dict, error: str | None) -> str:
         else:
             job_id = job.get("id") or "<job_id>"
             remediation = (
-                "On the host running Hermes, pin it explicitly: "
-                f"`hermes cron edit {job_id} --provider <provider> "
+                "On the host running Fulilian, pin it explicitly: "
+                f"`fulilian cron edit {job_id} --provider <provider> "
                 "--model <model>`."
             )
         return (
@@ -357,7 +357,7 @@ def _summarize_cron_failure_for_delivery(job: dict, error: str | None) -> str:
     message = f"⚠️ Cron '{job_name}' failed: {cleaned}"
 
     # Import-class failures (#95294 part 3): a long-lived gateway whose
-    # checkout was updated underneath it (interrupted `hermes update`, manual
+    # checkout was updated underneath it (interrupted `fulilian update`, manual
     # git pull) serves MIXED modules — old entries frozen in sys.modules,
     # new files loaded by lazy imports — and every agent cron job then dies
     # with `cannot import name X` / ModuleNotFoundError. The error itself
@@ -387,7 +387,7 @@ def _summarize_cron_failure_for_delivery(job: dict, error: str | None) -> str:
             message += (
                 f" Likely cause: the gateway is running stale code (booted "
                 f"on {boot_rev}, disk is at {disk_rev}) — run "
-                "`hermes gateway restart` to fix it."
+                "`fulilian gateway restart` to fix it."
             )
 
     return message
@@ -513,7 +513,7 @@ def _merge_mcp_into_per_job_toolsets(per_job: list[str], cfg: dict) -> list[str]
     result = [t for t in per_job if t != "no_mcp"]
     if "no_mcp" in per_job:
         return result
-    # lazy import: avoid heavy hermes_cli import at cron module load (matches
+    # lazy import: avoid heavy fulilian_cli import at cron module load (matches
     # _resolve_cron_enabled_toolsets' fallback) and share one MCP-membership
     # computation with the gateway/CLI platform resolver.
     from fulilian_cli.tools_config import enabled_mcp_server_names
@@ -534,7 +534,7 @@ def _resolve_cron_enabled_toolsets(job: dict, cfg: dict) -> list[str] | None:
        Keeps the agent's job-scoped toolset override intact — #6130. Enabled
        MCP servers are layered on per ``_merge_mcp_into_per_job_toolsets`` so a
        native-toolset allowlist does not silently strip MCP tools.
-    2. Per-platform ``hermes tools`` config for the ``cron`` platform.
+    2. Per-platform ``fulilian tools`` config for the ``cron`` platform.
        Mirrors gateway behavior (``_get_platform_tools(cfg, platform_key)``)
        so users can gate cron toolsets globally without recreating every job.
     3. ``None`` on any lookup failure — AIAgent loads the full default set
@@ -837,7 +837,7 @@ def _inflight_min_allowance_minutes() -> float:
     Effective allowance per job is ``max(2 * interval, this)``, so a
     slow-but-healthy long-interval job is never clipped by the sweep.
     Reads ``cron.inflight_max_minutes`` from config.yaml; the
-    ``HERMES_CRON_INFLIGHT_MAX_MINUTES`` env var is kept as an internal
+    ``FULILIAN_CRON_INFLIGHT_MAX_MINUTES`` env var is kept as an internal
     escape hatch only.
     """
     try:
@@ -851,7 +851,7 @@ def _inflight_min_allowance_minutes() -> float:
                 return val
     except Exception:
         pass
-    raw = os.getenv("HERMES_CRON_INFLIGHT_MAX_MINUTES", "").strip()
+    raw = os.getenv("FULILIAN_CRON_INFLIGHT_MAX_MINUTES", "").strip()
     if raw:
         try:
             val = float(raw)
@@ -859,7 +859,7 @@ def _inflight_min_allowance_minutes() -> float:
                 return val
         except (ValueError, TypeError):
             logger.warning(
-                "Invalid HERMES_CRON_INFLIGHT_MAX_MINUTES=%r; using default %s",
+                "Invalid FULILIAN_CRON_INFLIGHT_MAX_MINUTES=%r; using default %s",
                 raw,
                 _INFLIGHT_MIN_ALLOWANCE_MINUTES,
             )
@@ -964,13 +964,13 @@ def _record_forced_release(job_id: str, name: str, age_seconds: float, allowance
         "name": name,
         "age_seconds": round(age_seconds, 1),
         "allowance_seconds": round(allowance_seconds, 1),
-        "at": _hermes_now().isoformat(),
+        "at": _fulilian_now().isoformat(),
     }
     with _running_lock:
         _forced_releases.append(entry)
         del _forced_releases[:-_FORCED_RELEASE_HISTORY]
     try:
-        path = _get_hermes_home() / "cron" / "inflight_forced_releases.jsonl"
+        path = _get_fulilian_home() / "cron" / "inflight_forced_releases.jsonl"
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "a", encoding="utf-8") as fh:
             fh.write(json.dumps(entry) + "\n")
@@ -1227,7 +1227,7 @@ def mark_running_jobs_interrupted(
         registered_ids = {job_id for _t, job_id, _o, _p in active_fires}
         if only_owners is None:
             active_fires.extend(
-                (None, job_id, None, _get_hermes_home())
+                (None, job_id, None, _get_fulilian_home())
                 for job_id in _running_job_ids - registered_ids
             )
         _interrupted_job_ids.update(
@@ -1401,7 +1401,7 @@ _terminal_cwd_lock = _ReadWriteLock()
 
 # Ceiling on how long a cron job waits for the TERMINAL_CWD lock before
 # FAILING (fail-closed, #79768). Derived from the cron inactivity limit
-# (HERMES_CRON_TIMEOUT, default 600s): a wedged lock holder stops touching
+# (FULILIAN_CRON_TIMEOUT, default 600s): a wedged lock holder stops touching
 # its activity clock, so the inactivity monitor usually reaps it and the
 # lock is released within roughly that limit. The bound is measured from
 # the WAITER's arrival, so a holder that wedges late (or hangs in pre-agent
@@ -1419,20 +1419,20 @@ _CWD_LOCK_TIMEOUT_MARGIN_SECONDS = 60.0
 
 
 def _cron_inactivity_seconds() -> float:
-    """Parse HERMES_CRON_TIMEOUT (seconds). 0 = unlimited; bad input = 600.
+    """Parse FULILIAN_CRON_TIMEOUT (seconds). 0 = unlimited; bad input = 600.
 
     Shared by run_job's inactivity monitor (which maps 0 to "no limit") and
     the cwd-lock bound below (which keeps the wait bounded regardless) so
     the two sites cannot drift apart — the lock bound must stay at or above
     the inactivity limit or waiters would fail while a healthy holder runs.
     """
-    raw = os.getenv("HERMES_CRON_TIMEOUT", "").strip()
+    raw = os.getenv("FULILIAN_CRON_TIMEOUT", "").strip()
     if not raw:
         return 600.0
     try:
         return float(raw)
     except (ValueError, TypeError):
-        logger.warning("Invalid HERMES_CRON_TIMEOUT=%r; using default 600s", raw)
+        logger.warning("Invalid FULILIAN_CRON_TIMEOUT=%r; using default 600s", raw)
         return 600.0
 
 
@@ -1492,9 +1492,9 @@ def _shutdown_parallel_pool() -> None:
 
 atexit.register(_shutdown_parallel_pool)
 # Per-fire usage audit log for cron token spend instrumentation.
-# Resolves through _get_hermes_home() so profile-scoped paths work correctly.
+# Resolves through _get_fulilian_home() so profile-scoped paths work correctly.
 def _usage_audit_path() -> Path:
-    return _get_hermes_home() / "cron" / "usage_audit.jsonl"
+    return _get_fulilian_home() / "cron" / "usage_audit.jsonl"
 
 
 def _utcnow_iso_ms() -> str:
@@ -1505,7 +1505,7 @@ def _utcnow_iso_ms() -> str:
 
 
 def _write_usage_audit(record: dict) -> None:
-    """Append a single JSONL line to ~/.hermes/cron/usage_audit.jsonl.
+    """Append a single JSONL line to ~/.fulilian/cron/usage_audit.jsonl.
 
     NEVER raises — a logger bug must not break cron jobs. Wraps the entire
     write (path resolve, mkdir, json.dumps, file append) in a single try.
@@ -1524,7 +1524,7 @@ def _interpreter_shutting_down(exc: Optional[BaseException] = None) -> bool:
     """True when the Python interpreter is finalizing.
 
     A cron tick can fire while the gateway is tearing down — SIGTERM from
-    ``hermes update`` / ``hermes gateway stop`` / systemd restart, or an
+    ``fulilian update`` / ``fulilian gateway stop`` / systemd restart, or an
     OOM-kill. Once finalization starts, ``concurrent.futures`` refuses new
     work with ``RuntimeError: cannot schedule new futures after interpreter
     shutdown`` and asyncio's default executor is gone, so *any* attempt to
@@ -1550,25 +1550,25 @@ def _interpreter_shutting_down(exc: Optional[BaseException] = None) -> bool:
 
 
 # Backward-compatible module override used by tests and emergency monkeypatches.
-_hermes_home: Path | None = None
+_fulilian_home: Path | None = None
 
 
-def _get_hermes_home() -> Path:
-    """Resolve Hermes home dynamically while preserving test monkeypatch hooks.
+def _get_fulilian_home() -> Path:
+    """Resolve Fulilian home dynamically while preserving test monkeypatch hooks.
 
     Cron is per-profile by design (#4707): the in-process ticker runs inside a
-    profile-scoped gateway, so resolving the active HERMES_HOME at call time
+    profile-scoped gateway, so resolving the active FULILIAN_HOME at call time
     means a profile's jobs are stored AND executed under that profile's home
     (its .env, config.yaml, scripts, skills). Do not freeze this at import or
     anchor it at the shared default root — either re-breaks profile isolation.
     """
-    return _hermes_home or get_hermes_home()
+    return _fulilian_home or get_fulilian_home()
 
 
 def _get_lock_paths() -> tuple[Path, Path]:
     """Resolve cron lock paths at call time so profile/env changes are honored."""
-    hermes_home = _get_hermes_home()
-    lock_dir = hermes_home / "cron"
+    fulilian_home = _get_fulilian_home()
+    lock_dir = fulilian_home / "cron"
     return lock_dir, lock_dir / ".tick.lock"
 
 
@@ -1950,7 +1950,7 @@ def _open_continuable_cron_thread(
     if not callable(create_thread) or loop is None:
         return None
     task_name = job.get("name") or job.get("id", "cron")
-    thread_name = f"Hermes — {task_name}"
+    thread_name = f"Fulilian — {task_name}"
     try:
         from agent.async_utils import safe_schedule_threadsafe
 
@@ -2633,7 +2633,7 @@ def _get_bot_chat_delivery_timeout() -> int:
 def _deliver_to_bot_chat(job: dict, content: str, profile: str) -> Optional[str]:
     """Deliver job output into a profile's canonical Bot Chat as an inbound turn.
 
-    Runs ``hermes [-p <profile>] chat --in ~ -c "Bot Chat" --create-if-missing
+    Runs ``fulilian [-p <profile>] chat --in ~ -c "Bot Chat" --create-if-missing
     -Q --query-file <tmp>`` — the exact lane Bot Mode agent-to-agent messages
     use, so the adopt-before-mint canonical-session rules apply and the target
     bot receives the output as a real user-role message it can act on.
@@ -2641,7 +2641,7 @@ def _deliver_to_bot_chat(job: dict, content: str, profile: str) -> Optional[str]
     command lane, not a transcript splice.
 
     ``profile`` is ``""`` for the job's own profile (subprocess inherits this
-    scheduler's HERMES_HOME) or a validated local profile name.  Returns None
+    scheduler's FULILIAN_HOME) or a validated local profile name.  Returns None
     on success or an error string for ``last_delivery_error``.
     """
     import shutil as _shutil
@@ -2650,26 +2650,26 @@ def _deliver_to_bot_chat(job: dict, content: str, profile: str) -> Optional[str]
     job_id = job.get("id", "?")
     job_name = job.get("name", job_id)
 
-    hermes_bin = _shutil.which("hermes")
-    if hermes_bin:
-        argv = [hermes_bin]
+    fulilian_bin = _shutil.which("fulilian")
+    if fulilian_bin:
+        argv = [fulilian_bin]
     else:
         try:
             import importlib.util as _ilu
 
-            if _ilu.find_spec("hermes_cli") is not None:
-                argv = [sys.executable, "-m", "hermes_cli.main"]
+            if _ilu.find_spec("fulilian_cli") is not None:
+                argv = [sys.executable, "-m", "fulilian_cli.main"]
             else:
-                return "bot-chat delivery failed: hermes CLI not resolvable"
+                return "bot-chat delivery failed: fulilian CLI not resolvable"
         except Exception:
-            return "bot-chat delivery failed: hermes CLI not resolvable"
+            return "bot-chat delivery failed: fulilian CLI not resolvable"
 
     env = os.environ.copy()
     if profile:
         argv += ["-p", profile]
-        # -p owns profile resolution in the child; a leftover HERMES_HOME
+        # -p owns profile resolution in the child; a leftover FULILIAN_HOME
         # from THIS scheduler's profile must not shadow it.
-        env.pop("HERMES_HOME", None)
+        env.pop("FULILIAN_HOME", None)
 
     # The prefix tells the receiving bot this is scheduled output, not the
     # human typing — mirrors the Bot Mode sender-attribution convention.
@@ -2682,7 +2682,7 @@ def _deliver_to_bot_chat(job: dict, content: str, profile: str) -> Optional[str]
     query_file = None
     try:
         with tempfile.NamedTemporaryFile(
-            "w", encoding="utf-8", suffix=".txt", prefix="hermes-cron-botchat-",
+            "w", encoding="utf-8", suffix=".txt", prefix="fulilian-cron-botchat-",
             delete=False,
         ) as fh:
             fh.write(message)
@@ -2793,16 +2793,16 @@ def parse_bot_chat_deliver_token(part: str) -> Optional[str]:
 def _resolve_bot_chat_target(job: dict, profile_arg: str) -> Optional[dict]:
     """Resolve a bot-chat deliver token to a concrete delivery target.
 
-    ``profile_arg`` is ``""`` for the job's own profile (the HERMES_HOME
+    ``profile_arg`` is ``""`` for the job's own profile (the FULILIAN_HOME
     this scheduler runs under — machine-local and self-referential, so no
     ``-p`` flag is needed at send time) or an explicit profile name that
     must exist in THIS machine's profile root.  Cross-machine delivery is
     intentionally unsupported: names resolve only against the local
-    ``~/.hermes/profiles/`` tree, so same-named profiles on other gateways
+    ``~/.fulilian/profiles/`` tree, so same-named profiles on other gateways
     can never be targeted by accident.
     """
     if not profile_arg:
-        # Own profile: chat subprocess inherits HERMES_HOME, no name needed.
+        # Own profile: chat subprocess inherits FULILIAN_HOME, no name needed.
         return {"platform": BOT_CHAT_PLATFORM, "chat_id": "", "thread_id": None}
     try:
         from fulilian_cli.profiles import normalize_profile_name, profile_exists
@@ -2964,7 +2964,7 @@ def _send_media_via_adapter(
                 # big exports) can legitimately exceed a fixed 30s upload
                 # window. Configurable, matching the other cron timeouts
                 # (cron.media_send_timeout_seconds in config.yaml, or the
-                # HERMES_CRON_MEDIA_SEND_TIMEOUT env override).
+                # FULILIAN_CRON_MEDIA_SEND_TIMEOUT env override).
                 result = future.result(timeout=_get_media_send_timeout())
             except TimeoutError:
                 future.cancel()
@@ -3130,7 +3130,7 @@ def _deliver_result(job: dict, content: str, adapters=None, loop=None) -> Option
 
     # Bridge gateway media-policy config (strict / allow_dirs / trust_recent)
     # into the env vars the path validator reads. Gateway startup does this
-    # at boot; a standalone process (manual `hermes cron run` from the CLI,
+    # at boot; a standalone process (manual `fulilian cron run` from the CLI,
     # a cron tick without the gateway) historically did NOT — so manual runs
     # filtered attachment paths under a DIFFERENT policy than scheduled runs
     # and silently dropped files the gateway would deliver. Idempotent,
@@ -3273,7 +3273,7 @@ def _deliver_result(job: dict, content: str, adapters=None, loop=None) -> Option
             # No live transport. A relay-fronted platform's ONLY sender is the
             # gateway's live relay adapter — there is no standalone fallback
             # (the connector owns the credential). A manual in-process run
-            # (`hermes cron run`) has no live relay adapter, so surface the
+            # (`fulilian cron run`) has no live relay adapter, so surface the
             # accurate remediation instead of the native configured/enabled
             # gate, which misdiagnoses relay-fronted deployments.
             from gateway.relay import relay_fronted_platforms
@@ -3941,14 +3941,14 @@ def _get_script_timeout() -> int:
         except Exception:
             logger.warning("Invalid patched _SCRIPT_TIMEOUT=%r; using env/config/default", _SCRIPT_TIMEOUT)
 
-    env_value = os.getenv("HERMES_CRON_SCRIPT_TIMEOUT", "").strip()
+    env_value = os.getenv("FULILIAN_CRON_SCRIPT_TIMEOUT", "").strip()
     if env_value:
         try:
             timeout = int(float(env_value))
             if timeout > 0:
                 return timeout
         except Exception:
-            logger.warning("Invalid HERMES_CRON_SCRIPT_TIMEOUT=%r; using config/default", env_value)
+            logger.warning("Invalid FULILIAN_CRON_SCRIPT_TIMEOUT=%r; using config/default", env_value)
 
     try:
         cfg = load_config() or {}
@@ -3971,12 +3971,12 @@ def _get_media_send_timeout() -> int:
     """Resolve the per-attachment media-send timeout from env/config.
 
     Mirrors the ``script_timeout_seconds`` resolution pattern: the
-    HERMES_CRON_MEDIA_SEND_TIMEOUT env var wins, then
+    FULILIAN_CRON_MEDIA_SEND_TIMEOUT env var wins, then
     ``cron.media_send_timeout_seconds`` in config.yaml, then the default
     (300s — large attachments like long TTS audio can legitimately exceed
     the old fixed 30s upload window).
     """
-    env_value = os.getenv("HERMES_CRON_MEDIA_SEND_TIMEOUT", "").strip()
+    env_value = os.getenv("FULILIAN_CRON_MEDIA_SEND_TIMEOUT", "").strip()
     if env_value:
         try:
             timeout = int(float(env_value))
@@ -3984,7 +3984,7 @@ def _get_media_send_timeout() -> int:
                 return timeout
         except Exception:
             logger.warning(
-                "Invalid HERMES_CRON_MEDIA_SEND_TIMEOUT=%r; using config/default",
+                "Invalid FULILIAN_CRON_MEDIA_SEND_TIMEOUT=%r; using config/default",
                 env_value,
             )
 
@@ -4006,19 +4006,19 @@ def _get_session_db_timeout() -> float:
     """Resolve the bound on run_job's SessionDB init from env/config.
 
     Mirrors the ``script_timeout_seconds`` resolution pattern: the
-    HERMES_CRON_SESSION_DB_TIMEOUT env var wins, then
+    FULILIAN_CRON_SESSION_DB_TIMEOUT env var wins, then
     ``cron.session_db_timeout_seconds`` in config.yaml (present in
     DEFAULT_CONFIG, so ``load_config()``'s deep-merge supplies it), then
     10s. Unlike the sibling timeouts, 0 is meaningful (unlimited — legacy
     behavior, opt-in for debugging), so values are passed through untouched.
     """
-    env_value = os.getenv("HERMES_CRON_SESSION_DB_TIMEOUT", "").strip()
+    env_value = os.getenv("FULILIAN_CRON_SESSION_DB_TIMEOUT", "").strip()
     if env_value:
         try:
             return float(env_value)
         except (ValueError, TypeError):
             logger.warning(
-                "Invalid HERMES_CRON_SESSION_DB_TIMEOUT=%r; using config/default",
+                "Invalid FULILIAN_CRON_SESSION_DB_TIMEOUT=%r; using config/default",
                 env_value,
             )
 
@@ -4275,7 +4275,7 @@ def _run_job_script(
 ) -> tuple[bool, str]:
     """Execute a cron job's data-collection script and capture its output.
 
-    Scripts must reside within HERMES_HOME/scripts/.  Both relative and
+    Scripts must reside within FULILIAN_HOME/scripts/.  Both relative and
     absolute paths are resolved and validated against this directory to
     prevent arbitrary script execution via path traversal or absolute
     path injection.
@@ -4291,12 +4291,12 @@ def _run_job_script(
     (the `memory-watchdog.sh` pattern) without wrapping them in Python.
 
     Subprocess environment is passed through ``_sanitize_subprocess_env`` so
-    provider credentials and other Hermes-managed secrets are not inherited
+    provider credentials and other Fulilian-managed secrets are not inherited
     (SECURITY.md §2.3), matching terminal and MCP child processes.
 
     Args:
         script_path: Path to the script.  Relative paths are resolved
-            against HERMES_HOME/scripts/.  Absolute and ~-prefixed paths
+            against FULILIAN_HOME/scripts/.  Absolute and ~-prefixed paths
             are also validated to ensure they stay within the scripts dir.
         workdir: Optional absolute path to use as the script's cwd.
             When set, the subprocess runs in this directory instead of
@@ -4309,7 +4309,7 @@ def _run_job_script(
         (success, output) — on failure *output* contains the error message so the
         LLM can report the problem to the user.
     """
-    scripts_dir = _get_hermes_home() / "scripts"
+    scripts_dir = _get_fulilian_home() / "scripts"
     scripts_dir.mkdir(parents=True, exist_ok=True)
     scripts_dir_resolved = scripts_dir.resolve()
 
@@ -4341,7 +4341,7 @@ def _run_job_script(
         path = (scripts_dir / raw).resolve()
 
     # Guard against path traversal, absolute path injection, and symlink
-    # escape — scripts MUST reside within HERMES_HOME/scripts/.
+    # escape — scripts MUST reside within FULILIAN_HOME/scripts/.
     try:
         path.relative_to(scripts_dir_resolved)
     except ValueError:
@@ -4961,7 +4961,7 @@ def _block_and_pause_job(
     except Exception:
         logger.exception("Job '%s': failed to auto-pause unrunnable job", job_id)
 
-    now_iso = _hermes_now().strftime("%Y-%m-%d %H:%M:%S")
+    now_iso = _fulilian_now().strftime("%Y-%m-%d %H:%M:%S")
     doc = (
         f"# Cron Job: {job_name}\n\n"
         f"**Job ID:** {job_id}\n"
@@ -5119,7 +5119,7 @@ def _preflight_check_provider_key(job: dict, cfg: dict) -> Optional[str]:
         or str((_cron_cfg or {}).get("model_provider") or "").strip()
         or None
     )
-    model = job.get("model") or os.getenv("HERMES_MODEL") or ""
+    model = job.get("model") or os.getenv("FULILIAN_MODEL") or ""
 
     from fulilian_cli.auth import AuthError
 
@@ -5133,8 +5133,8 @@ def _preflight_check_provider_key(job: dict, cfg: dict) -> Optional[str]:
     except AuthError as exc:
         return (
             f"provider credential missing: {exc}. "
-            "Set the provider API key in .env (or `hermes setup`), or pin a "
-            "working provider via `hermes cron edit "
+            "Set the provider API key in .env (or `fulilian setup`), or pin a "
+            "working provider via `fulilian cron edit "
             f"{job.get('id')} --provider <p>`."
         )
     except Exception:
@@ -5199,7 +5199,7 @@ def _preflight_check_delivery(job: dict) -> Optional[str]:
             return (
                 f"delivery platform '{platform_name}' has no gateway "
                 "credentials configured (not connected). Configure it via "
-                "`hermes setup` or change the job's `deliver` target."
+                "`fulilian setup` or change the job's `deliver` target."
             )
     return None
 
@@ -5471,12 +5471,12 @@ def run_job(
         # TELEGRAM_HOME_CHANNEL/DISCORD_HOME_CHANNEL in its environment, and
         # the agent path's per-run dotenv reload below never executes for
         # no_agent jobs — every deliver=telegram/all script job failed with
-        # "no delivery target resolved". load_hermes_dotenv does not override
+        # "no delivery target resolved". load_fulilian_dotenv does not override
         # already-set vars, so the gateway's in-process tick is unaffected.
         try:
-            from fulilian_cli.env_loader import load_hermes_dotenv
+            from fulilian_cli.env_loader import load_fulilian_dotenv
 
-            load_hermes_dotenv(hermes_home=_get_hermes_home())
+            load_fulilian_dotenv(fulilian_home=_get_fulilian_home())
         except Exception:
             logger.debug(
                 "Job '%s': no_agent .env reload failed", job_id, exc_info=True
@@ -5517,7 +5517,7 @@ def run_job(
             )
             ok, output = False, f"Script execution failed: {exc}"
 
-        now_iso = _hermes_now().strftime("%Y-%m-%d %H:%M:%S")
+        now_iso = _fulilian_now().strftime("%Y-%m-%d %H:%M:%S")
 
         if not ok:
             # Script crashed / timed out / exited non-zero.  Deliver the
@@ -5601,7 +5601,7 @@ def run_job(
     _monitor_context: Optional[str] = None
     if job_has_monitor(job):
         _mon = check_monitor(job)
-        _mon_now = _hermes_now().strftime("%Y-%m-%d %H:%M:%S")
+        _mon_now = _fulilian_now().strftime("%Y-%m-%d %H:%M:%S")
         if not _mon.ok:
             # Source failure is an ERROR, never a change: alert the user so
             # a broken monitor can't silently stop watching. Stored hash is
@@ -5680,7 +5680,7 @@ def run_job(
             silent_doc = (
                 f"# Cron Job: {job_name}\n\n"
                 f"**Job ID:** {job_id}\n"
-                f"**Run Time:** {_hermes_now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+                f"**Run Time:** {_fulilian_now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
                 "Script gate returned `wakeAgent=false` — agent skipped.\n"
             )
             return True, silent_doc, SILENT_MARKER, None
@@ -5701,7 +5701,7 @@ def run_job(
         blocked_doc = (
             f"# Cron Job: {job_name}\n\n"
             f"**Job ID:** {job_id}\n"
-            f"**Run Time:** {_hermes_now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+            f"**Run Time:** {_fulilian_now().strftime('%Y-%m-%d %H:%M:%S')}\n"
             f"**Status:** BLOCKED\n\n"
             "The assembled prompt (user prompt + loaded skill content) tripped "
             "the cron injection scanner and the agent was NOT run.\n\n"
@@ -5715,7 +5715,7 @@ def run_job(
     if prompt is None:
         logger.info("Job '%s': script produced no output, skipping AI call.", job_name)
         return True, "", SILENT_MARKER, None
-    _cron_session_id = f"cron_{job_id}_{_hermes_now().strftime('%Y%m%d_%H%M%S')}"
+    _cron_session_id = f"cron_{job_id}_{_fulilian_now().strftime('%Y%m%d_%H%M%S')}"
 
     logger.info("Running job '%s' (ID: %s)", job_name, job_id)
     logger.info("Prompt: %s", prompt[:100])
@@ -5727,26 +5727,26 @@ def run_job(
     from gateway.session_context import set_session_vars, clear_session_vars, _VAR_MAP
 
     # Cron execution is an internal scheduler context, not a live inbound
-    # gateway message. Do not seed HERMES_SESSION_* contextvars from the
+    # gateway message. Do not seed FULILIAN_SESSION_* contextvars from the
     # stored ``origin`` (which is delivery routing metadata, not a sender
     # identity). Several tool consumers branch on these vars during job
     # execution and would otherwise behave as if a real user from the
     # origin chat was driving the agent:
     #   - tools/terminal_tool.py: background-process notification routing
-    #     (notify_on_complete / watch_patterns) reads HERMES_SESSION_PLATFORM
-    #     and HERMES_SESSION_CHAT_ID to populate watcher_platform / chat_id,
+    #     (notify_on_complete / watch_patterns) reads FULILIAN_SESSION_PLATFORM
+    #     and FULILIAN_SESSION_CHAT_ID to populate watcher_platform / chat_id,
     #     which would route completion notifications to the origin chat
-    #     instead of via HERMES_CRON_AUTO_DELIVER_* below.
+    #     instead of via FULILIAN_CRON_AUTO_DELIVER_* below.
     #   - tools/tts_tool.py: picks Opus vs MP3 based on
-    #     HERMES_SESSION_PLATFORM == "telegram".
+    #     FULILIAN_SESSION_PLATFORM == "telegram".
     #   - tools/skills_tool.py + agent/prompt_builder.py: per-platform
     #     skill-disable lists and the system-prompt cache key both consume
-    #     HERMES_SESSION_PLATFORM.
+    #     FULILIAN_SESSION_PLATFORM.
     #   - tools/send_message_tool.py: mirror source labelling and the
-    #     send_message gate read HERMES_SESSION_PLATFORM.
+    #     send_message gate read FULILIAN_SESSION_PLATFORM.
     # Cron output delivery itself reads job["origin"] directly via
-    # _resolve_origin(job) and the HERMES_CRON_AUTO_DELIVER_* vars set
-    # below, so clearing HERMES_SESSION_* here does not affect delivery.
+    # _resolve_origin(job) and the FULILIAN_CRON_AUTO_DELIVER_* vars set
+    # below, so clearing FULILIAN_SESSION_* here does not affect delivery.
     # Resolve workdir BEFORE set_session_vars so we can pass it as cwd=,
     # letting set_session_vars handle the _SESSION_CWD ContextVar set/clear
     # via its existing machinery (clear_session_vars calls clear_session_cwd
@@ -5764,13 +5764,13 @@ def run_job(
         chat_id="",
         chat_name="",
         # A cron job cannot receive a completion after its turn ends. We clear the
-        # HERMES_SESSION_* routing keys just below, so an async delegation's
+        # FULILIAN_SESSION_* routing keys just below, so an async delegation's
         # completion event carries session_key="" — _enrich_async_delegation_routing
         # cannot resolve it and _inject_watch_notification drops it ("no routing
         # metadata"). And by the time a child finishes, run_job has already shipped
         # the job's final response via _deliver_result; there is no turn left to
         # re-enter. (Worse, get_current_session_key() can fall back to the ambient
-        # os.environ HERMES_SESSION_KEY, which risks routing a cron subagent's output
+        # os.environ FULILIAN_SESSION_KEY, which risks routing a cron subagent's output
         # into an unrelated user chat.)
         #
         # Declaring the channel stateless routes delegate_task to its existing
@@ -5780,9 +5780,9 @@ def run_job(
         cwd=_job_workdir or "",
     )
     _cron_delivery_vars = (
-        "HERMES_CRON_AUTO_DELIVER_PLATFORM",
-        "HERMES_CRON_AUTO_DELIVER_CHAT_ID",
-        "HERMES_CRON_AUTO_DELIVER_THREAD_ID",
+        "FULILIAN_CRON_AUTO_DELIVER_PLATFORM",
+        "FULILIAN_CRON_AUTO_DELIVER_CHAT_ID",
+        "FULILIAN_CRON_AUTO_DELIVER_THREAD_ID",
     )
     for _var_name in _cron_delivery_vars:
         _VAR_MAP[_var_name].set("")
@@ -5828,7 +5828,7 @@ def run_job(
     # statement raises.  A leaked writer would deadlock the whole scheduler
     # (every future job blocks on acquire_*); a leaked reader blocks all
     # future writers.  Acquire itself can't leak (it either blocks or returns).
-    _cron_session_var = _VAR_MAP["HERMES_CRON_SESSION"]
+    _cron_session_var = _VAR_MAP["FULILIAN_CRON_SESSION"]
     _cron_session_token = None
     _non_dispatcher_token = None
     _session_db = None
@@ -5857,13 +5857,13 @@ def run_job(
 
         # Mark this job as NOT the dispatcher-owned kanban worker.
         #
-        # A kanban worker is a normal `hermes chat -q` CLI agent whose default
-        # toolset includes `cronjob`, running with HERMES_KANBAN_TASK
+        # A kanban worker is a normal `fulilian chat -q` CLI agent whose default
+        # toolset includes `cronjob`, running with FULILIAN_KANBAN_TASK
         # legitimately in its own env; `cronjob(action="run")` calls
         # run_one_job() -> run_job() right here in that process.  Without this
         # marker the cron agent is misread as that worker: the kanban toolset is
         # force-added, the worker protocol is injected into its system prompt,
-        # and kanban_complete defaults task_id to $HERMES_KANBAN_TASK -- letting
+        # and kanban_complete defaults task_id to $FULILIAN_KANBAN_TASK -- letting
         # an unrelated cron job close the worker's task and overwrite real
         # results.
         #
@@ -5880,40 +5880,40 @@ def run_job(
 
         # Re-read .env and config.yaml fresh every run so provider/key
         # changes take effect without a gateway restart. Route through
-        # load_hermes_dotenv (not a bare load_dotenv) and reset the secret-
+        # load_fulilian_dotenv (not a bare load_dotenv) and reset the secret-
         # source cache first: startup already applied external secrets and
-        # recorded this HERMES_HOME in _APPLIED_HOMES, so a naive reload would
+        # recorded this FULILIAN_HOME in _APPLIED_HOMES, so a naive reload would
         # re-apply only the .env placeholder and never re-resolve a Bitwarden/
         # BSM-backed secret — leaving cron jobs 401'ing on the placeholder
         # (#33465). Clearing the cache forces the re-pull; the resolved secret
         # overrides the placeholder only when secrets.bitwarden.override_existing
         # is set (mirrors startup), and the Bitwarden value-cache keeps the
-        # forced re-pull off the network. load_hermes_dotenv also handles the
+        # forced re-pull off the network. load_fulilian_dotenv also handles the
         # utf-8/latin-1 encoding fallback internally.
         from fulilian_cli.env_loader import (
-            load_hermes_dotenv,
+            load_fulilian_dotenv,
             reset_secret_source_cache,
         )
         reset_secret_source_cache()
-        load_hermes_dotenv(hermes_home=_get_hermes_home())
+        load_fulilian_dotenv(fulilian_home=_get_fulilian_home())
 
         delivery_target = _resolve_delivery_target(job)
         if delivery_target:
-            _VAR_MAP["HERMES_CRON_AUTO_DELIVER_PLATFORM"].set(delivery_target["platform"])
-            _VAR_MAP["HERMES_CRON_AUTO_DELIVER_CHAT_ID"].set(str(delivery_target["chat_id"]))
-            _VAR_MAP["HERMES_CRON_AUTO_DELIVER_THREAD_ID"].set(
+            _VAR_MAP["FULILIAN_CRON_AUTO_DELIVER_PLATFORM"].set(delivery_target["platform"])
+            _VAR_MAP["FULILIAN_CRON_AUTO_DELIVER_CHAT_ID"].set(str(delivery_target["chat_id"]))
+            _VAR_MAP["FULILIAN_CRON_AUTO_DELIVER_THREAD_ID"].set(
                 ""
                 if delivery_target.get("thread_id") is None
                 else str(delivery_target["thread_id"])
             )
 
         # Model resolution precedence: per-job override > cron.model (the
-        # cron-fleet default) > HERMES_MODEL env > config.yaml ``model:``
+        # cron-fleet default) > FULILIAN_MODEL env > config.yaml ``model:``
         # (string or ``{default: ...}``). The per-job value is intentionally
-        # re-read from storage every tick so a ``hermes cron edit --model``
+        # re-read from storage every tick so a ``fulilian cron edit --model``
         # after a failed run takes effect on the next tick — there is no
         # in-memory cache.
-        model = job.get("model") or os.getenv("HERMES_MODEL") or ""
+        model = job.get("model") or os.getenv("FULILIAN_MODEL") or ""
 
         # cron.model / cron.model_provider: a deliberate cron-fleet default
         # so unattended jobs stop shadowing chat `/model` switches. When an
@@ -5927,7 +5927,7 @@ def run_job(
         _model_cfg = {}
         try:
             from fulilian_cli.config import read_user_config_raw
-            _cfg_path = str(_get_hermes_home() / "config.yaml")
+            _cfg_path = str(_get_fulilian_home() / "config.yaml")
             if os.path.exists(_cfg_path):
                 _cfg = read_user_config_raw(Path(_cfg_path))
                 # Managed scope: a scheduled job must honor administrator-pinned
@@ -5971,11 +5971,11 @@ def run_job(
             raise RuntimeError(
                 f"Cron job '{job_name}' has no model configured "
                 f"(job.model={job.get('model')!r}, "
-                f"HERMES_MODEL={os.getenv('HERMES_MODEL', '')!r}, "
+                f"FULILIAN_MODEL={os.getenv('FULILIAN_MODEL', '')!r}, "
                 "config.yaml model.default missing or empty). "
                 f"Set a per-job model via "
-                f"`hermes cron edit {job_id} --model <name>` or set a "
-                "default with `hermes model <name>`."
+                f"`fulilian cron edit {job_id} --model <name>` or set a "
+                "default with `fulilian model <name>`."
             )
 
         # Apply IPv4 preference if configured.
@@ -5998,14 +5998,14 @@ def run_job(
         prefill_messages = None
         agent_cfg = _cfg.get("agent", {}) if isinstance(_cfg.get("agent", {}), dict) else {}
         prefill_file = (
-            os.getenv("HERMES_PREFILL_MESSAGES_FILE", "")
+            os.getenv("FULILIAN_PREFILL_MESSAGES_FILE", "")
             or _cfg.get("prefill_messages_file", "")
             or agent_cfg.get("prefill_messages_file", "")
         )
         if prefill_file:
             pfpath = Path(prefill_file).expanduser()
             if not pfpath.is_absolute():
-                pfpath = _get_hermes_home() / pfpath
+                pfpath = _get_fulilian_home() / pfpath
             if pfpath.exists():
                 try:
                     with open(pfpath, "r", encoding="utf-8") as _pf:
@@ -6099,7 +6099,7 @@ def run_job(
             blocked_doc = (
                 f"# Cron Job: {job_name}\n\n"
                 f"**Job ID:** {job_id}\n"
-                f"**Run Time:** {_hermes_now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                f"**Run Time:** {_fulilian_now().strftime('%Y-%m-%d %H:%M:%S')}\n"
                 f"**Status:** BLOCKED (configuration)\n\n"
                 "Pre-dispatch validation found a configuration problem and "
                 "the agent was NOT run (no tokens spent).\n\n"
@@ -6123,7 +6123,7 @@ def run_job(
             or None
         )
         try:
-            # Do not inject HERMES_INFERENCE_PROVIDER here. resolve_runtime_provider()
+            # Do not inject FULILIAN_INFERENCE_PROVIDER here. resolve_runtime_provider()
             # already prefers persisted config over stale shell/env overrides when
             # no explicit provider is requested. Passing the env var here short-
             # circuits that precedence and can resurrect old providers (for
@@ -6270,9 +6270,9 @@ def run_job(
                     )
                 else:
                     _remediation = (
-                        "To run on the new config, on the host running Hermes "
+                        "To run on the new config, on the host running Fulilian "
                         "pin it explicitly: "
-                        f"`hermes cron edit {job_id} --provider <provider> "
+                        f"`fulilian cron edit {job_id} --provider <provider> "
                         "--model <model>` (or pin the original values to keep "
                         "them)."
                     )
@@ -6353,7 +6353,7 @@ def run_job(
         # (wake-gate, prompt validation, drift skip) has passed, so a gated
         # run never opens state.db just to abandon the handle (#96290).
         #
-        # Bounded with its own timeout (separate from HERMES_CRON_TIMEOUT,
+        # Bounded with its own timeout (separate from FULILIAN_CRON_TIMEOUT,
         # which only watches the agent's run_conversation below):
         # SessionDB.__init__ opens/migrates state.db synchronously and has no
         # timeout of its own against a wedged sqlite3.connect (e.g. a stale
@@ -6363,7 +6363,7 @@ def run_job(
         # run forever.
         _session_db_timeout = _get_session_db_timeout()
         try:
-            from hermes_state import SessionDB
+            from fulilian_state import SessionDB
 
             if _session_db_timeout > 0:
                 _session_db_pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
@@ -6421,7 +6421,7 @@ def run_job(
             disabled_toolsets=_resolve_cron_disabled_toolsets(_cfg),
             quiet_mode=True,
             # Cron jobs should always inherit the user's SOUL.md identity from
-            # HERMES_HOME. When a workdir is configured, also inject project
+            # FULILIAN_HOME. When a workdir is configured, also inject project
             # context files (AGENTS.md / CLAUDE.md / .cursorrules) from there.
             # Without a workdir, keep cwd context discovery disabled.
             skip_context_files=not bool(_job_workdir),
@@ -6441,7 +6441,7 @@ def run_job(
         # for hours if it's actively calling tools / receiving stream tokens,
         # but a hung API call or stuck tool with no activity for the configured
         # duration is caught and killed.  Default 600s (10 min inactivity);
-        # override via HERMES_CRON_TIMEOUT env var.  0 = unlimited.
+        # override via FULILIAN_CRON_TIMEOUT env var.  0 = unlimited.
         #
         # Uses the agent's built-in activity tracker (updated by
         # _touch_activity() on every tool call, API call, and stream delta).
@@ -6642,7 +6642,7 @@ def run_job(
             # through and be delivered as a cron warning.
             _explainer_variants = []
             try:
-                from hermes_state import PERSISTENCE_ERROR_CAUSES as _causes
+                from fulilian_state import PERSISTENCE_ERROR_CAUSES as _causes
             except Exception:
                 _causes = ("locked", "disk", "unknown")
             for _cause in (None, *_causes):
@@ -6676,7 +6676,7 @@ def run_job(
         output = f"""# Cron Job: {job_name}
 
 **Job ID:** {job_id}
-**Run Time:** {_hermes_now().strftime('%Y-%m-%d %H:%M:%S')}
+**Run Time:** {_fulilian_now().strftime('%Y-%m-%d %H:%M:%S')}
 **Schedule:** {job.get('schedule_display', 'N/A')}
 
 ## Prompt
@@ -6733,7 +6733,7 @@ def run_job(
         output = f"""# Cron Job: {job_name} (FAILED)
 
 **Job ID:** {job_id}
-**Run Time:** {_hermes_now().strftime('%Y-%m-%d %H:%M:%S')}
+**Run Time:** {_fulilian_now().strftime('%Y-%m-%d %H:%M:%S')}
 **Schedule:** {job.get('schedule_display', 'N/A')}
 
 ## Prompt
@@ -6812,7 +6812,7 @@ def run_job(
             # except-fallback below guarantees a non-blank title (#50535).
             try:
                 _title_base = " ".join(job_name.split())[:60].strip() or f"cron {job_id}"
-                _cron_title = f"{_title_base} · {_hermes_now().strftime('%b %d %H:%M')}"
+                _cron_title = f"{_title_base} · {_fulilian_now().strftime('%b %d %H:%M')}"
                 if not _set_cron_session_title(
                     _session_db, _final_cron_session_id, _cron_title
                 ):
@@ -6849,7 +6849,7 @@ def run_job(
             # session_lifecycle_statuses is the existing cost-bounded
             # classifier for exactly this shape. Only a POSITIVELY recognized
             # pathological status (see the status vocabulary in
-            # hermes_state's session_lifecycle_statuses docstring — keep the
+            # fulilian_state's session_lifecycle_statuses docstring — keep the
             # tuple below in sync when it grows) downgrades the booking: an
             # unknown value (newer classifier shape, test doubles) keeps the
             # historical reason, and so does a failed probe — the booking
@@ -7063,7 +7063,7 @@ def run_one_job(
     through the single fenced completion path.
     """
     if extra_prompt is None:
-        # A gateway-forwarded manual run (`hermes cron run --prompt` /
+        # A gateway-forwarded manual run (`fulilian cron run --prompt` /
         # cronjob(action='run', prompt=...) on a relay-fronted target) stamps
         # its transient context on the job via trigger_job; the ticker/Chronos
         # fire that consumes the manual occurrence carries it here. Single-fire:
@@ -7074,7 +7074,7 @@ def run_one_job(
     claim = job.get("fire_claim")
     fire_owner = str(claim.get("by") or "") if isinstance(claim, dict) else ""
     execution_token = object()
-    profile_home = _get_hermes_home().resolve()
+    profile_home = _get_fulilian_home().resolve()
     with _running_lock:
         _running_fire_owners.setdefault(job["id"], {})[execution_token] = (
             fire_owner or None,
@@ -7194,7 +7194,7 @@ def _run_one_job_body(
         )
 
         _scope_token = set_secret_scope(
-            build_profile_secret_scope(_get_hermes_home())
+            build_profile_secret_scope(_get_fulilian_home())
         )
         # Defer the cron agent's async-resource teardown until AFTER delivery.
         # run_job normally closes the agent (and reaps stale async clients) in
@@ -7503,7 +7503,7 @@ def _run_one_job_body(
         elif incident_acked and not success:
             # Distinct from plain "suppressed" (silence marker / local jobs):
             # the failure ping was withheld because the operator acked this
-            # exact signature via `hermes cron incidents ack`.
+            # exact signature via `fulilian cron incidents ack`.
             delivery_outcome = "suppressed_acked"
         else:
             delivery_outcome = "suppressed"
@@ -7760,9 +7760,9 @@ def tick(
         raise
 
     try:
-        # Global emergency stop (`hermes pause`): skip dispatch entirely while
+        # Global emergency stop (`fulilian pause`): skip dispatch entirely while
         # the ESTOP sentinel exists. Never touches in-flight runs — due jobs
-        # simply wait for the next tick after `hermes resume`. Logged once per
+        # simply wait for the next tick after `fulilian resume`. Logged once per
         # engagement (not every tick) by check_paused.
         try:
             from agent.estop import check_paused as _estop_check_paused
@@ -7777,7 +7777,7 @@ def tick(
 
         # Dead-owner claim reclaim (#86721): execution rows carry their owner
         # pid + process start time, but recovery previously ran only at
-        # scheduler STARTUP. A one-shot `hermes cron run` that claimed a job
+        # scheduler STARTUP. A one-shot `fulilian cron run` that claimed a job
         # and died mid-run (its runner thread lived in the exiting CLI
         # process) left the row 'claimed' forever while the long-lived
         # gateway ticker kept running — blocking every future run of that
@@ -7839,7 +7839,7 @@ def tick(
             # sweeps on idle ticks so orphaned stdio children from crashed
             # jobs are reaped even when nothing is due.
             if verbose:
-                logger.info("%s - No jobs due", _hermes_now().strftime('%H:%M:%S'))
+                logger.info("%s - No jobs due", _fulilian_now().strftime('%H:%M:%S'))
             try:
                 from tools.mcp_tool import _kill_orphaned_mcp_children
                 _kill_orphaned_mcp_children()
@@ -7848,7 +7848,7 @@ def tick(
             return 0
 
         if verbose:
-            logger.info("%s - %s job(s) due", _hermes_now().strftime('%H:%M:%S'), len(due_jobs))
+            logger.info("%s - %s job(s) due", _fulilian_now().strftime('%H:%M:%S'), len(due_jobs))
 
         # Advance next_run_at for all recurring jobs FIRST, under the file lock,
         # before any execution begins.  This preserves at-most-once semantics.
@@ -7863,14 +7863,14 @@ def tick(
         advance_next_runs([job["id"] for job in due_jobs])
 
         # Resolve max parallel workers: env var > config.yaml > unbounded.
-        # Set HERMES_CRON_MAX_PARALLEL=1 to restore old serial behaviour.
+        # Set FULILIAN_CRON_MAX_PARALLEL=1 to restore old serial behaviour.
         _max_workers: Optional[int] = None
         try:
-            _env_par = os.getenv("HERMES_CRON_MAX_PARALLEL", "").strip()
+            _env_par = os.getenv("FULILIAN_CRON_MAX_PARALLEL", "").strip()
             if _env_par:
                 _max_workers = int(_env_par) or None
         except (ValueError, TypeError):
-            logger.warning("Invalid HERMES_CRON_MAX_PARALLEL value; defaulting to unbounded")
+            logger.warning("Invalid FULILIAN_CRON_MAX_PARALLEL value; defaulting to unbounded")
         if _max_workers is None:
             try:
                 _ucfg = load_config() or {}

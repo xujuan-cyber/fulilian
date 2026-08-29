@@ -1,12 +1,12 @@
-"""hermes webhook — manage dynamic webhook subscriptions from the CLI.
+"""fulilian webhook — manage dynamic webhook subscriptions from the CLI.
 
 Usage:
-    hermes webhook subscribe <name> [options]
-    hermes webhook list
-    hermes webhook remove <name>
-    hermes webhook test <name> [--payload '{"key": "value"}']
+    fulilian webhook subscribe <name> [options]
+    fulilian webhook list
+    fulilian webhook remove <name>
+    fulilian webhook test <name> [--payload '{"key": "value"}']
 
-Subscriptions persist to ~/.hermes/webhook_subscriptions.json and are
+Subscriptions persist to ~/.fulilian/webhook_subscriptions.json and are
 hot-reloaded by the webhook adapter without a gateway restart.
 """
 
@@ -19,7 +19,7 @@ import time
 from pathlib import Path
 from typing import Dict
 
-from fulilian_constants import display_hermes_home
+from fulilian_constants import display_fulilian_home
 from utils import atomic_replace
 from fulilian_cli.config import cfg_get
 
@@ -28,13 +28,13 @@ _SUBSCRIPTIONS_FILENAME = "webhook_subscriptions.json"
 _SUBSCRIPTIONS_FILE_MODE = 0o600
 
 
-def _hermes_home() -> Path:
-    from fulilian_constants import get_hermes_home
-    return get_hermes_home()
+def _fulilian_home() -> Path:
+    from fulilian_constants import get_fulilian_home
+    return get_fulilian_home()
 
 
 def _subscriptions_path() -> Path:
-    return _hermes_home() / _SUBSCRIPTIONS_FILENAME
+    return _fulilian_home() / _SUBSCRIPTIONS_FILENAME
 
 
 def _load_subscriptions() -> Dict[str, dict]:
@@ -105,12 +105,12 @@ def _get_webhook_base_url() -> str:
 
 
 def _setup_hint() -> str:
-    _dhh = display_hermes_home()
+    _dhh = display_fulilian_home()
     return f"""
   Webhook platform is not enabled. To set it up:
 
   1. Run the gateway setup wizard:
-     hermes gateway setup
+     fulilian gateway setup
 
   2. Or manually add to {_dhh}/config.yaml:
      platforms:
@@ -125,7 +125,7 @@ def _setup_hint() -> str:
      WEBHOOK_PORT=8644
      WEBHOOK_SECRET=your-global-secret
 
-  Then start the gateway: hermes gateway run
+  Then start the gateway: fulilian gateway run
 """
 
 
@@ -138,12 +138,12 @@ def _require_webhook_enabled() -> bool:
 
 
 def webhook_command(args):
-    """Entry point for 'hermes webhook' subcommand."""
+    """Entry point for 'fulilian webhook' subcommand."""
     sub = getattr(args, "webhook_action", None)
 
     if not sub:
-        print("Usage: hermes webhook {subscribe|list|remove|test}")
-        print("Run 'hermes webhook --help' for details.")
+        print("Usage: fulilian webhook {subscribe|list|remove|test}")
+        print("Run 'fulilian webhook --help' for details.")
         return
 
     if not _require_webhook_enabled():
@@ -221,14 +221,14 @@ def _cmd_subscribe(args):
         print(f"  Script: {route['script']}")
     print("\n  Configure your service to POST to the URL above.")
     print("  Use the secret for HMAC-SHA256 signature validation.")
-    print("  The gateway must be running to receive events (hermes gateway run).\n")
+    print("  The gateway must be running to receive events (fulilian gateway run).\n")
 
 
 def _cmd_list(args):
     subs = _load_subscriptions()
     if not subs:
         print("  No dynamic webhook subscriptions.")
-        print("  Create one with: hermes webhook subscribe <name>")
+        print("  Create one with: fulilian webhook subscribe <name>")
         return
 
     base_url = _get_webhook_base_url()
@@ -278,7 +278,7 @@ def _cmd_test(args):
     base_url = _get_webhook_base_url()
     url = f"{base_url}/webhooks/{name}"
 
-    payload = args.payload or '{"test": true, "event_type": "test", "message": "Hello from hermes webhook test"}'
+    payload = args.payload or '{"test": true, "event_type": "test", "message": "Hello from fulilian webhook test"}'
 
     import hmac
     import hashlib
@@ -304,4 +304,4 @@ def _cmd_test(args):
             print(f"  Response ({resp.status}): {body}")
     except Exception as e:
         print(f"  Error: {e}")
-        print("  Is the gateway running? (hermes gateway run)")
+        print("  Is the gateway running? (fulilian gateway run)")

@@ -65,7 +65,7 @@ def test_interrupted_session_end_skipped_for_handed_off():
     cli_mock.agent = agent
     cli_mock.session_id = "handoff-session-456"
 
-    with patch("hermes_cli.lifecycle.invoke_hook") as mock_hook:
+    with patch("fulilian_cli.lifecycle.invoke_hook") as mock_hook:
         cli_mod._emit_interrupted_session_end(cli_mock, reason="keyboard_interrupt")
 
     # on_session_end hook must NOT fire for a handed-off session
@@ -91,7 +91,7 @@ def test_interrupted_session_end_fires_for_normal():
     cli_mock.agent = agent
     cli_mock.session_id = "normal-session-789"
 
-    with patch("hermes_cli.lifecycle.invoke_hook") as mock_hook:
+    with patch("fulilian_cli.lifecycle.invoke_hook") as mock_hook:
         cli_mod._emit_interrupted_session_end(cli_mock, reason="keyboard_interrupt")
 
     mock_hook.assert_called_once()
@@ -110,8 +110,8 @@ def test_cleanup_does_not_finalize_handed_off_session():
     cli_mod._active_agent_ref = agent
 
     with (
-        patch("hermes_cli.lifecycle.finalize_session") as mock_finalize,
-        patch("hermes_cli.plugins.invoke_hook"),
+        patch("fulilian_cli.lifecycle.finalize_session") as mock_finalize,
+        patch("fulilian_cli.plugins.invoke_hook"),
     ):
         cli_mod._run_cleanup()
 
@@ -130,8 +130,8 @@ def test_cleanup_finalizes_normal_session():
     cli_mod._active_agent_ref = agent
 
     with (
-        patch("hermes_cli.lifecycle.finalize_session") as mock_finalize,
-        patch("hermes_cli.plugins.invoke_hook"),
+        patch("fulilian_cli.lifecycle.finalize_session") as mock_finalize,
+        patch("fulilian_cli.plugins.invoke_hook"),
     ):
         cli_mod._run_cleanup()
 
@@ -153,7 +153,7 @@ def test_single_query_finalize_skipped_for_handed_off():
     cli_mock.agent = agent
     cli_mock.session_id = "handoff-session-single"
 
-    with patch("hermes_cli.lifecycle.finalize_session") as mock_finalize:
+    with patch("fulilian_cli.lifecycle.finalize_session") as mock_finalize:
         cli_mod._notify_single_query_session_finalize(cli_mock)
 
     mock_finalize.assert_not_called()

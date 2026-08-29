@@ -4,14 +4,14 @@ sidebar_position: 2
 
 # Profiles: Running Multiple Agents
 
-Run multiple independent Hermes agents on the same machine — each with its own config, API keys, memory, sessions, skills, and gateway state.
+Run multiple independent Fulilian agents on the same machine — each with its own config, API keys, memory, sessions, skills, and gateway state.
 
 ## What are profiles?
 
-A profile is a separate Hermes home directory. Each profile gets its own directory containing its own `config.yaml`, `.env`, `SOUL.md`, memories, sessions, skills, cron jobs, and state database. Profiles let you run separate agents for different purposes — a coding assistant, a personal bot, a research agent — without mixing up Hermes state.
+A profile is a separate Fulilian home directory. Each profile gets its own directory containing its own `config.yaml`, `.env`, `SOUL.md`, memories, sessions, skills, cron jobs, and state database. Profiles let you run separate agents for different purposes — a coding assistant, a personal bot, a research agent — without mixing up Fulilian state.
 
 :::caution Give every agent its own profile
-Never point two agent processes at the same profile (the same Hermes home). Both write memory automatically, and each loads the other's writes into its system prompt at session start — so two writers on one home compound each other's state until it stops being anything you configured. Profiles exist exactly to prevent this; agents that need shared memory should use an [external memory provider](/user-guide/features/memory-providers) instead.
+Never point two agent processes at the same profile (the same Fulilian home). Both write memory automatically, and each loads the other's writes into its system prompt at session start — so two writers on one home compound each other's state until it stops being anything you configured. Profiles exist exactly to prevent this; agents that need shared memory should use an [external memory provider](/user-guide/features/memory-providers) instead.
 :::
 
 When you create a profile, it automatically becomes its own command. Create a profile called `coder` and you immediately have `coder chat`, `coder setup`, `coder gateway start`, etc.
@@ -19,23 +19,23 @@ When you create a profile, it automatically becomes its own command. Create a pr
 ## Quick start
 
 ```bash
-hermes profile create coder       # creates profile + "coder" command alias
+fulilian profile create coder       # creates profile + "coder" command alias
 coder setup                       # configure API keys and model
 coder chat                        # start chatting
 ```
 
-That's it. `coder` is now its own Hermes profile with its own config, memory, and state.
+That's it. `coder` is now its own Fulilian profile with its own config, memory, and state.
 
 ## Creating a profile
 
 :::tip
-Quickest setup: run `hermes setup --portal` inside the new profile to wire up models + tools at once. See [Nous Portal](/integrations/nous-portal).
+Quickest setup: run `fulilian setup --portal` inside the new profile to wire up models + tools at once. See [Nous Portal](/integrations/nous-portal).
 :::
 
 ### Blank profile
 
 ```bash
-hermes profile create mybot
+fulilian profile create mybot
 ```
 
 Creates a fresh profile with bundled skills seeded. Run `mybot setup` to configure API keys, model, and gateway tokens.
@@ -43,37 +43,37 @@ Creates a fresh profile with bundled skills seeded. Run `mybot setup` to configu
 If you plan to use this profile as a kanban worker (or want the kanban orchestrator to route work to it), pass `--description "<role>"` at create time so the orchestrator knows what it's good at:
 
 ```bash
-hermes profile create researcher --description "Reads source code and external docs, writes findings."
+fulilian profile create researcher --description "Reads source code and external docs, writes findings."
 ```
 
-You can also set or auto-generate the description later with `hermes profile describe` — see the [Kanban guide](./features/kanban#auto-vs-manual-orchestration) for the full routing model.
+You can also set or auto-generate the description later with `fulilian profile describe` — see the [Kanban guide](./features/kanban#auto-vs-manual-orchestration) for the full routing model.
 
 ### Clone config only (`--clone`)
 
 ```bash
-hermes profile create work --clone
+fulilian profile create work --clone
 ```
 
-Copies your current profile's `config.yaml`, `.env`, `SOUL.md`, and skills into the new profile. Same API keys, model, and capabilities, but fresh sessions and memory. Edit `~/.hermes/profiles/work/.env` for different API keys, or `~/.hermes/profiles/work/SOUL.md` for a different personality.
+Copies your current profile's `config.yaml`, `.env`, `SOUL.md`, and skills into the new profile. Same API keys, model, and capabilities, but fresh sessions and memory. Edit `~/.fulilian/profiles/work/.env` for different API keys, or `~/.fulilian/profiles/work/SOUL.md` for a different personality.
 
 ### Clone everything (`--clone-all`)
 
 ```bash
-hermes profile create backup --clone-all
+fulilian profile create backup --clone-all
 ```
 
-Copies **everything** — config, API keys, personality, all memories, skills, cron jobs, plugins. A complete working snapshot. Per-profile history is excluded (session history, `state.db`, `backups/`, `state-snapshots/`, `checkpoints/`) — these belong to the source profile and can reach tens of GB. For a full backup including history, use `hermes profile export` or `hermes backup` instead.
+Copies **everything** — config, API keys, personality, all memories, skills, cron jobs, plugins. A complete working snapshot. Per-profile history is excluded (session history, `state.db`, `backups/`, `state-snapshots/`, `checkpoints/`) — these belong to the source profile and can reach tens of GB. For a full backup including history, use `fulilian profile export` or `fulilian backup` instead.
 
 ### Clone from a specific profile
 
 ```bash
-hermes profile create work --clone-from coder
+fulilian profile create work --clone-from coder
 ```
 
 `--clone-from <source>` selects the source profile directly and implies a config/skills/SOUL clone. Combine it with `--clone-all` when you want a full copy of that source profile:
 
 ```bash
-hermes profile create work-backup --clone-from coder --clone-all
+fulilian profile create work-backup --clone-from coder --clone-all
 ```
 
 :::tip Honcho memory + profiles
@@ -95,28 +95,28 @@ coder skills list             # list coder's skills
 coder config set model.default anthropic/claude-sonnet-4
 ```
 
-The alias works with every hermes subcommand — it's just `hermes -p <name>` under the hood.
+The alias works with every fulilian subcommand — it's just `fulilian -p <name>` under the hood.
 
 ### The `-p` flag
 
 You can also target a profile explicitly with any command:
 
 ```bash
-hermes -p coder chat
-hermes --profile=coder doctor
-hermes chat -p coder -q "hello"    # works in any position
+fulilian -p coder chat
+fulilian --profile=coder doctor
+fulilian chat -p coder -q "hello"    # works in any position
 ```
 
-### Sticky default (`hermes profile use`)
+### Sticky default (`fulilian profile use`)
 
 ```bash
-hermes profile use coder
-hermes chat                   # now targets coder
-hermes tools                  # configures coder's tools
-hermes profile use default    # switch back
+fulilian profile use coder
+fulilian chat                   # now targets coder
+fulilian tools                  # configures coder's tools
+fulilian profile use default    # switch back
 ```
 
-Sets a default so plain `hermes` commands target that profile. Like `kubectl config use-context`.
+Sets a default so plain `fulilian` commands target that profile. Like `kubectl config use-context`.
 
 ### Knowing where you are
 
@@ -124,13 +124,13 @@ The CLI always shows which profile is active:
 
 - **Prompt**: `coder ❯` instead of `❯`
 - **Banner**: Shows `Profile: coder` on startup
-- **`hermes profile`**: Shows current profile name, path, model, gateway status
+- **`fulilian profile`**: Shows current profile name, path, model, gateway status
 
 ## Profiles vs workspaces vs sandboxing
 
 Profiles are often confused with workspaces or sandboxes, but they are different things:
 
-- A **profile** gives Hermes its own state directory: `config.yaml`, `.env`, `SOUL.md`, sessions, memory, logs, cron jobs, and gateway state.
+- A **profile** gives Fulilian its own state directory: `config.yaml`, `.env`, `SOUL.md`, sessions, memory, logs, cron jobs, and gateway state.
 - A **workspace** or **working directory** is where terminal commands start. That is controlled separately by `terminal.cwd`.
 - A **sandbox** is what limits filesystem access. Profiles do **not** sandbox the agent.
 
@@ -144,7 +144,7 @@ terminal:
   cwd: /absolute/path/to/project
 ```
 
-Using `cwd: "."` on the local backend means "the directory Hermes was launched from", not "the profile directory".
+Using `cwd: "."` on the local backend means "the directory Fulilian was launched from", not "the profile directory".
 
 Also note:
 
@@ -167,10 +167,10 @@ Each profile has its own `.env` file. Configure a different Telegram/Discord/Sla
 
 ```bash
 # Edit coder's tokens
-nano ~/.hermes/profiles/coder/.env
+nano ~/.fulilian/profiles/coder/.env
 
 # Edit assistant's tokens
-nano ~/.hermes/profiles/assistant/.env
+nano ~/.fulilian/profiles/assistant/.env
 ```
 
 ### Safety: token locks
@@ -180,14 +180,14 @@ If two profiles accidentally use the same bot token, the second gateway will be 
 ### Persistent services
 
 ```bash
-coder gateway install         # creates hermes-gateway-coder systemd/launchd service
-assistant gateway install     # creates hermes-gateway-assistant service
+coder gateway install         # creates fulilian-gateway-coder systemd/launchd service
+assistant gateway install     # creates fulilian-gateway-assistant service
 ```
 
 Each profile gets its own service name. They run independently.
 
 :::note Inside the official Docker image
-Per-profile gateways are supervised by [s6-overlay](https://github.com/just-containers/s6-overlay) (PID 1 in the container), so `hermes profile create <name>` automatically registers an s6 service slot at `/run/service/gateway-<name>/`. `hermes -p <name> gateway start/stop/restart` dispatches to `s6-svc` instead of spawning a bare process — crashes are auto-restarted and `docker restart` preserves the previously-running set of gateways. See [Per-profile gateway supervision](/user-guide/docker#per-profile-gateway-supervision) for details.
+Per-profile gateways are supervised by [s6-overlay](https://github.com/just-containers/s6-overlay) (PID 1 in the container), so `fulilian profile create <name>` automatically registers an s6 service slot at `/run/service/gateway-<name>/`. `fulilian -p <name> gateway start/stop/restart` dispatches to `s6-svc` instead of spawning a bare process — crashes are auto-restarted and `docker restart` preserves the previously-running set of gateways. See [Per-profile gateway supervision](/user-guide/docker#per-profile-gateway-supervision) for details.
 :::
 
 ## Configuring profiles
@@ -200,7 +200,7 @@ Each profile has its own:
 
 ```bash
 coder config set model.default anthropic/claude-sonnet-4
-echo "You are a focused coding assistant." > ~/.hermes/profiles/coder/SOUL.md
+echo "You are a focused coding assistant." > ~/.fulilian/profiles/coder/SOUL.md
 ```
 
 If you want this profile to work in a specific project by default, also set its own `terminal.cwd`:
@@ -220,15 +220,15 @@ also follows the switcher, spawning a conversation under the selected
 profile's home.
 
 Note: "Set as active" on the dashboard's Profiles page is the sticky
-default for **future CLI/gateway runs** (same as `hermes profile use`) —
+default for **future CLI/gateway runs** (same as `fulilian profile use`) —
 to edit a profile from the dashboard, use the switcher instead.
 
 ## Updating
 
-`hermes update` pulls code once (shared) and syncs new bundled skills to **all** profiles automatically:
+`fulilian update` pulls code once (shared) and syncs new bundled skills to **all** profiles automatically:
 
 ```bash
-hermes update
+fulilian update
 # → Code updated (12 commits)
 # → Skills synced: default (up to date), coder (+2 new), assistant (+2 new)
 ```
@@ -238,11 +238,11 @@ User-modified skills are never overwritten.
 ## Managing profiles
 
 ```bash
-hermes profile list           # show all profiles with status
-hermes profile show coder     # detailed info for one profile
-hermes profile rename coder dev-bot   # rename (updates alias + service)
-hermes profile export coder   # pack into coder.tar.gz (shareable; keys stripped)
-hermes profile import coder.tar.gz   # install an archive as a new profile
+fulilian profile list           # show all profiles with status
+fulilian profile show coder     # detailed info for one profile
+fulilian profile rename coder dev-bot   # rename (updates alias + service)
+fulilian profile export coder   # pack into coder.tar.gz (shareable; keys stripped)
+fulilian profile import coder.tar.gz   # install an archive as a new profile
 ```
 
 In chat, the same two live as `/export` and `/import` — and in the desktop app as **⌘K → Export/Import profile…**. See [Sharing a profile](#sharing-a-profile).
@@ -250,80 +250,80 @@ In chat, the same two live as `/export` and `/import` — and in the desktop app
 ### Naming the default profile
 
 The default profile's internal ID is always `default` — it can't be truly
-renamed because `~/.hermes` is the installation root. Renaming it instead
+renamed because `~/.fulilian` is the installation root. Renaming it instead
 sets a **display name**, which UI surfaces show in place of the bare ID:
 
 ```bash
-hermes profile rename default Harumesu   # Unicode fine: 小助手
+fulilian profile rename default Harumesu   # Unicode fine: 小助手
 ```
 
-The display name appears in `hermes profile list`/`show`, the `/profile`
+The display name appears in `fulilian profile list`/`show`, the `/profile`
 chat command, the dashboard, and the desktop app (including the Bot Mode
 roster). It is presentation-only: `-p default`, service names, cron jobs,
 and every other reference keep using the canonical `default` ID. It is
-stored as `display_name` in `~/.hermes/profile.yaml`; remove that line to
+stored as `display_name` in `~/.fulilian/profile.yaml`; remove that line to
 revert. Named profiles can carry a `display_name` too (it survives a real
 rename), but `rename` for them still renames the profile itself.
 
 ## Deleting a profile
 
 ```bash
-hermes profile delete coder
+fulilian profile delete coder
 ```
 
 This stops the gateway, removes the systemd/launchd service, removes the command alias, and deletes all profile data. You'll be asked to type the profile name to confirm.
 
-Use `--yes` to skip confirmation: `hermes profile delete coder --yes`
+Use `--yes` to skip confirmation: `fulilian profile delete coder --yes`
 
 :::note
-You cannot delete the default profile (`~/.hermes`). To remove everything, use `hermes uninstall`.
+You cannot delete the default profile (`~/.fulilian`). To remove everything, use `fulilian uninstall`.
 :::
 
 ## Tab completion
 
 ```bash
 # Bash
-eval "$(hermes completion bash)"
+eval "$(fulilian completion bash)"
 
 # Zsh
-eval "$(hermes completion zsh)"
+eval "$(fulilian completion zsh)"
 ```
 
 Add the line to your `~/.bashrc` or `~/.zshrc` for persistent completion. Completes profile names after `-p`, profile subcommands, and top-level commands.
 
 ## How it works
 
-Profiles use the `HERMES_HOME` environment variable. When you run `coder chat`, the wrapper script sets `HERMES_HOME=~/.hermes/profiles/coder` before launching hermes. Since 119+ files in the codebase resolve paths via `get_hermes_home()`, Hermes state automatically scopes to the profile's directory — config, sessions, memory, skills, state database, gateway PID, logs, and cron jobs.
+Profiles use the `FULILIAN_HOME` environment variable. When you run `coder chat`, the wrapper script sets `FULILIAN_HOME=~/.fulilian/profiles/coder` before launching fulilian. Since 119+ files in the codebase resolve paths via `get_fulilian_home()`, Fulilian state automatically scopes to the profile's directory — config, sessions, memory, skills, state database, gateway PID, logs, and cron jobs.
 
-This is separate from terminal working directory. Tool execution starts from `terminal.cwd` (or the launch directory when `cwd: "."` on the local backend), not automatically from `HERMES_HOME`.
+This is separate from terminal working directory. Tool execution starts from `terminal.cwd` (or the launch directory when `cwd: "."` on the local backend), not automatically from `FULILIAN_HOME`.
 
 On host installs, tool subprocesses keep your real OS-user `HOME` by default so
 existing CLI credentials under `~` keep working across profiles. Profile data is
-isolated by `HERMES_HOME`, not by changing `HOME`. Container backends still use
-`{HERMES_HOME}/home` for persistent tool state, and host users who need strict
+isolated by `FULILIAN_HOME`, not by changing `HOME`. Container backends still use
+`{FULILIAN_HOME}/home` for persistent tool state, and host users who need strict
 per-profile tool config can opt in with `terminal.home_mode: profile`.
 
 This means two things that are easy to mix up:
 
-- `HERMES_HOME` is the profile boundary. It controls Hermes config, `.env`,
-  memory, sessions, skills, logs, cron jobs, gateway state, and other Hermes
+- `FULILIAN_HOME` is the profile boundary. It controls Fulilian config, `.env`,
+  memory, sessions, skills, logs, cron jobs, gateway state, and other Fulilian
   data.
 - `HOME` is the operating-system/user home that external CLIs expect. On host
-  installs, Hermes keeps it as the real user home by default so tools like
+  installs, Fulilian keeps it as the real user home by default so tools like
   `git`, `ssh`, `gh`, `az`, `npm`, Claude Code, and Codex find the same
   credentials they use in your normal shell.
 
 The tradeoff is that host profiles share normal user-level CLI state by default.
 If you need separate CLI identities per profile, set `terminal.home_mode:
-profile` in that profile's `config.yaml`. In that mode Hermes launches tool
-subprocesses with `HOME={HERMES_HOME}/home`; you then need to initialize or link
+profile` in that profile's `config.yaml`. In that mode Fulilian launches tool
+subprocesses with `HOME={FULILIAN_HOME}/home`; you then need to initialize or link
 the profile-specific `~/.ssh`, `~/.gitconfig`, `~/.config/gh`, cloud CLI auth,
 Claude/Codex auth, npm state, and similar files inside that profile home.
 
-Hermes also exposes `HERMES_REAL_HOME` to subprocesses so scripts can still find
+Fulilian also exposes `FULILIAN_REAL_HOME` to subprocesses so scripts can still find
 the actual account home when `home_mode: profile` is active.
 
-The default profile is simply `~/.hermes` itself. No migration needed — existing installs work identically.
+The default profile is simply `~/.fulilian` itself. No migration needed — existing installs work identically.
 
 ## Sharing a profile
 
@@ -333,18 +333,18 @@ A profile you built on one machine can go to another — your own workstation, a
 
 ```bash
 # In chat, run /export, hand over the file, and they run /import on it
-hermes profile export coder
-hermes profile import ./coder.tar.gz --name coder
+fulilian profile export coder
+fulilian profile import ./coder.tar.gz --name coder
 ```
 
 **Publish a distribution.** Package the profile as a **git repository** so recipients install it with one command and pull versioned updates later. Carries the SOUL, config, skills, cron jobs, and MCP connections; credentials, memories, and sessions stay per-machine.
 
 ```bash
 # Install a whole agent from a git repo
-hermes profile install github.com/you/research-bot --alias
+fulilian profile install github.com/you/research-bot --alias
 
 # Update later when the author ships a new version (keeps your memories + .env)
-hermes profile update research-bot
+fulilian profile update research-bot
 ```
 
 Use an export file for a one-time handoff or a move; use a distribution for an agent you'll keep shipping. See **[Profile Distributions: Share a Whole Agent](./profile-distributions.md)** for both — the comparison table, authoring, publishing, update semantics, and the security model.

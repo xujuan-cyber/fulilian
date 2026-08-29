@@ -1,10 +1,10 @@
 """SQLite-backed Kanban board for multi-profile, multi-project collaboration.
 
 In a fresh install the board lives at ``<root>/kanban.db`` where
-``<root>`` is the **shared Hermes root** (the parent of any active
+``<root>`` is the **shared Fulilian root** (the parent of any active
 profile). Profiles intentionally collapse onto a shared board: it IS
 the cross-profile coordination primitive. A worker spawned with
-``hermes -p <profile>`` joins the same board as the dispatcher that
+``fulilian -p <profile>`` joins the same board as the dispatcher that
 claimed the task. The same applies to ``<root>/kanban/workspaces/`` and
 ``<root>/kanban/logs/``.
 
@@ -12,7 +12,7 @@ claimed the task. The same applies to ``<root>/kanban/workspaces/`` and
 separate unrelated streams of work (e.g. one per project / repo / domain).
 Each board is a directory under ``<root>/kanban/boards/<slug>/`` with
 its own ``kanban.db``, ``workspaces/``, and ``logs/``. All boards share
-the profile's Hermes home but are otherwise isolated: a worker spawned
+the profile's Fulilian home but are otherwise isolated: a worker spawned
 for a task on board ``atm10-server`` sees only that board's tasks,
 cannot enumerate other boards, and its dispatcher ticks don't touch
 other boards' DBs.
@@ -27,27 +27,27 @@ Board resolution order (highest precedence first, all optional):
 * ``board=`` argument passed directly to :func:`connect` / :func:`init_db`
   (explicit — used by the CLI ``--board`` flag and the dashboard
   ``?board=...`` query param).
-* ``HERMES_KANBAN_BOARD`` env var (used by the dispatcher to pin workers
+* ``FULILIAN_KANBAN_BOARD`` env var (used by the dispatcher to pin workers
   to the board their task lives on — workers cannot see other boards).
-* ``HERMES_KANBAN_DB`` env var (pins the DB file path directly — legacy
+* ``FULILIAN_KANBAN_DB`` env var (pins the DB file path directly — legacy
   override still honoured; highest precedence when the file path itself
   is what the caller wants to force).
 * ``<root>/kanban/current`` — a one-line text file holding the slug of
-  the "currently selected" board. Written by ``hermes kanban boards
+  the "currently selected" board. Written by ``fulilian kanban boards
   switch <slug>``. When absent, the active board is ``default``.
 
-In standard installs ``<root>`` is ``~/.hermes``. In Docker / custom
-deployments where ``HERMES_HOME`` points outside ``~/.hermes`` (e.g.
-``/opt/hermes``), ``<root>`` is ``HERMES_HOME``. Legacy env-var
+In standard installs ``<root>`` is ``~/.fulilian``. In Docker / custom
+deployments where ``FULILIAN_HOME`` points outside ``~/.fulilian`` (e.g.
+``/opt/fulilian``), ``<root>`` is ``FULILIAN_HOME``. Legacy env-var
 overrides still work:
 
-* ``HERMES_KANBAN_DB`` — pin the database file path directly.
-* ``HERMES_KANBAN_WORKSPACES_ROOT`` — pin the workspaces root directly.
-* ``HERMES_KANBAN_HOME`` — pin the umbrella root that anchors kanban
+* ``FULILIAN_KANBAN_DB`` — pin the database file path directly.
+* ``FULILIAN_KANBAN_WORKSPACES_ROOT`` — pin the workspaces root directly.
+* ``FULILIAN_KANBAN_HOME`` — pin the umbrella root that anchors kanban
   paths. Useful for tests and unusual deployments.
 
-The dispatcher injects ``HERMES_KANBAN_DB``,
-``HERMES_KANBAN_WORKSPACES_ROOT``, and ``HERMES_KANBAN_BOARD`` into
+The dispatcher injects ``FULILIAN_KANBAN_DB``,
+``FULILIAN_KANBAN_WORKSPACES_ROOT``, and ``FULILIAN_KANBAN_BOARD`` into
 worker subprocess env so workers converge on the exact DB the
 dispatcher used to claim their task — even under unusual symlink or
 Docker layouts.
@@ -55,7 +55,7 @@ Docker layouts.
 Schema is intentionally small: tasks, task_links, task_comments,
 task_events.  The ``workspace_kind`` field decouples coordination from git
 worktrees so that research / ops / digital-twin workloads work alongside
-coding workloads.  See ``docs/hermes-kanban-v1-spec.pdf`` for the full
+coding workloads.  See ``docs/fulilian-kanban-v1-spec.pdf`` for the full
 design specification.
 
 Concurrency strategy: WAL mode + ``BEGIN IMMEDIATE`` for write
@@ -138,7 +138,7 @@ VALID_WORKSPACE_KINDS = {"scratch", "worktree", "dir"}
 def normalize_reasoning_effort(effort: Optional[str]) -> Optional[str]:
     """Normalize a per-task reasoning effort into a storable level.
 
-    Accepts any level in ``hermes_constants.VALID_REASONING_EFFORTS`` plus
+    Accepts any level in ``fulilian_constants.VALID_REASONING_EFFORTS`` plus
     ``"none"`` (thinking disabled), case-insensitively. Empty / None means
     "inherit the worker profile's own ``agent.reasoning_effort``" and stores
     NULL. Anything else is rejected rather than silently dropped — a typo'd
@@ -178,7 +178,7 @@ def _assert_not_delegated_child_mutation() -> None:
 
         delegated = is_delegated_child_process_context()
     except Exception:
-        delegated = bool(os.environ.get("HERMES_DELEGATED_CHILD_CONTEXT"))
+        delegated = bool(os.environ.get("FULILIAN_DELEGATED_CHILD_CONTEXT"))
     if delegated:
         raise PermissionError(
             "delegate_task child contexts cannot mutate Kanban tasks or boards"
@@ -194,7 +194,7 @@ def _fire_kanban_lifecycle_hook(event: str, task_id: str, **fields: Any) -> None
     a plugin raising, import error) is swallowed — a misbehaving observer must
     never break a board state transition.
 
-    ``profile_name`` is resolved from the active HERMES_HOME so dispatcher- and
+    ``profile_name`` is resolved from the active FULILIAN_HOME so dispatcher- and
     worker-side hooks both carry the right profile without the caller plumbing
     it through.
     """
@@ -362,7 +362,7 @@ def _fire_dispatch_tick_hook(
 # next dispatcher tick reclaims it. Workers that outlive this window should
 # call ``heartbeat_claim(task_id)`` periodically. In practice most kanban
 # workloads either finish within 15m, set a longer claim explicitly, or use
-# ``HERMES_KANBAN_CLAIM_TTL_SECONDS`` to raise the default claim window for
+# ``FULILIAN_KANBAN_CLAIM_TTL_SECONDS`` to raise the default claim window for
 # long single-call MCP workflows.
 DEFAULT_CLAIM_TTL_SECONDS = 15 * 60
 
@@ -391,14 +391,14 @@ def _resolve_claim_ttl_seconds(ttl_seconds: Optional[int] = None) -> int:
     """Return the effective claim TTL, honoring the kanban env override.
 
     Explicit call-site values win. Otherwise a positive integer from
-    ``HERMES_KANBAN_CLAIM_TTL_SECONDS`` overrides the built-in default.
+    ``FULILIAN_KANBAN_CLAIM_TTL_SECONDS`` overrides the built-in default.
     Invalid or non-positive env values fall back silently so existing
     installs keep working.
     """
     if ttl_seconds is not None:
         return max(1, int(ttl_seconds))
 
-    raw = os.environ.get("HERMES_KANBAN_CLAIM_TTL_SECONDS", "").strip()
+    raw = os.environ.get("FULILIAN_KANBAN_CLAIM_TTL_SECONDS", "").strip()
     if raw:
         try:
             parsed = int(raw)
@@ -433,12 +433,12 @@ KANBAN_RATE_LIMIT_EXIT_CODE = 75
 def _resolve_crash_grace_seconds() -> int:
     """Return the crash-detection grace period in seconds.
 
-    Reads ``HERMES_KANBAN_CRASH_GRACE_SECONDS`` from the environment;
+    Reads ``FULILIAN_KANBAN_CRASH_GRACE_SECONDS`` from the environment;
     falls back to ``DEFAULT_CRASH_GRACE_SECONDS`` when absent, empty,
     non-integer, or negative. A value of 0 restores immediate-reclaim
     behaviour (useful for tests).
     """
-    raw = os.environ.get("HERMES_KANBAN_CRASH_GRACE_SECONDS", "").strip()
+    raw = os.environ.get("FULILIAN_KANBAN_CRASH_GRACE_SECONDS", "").strip()
     if raw:
         try:
             parsed = int(raw)
@@ -452,14 +452,14 @@ def _resolve_crash_grace_seconds() -> int:
 def _resolve_rate_limit_cooldown_seconds() -> int:
     """Return the rate-limit requeue cooldown in seconds.
 
-    Reads ``HERMES_KANBAN_RATE_LIMIT_COOLDOWN_SECONDS`` from the environment;
+    Reads ``FULILIAN_KANBAN_RATE_LIMIT_COOLDOWN_SECONDS`` from the environment;
     falls back to ``DEFAULT_RATE_LIMIT_COOLDOWN_SECONDS`` when absent, empty,
     non-integer, or negative. A value of 0 disables the cooldown (re-spawn on
     the next tick) — useful for tests that want to assert the task becomes
     spawnable again immediately.
     """
     raw = os.environ.get(
-        "HERMES_KANBAN_RATE_LIMIT_COOLDOWN_SECONDS", ""
+        "FULILIAN_KANBAN_RATE_LIMIT_COOLDOWN_SECONDS", ""
     ).strip()
     if raw:
         try:
@@ -526,7 +526,7 @@ def _relative_age(ts: Optional[int], now: Optional[int] = None) -> str:
 
 DEFAULT_BOARD = "default"
 _CURRENT_BOARD_OVERRIDE: ContextVar[str | None] = ContextVar(
-    "hermes_kanban_current_board_override",
+    "fulilian_kanban_current_board_override",
     default=None,
 )
 
@@ -542,7 +542,7 @@ def scoped_current_board(slug: str):
 
 # Slug validator: lowercase alphanumerics, digits, hyphens; 1–64 chars.
 # Strict enough to stop traversal (`..`) and embedded path separators, loose
-# enough that kebab-case names like ``atm10-server`` or ``hermes-agent``
+# enough that kebab-case names like ``atm10-server`` or ``fulilian-agent``
 # pass without fuss. Board names with display formatting (spaces, emoji)
 # live in ``board.json``; the slug is just the directory name.
 _BOARD_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9\-_]{0,63}$")
@@ -564,26 +564,26 @@ def _normalize_board_slug(slug: Optional[str]) -> Optional[str]:
 
 
 def kanban_home() -> Path:
-    """Return the shared Hermes root that anchors the kanban board.
+    """Return the shared Fulilian root that anchors the kanban board.
 
     Resolution order:
 
-    1. ``HERMES_KANBAN_HOME`` env var when set and non-empty (explicit
+    1. ``FULILIAN_KANBAN_HOME`` env var when set and non-empty (explicit
        override for tests and unusual deployments).
-    2. ``get_default_hermes_root()``, which already returns ``<root>``
-       when ``HERMES_HOME`` is ``<root>/profiles/<name>``, and returns
-       ``HERMES_HOME`` directly for Docker / custom deployments.
+    2. ``get_default_fulilian_root()``, which already returns ``<root>``
+       when ``FULILIAN_HOME`` is ``<root>/profiles/<name>``, and returns
+       ``FULILIAN_HOME`` directly for Docker / custom deployments.
 
     The kanban board is shared across profiles **by design** (see the
     module docstring). Resolving the kanban paths through the active
-    profile's ``HERMES_HOME`` would silently fork the board per profile,
+    profile's ``FULILIAN_HOME`` would silently fork the board per profile,
     which breaks the dispatcher / worker handoff.
     """
-    override = os.environ.get("HERMES_KANBAN_HOME", "").strip()
+    override = os.environ.get("FULILIAN_KANBAN_HOME", "").strip()
     if override:
         return Path(override).expanduser()
-    from fulilian_constants import get_default_hermes_root
-    return get_default_hermes_root()
+    from fulilian_constants import get_default_fulilian_root
+    return get_default_fulilian_root()
 
 
 def boards_root() -> Path:
@@ -600,7 +600,7 @@ def boards_root() -> Path:
 def current_board_path() -> Path:
     """Return the path to ``<root>/kanban/current``.
 
-    One-line text file written by ``hermes kanban boards switch <slug>``
+    One-line text file written by ``fulilian kanban boards switch <slug>``
     to persist the user's board selection across CLI invocations. Absent
     by default (meaning: active board is ``default``).
     """
@@ -612,9 +612,9 @@ def get_current_board() -> str:
 
     Order (highest precedence first):
 
-    1. ``HERMES_KANBAN_BOARD`` env var (set by the dispatcher on worker
+    1. ``FULILIAN_KANBAN_BOARD`` env var (set by the dispatcher on worker
        spawn, or manually for ad-hoc overrides).
-    2. ``<root>/kanban/current`` on disk (set by ``hermes kanban boards
+    2. ``<root>/kanban/current`` on disk (set by ``fulilian kanban boards
        switch``), but only when that board still exists.
     3. ``DEFAULT_BOARD`` (``"default"``).
 
@@ -631,7 +631,7 @@ def get_current_board() -> str:
         except ValueError:
             pass
 
-    env = os.environ.get("HERMES_KANBAN_BOARD", "").strip()
+    env = os.environ.get("FULILIAN_KANBAN_BOARD", "").strip()
     if env:
         try:
             normed = _normalize_board_slug(env)
@@ -660,7 +660,7 @@ def set_current_board(slug: str) -> Path:
 
     Writes ``<root>/kanban/current``. The caller should validate the slug
     exists first (via :func:`board_exists`) — this function does not —
-    so that ``hermes kanban boards switch <typo>`` returns an error
+    so that ``fulilian kanban boards switch <typo>`` returns an error
     instead of silently pointing at nothing.
     """
     _assert_not_delegated_child_mutation()
@@ -715,7 +715,7 @@ def kanban_db_path(board: Optional[str] = None) -> Path:
 
     Resolution (highest precedence first):
 
-    1. ``HERMES_KANBAN_DB`` env var — pins the path directly. Honoured for
+    1. ``FULILIAN_KANBAN_DB`` env var — pins the path directly. Honoured for
        back-compat and for the dispatcher→worker handoff (defense in
        depth: dispatcher injects this into worker env so workers are
        immune to any path-resolution disagreement).
@@ -724,7 +724,7 @@ def kanban_db_path(board: Optional[str] = None) -> Path:
     3. Board ``default`` → ``<root>/kanban.db`` (back-compat path).
        Other boards → ``<root>/kanban/boards/<slug>/kanban.db``.
     """
-    override = os.environ.get("HERMES_KANBAN_DB", "").strip()
+    override = os.environ.get("FULILIAN_KANBAN_DB", "").strip()
     if override:
         return Path(override).expanduser()
     slug = _normalize_board_slug(board)
@@ -739,14 +739,14 @@ def workspaces_root(board: Optional[str] = None) -> Path:
     """Return the directory under which ``scratch`` workspaces are created.
 
     Anchored per-board so workspaces don't leak between projects.
-    ``HERMES_KANBAN_WORKSPACES_ROOT`` pins the path directly (highest
+    ``FULILIAN_KANBAN_WORKSPACES_ROOT`` pins the path directly (highest
     precedence) — the dispatcher injects this into worker env.
 
     ``default`` keeps the legacy path ``<root>/kanban/workspaces/`` so
     that existing scratch workspaces from before the boards feature are
     preserved. Other boards use ``<root>/kanban/boards/<slug>/workspaces/``.
     """
-    override = os.environ.get("HERMES_KANBAN_WORKSPACES_ROOT", "").strip()
+    override = os.environ.get("FULILIAN_KANBAN_WORKSPACES_ROOT", "").strip()
     if override:
         return Path(override).expanduser()
     slug = _normalize_board_slug(board)
@@ -764,7 +764,7 @@ def attachments_root(board: Optional[str] = None) -> Path:
     per-board so attachments don't leak between projects. Each task gets
     its own ``<root>/.../attachments/<task_id>/`` subdirectory.
 
-    ``HERMES_KANBAN_ATTACHMENTS_ROOT`` pins the path directly (highest
+    ``FULILIAN_KANBAN_ATTACHMENTS_ROOT`` pins the path directly (highest
     precedence) for tests and unusual deployments.
 
     ``default`` uses ``<root>/kanban/attachments/``; other boards use
@@ -776,7 +776,7 @@ def attachments_root(board: Optional[str] = None) -> Path:
     directly. Remote backends (Docker/Modal) need this directory mounted;
     see the kanban docs.
     """
-    override = os.environ.get("HERMES_KANBAN_ATTACHMENTS_ROOT", "").strip()
+    override = os.environ.get("FULILIAN_KANBAN_ATTACHMENTS_ROOT", "").strip()
     if override:
         return Path(override).expanduser()
     slug = _normalize_board_slug(board)
@@ -797,7 +797,7 @@ def worker_logs_dir(board: Optional[str] = None) -> Path:
 
     ``default`` keeps the legacy path ``<root>/kanban/logs/``. Other
     boards use ``<root>/kanban/boards/<slug>/logs/``. Logs follow the
-    board — makes ``hermes kanban log`` unambiguous even when multiple
+    board — makes ``fulilian kanban log`` unambiguous even when multiple
     boards have tasks with the same id.
     """
     slug = _normalize_board_slug(board)
@@ -1102,7 +1102,7 @@ class Task:
     # profile configured for provider B" mismatch class.
     provider_override: Optional[str] = None
     # Per-task reasoning effort for the worker (one of
-    # ``hermes_constants.VALID_REASONING_EFFORTS``, or ``"none"`` for thinking
+    # ``fulilian_constants.VALID_REASONING_EFFORTS``, or ``"none"`` for thinking
     # off). When set, the dispatcher passes ``--reasoning <level>`` so the
     # worker runs at that depth regardless of the profile's
     # ``agent.reasoning_effort``. NULL = the worker profile's own setting.
@@ -1129,7 +1129,7 @@ class Task:
     # through to the goals engine default (``goals.DEFAULT_MAX_TURNS``).
     goal_max_turns: Optional[int] = None
     # Originating chat/agent session id, when the task was created from
-    # within an agent loop that propagated ``HERMES_SESSION_ID``. NULL for
+    # within an agent loop that propagated ``FULILIAN_SESSION_ID``. NULL for
     # tasks created from the CLI, the dashboard, or any path that doesn't
     # set the env var. Lets clients render a per-session board without
     # relying on tenant + time-window heuristics.
@@ -1344,7 +1344,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     workspace_kind       TEXT NOT NULL DEFAULT 'scratch',
     workspace_path       TEXT,
     branch_name          TEXT,
-    -- Optional link to a first-class Project (hermes_cli/projects_db). When set,
+    -- Optional link to a first-class Project (fulilian_cli/projects_db). When set,
     -- the task's worktree is anchored under the project's primary repo with a
     -- deterministic branch name instead of a random wt/<task-id> fallback.
     project_id           TEXT,
@@ -1405,7 +1405,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     -- goals-engine default.
     goal_max_turns       INTEGER,
     -- Originating chat/agent session id when the task was created from
-    -- inside an agent loop that propagated ``HERMES_SESSION_ID``. NULL
+    -- inside an agent loop that propagated ``FULILIAN_SESSION_ID``. NULL
     -- for tasks created from the CLI, dashboard, or any path that doesn't
     -- set the env var. Indexed so per-session list queries stay cheap on
     -- larger boards.
@@ -1560,7 +1560,7 @@ def _resolve_busy_timeout_ms() -> int:
     expected.  A long busy timeout lets SQLite serialize writers via WAL rather
     than surfacing transient ``database is locked`` failures during bursts.
     """
-    raw = os.environ.get("HERMES_KANBAN_BUSY_TIMEOUT_MS", "").strip()
+    raw = os.environ.get("FULILIAN_KANBAN_BUSY_TIMEOUT_MS", "").strip()
     if raw:
         try:
             parsed = int(raw)
@@ -1577,7 +1577,7 @@ def _sqlite_connect(path: Path) -> sqlite3.Connection:
     Uses ``connect_tracked`` so the live-connection registry knows this file
     is open: while it is, byte-level probes of the same file are refused,
     because an ``open()``/``close()`` would cancel this process's POSIX
-    advisory locks on the database (see ``hermes_cli.sqlite_safe_read``).
+    advisory locks on the database (see ``fulilian_cli.sqlite_safe_read``).
     The registration is released automatically when the connection closes.
     """
     from fulilian_cli.sqlite_safe_read import connect_tracked
@@ -1699,7 +1699,7 @@ def _dispatch_tick_lock(db_path: Path):
     may proceed with the tick, or ``False`` when another process already
     holds it (the caller should skip the tick this round).
 
-    Motivation (issue #35240): a ``hermes gateway run --replace`` /
+    Motivation (issue #35240): a ``fulilian gateway run --replace`` /
     ``gateway restart`` invoked from a shell on a systemd/launchd host can
     leave an orphan gateway whose dispatcher escapes the service cgroup,
     survives ``systemctl restart``, and becomes a *second* long-lived
@@ -1977,7 +1977,7 @@ def _backup_corrupt_db(path: Path) -> Optional[Path]:
     base_name = resolved.name  # basename only
     # This reads the whole DB file to fingerprint it. That is a close()-on-a-
     # database-file hazard (it cancels this process's POSIX advisory locks --
-    # see hermes_cli.sqlite_safe_read), so it must only run once the board has
+    # see fulilian_cli.sqlite_safe_read), so it must only run once the board has
     # been taken out of service. Every caller reaches here on the corrupt/
     # quarantine path after closing its probe connection, but another
     # SessionDB/kanban connection elsewhere in the process would still be at
@@ -2144,7 +2144,7 @@ def _guard_existing_db_is_healthy(path: Path) -> None:
     Path-trust note: ``path`` arrives via :func:`connect`, which itself
     resolves it from an explicit ``db_path`` argument, the
     :func:`kanban_db_path` env-var chain, or the kanban-home default —
-    all sources Hermes treats as user-controlled-but-trusted on the
+    all sources Fulilian treats as user-controlled-but-trusted on the
     user's own machine. We additionally resolve the path here and
     confine all filesystem writes to its parent directory so any
     accidental ``..`` segments are collapsed before any I/O happens.
@@ -2246,7 +2246,7 @@ def repair_db(
     the board's cross-process init flock; and anything else stays corrupt
     (fail-closed) for the caller to surface. Unlike the guard this never
     raises :class:`KanbanDbCorruptError` — it returns a structured
-    :class:`RepairResult` so ``hermes kanban repair`` can report and choose
+    :class:`RepairResult` so ``fulilian kanban repair`` can report and choose
     its own exit code.
 
     Transient ``sqlite3.OperationalError`` (locked/busy) still propagates
@@ -2355,7 +2355,7 @@ def connect(
     * ``db_path`` explicit → used as-is (legacy callers, tests).
     * ``board`` explicit → resolves to that board's DB.
     * Neither → :func:`kanban_db_path` resolves via
-      ``HERMES_KANBAN_DB`` env → ``HERMES_KANBAN_BOARD`` env →
+      ``FULILIAN_KANBAN_DB`` env → ``FULILIAN_KANBAN_BOARD`` env →
       ``<root>/kanban/current`` → ``default``.
     """
     if db_path is not None:
@@ -2368,7 +2368,7 @@ def connect(
     # first-open work (header validation, integrity probe, schema + additive
     # migrations) is already done and cached in _INITIALIZED_PATHS. Acquiring
     # the cross-process init lock on every connect is what let a single stalled
-    # holder (e.g. an external `hermes kanban list` mid-integrity-probe) block
+    # holder (e.g. an external `fulilian kanban list` mid-integrity-probe) block
     # the long-lived gateway dispatcher's next-tick connect() forever — an
     # unbounded flock with no timeout, no LOCK_NB, no recovery (#36644). On the
     # steady-state path there is nothing for the cross-process lock to protect
@@ -2380,7 +2380,7 @@ def connect(
         try:
             conn.row_factory = sqlite3.Row
             with _INIT_LOCK:
-                from hermes_state import apply_wal_with_fallback
+                from fulilian_state import apply_wal_with_fallback
                 apply_wal_with_fallback(conn, db_label=f"kanban.db ({path.name})")
                 conn.execute("PRAGMA synchronous=FULL")
                 conn.execute("PRAGMA wal_autocheckpoint=100")
@@ -2419,7 +2419,7 @@ def connect(
         # repair-or-refuse before the header/integrity probes so a stray
         # read-only kanban.db fails with an actionable message instead of
         # "attempt to write a readonly database" mid-init.
-        from hermes_state import preflight_db_writability
+        from fulilian_state import preflight_db_writability
         preflight_db_writability(path, db_label=f"kanban.db ({path.name})")
         # Cheap byte-level check first — catches the #29507 TLS-overwrite shape
         # and other invalid-header cases without opening a sqlite connection.
@@ -2439,8 +2439,8 @@ def connect(
                 # startup threads do not race before _INITIALIZED_PATHS is populated.
                 # WAL doesn't work on network filesystems (NFS/SMB/FUSE). Shared helper
                 # falls back to DELETE with one ERROR log so kanban stays usable there.
-                # See hermes_state._WAL_INCOMPAT_MARKERS for detection logic.
-                from hermes_state import apply_wal_with_fallback
+                # See fulilian_state._WAL_INCOMPAT_MARKERS for detection logic.
+                from fulilian_state import apply_wal_with_fallback
                 apply_wal_with_fallback(conn, db_label=f"kanban.db ({path.name})")
                 # FULL (was NORMAL): fsync before each checkpoint to narrow the
                 # crash window that can leave a b-tree page header torn.
@@ -2516,7 +2516,7 @@ def init_db(
 ) -> Path:
     """Create the schema if it doesn't exist; return the path used.
 
-    Kept as a public entry point so CLI ``hermes kanban init`` and the
+    Kept as a public entry point so CLI ``fulilian kanban init`` and the
     daemon have something explicit to call. Unlike :func:`connect`'s
     first-time auto-init (which caches by path), ``init_db`` always
     re-runs the migration pass. Callers that know the on-disk schema
@@ -2668,7 +2668,7 @@ def _migrate_add_optional_columns(conn: sqlite3.Connection) -> None:
     if "session_id" not in cols:
         # Originating agent/chat session id, populated when the task is
         # created from within an agent loop that propagated
-        # ``HERMES_SESSION_ID`` (e.g. ACP). NULL on legacy rows and on any
+        # ``FULILIAN_SESSION_ID`` (e.g. ACP). NULL on legacy rows and on any
         # creation path that doesn't set the env var (CLI, dashboard).
         _add_column_if_missing(
             conn, "tasks", "session_id", "session_id TEXT"
@@ -3083,7 +3083,7 @@ def write_txn(conn: sqlite3.Connection, *, allow_nested: bool = False):
                 "(savepoint semantics; the inner RELEASE is not durable until "
                 "the outer transaction commits)."
             )
-        savepoint = f"hermes_nested_{secrets.token_hex(8)}"
+        savepoint = f"fulilian_nested_{secrets.token_hex(8)}"
         conn.execute(f"SAVEPOINT {savepoint}")
         try:
             yield conn
@@ -3214,7 +3214,7 @@ def create_task(
 
     ``skills`` is an optional list of skill names to force-load into
     the worker when dispatched. Stored as JSON; the dispatcher passes
-    each name to ``hermes --skills ...``. Use this to pin a task to a
+    each name to ``fulilian --skills ...``. Use this to pin a task to a
     specialist skill (e.g. ``skills=["translation"]`` so the worker loads the
     translation skill regardless of the profile's default config).
 
@@ -3362,7 +3362,7 @@ def create_task(
     # Normalise + validate skills: strip whitespace, drop empties, dedupe
     # (preserving order). Refuse commas inside a single name so we don't
     # invisibly splatter a comma-joined string into one argv slot — the
-    # `hermes --skills X,Y` comma syntax is handled in the dispatcher,
+    # `fulilian --skills X,Y` comma syntax is handled in the dispatcher,
     # not here.
     skills_list: Optional[list[str]] = None
     if skills is not None:
@@ -3644,7 +3644,7 @@ def get_task(conn: sqlite3.Connection, task_id: str) -> Optional[Task]:
     return Task.from_row(row) if row else None
 
 
-# Canonical sort-order mappings for ``hermes kanban list --sort``.
+# Canonical sort-order mappings for ``fulilian kanban list --sort``.
 # Each value is a raw SQL fragment appended after ``ORDER BY``.
 VALID_SORT_ORDERS: dict[str, str] = {
     "created": "created_at ASC, id ASC",
@@ -3907,7 +3907,7 @@ def unlink_tasks(conn: sqlite3.Connection, parent_id: str, child_id: str) -> boo
         # Dependency edge removed — re-evaluate promotion eligibility for the
         # child immediately.  Matches the contract of complete_task and
         # unblock_task; without this the child stays stuck in todo until the
-        # next dispatcher tick or a manual `hermes kanban recompute` (issue #22459).
+        # next dispatcher tick or a manual `fulilian kanban recompute` (issue #22459).
         recompute_ready(conn)
     return removed
 
@@ -4129,7 +4129,7 @@ def store_attachment_bytes(
 
     This is the single write path shared by the dashboard endpoint, the
     agent toolset (``kanban_attach`` / ``kanban_attach_url``), and the CLI
-    (``hermes kanban attach``) so name-sanitisation, the size cap, and the
+    (``fulilian kanban attach``) so name-sanitisation, the size cap, and the
     collision-resolution all behave identically everywhere.
 
     Steps: enforce ``max_bytes``, sanitise ``filename`` to a safe basename,
@@ -4348,7 +4348,7 @@ def _end_run(
     timed_out / spawn_failed / gave_up / reclaimed). ``status`` is the
     run-row status (usually just ``outcome``, but callers can pass it
     explicitly). Returns the closed run_id or ``None`` if no active run
-    existed (e.g. a CLI user calling ``hermes kanban complete`` on a
+    existed (e.g. a CLI user calling ``fulilian kanban complete`` on a
     task that was never claimed).
     """
     now = int(time.time())
@@ -4408,7 +4408,7 @@ def _synthesize_ended_run(
     """Insert a zero-duration, already-closed run row.
 
     Used when a terminal transition happens on a task that was never
-    claimed (CLI user calling ``hermes kanban complete <ready-task>
+    claimed (CLI user calling ``fulilian kanban complete <ready-task>
     --summary X``, or dashboard "mark done" on a ready task). Without
     this, the handoff fields (summary / metadata / error) would be
     silently dropped: ``_end_run`` is a no-op because there's no
@@ -4459,7 +4459,7 @@ def _has_sticky_block(conn: sqlite3.Connection, task_id: str) -> bool:
 
     * **Worker- or operator-initiated** — a worker called
       ``kanban_block(reason="review-required: ...")`` (or somebody ran
-      ``hermes kanban block <id>``).  This is a deliberate handoff that
+      ``fulilian kanban block <id>``).  This is a deliberate handoff that
       should stay blocked until an operator unblocks it.  The block tool
       emits a ``"blocked"`` event row in ``task_events``.
 
@@ -5374,7 +5374,7 @@ def complete_task(
     """Transition ``running|ready|blocked|review -> done`` and record ``result``.
 
     Accepts a task that is merely ``ready`` too, so a manual CLI
-    completion (``hermes kanban complete <id>``) works without requiring
+    completion (``fulilian kanban complete <id>``) works without requiring
     a claim/start/complete sequence. ``review`` is accepted so a human
     (or reviewer) can approve a task parked in the review lane by
     :func:`request_review` — even when it has no active run
@@ -5812,7 +5812,7 @@ def _managed_scratch_path_info(p: Path) -> tuple[bool, Optional[str]]:
     except OSError:
         return False, None
     roots: list[tuple[Path, Optional[str]]] = []
-    override = os.environ.get("HERMES_KANBAN_WORKSPACES_ROOT", "").strip()
+    override = os.environ.get("FULILIAN_KANBAN_WORKSPACES_ROOT", "").strip()
     if override:
         try:
             roots.append((Path(override).expanduser().resolve(strict=False), None))
@@ -5864,7 +5864,7 @@ def _is_managed_scratch_path(p: Path) -> bool:
     broader kanban home, a board root, or sibling subtrees like ``logs/`` or
     ``boards/<slug>/`` itself. Allowed roots:
 
-    * ``HERMES_KANBAN_WORKSPACES_ROOT`` when set (worker-side override
+    * ``FULILIAN_KANBAN_WORKSPACES_ROOT`` when set (worker-side override
       injected by the dispatcher).
     * ``<kanban_home>/kanban/workspaces`` — legacy default-board scratch root.
     * ``<kanban_home>/kanban/boards/<slug>/workspaces`` for each board slug
@@ -5875,10 +5875,10 @@ def _is_managed_scratch_path(p: Path) -> bool:
     task's scratch dir at once), and a path that resolves to ``<kanban_home>
     /kanban`` itself, ``<kanban_home>/kanban/logs``, or
     ``<kanban_home>/kanban/boards/<slug>`` is rejected because those
-    subtrees hold Hermes' own DB, metadata, and logs, not task workspaces.
+    subtrees hold Fulilian' own DB, metadata, and logs, not task workspaces.
 
     Used by :func:`_cleanup_workspace` to refuse to ``shutil.rmtree`` paths
-    outside Hermes-managed storage. A board ``default_workdir`` pointing at a
+    outside Fulilian-managed storage. A board ``default_workdir`` pointing at a
     real source tree can otherwise pair with ``workspace_kind='scratch'`` and
     cause task completion to delete user data (#28818).
     """
@@ -6115,7 +6115,7 @@ def _cleanup_worker_tmux(conn: sqlite3.Connection, task_id: str) -> None:
 # we:
 #   1. Log a warning line on the dispatcher logger.
 #   2. Append a ``tip_scratch_workspace`` event on the task so it's visible
-#      via ``hermes kanban show <id>`` and the dashboard.
+#      via ``fulilian kanban show <id>`` and the dashboard.
 #   3. Touch a sentinel file under ``kanban_home() / '.scratch_tip_shown'``
 #      so we don't repeat the tip — once you know, you know.
 #
@@ -7761,7 +7761,7 @@ def _resolve_worktree_workspace(
     worktree task under a meaningful, board-owned repo — ``<repo>/.worktrees/
     <task-id>`` — instead of silently landing under the dispatcher's current
     working directory (which is whatever directory the gateway happened to be
-    launched from, e.g. the Hermes checkout). If no anchor is configured
+    launched from, e.g. the Fulilian checkout). If no anchor is configured
     anywhere, we fail loudly rather than guess.
     """
     branch_name = (task.branch_name or "").strip() or f"wt/{task.id}"
@@ -7854,13 +7854,13 @@ def resolve_workspace(task: Task, *, board: Optional[str] = None) -> Path:
       root.  Users who want a kanban-root-relative workspace should
       compute the absolute path themselves.
     - ``worktree``: a real linked git worktree. If ``workspace_path`` names
-      a repo root, Hermes treats it as an anchor and materializes a linked
+      a repo root, Fulilian treats it as an anchor and materializes a linked
       worktree at ``<repo>/.worktrees/<task-id>``. If ``workspace_path`` names
-      a concrete target path, Hermes creates/reuses that linked worktree. With
-      no ``workspace_path``, Hermes anchors on the board's ``default_workdir``
+      a concrete target path, Fulilian creates/reuses that linked worktree. With
+      no ``workspace_path``, Fulilian anchors on the board's ``default_workdir``
       and materializes ``<repo>/.worktrees/<task-id>`` per task; if no
       ``default_workdir`` is configured it raises rather than guessing from the
-      dispatcher's CWD. When ``branch_name`` is empty, Hermes uses
+      dispatcher's CWD. When ``branch_name`` is empty, Fulilian uses
       ``wt/<task-id>``.
 
     Persist the resolved path back to the task row via ``set_workspace_path``
@@ -8010,7 +8010,7 @@ _RESPAWN_GUARD_SUCCESS_WINDOW = 3600  # 1 hour
 # would be re-spawned on the very next tick and immediately bounce off the
 # same quota wall, burning a worker slot every tick for hours. The cooldown
 # spaces retries out so the board keeps cheaply probing whether quota is back
-# without thrashing. Overridable via ``HERMES_KANBAN_RATE_LIMIT_COOLDOWN_SECONDS``
+# without thrashing. Overridable via ``FULILIAN_KANBAN_RATE_LIMIT_COOLDOWN_SECONDS``
 # for operators who want a tighter/looser probe cadence.
 DEFAULT_RATE_LIMIT_COOLDOWN_SECONDS = 300  # 5 minutes
 
@@ -8047,7 +8047,7 @@ class DispatchResult:
     rather than on explicit per-task assignments."""
     skipped_nonspawnable: list[str] = field(default_factory=list)
     """Ready task ids skipped because their assignee names a control-plane
-    lane (a Claude Code terminal like ``orion-cc``) rather than a Hermes
+    lane (a Claude Code terminal like ``orion-cc``) rather than a Fulilian
     profile. Expected steady-state on multi-lane setups; NOT an
     operator-actionable failure. Tracked separately so health telemetry
     can distinguish "real stuck" (nothing spawned but spawnable work
@@ -8352,7 +8352,7 @@ def _defer_reclaim_for_live_worker(
 
     Extends ``claim_expires`` by ``RECLAIM_DEFER_GRACE_SECONDS`` so the task
     stays ``running`` (no duplicate spawn) and records a ``reclaim_deferred``
-    event so the hold is visible in ``hermes kanban tail``. The next dispatch
+    event so the hold is visible in ``fulilian kanban tail``. The next dispatch
     tick retries the kill; this is self-correcting because not spawning a
     duplicate is what lets the throttled worker finally die.
     """
@@ -9357,7 +9357,7 @@ def _record_spawn_failure(
 def _set_worker_pid(conn: sqlite3.Connection, task_id: str, pid: int) -> None:
     """Record the spawned child's pid + emit a ``spawned`` event.
 
-    The event's payload carries the pid so a human reading ``hermes kanban
+    The event's payload carries the pid so a human reading ``fulilian kanban
     tail`` can correlate log lines with OS-level traces without opening
     the drawer.
     """
@@ -9550,7 +9550,7 @@ def check_respawn_guard(
 
 def has_spawnable_ready(conn: sqlite3.Connection) -> bool:
     """Return True iff there is at least one ready+assigned+unclaimed task
-    whose assignee maps to a real Hermes profile.
+    whose assignee maps to a real Fulilian profile.
 
     Used by the gateway- and CLI-embedded dispatchers' health telemetry to
     decide whether ``0 spawned`` is a "stuck" condition (real spawnable
@@ -9582,7 +9582,7 @@ def has_spawnable_ready(conn: sqlite3.Connection) -> bool:
 
 def has_spawnable_review(conn: sqlite3.Connection) -> bool:
     """Return True iff there is at least one review+assigned+unclaimed task
-    whose assignee maps to a real Hermes profile.
+    whose assignee maps to a real Fulilian profile.
 
     Mirror of :func:`has_spawnable_ready` for the review column —
     used by the health telemetry to decide whether the dispatcher
@@ -9608,7 +9608,7 @@ def has_spawnable_review(conn: sqlite3.Connection) -> bool:
 def review_dispatch_enabled() -> bool:
     """Return whether first-class review tasks should dispatch automatically.
 
-    The default is true because Hermes ships the ``sdlc-review`` skill and the
+    The default is true because Fulilian ships the ``sdlc-review`` skill and the
     review lifecycle includes a supported reviewer-owned changes-requested
     transition. Operators can disable it for human-only review boards.
     """
@@ -9643,7 +9643,7 @@ def review_dispatch_enabled() -> bool:
 # pressure level is "unknown" (no spawn restriction).
 # ---------------------------------------------------------------------------
 
-# Assumed per-worker memory footprint for the derived default cap. Hermes
+# Assumed per-worker memory footprint for the derived default cap. Fulilian
 # workers are full agent processes (Python + model client + tool subprocesses);
 # ~512 MiB is a deliberately conservative planning number so the derived cap
 # errs toward fewer workers on small VMs.
@@ -9697,7 +9697,7 @@ def resolve_max_in_progress(configured: Optional[int]) -> Optional[int]:
 
     An explicit operator-configured value always wins. When unset, fall back
     to the memory-derived default (see :func:`derive_default_max_in_progress`).
-    Callers that parse config (gateway dispatcher, ``hermes kanban dispatch``)
+    Callers that parse config (gateway dispatcher, ``fulilian kanban dispatch``)
     should route through this so both paths agree.
     """
     if configured is not None:
@@ -9758,7 +9758,7 @@ def count_running_tasks_other_boards(board: Optional[str] = None) -> int:
     number of active boards — reproduced in review of OOF-30: two boards
     each spawned N workers on a derived N-worker host budget.
 
-    Boards are matched by resolved DB path, so the ``HERMES_KANBAN_DB``
+    Boards are matched by resolved DB path, so the ``FULILIAN_KANBAN_DB``
     override (which pins every board to one file) naturally yields 0.
     Fails open per board: one broken/corrupt board must not brick dispatch
     on the healthy ones.
@@ -10169,11 +10169,11 @@ def _dispatch_once_locked(
             else:
                 result.skipped_unassigned.append(row["id"])
                 continue
-        # Skip ready tasks whose assignee is not a real Hermes profile.
-        # `_default_spawn` invokes ``hermes -p <assignee>`` which fails
+        # Skip ready tasks whose assignee is not a real Fulilian profile.
+        # `_default_spawn` invokes ``fulilian -p <assignee>`` which fails
         # with "Profile 'X' does not exist" when the assignee names a
         # control-plane lane (e.g. an interactive Claude Code terminal
-        # like ``orion-cc`` / ``orion-research``) rather than a Hermes
+        # like ``orion-cc`` / ``orion-research``) rather than a Fulilian
         # profile. Those task lanes are pulled by terminals via
         # ``claim_task`` directly and should NEVER auto-spawn — the
         # subprocess would crash on startup, get reaped as a zombie,
@@ -10217,7 +10217,7 @@ def _dispatch_once_locked(
         if guard_reason is not None:
             result.respawn_guarded.append((row["id"], guard_reason))
             # Emit an event so operators can see why the task was
-            # skipped when reading `hermes kanban tail` — without
+            # skipped when reading `fulilian kanban tail` — without
             # this the task appears stuck in ready with no diagnosis.
             if not dry_run:
                 with write_txn(conn):
@@ -10316,7 +10316,7 @@ def _dispatch_once_locked(
     # Same concurrency model as ready dispatch: review spawns count
     # against max_spawn alongside ready tasks, so the total number of
     # running workers stays bounded.
-    # Auto-dispatch is enabled by default because Hermes bundles the
+    # Auto-dispatch is enabled by default because Fulilian bundles the
     # ``sdlc-review`` skill and reviewer workers can now approve, request
     # changes without block-loop accounting, or escalate a genuine blocker.
     # Human-only boards can disable it with ``kanban.review_dispatch``.
@@ -10511,16 +10511,16 @@ def _rotate_worker_log(
         pass
 
 
-def _module_hermes_argv() -> list[str]:
-    """Return the interpreter-bound Hermes CLI invocation."""
-    # ``hermes_cli.main`` is the console-script target declared in
-    # pyproject.toml, NOT a top-level ``hermes`` package — there is no
-    # ``hermes`` package to import.
-    return [sys.executable, "-m", "hermes_cli.main"]
+def _module_fulilian_argv() -> list[str]:
+    """Return the interpreter-bound Fulilian CLI invocation."""
+    # ``fulilian_cli.main`` is the console-script target declared in
+    # pyproject.toml, NOT a top-level ``fulilian`` package — there is no
+    # ``fulilian`` package to import.
+    return [sys.executable, "-m", "fulilian_cli.main"]
 
 
-def _absolute_hermes_path(path: str) -> str:
-    """Return an absolute filesystem path for a resolved Hermes shim."""
+def _absolute_fulilian_path(path: str) -> str:
+    """Return an absolute filesystem path for a resolved Fulilian shim."""
     expanded = os.path.expanduser(path)
     return expanded if os.path.isabs(expanded) else os.path.abspath(expanded)
 
@@ -10573,8 +10573,8 @@ def _safe_which_no_cwd(command: str) -> Optional[str]:
     return None
 
 
-def _hermes_path_argv(path: str) -> list[str]:
-    """Return argv for a resolved Hermes executable path.
+def _fulilian_path_argv(path: str) -> list[str]:
+    """Return argv for a resolved Fulilian executable path.
 
     Windows batch shims (`.cmd` / `.bat`) are not safe as argv[0] for
     worker launches because the argument vector includes task-derived
@@ -10582,49 +10582,49 @@ def _hermes_path_argv(path: str) -> list[str]:
     executable is only a shell shim.
     """
     if _IS_WINDOWS and _is_windows_batch_shim(path):
-        return _module_hermes_argv()
-    return [_absolute_hermes_path(path)]
+        return _module_fulilian_argv()
+    return [_absolute_fulilian_path(path)]
 
 
-def _resolve_hermes_argv() -> list[str]:
-    """Resolve the ``hermes`` invocation as argv parts for ``Popen``.
+def _resolve_fulilian_argv() -> list[str]:
+    """Resolve the ``fulilian`` invocation as argv parts for ``Popen``.
 
     Tries in order:
 
-    1. ``$HERMES_BIN`` — explicit operator override. Path-like values are
+    1. ``$FULILIAN_BIN`` — explicit operator override. Path-like values are
        normalized to absolute paths; bare command names keep normal PATH
        semantics and never prefer a same-directory file before ``PATH``.
-    2. ``shutil.which("hermes")`` — the console-script shim, normalized to
+    2. ``shutil.which("fulilian")`` — the console-script shim, normalized to
        an absolute path. On Windows, ``which`` can return a relative
-       ``.\\hermes.CMD`` when the current directory is on ``PATH``; directly
+       ``.\\fulilian.CMD`` when the current directory is on ``PATH``; directly
        launching batch shims is also unsafe with task-derived argv. The
        dispatcher therefore falls back to the interpreter-bound module form
        for implicit ``.cmd`` / ``.bat`` shims.
-    3. ``sys.executable -m hermes_cli.main`` — fallback for setups where
-       Hermes is launched from a venv and the ``hermes`` shim is not on
+    3. ``sys.executable -m fulilian_cli.main`` — fallback for setups where
+       Fulilian is launched from a venv and the ``fulilian`` shim is not on
        the dispatcher's ``$PATH`` (cron, systemd ``User=`` services,
        launchd jobs, detached processes, etc.). Goes through the running
        interpreter so the result is independent of ``$PATH``.
 
-    Mirrors ``gateway.run._resolve_hermes_bin`` for the same reason. Kept
-    local (not imported from gateway) because ``hermes_cli`` sits below
+    Mirrors ``gateway.run._resolve_fulilian_bin`` for the same reason. Kept
+    local (not imported from gateway) because ``fulilian_cli`` sits below
     ``gateway`` in the dependency order.
     """
     import shutil
 
-    env_bin = os.environ.get("HERMES_BIN", "").strip()
+    env_bin = os.environ.get("FULILIAN_BIN", "").strip()
     if env_bin:
         if _looks_like_path(env_bin):
-            return _hermes_path_argv(env_bin)
+            return _fulilian_path_argv(env_bin)
         resolved_env_bin = _safe_which_no_cwd(env_bin)
         if resolved_env_bin:
-            return _hermes_path_argv(resolved_env_bin)
-        return _module_hermes_argv()
+            return _fulilian_path_argv(resolved_env_bin)
+        return _module_fulilian_argv()
 
-    hermes_bin = _safe_which_no_cwd("hermes") if _IS_WINDOWS else shutil.which("hermes")
-    if hermes_bin:
-        return _hermes_path_argv(hermes_bin)
-    return _module_hermes_argv()
+    fulilian_bin = _safe_which_no_cwd("fulilian") if _IS_WINDOWS else shutil.which("fulilian")
+    if fulilian_bin:
+        return _fulilian_path_argv(fulilian_bin)
+    return _module_fulilian_argv()
 
 
 def _worker_terminal_timeout_env(
@@ -10657,7 +10657,7 @@ def _worker_terminal_timeout_env(
     return str(desired)
 
 
-def _resolve_worker_cli_toolsets(hermes_home: Optional[str]) -> Optional[list[str]]:
+def _resolve_worker_cli_toolsets(fulilian_home: Optional[str]) -> Optional[list[str]]:
     """Return the assigned profile's effective CLI toolsets for a worker.
 
     Dispatcher-spawned workers are launched from a long-lived gateway process,
@@ -10666,26 +10666,26 @@ def _resolve_worker_cli_toolsets(hermes_home: Optional[str]) -> Optional[list[st
     explicit ``--toolsets`` pin so worker startup cannot fall back to a stale
     root/active-profile config or a profile whose top-level ``toolsets`` entry
     is only the kanban orchestrator surface. ``model_tools`` still appends the
-    task-scoped kanban lifecycle tools when ``HERMES_KANBAN_TASK`` is set.
+    task-scoped kanban lifecycle tools when ``FULILIAN_KANBAN_TASK`` is set.
     """
-    if not hermes_home:
+    if not fulilian_home:
         return None
     try:
-        from fulilian_constants import reset_hermes_home_override, set_hermes_home_override
+        from fulilian_constants import reset_fulilian_home_override, set_fulilian_home_override
         from fulilian_cli.config import load_config
         from fulilian_cli.tools_config import _get_platform_tools
 
-        token = set_hermes_home_override(hermes_home)
+        token = set_fulilian_home_override(fulilian_home)
         try:
             cfg = load_config()
             toolsets = sorted(_get_platform_tools(cfg, "cli"))
         finally:
-            reset_hermes_home_override(token)
+            reset_fulilian_home_override(token)
         return toolsets or None
     except Exception as exc:
         _log.debug(
-            "kanban worker: could not resolve CLI toolsets for HERMES_HOME=%r (%s)",
-            hermes_home,
+            "kanban worker: could not resolve CLI toolsets for FULILIAN_HOME=%r (%s)",
+            fulilian_home,
             exc,
         )
         return None
@@ -10705,7 +10705,7 @@ def _retag_legacy_worker_sessions(workspaces_root_path: str) -> None:
     if workspaces_root_path in _retagged_workspace_roots:
         return
     try:
-        from hermes_state import SessionDB
+        from fulilian_state import SessionDB
 
         db = SessionDB()
         try:
@@ -10723,7 +10723,7 @@ def _default_spawn(
     *,
     board: Optional[str] = None,
 ) -> Optional[int]:
-    """Fire-and-forget ``hermes -p <profile> chat -q ...`` subprocess.
+    """Fire-and-forget ``fulilian -p <profile> chat -q ...`` subprocess.
 
     Returns the spawned child's PID so the dispatcher can detect crashes
     before the claim TTL expires. The child's completion is still observed
@@ -10731,7 +10731,7 @@ def _default_spawn(
     the PID check is a safety net for crashes, OOM kills, and Ctrl+C.
 
     ``board`` pins the child's kanban context to that board: the child's
-    ``HERMES_KANBAN_DB`` / ``HERMES_KANBAN_BOARD`` / workspaces_root env
+    ``FULILIAN_KANBAN_DB`` / ``FULILIAN_KANBAN_BOARD`` / workspaces_root env
     vars all resolve to the same board the dispatcher claimed the task
     from. Workers cannot accidentally see other boards.
     """
@@ -10752,36 +10752,36 @@ def _default_spawn(
     for key in _VAR_MAP:
         env.pop(key, None)
 
-    # Inject HERMES_HOME so the worker reads the profile-scoped config.yaml
+    # Inject FULILIAN_HOME so the worker reads the profile-scoped config.yaml
     # (fallback_providers, toolsets, agent settings, etc.) instead of the root
     # config.  Without this, `env = dict(os.environ)` copies only the parent's
-    # env, and when the child process starts `hermes -p <name>` the
-    # _apply_profile_override() runs *before* hermes_constants is imported.
-    # If HERMES_HOME is absent from the child's env, get_hermes_home() falls
-    # back to Path.home() / ".hermes" (the DEFAULT profile root), ignoring the
+    # env, and when the child process starts `fulilian -p <name>` the
+    # _apply_profile_override() runs *before* fulilian_constants is imported.
+    # If FULILIAN_HOME is absent from the child's env, get_fulilian_home() falls
+    # back to Path.home() / ".fulilian" (the DEFAULT profile root), ignoring the
     # profile-specific config entirely.  Fixes profile-scoped fallback_providers
     # being invisible to kanban workers.
     from fulilian_cli.profiles import resolve_profile_env
     try:
-        env["HERMES_HOME"] = resolve_profile_env(profile_arg)
+        env["FULILIAN_HOME"] = resolve_profile_env(profile_arg)
     except FileNotFoundError:
         # Profile dir doesn't exist — defer resolution to the CLI's
-        # _apply_profile_override() via HERMES_PROFILE (set below).
+        # _apply_profile_override() via FULILIAN_PROFILE (set below).
         # This only happens in test fixtures where the isolated
-        # HERMES_HOME never had profiles created.
+        # FULILIAN_HOME never had profiles created.
         pass
     if task.tenant:
-        env["HERMES_TENANT"] = task.tenant
-    env["HERMES_KANBAN_TASK"] = task.id
-    env["HERMES_KANBAN_WORKSPACE"] = workspace
+        env["FULILIAN_TENANT"] = task.tenant
+    env["FULILIAN_KANBAN_TASK"] = task.id
+    env["FULILIAN_KANBAN_WORKSPACE"] = workspace
     # Tag the worker's session so it lands in state.db as `kanban`, not as an
     # untitled `cli` row. A worker is a dispatcher-owned run whose transcript is
-    # read on the board and in `hermes kanban log` — it is not a conversation
+    # read on the board and in `fulilian kanban log` — it is not a conversation
     # the user started, so every session-browsing surface (desktop sidebar, TUI
     # resume picker, session_search) filters it out by source. Without this the
     # sidebar renders one row per attempt, labeled with the worker's own prompt
     # ("work kanban task t_…").
-    env["HERMES_SESSION_SOURCE"] = "kanban"
+    env["FULILIAN_SESSION_SOURCE"] = "kanban"
     # Pin TERMINAL_CWD to the task's workspace so the worker's file tools and
     # context-file loader anchor on the workspace, not whatever cwd the
     # dispatching gateway happened to export. The worker subprocess is already
@@ -10797,18 +10797,18 @@ def _default_spawn(
     if workspace and os.path.isabs(workspace) and os.path.isdir(workspace):
         env["TERMINAL_CWD"] = workspace
     if task.branch_name:
-        env["HERMES_KANBAN_BRANCH"] = task.branch_name
+        env["FULILIAN_KANBAN_BRANCH"] = task.branch_name
     if task.current_run_id is not None:
-        env["HERMES_KANBAN_RUN_ID"] = str(task.current_run_id)
+        env["FULILIAN_KANBAN_RUN_ID"] = str(task.current_run_id)
     if task.claim_lock:
-        env["HERMES_KANBAN_CLAIM_LOCK"] = task.claim_lock
+        env["FULILIAN_KANBAN_CLAIM_LOCK"] = task.claim_lock
     # Goal-loop mode: the worker reads these and wraps its run in the
     # Ralph-style /goal judge loop (see cli.py quiet-mode path). Only set
     # when enabled so non-goal tasks keep a clean env.
     if task.goal_mode:
-        env["HERMES_KANBAN_GOAL_MODE"] = "1"
+        env["FULILIAN_KANBAN_GOAL_MODE"] = "1"
         if task.goal_max_turns is not None:
-            env["HERMES_KANBAN_GOAL_MAX_TURNS"] = str(int(task.goal_max_turns))
+            env["FULILIAN_KANBAN_GOAL_MAX_TURNS"] = str(int(task.goal_max_turns))
     terminal_timeout = _worker_terminal_timeout_env(
         task.max_runtime_seconds,
         env.get("TERMINAL_TIMEOUT"),
@@ -10822,38 +10822,38 @@ def _default_spawn(
     if foreground_timeout is not None:
         env["TERMINAL_MAX_FOREGROUND_TIMEOUT"] = foreground_timeout
     # Pin the shared board + workspaces root the dispatcher resolved, so
-    # that even when the worker activates a profile (`hermes -p <name>`
-    # rewrites HERMES_HOME), its kanban paths still match the
-    # dispatcher's. Belt-and-braces with the `get_default_hermes_root()`
+    # that even when the worker activates a profile (`fulilian -p <name>`
+    # rewrites FULILIAN_HOME), its kanban paths still match the
+    # dispatcher's. Belt-and-braces with the `get_default_fulilian_root()`
     # resolution in `kanban_home()` — symmetric resolution is the norm,
     # but unusual symlink / Docker layouts are caught here too.
-    env["HERMES_KANBAN_DB"] = str(kanban_db_path(board=board))
-    env["HERMES_KANBAN_WORKSPACES_ROOT"] = str(workspaces_root(board=board))
-    _retag_legacy_worker_sessions(env["HERMES_KANBAN_WORKSPACES_ROOT"])
+    env["FULILIAN_KANBAN_DB"] = str(kanban_db_path(board=board))
+    env["FULILIAN_KANBAN_WORKSPACES_ROOT"] = str(workspaces_root(board=board))
+    _retag_legacy_worker_sessions(env["FULILIAN_KANBAN_WORKSPACES_ROOT"])
     # Board slug — the final defense-in-depth pin. If the worker ever
     # resolves kanban paths without the DB / workspaces env vars, the
     # board slug still forces it to the right directory.
     resolved_board = _normalize_board_slug(board) or get_current_board()
-    env["HERMES_KANBAN_BOARD"] = resolved_board
-    # HERMES_PROFILE is the author the kanban_comment tool defaults to.
-    # `hermes -p <assignee>` activates the profile, but the env var is
+    env["FULILIAN_KANBAN_BOARD"] = resolved_board
+    # FULILIAN_PROFILE is the author the kanban_comment tool defaults to.
+    # `fulilian -p <assignee>` activates the profile, but the env var is
     # what the tool reads — set it explicitly here so comments are
     # attributed correctly regardless of how the child loads config.
-    env["HERMES_PROFILE"] = profile_arg
+    env["FULILIAN_PROFILE"] = profile_arg
 
-    # A worker must NEVER boot the interactive TUI: an inherited HERMES_TUI=1
+    # A worker must NEVER boot the interactive TUI: an inherited FULILIAN_TUI=1
     # or a `display.interface: tui` in the profile's config would send the
     # quiet chat run into the Ink TUI, whose no-TTY bail-out exits 0 without
     # doing the task → "protocol violation" on every attempt. `--cli` is the
     # highest-precedence interface override; dropping the env var covers
-    # older hermes builds on PATH that predate the flag's precedence.
-    env.pop("HERMES_TUI", None)
+    # older fulilian builds on PATH that predate the flag's precedence.
+    env.pop("FULILIAN_TUI", None)
 
     cmd = [
-        *_resolve_hermes_argv(),
+        *_resolve_fulilian_argv(),
         "-p", profile_arg,
         "--cli",
-        # Worker subprocesses switch to a profile-scoped HERMES_HOME above,
+        # Worker subprocesses switch to a profile-scoped FULILIAN_HOME above,
         # so they see that profile's shell-hook allowlist instead of the
         # dispatcher's root allowlist. Pass --accept-hooks explicitly so
         # profile-local worker sessions still register configured hooks.
@@ -10881,7 +10881,7 @@ def _default_spawn(
     # branch, not a nested one.
     if task.reasoning_effort:
         cmd.extend(["--reasoning", task.reasoning_effort])
-    worker_toolsets = _resolve_worker_cli_toolsets(env.get("HERMES_HOME"))
+    worker_toolsets = _resolve_worker_cli_toolsets(env.get("FULILIAN_HOME"))
     if worker_toolsets:
         cmd.extend(["--toolsets", ",".join(worker_toolsets)])
     cmd.extend([
@@ -10897,7 +10897,7 @@ def _default_spawn(
         cmd.append("-Q")
     # Redirect output to a per-task log under <board-root>/logs/.
     # Anchored at the board root (not the shared kanban root), so
-    # `hermes kanban log` on a specific board reads its own file and
+    # `fulilian kanban log` on a specific board reads its own file and
     # logs don't collide across boards that happen to share task ids.
     log_dir = worker_logs_dir(board=board)
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -10921,8 +10921,8 @@ def _default_spawn(
     except FileNotFoundError:
         log_f.close()
         raise RuntimeError(
-            "`hermes` executable not found on PATH. "
-            "Install Hermes Agent or activate its venv before running the kanban dispatcher."
+            "`fulilian` executable not found on PATH. "
+            "Install FuLiLian or activate its venv before running the kanban dispatcher."
         )
     # NOTE: we intentionally do NOT close log_f here — we want Popen's
     # child process to keep writing after this function returns.  The
@@ -10947,13 +10947,13 @@ def run_daemon(
     """Run the dispatcher in a loop until interrupted.
 
     Calls :func:`dispatch_once` every ``interval`` seconds. Exits cleanly
-    on SIGINT / SIGTERM so ``hermes kanban daemon`` is systemd-friendly.
+    on SIGINT / SIGTERM so ``fulilian kanban daemon`` is systemd-friendly.
     ``stop_event`` (a :class:`threading.Event`) and ``on_tick`` (a
     callable receiving the :class:`DispatchResult`) are test hooks.
 
     Each tick resolves ``kanban.max_in_progress`` (explicit config, else
     the memory-derived default) exactly like the gateway-embedded
-    dispatcher and ``hermes kanban dispatch`` — the standalone daemon must
+    dispatcher and ``fulilian kanban dispatch`` — the standalone daemon must
     not be the one uncapped entry point (OOF-30).
     """
     import signal
@@ -10979,7 +10979,7 @@ def run_daemon(
     while not stop_event.is_set():
         try:
             # Resolve the global concurrency cap the same way the gateway
-            # dispatcher and `hermes kanban dispatch` do (OOF-30): explicit
+            # dispatcher and `fulilian kanban dispatch` do (OOF-30): explicit
             # kanban.max_in_progress wins, otherwise the memory-derived
             # default applies. The standalone daemon previously passed no
             # cap at all — the shipped systemd path could still fan out an
@@ -11247,7 +11247,7 @@ def build_worker_context(conn: sqlite3.Connection, task_id: str) -> str:
             age = _relative_age(c.created_at, _now)
             ts_disp = f"{ts}, {age}" if age else ts
             # Render author with explicit "comment from worker" framing so
-            # operator-controlled HERMES_PROFILE values like "hermes-system"
+            # operator-controlled FULILIAN_PROFILE values like "fulilian-system"
             # or "operator" can't be misread by the next worker as a system
             # directive above the (attacker-influenceable) comment body.
             # Defense-in-depth — the LLM-controlled author-forgery surface
@@ -11971,15 +11971,15 @@ def list_profiles_on_disk() -> list[str]:
 
     Includes:
     - named profiles under ``<default-root>/profiles/<name>/config.yaml``
-    - the implicit ``default`` profile when the default Hermes root exists
+    - the implicit ``default`` profile when the default Fulilian root exists
 
     Reads profile paths directly so this module has no import dependency on
-    ``hermes_cli.profiles`` (which pulls in a large chunk of the CLI startup
+    ``fulilian_cli.profiles`` (which pulls in a large chunk of the CLI startup
     path).
     """
     try:
-        from fulilian_constants import get_default_hermes_root
-        default_root = get_default_hermes_root()
+        from fulilian_constants import get_default_fulilian_root
+        default_root = get_default_fulilian_root()
         profiles_dir = default_root / "profiles"
     except Exception:
         return []
@@ -12008,7 +12008,7 @@ def known_assignees(conn: sqlite3.Connection) -> list[dict]:
     A name is included when it's a configured profile on disk OR when
     any non-archived task has it as the assignee. Used by:
 
-    - ``hermes kanban assignees`` for the terminal.
+    - ``fulilian kanban assignees`` for the terminal.
     - The dashboard assignee dropdown (so a fresh profile appears in
       the picker even before it's been given any task).
     - Router-profile heuristics ("who's overloaded?") without scanning

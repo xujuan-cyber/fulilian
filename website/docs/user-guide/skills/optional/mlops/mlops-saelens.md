@@ -14,7 +14,7 @@ Train sparse autoencoders to interpret model features.
 
 | | |
 |---|---|
-| Source | Optional — install with `hermes skills install official/mlops/saelens` |
+| Source | Optional — install with `fulilian skills install official/mlops/saelens` |
 | Path | `optional-skills/mlops/saelens` |
 | Version | `1.0.1` |
 | Author | Orchestra Research |
@@ -26,7 +26,7 @@ Train sparse autoencoders to interpret model features.
 ## Reference: full SKILL.md
 
 :::info
-The following is the complete skill definition that Hermes loads when this skill is triggered. This is what the agent sees as instructions when the skill is active.
+The following is the complete skill definition that Fulilian loads when this skill is triggered. This is what the agent sees as instructions when the skill is active.
 :::
 
 # SAELens: Sparse Autoencoders for Mechanistic Interpretability

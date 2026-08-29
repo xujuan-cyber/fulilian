@@ -1,8 +1,8 @@
-"""``hermes import-agent`` subcommand parser.
+"""``fulilian import-agent`` subcommand parser.
 
-Follows the ``hermes claw`` pattern (see ``hermes_cli/subcommands/claw.py``):
+Follows the ``fulilian claw`` pattern (see ``fulilian_cli/subcommands/claw.py``):
 parser building lives here, the handler is injected to avoid importing
-``main``, and the import logic itself lives in ``hermes_cli/agent_import.py``.
+``main``, and the import logic itself lives in ``fulilian_cli/agent_import.py``.
 """
 
 from __future__ import annotations
@@ -14,13 +14,13 @@ def build_import_agent_parser(subparsers, *, cmd_import_agent: Callable) -> None
     """Attach the ``import-agent`` subcommand to ``subparsers``."""
     parser = subparsers.add_parser(
         "import-agent",
-        help="Import a Claude Code or Codex CLI setup into Hermes",
+        help="Import a Claude Code or Codex CLI setup into Fulilian",
         description=(
-            "One-command import of another coding agent's setup into Hermes. "
+            "One-command import of another coding agent's setup into Fulilian. "
             "Maps CLAUDE.md/AGENTS.md instructions, permission allowlists, MCP "
-            "servers, skills, and memories into their Hermes equivalents. "
+            "servers, skills, and memories into their Fulilian equivalents. "
             "Always shows a preview before making changes. API keys and "
-            "credentials are never imported — run 'hermes setup' for those."
+            "credentials are never imported — run 'fulilian setup' for those."
         ),
     )
     parser.add_argument(
@@ -41,7 +41,7 @@ def build_import_agent_parser(subparsers, *, cmd_import_agent: Callable) -> None
     parser.add_argument(
         "--overwrite",
         action="store_true",
-        help="Overwrite existing Hermes items on name conflicts (default: skip)",
+        help="Overwrite existing Fulilian items on name conflicts (default: skip)",
     )
     parser.add_argument(
         "--yes", "-y", action="store_true", help="Skip confirmation prompts"

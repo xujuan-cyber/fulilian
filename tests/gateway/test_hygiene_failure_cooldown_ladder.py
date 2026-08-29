@@ -90,7 +90,7 @@ class TestCooldownLadder:
         assert seen == [300.0, 900.0, 2700.0]
 
     def test_consecutive_failures_escalate_across_gateway_restart(self, tmp_path):
-        from hermes_state import SessionDB
+        from fulilian_state import SessionDB
 
         db = SessionDB(db_path=tmp_path / "state.db")
         try:
@@ -147,7 +147,7 @@ class TestCooldownLadder:
         assert _hygiene_cooldown_for_failure(runner, KEY, BASE) == BASE
 
     def test_reset_returns_restarted_gateway_to_first_rung(self, tmp_path):
-        from hermes_state import SessionDB
+        from fulilian_state import SessionDB
 
         db = SessionDB(db_path=tmp_path / "state.db")
         try:

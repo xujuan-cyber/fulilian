@@ -7,7 +7,7 @@ from gateway.restart import GATEWAY_FATAL_CONFIG_EXIT_CODE
 
 class TestServedProfilesStatus:
     def test_write_and_read_served_profiles(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        monkeypatch.setenv("FULILIAN_HOME", str(tmp_path))
         import importlib
         import gateway.status as status
         importlib.reload(status)
@@ -24,8 +24,8 @@ class TestServedProfilesStatus:
 def test_cron_profile_homes_follow_allowlist(tmp_path, monkeypatch):
     """The helper wired into in-process cron returns only selected profiles."""
     monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
-    default_home = tmp_path / ".hermes"
-    monkeypatch.setenv("HERMES_HOME", str(default_home))
+    default_home = tmp_path / ".fulilian"
+    monkeypatch.setenv("FULILIAN_HOME", str(default_home))
     for name in ("worker", "guest"):
         (default_home / "profiles" / name).mkdir(parents=True)
 
@@ -55,7 +55,7 @@ class TestNamedProfileMultiplexerGuard:
         from fulilian_cli import gateway as gw
         monkeypatch.setattr(gw, "_profile_suffix", lambda: "coder")
         monkeypatch.setattr(
-            "hermes_constants.get_default_hermes_root", lambda: tmp_path
+            "fulilian_constants.get_default_fulilian_root", lambda: tmp_path
         )
         # No gateway.pid in tmp_path => no running default gateway => no raise.
         gw._guard_named_profile_under_multiplexer(force=False)
@@ -67,7 +67,7 @@ class TestNamedProfileMultiplexerGuard:
 
         monkeypatch.setattr(gw, "_profile_suffix", lambda: "coder")
         monkeypatch.setattr(
-            "hermes_constants.get_default_hermes_root", lambda: tmp_path
+            "fulilian_constants.get_default_fulilian_root", lambda: tmp_path
         )
         (tmp_path / "gateway.pid").write_text("12345", encoding="utf-8")
         monkeypatch.setattr(status, "_read_pid_record", lambda p: {"pid": 12345})

@@ -20,7 +20,7 @@ How it fits the existing auth framework:
   * :func:`token_auth_middleware` runs OUTERMOST (installed last in
     ``web_server.py``). For a token route it fully owns the auth decision:
     authenticate via the stacked token providers, attach the verified
-    :class:`~hermes_cli.dashboard_auth.base.TokenPrincipal` to
+    :class:`~fulilian_cli.dashboard_auth.base.TokenPrincipal` to
     ``request.state.token_principal`` + set ``request.state.token_authenticated``,
     and pass through; otherwise reject (401 unauthenticated, or 503 when a
     provider's backing store was unreachable). The downstream cookie/session

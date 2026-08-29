@@ -92,7 +92,7 @@ const SOURCE_CONFIG: Record<string, { icon: typeof Terminal; color: string }> =
     tool: { icon: Play, color: "text-warning" },
     api_server: { icon: Globe, color: "text-muted-foreground" },
     acp: { icon: Database, color: "text-muted-foreground" },
-    hermes_flow: { icon: Play, color: "text-warning" },
+    fulilian_flow: { icon: Play, color: "text-warning" },
     vulcan_delegate: { icon: Play, color: "text-warning" },
     webhook: { icon: Globe, color: "text-warning" },
   };
@@ -102,12 +102,12 @@ const AUTOMATION_SESSION_SOURCES = [
   "tool",
   "api_server",
   "acp",
-  "hermes_flow",
+  "fulilian_flow",
   "vulcan_delegate",
   "webhook",
 ];
 const AUTOMATION_SESSION_SOURCE_SET = new Set(AUTOMATION_SESSION_SOURCES);
-const NO_MATCHING_SESSION_SOURCE = "__hermes_dashboard_no_matching_source__";
+const NO_MATCHING_SESSION_SOURCE = "__fulilian_dashboard_no_matching_source__";
 
 type SessionFilterCategory = "chats" | "automation" | "all";
 type SourceSelectionsByCategory = Record<SessionFilterCategory, string[] | null>;
@@ -151,8 +151,8 @@ function sourceLabel(source: string): string {
       return "Cron";
     case "tool":
       return "Tool";
-    case "hermes_flow":
-      return "Hermes Flow";
+    case "fulilian_flow":
+      return "Fulilian Flow";
     case "vulcan_delegate":
       return "Vulcan delegate";
     case "webhook":
@@ -1471,9 +1471,9 @@ export default function SessionsPage() {
         const res = await fetch(api.exportSessionUrl(id), {
           credentials: "include",
           headers: {
-            "X-Hermes-Session-Token":
-              (window as unknown as { __HERMES_SESSION_TOKEN__?: string })
-                .__HERMES_SESSION_TOKEN__ ?? "",
+            "X-Fulilian-Session-Token":
+              (window as unknown as { __FULILIAN_SESSION_TOKEN__?: string })
+                .__FULILIAN_SESSION_TOKEN__ ?? "",
           },
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -1753,7 +1753,7 @@ export default function SessionsPage() {
               <span className="text-xs font-mondwest tracking-[0.12em] truncate">
                 {activeAction === "restart"
                   ? t.status.restartGateway
-                  : t.status.updateHermes}
+                  : t.status.updateFulilian}
               </span>
 
               <Badge

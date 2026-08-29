@@ -1,6 +1,6 @@
-"""ACP session manager — maps ACP sessions to Hermes AIAgent instances.
+"""ACP session manager — maps ACP sessions to Fulilian AIAgent instances.
 
-Sessions are persisted to the shared SessionDB (``~/.hermes/state.db``) so they
+Sessions are persisted to the shared SessionDB (``~/.fulilian/state.db``) so they
 survive process restarts and appear in ``session_search``.  When the editor
 reconnects after idle/restart, the ``load_session`` / ``resume_session`` calls
 find the persisted session in the database and restore the full conversation
@@ -8,7 +8,7 @@ history.
 """
 from __future__ import annotations
 
-from fulilian_constants import get_hermes_home
+from fulilian_constants import get_fulilian_home
 
 import copy
 import json
@@ -27,9 +27,9 @@ logger = logging.getLogger(__name__)
 
 
 def _translate_acp_cwd(cwd: str) -> str:
-    """Translate Windows ACP cwd values when Hermes itself is running in WSL.
+    """Translate Windows ACP cwd values when Fulilian itself is running in WSL.
 
-    Windows ACP clients can launch ``hermes acp`` inside WSL while still sending
+    Windows ACP clients can launch ``fulilian acp`` inside WSL while still sending
     editor workspaces as Windows drive paths (``E:\\Projects``) or
     ``\\\\wsl.localhost\\`` UNC paths. Store and execute against the POSIX form so
     agents, tools, and persisted ACP sessions all agree on the usable workspace.
@@ -123,7 +123,7 @@ def _acp_stderr_print(*args, **kwargs) -> None:
 def _register_task_cwd(task_id: str, cwd: str) -> None:
     """Bind a task/session id to the editor's working directory for tools.
 
-    Zed can launch Hermes from a Windows workspace while the ACP process runs
+    Zed can launch Fulilian from a Windows workspace while the ACP process runs
     inside WSL. In that case ACP sends cwd as e.g. ``E:\\Projects\\POTI``;
     local tools need the WSL mount equivalent or subprocess creation fails
     before the command can run.
@@ -143,7 +143,7 @@ def _expand_acp_enabled_toolsets(
 ) -> List[str]:
     """Return ACP toolsets plus explicit MCP server toolsets for this session."""
     expanded: List[str] = []
-    for name in list(toolsets or ["hermes-acp"]):
+    for name in list(toolsets or ["fulilian-acp"]):
         if name and name not in expanded:
             expanded.append(name)
 
@@ -168,7 +168,7 @@ def _clear_task_cwd(task_id: str) -> None:
 
 @dataclass
 class SessionState:
-    """Tracks per-session state for an ACP-managed Hermes agent."""
+    """Tracks per-session state for an ACP-managed Fulilian agent."""
 
     session_id: str
     agent: Any  # AIAgent instance
@@ -184,7 +184,7 @@ class SessionState:
 
 
 class SessionManager:
-    """Thread-safe manager for ACP sessions backed by Hermes AIAgent instances.
+    """Thread-safe manager for ACP sessions backed by Fulilian AIAgent instances.
 
     Sessions are held in-memory for fast access **and** persisted to the
     shared SessionDB so they survive process restarts and are searchable
@@ -196,9 +196,9 @@ class SessionManager:
         Args:
             agent_factory: Optional callable that creates an AIAgent-like object.
                            Used by tests. When omitted, a real AIAgent is created
-                           using the current Hermes runtime provider configuration.
+                           using the current Fulilian runtime provider configuration.
             db:            Optional SessionDB instance. When omitted, the default
-                           SessionDB (``~/.hermes/state.db``) is lazily created.
+                           SessionDB (``~/.fulilian/state.db``) is lazily created.
         """
         self._sessions: Dict[str, SessionState] = {}
         self._lock = Lock()
@@ -404,17 +404,17 @@ class SessionManager:
         Returns ``None`` if the DB is unavailable (e.g. import error in a
         minimal test environment).
 
-        Note: we resolve ``HERMES_HOME`` dynamically rather than relying on
+        Note: we resolve ``FULILIAN_HOME`` dynamically rather than relying on
         the module-level ``DEFAULT_DB_PATH`` constant, because that constant
         is evaluated at import time and won't reflect env-var changes made
-        later (e.g. by the test fixture ``_isolate_hermes_home``).
+        later (e.g. by the test fixture ``_isolate_fulilian_home``).
         """
         if self._db_instance is not None:
             return self._db_instance
         try:
-            from hermes_state import SessionDB
-            hermes_home = get_hermes_home()
-            self._db_instance = SessionDB(db_path=hermes_home / "state.db")
+            from fulilian_state import SessionDB
+            fulilian_home = get_fulilian_home()
+            self._db_instance = SessionDB(db_path=fulilian_home / "state.db")
             return self._db_instance
         except Exception:
             logger.debug("SessionDB unavailable for ACP persistence", exc_info=True)
@@ -550,7 +550,7 @@ class SessionManager:
         # LIVE REPLAY — the loaded list becomes the resumed agent's working
         # conversation. A durable ``user;user`` violation left in state.db would
         # otherwise re-fire the pre-request defensive repair on every request
-        # for the rest of the session (see hermes_state.get_messages_as_conversation).
+        # for the rest of the session (see fulilian_state.get_messages_as_conversation).
         try:
             history = db.get_messages_as_conversation(
                 session_id, repair_alternation=True
@@ -635,7 +635,7 @@ class SessionManager:
         kwargs = {
             "platform": "acp",
             "enabled_toolsets": _expand_acp_enabled_toolsets(
-                ["hermes-acp"],
+                ["fulilian-acp"],
                 mcp_server_names=configured_mcp_servers,
             ),
             "quiet_mode": True,
@@ -673,7 +673,7 @@ class SessionManager:
         # construction site self-sufficient.  Bounded by
         # ``mcp_discovery_timeout`` (config.yaml, default ~1.5s) so a dead
         # server can't block — servers that miss the bound are picked up by
-        # the automatic late-refresh (see HermesACPAgent._schedule_mcp_late_refresh).
+        # the automatic late-refresh (see FulilianACPAgent._schedule_mcp_late_refresh).
         try:
             from fulilian_cli.mcp_startup import ensure_mcp_discovery_before_agent_build
 
@@ -687,7 +687,7 @@ class SessionManager:
         agent = AIAgent(**kwargs)
         # Codex app-server sessions are spawned lazily on the first turn. Stamp
         # the ACP workspace onto the agent so the Codex runtime starts from the
-        # editor/session cwd instead of the Hermes daemon's process cwd.
+        # editor/session cwd instead of the Fulilian daemon's process cwd.
         agent.session_cwd = cwd
         # ACP stdio transport requires stdout to remain protocol-only JSON-RPC.
         # Route any incidental human-readable agent output to stderr instead.

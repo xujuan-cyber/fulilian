@@ -7,10 +7,10 @@ import pytest
 
 @pytest.fixture()
 def _temp_home(tmp_path, monkeypatch):
-    home = tmp_path / "hermes-home"
+    home = tmp_path / "fulilian-home"
     home.mkdir()
-    monkeypatch.setenv("HERMES_HOME", str(home))
-    monkeypatch.delenv("HERMES_TUI_WS_ORPHAN_REAP_GRACE_S", raising=False)
+    monkeypatch.setenv("FULILIAN_HOME", str(home))
+    monkeypatch.delenv("FULILIAN_TUI_WS_ORPHAN_REAP_GRACE_S", raising=False)
     return home
 
 
@@ -73,7 +73,7 @@ def test_ws_orphan_reap_grace_env_var_overrides_config(_temp_home, monkeypatch):
           ws_orphan_reap_grace_s: 33
         """,
     )
-    monkeypatch.setenv("HERMES_TUI_WS_ORPHAN_REAP_GRACE_S", "7")
+    monkeypatch.setenv("FULILIAN_TUI_WS_ORPHAN_REAP_GRACE_S", "7")
     assert server._resolve_ws_orphan_reap_grace() == 7.0
 
 
@@ -88,5 +88,5 @@ def test_ws_orphan_reap_grace_invalid_values_fall_back(_temp_home, monkeypatch):
         """,
     )
     assert server._resolve_ws_orphan_reap_grace() == 20.0
-    monkeypatch.setenv("HERMES_TUI_WS_ORPHAN_REAP_GRACE_S", "-5")
+    monkeypatch.setenv("FULILIAN_TUI_WS_ORPHAN_REAP_GRACE_S", "-5")
     assert server._resolve_ws_orphan_reap_grace() == 0.0

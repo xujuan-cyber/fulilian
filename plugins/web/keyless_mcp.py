@@ -8,7 +8,7 @@ path):
 - Parallel: https://search.parallel.ai/mcp   (tools: web_search, web_fetch)
 
 This module implements a minimal JSON-RPC ``tools/call`` client for those
-two endpoints so a fresh Hermes install with **zero web credentials** still
+two endpoints so a fresh Fulilian install with **zero web credentials** still
 gets working ``web_search`` / ``web_extract`` tools. The keyless tier is
 resolved strictly LAST — after every keyed backend, the managed tool
 gateway, ddgs, and custom plugin providers — so it never pre-empts a
@@ -83,7 +83,7 @@ def provider_tier(name: str) -> str:
     """Return the user-selected tier for *name*: ``free``, ``paid``, or ``auto``.
 
     Reads ``web.provider_tier.<name>`` from config.yaml (set by the
-    ``hermes tools`` picker's Free/Paid rows). ``free`` forces the keyless
+    ``fulilian tools`` picker's Free/Paid rows). ``free`` forces the keyless
     public endpoint even when the vendor API key is present; ``paid``
     forces the keyed SDK path (missing key surfaces the standard
     "X_API_KEY not set" error instead of silently downgrading to the free
@@ -195,7 +195,7 @@ def mcp_call(
     headers = {
         "Content-Type": "application/json",
         "Accept": "application/json, text/event-stream",
-        "User-Agent": "hermes-agent",
+        "User-Agent": "fulilian-agent",
     }
     try:
         response = requests.post(url, json=payload, headers=headers, timeout=timeout)
@@ -246,7 +246,7 @@ def parallel_search_keyless(query: str, limit: int = 5) -> Dict[str, Any]:
             "error": (
                 f"Keyless Parallel search failed: {exc}. "
                 "Set PARALLEL_API_KEY (https://parallel.ai) or another web "
-                "backend via `hermes tools` for reliable service."
+                "backend via `fulilian tools` for reliable service."
             ),
         }
     except (json.JSONDecodeError, TypeError, KeyError) as exc:
@@ -270,7 +270,7 @@ def parallel_extract_keyless(urls: List[str]) -> List[Dict[str, Any]]:
         message = (
             f"Keyless Parallel extract failed: {exc}. "
             "Set PARALLEL_API_KEY (https://parallel.ai) or another web "
-            "backend via `hermes tools` for reliable service."
+            "backend via `fulilian tools` for reliable service."
         )
         return [
             {"url": u, "title": "", "content": "", "error": message}
@@ -386,7 +386,7 @@ def exa_search_keyless(query: str, limit: int = 5) -> Dict[str, Any]:
             "error": (
                 f"Keyless Exa search failed: {exc}. "
                 "Set EXA_API_KEY (https://exa.ai) or another web backend "
-                "via `hermes tools` for reliable service."
+                "via `fulilian tools` for reliable service."
             ),
         }
     return {"success": True, "data": {"web": _parse_exa_search_text(text, limit)}}
@@ -411,7 +411,7 @@ def exa_extract_keyless(urls: List[str]) -> List[Dict[str, Any]]:
                     "error": (
                         f"Keyless Exa extract failed: {exc}. "
                         "Set EXA_API_KEY (https://exa.ai) or another web "
-                        "backend via `hermes tools` for reliable service."
+                        "backend via `fulilian tools` for reliable service."
                     ),
                 }
             )
@@ -456,7 +456,7 @@ def _tavily_keyless_post(endpoint: str, payload: Dict[str, Any]) -> Dict[str, An
             json=payload,
             headers={
                 "Content-Type": "application/json",
-                "X-Client-Name": "hermes-agent",
+                "X-Client-Name": "fulilian-agent",
                 "X-Tavily-Access-Mode": "keyless",
             },
             timeout=_TIMEOUT_SECONDS,
@@ -482,7 +482,7 @@ def tavily_search_keyless(query: str, limit: int = 5) -> Dict[str, Any]:
             "error": (
                 f"Keyless Tavily search failed: {exc}. "
                 "Set TAVILY_API_KEY (https://app.tavily.com) or another web "
-                "backend via `hermes tools` for reliable service."
+                "backend via `fulilian tools` for reliable service."
             ),
         }
     web_results = []
@@ -506,7 +506,7 @@ def tavily_extract_keyless(urls: List[str]) -> List[Dict[str, Any]]:
         message = (
             f"Keyless Tavily extract failed: {exc}. "
             "Set TAVILY_API_KEY (https://app.tavily.com) or another web "
-            "backend via `hermes tools` for reliable service."
+            "backend via `fulilian tools` for reliable service."
         )
         return [
             {"url": u, "title": "", "content": "", "error": message}
@@ -568,7 +568,7 @@ def firecrawl_search_keyless(query: str, limit: int = 5) -> Dict[str, Any]:
             "error": (
                 f"Keyless Firecrawl search failed: {exc}. "
                 "Set FIRECRAWL_API_KEY (https://firecrawl.dev) or another web "
-                "backend via `hermes tools` for reliable service."
+                "backend via `fulilian tools` for reliable service."
             ),
         }
 
@@ -622,7 +622,7 @@ def firecrawl_extract_keyless(urls: List[str]) -> List[Dict[str, Any]]:
 
 
 KEENABLE_API_URL = "https://api.keenable.ai"
-_KEENABLE_TITLE = "hermes-agent"
+_KEENABLE_TITLE = "fulilian-agent"
 
 
 def keenable_search_keyless(query: str, limit: int = 5) -> Dict[str, Any]:
@@ -655,7 +655,7 @@ def keenable_search_keyless(query: str, limit: int = 5) -> Dict[str, Any]:
             "error": (
                 f"Keyless Keenable search failed: {exc}. "
                 "Set KEENABLE_API_KEY (https://keenable.ai) or another web "
-                "backend via `hermes tools` for reliable service."
+                "backend via `fulilian tools` for reliable service."
             ),
         }
     except Exception as exc:  # noqa: BLE001 — transport/JSON errors

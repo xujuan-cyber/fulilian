@@ -8,7 +8,7 @@ mutation/detail endpoints) thousands of lines later - each is mounted at its
 original registration point so the app's route table is byte-identical.
 
 Handler bodies are byte-identical; web_server-owned helpers are reached via
-the late-binding seam in :mod:`hermes_cli.web_deps` so tests that
+the late-binding seam in :mod:`fulilian_cli.web_deps` so tests that
 ``monkeypatch.setattr(web_server, "_helper", ...)`` keep working.
 """
 
@@ -32,7 +32,7 @@ from fulilian_cli.web_models import (
 )
 
 # Same logger the handlers used before extraction (identical logger object).
-_log = logging.getLogger("hermes_cli.web_server")
+_log = logging.getLogger("fulilian_cli.web_server")
 
 list_router = APIRouter()
 search_router = APIRouter()
@@ -316,7 +316,7 @@ async def search_sessions(
                 seen[root] = payload
 
             # Direct ID matches first: users often paste a session id from CLI,
-            # logs, or another Hermes surface. FTS can't find those unless the
+            # logs, or another Fulilian surface. FTS can't find those unless the
             # id happens to appear in message text. search_sessions_by_id is
             # SQL-bounded, so this stays cheap even with thousands of sessions.
             for row in db.search_sessions_by_id(
@@ -451,7 +451,7 @@ async def import_sessions_endpoint(request: Request):
     """Import one or more sessions exported from the dashboard or CLI.
 
     This is intentionally separate from ``/api/ops/import``: that endpoint
-    restores a whole Hermes backup archive, while this endpoint is scoped to
+    restores a whole Fulilian backup archive, while this endpoint is scoped to
     session rows/messages and is safe to use from the Sessions page.
     """
     try:
@@ -528,7 +528,7 @@ async def delete_empty_sessions_endpoint(profile: Optional[str] = None):
 
 @manage_router.get("/api/sessions/stats")
 async def get_session_stats(profile: Optional[str] = None):
-    """Session-store statistics for the Sessions page (mirrors `hermes sessions stats`).
+    """Session-store statistics for the Sessions page (mirrors `fulilian sessions stats`).
 
     Registered before ``/api/sessions/{session_id}`` so the literal ``stats``
     path isn't captured as a session id by the parameterized route.

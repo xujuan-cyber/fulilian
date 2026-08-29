@@ -23,7 +23,7 @@ import { usePromptActions } from '@/app/session/hooks/use-prompt-actions'
 import type { ClientSessionState } from '@/app/types'
 import { chatMessageText } from '@/lib/chat-messages'
 import { createClientSessionState } from '@/lib/chat-runtime'
-import type { RpcEvent } from '@/types/hermes'
+import type { RpcEvent } from '@/types/fulilian'
 
 import { STREAM_DELTA_FLUSH_MS } from './utils'
 
@@ -66,7 +66,7 @@ function Harness() {
     activeSessionIdRef,
     hydrateFromStoredSession: vi.fn(async () => undefined),
     queryClient: queryClientRef.current,
-    refreshHermesConfig: vi.fn(async () => undefined),
+    refreshFulilianConfig: vi.fn(async () => undefined),
     refreshSessions: vi.fn(async () => undefined),
     sessionStateByRuntimeIdRef,
     updateSessionState

@@ -15,7 +15,7 @@ import {
 } from '@/store/preview'
 import { $activeSessionId, $currentCwd } from '@/store/session'
 import { $focusedRuntimeId, $sessionTiles } from '@/store/session-states'
-import type { RpcEvent } from '@/types/hermes'
+import type { RpcEvent } from '@/types/fulilian'
 
 type EventHandler = (event: RpcEvent) => void
 

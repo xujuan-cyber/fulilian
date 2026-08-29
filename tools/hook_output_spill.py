@@ -26,14 +26,14 @@ Config (``config.yaml``)::
         max_chars: 10000       # default; context above this is spilled
         preview_head: 500      # chars shown at the start of the preview
         preview_tail: 500      # chars shown at the end of the preview
-        directory: null        # default: <HERMES_HOME>/hook_outputs
+        directory: null        # default: <FULILIAN_HOME>/hook_outputs
 
 Design invariants
 -----------------
 * Behaviour-preserving when ``enabled: false`` or when content is under
   the cap — return the input string unchanged.
 * Never raises. Any I/O error (disk full, permission denied, missing
-  HERMES_HOME, etc.) falls back to a byte-length truncation with an
+  FULILIAN_HOME, etc.) falls back to a byte-length truncation with an
   in-prompt notice — the hook context still reaches the model, just
   bounded in size.
 * Spill files are grouped by session so a ``/new`` session doesn't grow
@@ -117,9 +117,9 @@ def _resolve_spill_dir(directory_override: Optional[str], session_id: Optional[s
     if directory_override:
         base = Path(os.path.expanduser(directory_override))
     else:
-        from fulilian_constants import get_hermes_home
+        from fulilian_constants import get_fulilian_home
 
-        base = Path(get_hermes_home()) / "hook_outputs"
+        base = Path(get_fulilian_home()) / "hook_outputs"
 
     # Group by session so spills are contained per conversation.
     session_segment = session_id or "no-session"

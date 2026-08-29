@@ -14,7 +14,7 @@ import {
   profileColorSoft,
   relativeTime,
   useQuery
-} from '@hermes/plugin-sdk'
+} from '@fulilian/plugin-sdk'
 import { type ReactNode, useEffect, useState } from 'react'
 
 import { fetchOrchestration, ORCHESTRATION_KEY } from './api'

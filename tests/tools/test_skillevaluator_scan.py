@@ -222,21 +222,21 @@ class TestFormatReport:
 
 class TestConfigGate:
     def test_default_enabled(self):
-        with mock.patch("hermes_cli.config.load_config", return_value={}):
+        with mock.patch("fulilian_cli.config.load_config", return_value={}):
             assert tier1_advisory_enabled()
 
     def test_disabled_via_config(self):
-        with mock.patch("hermes_cli.config.load_config",
+        with mock.patch("fulilian_cli.config.load_config",
                         return_value={"skills": {"tier1_advisory": False}}):
             assert not tier1_advisory_enabled()
 
     def test_string_false_disabled(self):
-        with mock.patch("hermes_cli.config.load_config",
+        with mock.patch("fulilian_cli.config.load_config",
                         return_value={"skills": {"tier1_advisory": "false"}}):
             assert not tier1_advisory_enabled()
 
     def test_config_error_defaults_enabled(self):
-        with mock.patch("hermes_cli.config.load_config", side_effect=RuntimeError):
+        with mock.patch("fulilian_cli.config.load_config", side_effect=RuntimeError):
             assert tier1_advisory_enabled()
 
 

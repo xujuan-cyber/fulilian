@@ -17,7 +17,7 @@ Config via config.yaml:
     byterover:
       auto_extract: false  # disable automatic brv curate hooks
 
-Working directory: $HERMES_HOME/byterover/ (profile-scoped context tree)
+Working directory: $FULILIAN_HOME/byterover/ (profile-scoped context tree)
 """
 
 from __future__ import annotations
@@ -164,8 +164,8 @@ def _run_brv(args: List[str], timeout: int = _QUERY_TIMEOUT,
 
 def _get_brv_cwd() -> Path:
     """Profile-scoped working directory for the brv context tree."""
-    from fulilian_constants import get_hermes_home
-    return get_hermes_home() / "byterover"
+    from fulilian_constants import get_fulilian_home
+    return get_fulilian_home() / "byterover"
 
 
 # ---------------------------------------------------------------------------

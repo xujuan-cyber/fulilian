@@ -76,13 +76,13 @@ CONTINUATION_TEXT = "[Continuing toward your standing goal]\nGoal: ship it"
 
 
 @pytest.fixture()
-def hermes_home(tmp_path, monkeypatch):
+def fulilian_home(tmp_path, monkeypatch):
     from pathlib import Path
 
-    home = tmp_path / ".hermes"
+    home = tmp_path / ".fulilian"
     home.mkdir()
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setenv("HERMES_HOME", str(home))
+    monkeypatch.setenv("FULILIAN_HOME", str(home))
 
     from fulilian_cli import goals
 
@@ -141,7 +141,7 @@ async def test_fifo_enqueued_continuation_is_drained_without_new_user_message():
 
 
 @pytest.mark.asyncio
-async def test_runner_goal_hook_enqueues_into_the_key_the_adapter_drains(hermes_home):
+async def test_runner_goal_hook_enqueues_into_the_key_the_adapter_drains(fulilian_home):
     """_post_turn_goal_continuation resolves the FIFO key via
     _session_key_for_source; the adapter drain uses build_session_key on the
     event source. These must agree or the continuation is orphaned under a
@@ -181,7 +181,7 @@ async def test_runner_goal_hook_enqueues_into_the_key_the_adapter_drains(hermes_
 
     GoalManager(session_entry.session_id).set("ship it")
     with patch(
-        "hermes_cli.goals.judge_goal",
+        "fulilian_cli.goals.judge_goal",
         return_value=("continue", "still needs work", False, None, False),
     ):
         await runner._post_turn_goal_continuation(

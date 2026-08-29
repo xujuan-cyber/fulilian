@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read which OS window sits directly underneath the Hermes desktop window.
+"""Read which OS window sits directly underneath the Fulilian desktop window.
 
 The window list lives with the OS, so this tool round-trips through the
 gateway's blocking-prompt bridge — the same one `read_terminal` uses:
@@ -16,10 +16,10 @@ from tools.registry import registry, tool_error
 
 
 def read_window_below_tool(callback: Optional[Callable] = None) -> str:
-    """Return the window underneath the Hermes window as a JSON string."""
+    """Return the window underneath the Fulilian window as a JSON string."""
     if callback is None:
         return tool_error(
-            "read_window_below is only available in the Hermes desktop app."
+            "read_window_below is only available in the Fulilian desktop app."
         )
 
     try:
@@ -44,12 +44,12 @@ READ_WINDOW_BELOW_SCHEMA = {
     "name": "read_window_below",
     "description": (
         "Identify the application window directly underneath (behind) the "
-        "Hermes desktop window — what the user is working in behind this app. "
+        "Fulilian desktop window — what the user is working in behind this app. "
         "Returns JSON: {window: {app, title, bounds{x,y,width,height}, id}, "
         "frontmost: {app, title}, platform}. `title` may be empty when the OS "
         "withholds window titles (e.g. macOS without the Screen Recording "
-        "permission — never prompted for, noted in `note`). Other Hermes "
-        "windows are skipped: the nearest non-Hermes window is reported. "
+        "permission — never prompted for, noted in `note`). Other Fulilian "
+        "windows are skipped: the nearest non-Fulilian window is reported. "
         "Returns {error, platform} instead where the OS cannot enumerate "
         "windows at all (e.g. a Wayland session); `error` says what would fix "
         "it, so relay it rather than retrying. "

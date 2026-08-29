@@ -1,4 +1,4 @@
-"""Approval hooks must carry the Hermes session id to observer plugins.
+"""Approval hooks must carry the Fulilian session id to observer plugins.
 
 Staging defect 2026-08-10: approval marks were emitted under a synthetic
 "default" relay session because the approval hook payload carried only
@@ -35,7 +35,7 @@ class TestApprovalHookSessionId:
         )
         try:
             with patch(
-                "hermes_cli.lifecycle.invoke_hook",
+                "fulilian_cli.lifecycle.invoke_hook",
                 side_effect=_capture_hook(captured),
             ):
                 approval_mod._fire_approval_hook(
@@ -60,7 +60,7 @@ class TestApprovalHookSessionId:
         )
         try:
             with patch(
-                "hermes_cli.lifecycle.invoke_hook",
+                "fulilian_cli.lifecycle.invoke_hook",
                 side_effect=_capture_hook(captured),
             ):
                 approval_mod._fire_approval_hook(
@@ -77,7 +77,7 @@ class TestApprovalHookSessionId:
     def test_absent_when_unbound(self):
         captured = []
         with patch(
-            "hermes_cli.lifecycle.invoke_hook",
+            "fulilian_cli.lifecycle.invoke_hook",
             side_effect=_capture_hook(captured),
         ):
             approval_mod._fire_approval_hook(

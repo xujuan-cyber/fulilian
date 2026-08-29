@@ -221,7 +221,7 @@ class TestNoteInSummary:
         from tools.computer_use.backend import CaptureResult
         from tools.computer_use import tool as cu_tool
 
-        monkeypatch.setattr(hermes_constants, "get_hermes_dir",
+        monkeypatch.setattr(fulilian_constants, "get_fulilian_dir",
                             lambda *a, **k: tmp_path)
         monkeypatch.setattr(cu_tool, "_should_route_through_aux_vision",
                             lambda: False)

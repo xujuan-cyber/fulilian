@@ -109,8 +109,8 @@ describe('host.state turn flags', () => {
 })
 
 describe('host.connections', () => {
-  const desktopWindow = window as unknown as { hermesDesktop?: Window['hermesDesktop'] }
-  const originalDesktop = desktopWindow.hermesDesktop
+  const desktopWindow = window as unknown as { fulilianDesktop?: Window['fulilianDesktop'] }
+  const originalDesktop = desktopWindow.fulilianDesktop
 
   const connection = (id: string, label: string) => ({
     id,
@@ -122,14 +122,14 @@ describe('host.connections', () => {
   })
 
   const stubBridge = (list: () => Promise<unknown>) => {
-    desktopWindow.hermesDesktop = {
+    desktopWindow.fulilianDesktop = {
       ...originalDesktop,
       connections: { list }
-    } as unknown as Window['hermesDesktop']
+    } as unknown as Window['fulilianDesktop']
   }
 
   afterEach(() => {
-    desktopWindow.hermesDesktop = originalDesktop
+    desktopWindow.fulilianDesktop = originalDesktop
   })
 
   it('returns the registry rows, not the envelope that carries them (#89823)', async () => {
@@ -168,7 +168,7 @@ describe('host.connections', () => {
   })
 
   it('still rejects on a Desktop build without the connection registry', async () => {
-    desktopWindow.hermesDesktop = undefined
+    desktopWindow.fulilianDesktop = undefined
 
     await expect(host.connections()).rejects.toThrow('This Desktop build has no connection registry')
   })

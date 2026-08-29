@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { assistantTextPart, type ChatMessage } from '@/lib/chat-messages'
 import { $previewTabs, $previewTarget, closeRightRail, type PreviewTarget } from '@/store/preview'
 import { $activeSessionId, $currentCwd, $messages, $selectedStoredSessionId } from '@/store/session'
-import type { RpcEvent } from '@/types/hermes'
+import type { RpcEvent } from '@/types/fulilian'
 
 import { usePreviewRouting } from './use-preview-routing'
 
@@ -64,7 +64,7 @@ describe('preview routing', () => {
     closeRightRail()
     window.localStorage.clear()
 
-    Object.defineProperty(window, 'hermesDesktop', {
+    Object.defineProperty(window, 'fulilianDesktop', {
       configurable: true,
       value: { normalizePreviewTarget: vi.fn(async (target: string) => fileTarget(target)) }
     })
@@ -183,7 +183,7 @@ describe('preview routing', () => {
       })
 
       expect($previewTabs.get()).toHaveLength(0)
-      expect(window.hermesDesktop.normalizePreviewTarget).not.toHaveBeenCalled()
+      expect(window.fulilianDesktop.normalizePreviewTarget).not.toHaveBeenCalled()
     })
 
     it('does not open a preview off the back of a tool result', async () => {

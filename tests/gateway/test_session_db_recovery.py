@@ -110,7 +110,7 @@ def test_runtime_health_is_sanitized_and_recovers() -> None:
 
 
 def test_session_store_and_runner_reopen_after_failed_construction(monkeypatch, tmp_path) -> None:
-    import hermes_state
+    import fulilian_state
     from gateway.run import GatewayRunner, _SESSION_DB_UNPINNED
     from gateway.session import SessionStore, _DB_UNPINNED
 
@@ -126,8 +126,8 @@ def test_session_store_and_runner_reopen_after_failed_construction(monkeypatch, 
         opened.append(handle)
         return handle
 
-    monkeypatch.setattr(hermes_state, "SessionDB", fail_once_session_db)
-    monkeypatch.setattr(hermes_state, "_default_db_path", lambda: db_path)
+    monkeypatch.setattr(fulilian_state, "SessionDB", fail_once_session_db)
+    monkeypatch.setattr(fulilian_state, "_default_db_path", lambda: db_path)
 
     store = object.__new__(SessionStore)
     store._db_pinned = _DB_UNPINNED
@@ -155,8 +155,8 @@ def test_session_store_and_runner_reopen_after_failed_construction(monkeypatch, 
         runner_opened.append(handle)
         return handle
 
-    monkeypatch.setattr(hermes_state, "SessionDB", runner_fail_once)
-    monkeypatch.setattr(hermes_state, "AsyncSessionDB", lambda db: ("async", db))
+    monkeypatch.setattr(fulilian_state, "SessionDB", runner_fail_once)
+    monkeypatch.setattr(fulilian_state, "AsyncSessionDB", lambda db: ("async", db))
     runner = object.__new__(GatewayRunner)
     runner._session_db_pinned = _SESSION_DB_UNPINNED
     runner._session_db_init_error = "temporary open failure"
@@ -262,7 +262,7 @@ def test_close_all_preserves_inflight_failure() -> None:
 
 
 def test_recovered_db_rows_survive_fallback_structural_save(monkeypatch, tmp_path) -> None:
-    import hermes_state
+    import fulilian_state
     from gateway.config import GatewayConfig, Platform
     from gateway.session import SessionEntry, SessionSource, SessionStore, _now
 
@@ -297,7 +297,7 @@ def test_recovered_db_rows_survive_fallback_structural_save(monkeypatch, tmp_pat
         updated_at=now,
         origin=SessionSource(platform=Platform.TELEGRAM, chat_id="changed"),
     )
-    database = hermes_state.SessionDB(db_path=db_path)
+    database = fulilian_state.SessionDB(db_path=db_path)
     for entry in (durable, deleted, changed):
         database.save_gateway_routing_entry(
             entry.session_key,
@@ -316,7 +316,7 @@ def test_recovered_db_rows_survive_fallback_structural_save(monkeypatch, tmp_pat
         encoding="utf-8",
     )
 
-    real_session_db = hermes_state.SessionDB
+    real_session_db = fulilian_state.SessionDB
     calls = 0
 
     def fail_once_session_db(*args, **kwargs):
@@ -326,8 +326,8 @@ def test_recovered_db_rows_survive_fallback_structural_save(monkeypatch, tmp_pat
             raise OSError("temporary open failure")
         return real_session_db(db_path=db_path)
 
-    monkeypatch.setattr(hermes_state, "SessionDB", fail_once_session_db)
-    monkeypatch.setattr(hermes_state, "_default_db_path", lambda: db_path)
+    monkeypatch.setattr(fulilian_state, "SessionDB", fail_once_session_db)
+    monkeypatch.setattr(fulilian_state, "_default_db_path", lambda: db_path)
     store = SessionStore(
         sessions_dir,
         GatewayConfig(sessions_dir=sessions_dir, write_sessions_json=False),

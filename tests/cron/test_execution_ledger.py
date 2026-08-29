@@ -44,7 +44,7 @@ def test_execution_ledger_follows_the_current_profile_home(monkeypatch, tmp_path
 
     current_home = {"path": tmp_path / "default"}
     monkeypatch.setattr(executions, "EXECUTIONS_FILE", None)
-    monkeypatch.setattr(executions, "get_hermes_home", lambda: current_home["path"])
+    monkeypatch.setattr(executions, "get_fulilian_home", lambda: current_home["path"])
 
     default_row = executions.create_execution("default-job", source="builtin")
     current_home["path"] = tmp_path / "worker"
@@ -133,11 +133,11 @@ def test_recovery_does_not_mark_live_process_execution_unknown(monkeypatch, tmp_
 
 
 def test_restart_marks_interrupted_execution_unknown_without_requeue(tmp_path):
-    """Real temp-HERMES_HOME subprocess restart: in-flight is audit-only unknown."""
+    """Real temp-FULILIAN_HOME subprocess restart: in-flight is audit-only unknown."""
     home = tmp_path / "home"
     repo = Path(__file__).resolve().parents[2]
     env = os.environ.copy()
-    env["HERMES_HOME"] = str(home)
+    env["FULILIAN_HOME"] = str(home)
     env["PYTHONPATH"] = str(repo)
 
     create = subprocess.run(

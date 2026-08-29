@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Skills Hub — Source adapters and hub state management for the Hermes Skills Hub.
+Skills Hub — Source adapters and hub state management for the Fulilian Skills Hub.
 
 This is a library module (not an agent tool). It provides:
   - GitHubAuth: Shared GitHub API authentication (PAT, gh CLI, GitHub App)
@@ -10,7 +10,7 @@ This is a library module (not an agent tool). It provides:
   - HubLockFile: Track provenance of installed hub skills
   - Hub state directory management (quarantine, audit log, taps, index cache)
 
-Used by hermes_cli/skills_hub.py for CLI commands and the /skills slash command.
+Used by fulilian_cli/skills_hub.py for CLI commands and the /skills slash command.
 """
 
 import hashlib
@@ -25,7 +25,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
-from fulilian_constants import get_hermes_home
+from fulilian_constants import get_fulilian_home
 from fulilian_cli._subprocess_compat import windows_hide_flags
 from agent.skill_utils import is_excluded_skill_path
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -60,13 +60,13 @@ def _override(name: str):
     return globals().get(name)
 
 
-def _hermes_home() -> Path:
-    return get_hermes_home()
+def _fulilian_home() -> Path:
+    return get_fulilian_home()
 
 
 def _skills_dir() -> Path:
     forced = _override("SKILLS_DIR")
-    return Path(forced) if forced is not None else _hermes_home() / "skills"
+    return Path(forced) if forced is not None else _fulilian_home() / "skills"
 
 
 def _hub_dir() -> Path:
@@ -100,7 +100,7 @@ def _index_cache_dir() -> Path:
 
 
 _DYNAMIC_PATH_RESOLVERS = {
-    "HERMES_HOME": _hermes_home,
+    "FULILIAN_HOME": _fulilian_home,
     "SKILLS_DIR": _skills_dir,
     "HUB_DIR": _hub_dir,
     "LOCK_FILE": _lock_file,
@@ -734,9 +734,9 @@ class GitHubSource(SkillSource):
         tags = []
         metadata = fm.get("metadata", {})
         if isinstance(metadata, dict):
-            hermes_meta = metadata.get("hermes", {})
-            if isinstance(hermes_meta, dict):
-                tags = hermes_meta.get("tags", [])
+            fulilian_meta = metadata.get("fulilian", {})
+            if isinstance(fulilian_meta, dict):
+                tags = fulilian_meta.get("tags", [])
         if not tags:
             raw_tags = fm.get("tags", [])
             tags = raw_tags if isinstance(raw_tags, list) else []
@@ -1487,9 +1487,9 @@ class UrlSource(SkillSource):
         tags: List[str] = []
         metadata = fm.get("metadata", {})
         if isinstance(metadata, dict):
-            hermes_meta = metadata.get("hermes", {})
-            if isinstance(hermes_meta, dict):
-                raw_tags = hermes_meta.get("tags", [])
+            fulilian_meta = metadata.get("fulilian", {})
+            if isinstance(fulilian_meta, dict):
+                raw_tags = fulilian_meta.get("tags", [])
                 if isinstance(raw_tags, list):
                     tags = [str(t) for t in raw_tags]
         return SkillMeta(
@@ -3123,7 +3123,7 @@ class LobeHubSource(SkillSource):
             f"name: {identifier}",
             f"description: {description[:500]}",
             "metadata:",
-            "  hermes:",
+            "  fulilian:",
             f"    tags: [{', '.join(str(t) for t in tag_list)}]",
             "  lobehub:",
             "    source: lobehub",
@@ -3329,7 +3329,7 @@ class OptionalSkillSource(SkillSource):
 
     These skills are official (maintained by Nous Research) but not activated
     by default — they don't appear in the system prompt and aren't copied to
-    ~/.hermes/skills/ during setup.  They are discoverable via the Skills Hub
+    ~/.fulilian/skills/ during setup.  They are discoverable via the Skills Hub
     (search / install / inspect) and labelled "official" with "builtin" trust.
     """
 
@@ -3490,7 +3490,7 @@ class OptionalSkillSource(SkillSource):
 
         Local installs lag `main` — a freshly merged optional skill isn't in
         the user's `optional-skills/` checkout until they run
-        ``hermes update``. Rather than telling them to update first, resolve
+        ``fulilian update``. Rather than telling them to update first, resolve
         the skill against the live default branch.
 
         ``rel`` is the identifier without the ``official/`` prefix — either
@@ -3635,9 +3635,9 @@ class OptionalSkillSource(SkillSource):
             tags = []
             meta_block = fm.get("metadata", {})
             if isinstance(meta_block, dict):
-                hermes_meta = meta_block.get("hermes", {})
-                if isinstance(hermes_meta, dict):
-                    tags = hermes_meta.get("tags", [])
+                fulilian_meta = meta_block.get("fulilian", {})
+                if isinstance(fulilian_meta, dict):
+                    tags = fulilian_meta.get("tags", [])
 
             rel_path = parent.relative_to(self._optional_dir).as_posix()
 
@@ -3921,7 +3921,7 @@ def _category_skill_dirs(directory: Path) -> List[str]:
     :func:`is_excluded_skill_path` so a lone ``node_modules`` or
     ``references/pkg/SKILL.md`` hit does not misclassify the directory as
     a category. Shared by the install-time category guard here and
-    ``hermes_cli.skills_hub._existing_categories``.
+    ``fulilian_cli.skills_hub._existing_categories``.
     """
     skill_dirs: List[str] = []
     for entry in directory.iterdir():
@@ -4217,31 +4217,31 @@ def check_for_skill_updates(
 
 
 # ---------------------------------------------------------------------------
-# Hermes centralized index source
+# Fulilian centralized index source
 # ---------------------------------------------------------------------------
 
-HERMES_INDEX_URL = "https://hermes-agent.nousresearch.com/docs/api/skills-index.json"
-HERMES_INDEX_TTL = 6 * 3600  # 6 hours
+FULILIAN_INDEX_URL = "https://hermes-agent.nousresearch.com/docs/api/skills-index.json"
+FULILIAN_INDEX_TTL = 6 * 3600  # 6 hours
 
 
-def _hermes_index_cache_file() -> Path:
-    return _index_cache_dir() / "hermes-index.json"
+def _fulilian_index_cache_file() -> Path:
+    return _index_cache_dir() / "fulilian-index.json"
 
 
-def _load_hermes_index() -> Optional[dict]:
+def _load_fulilian_index() -> Optional[dict]:
     """Fetch the centralized skills index, with local cache.
 
     The index is a JSON file hosted on the docs site, rebuilt daily by CI.
-    We cache it locally for HERMES_INDEX_TTL seconds to avoid repeated
+    We cache it locally for FULILIAN_INDEX_TTL seconds to avoid repeated
     downloads within a session.
     """
     # Check local cache
-    hermes_index_cache_file = _hermes_index_cache_file()
-    if hermes_index_cache_file.exists():
+    fulilian_index_cache_file = _fulilian_index_cache_file()
+    if fulilian_index_cache_file.exists():
         try:
-            age = time.time() - hermes_index_cache_file.stat().st_mtime
-            if age < HERMES_INDEX_TTL:
-                return json.loads(hermes_index_cache_file.read_text(encoding="utf-8"))
+            age = time.time() - fulilian_index_cache_file.stat().st_mtime
+            if age < FULILIAN_INDEX_TTL:
+                return json.loads(fulilian_index_cache_file.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             pass
 
@@ -4262,13 +4262,13 @@ def _load_hermes_index() -> Optional[dict]:
     for accept_encoding in ("gzip, deflate", "identity"):
         try:
             resp = httpx.get(
-                HERMES_INDEX_URL,
+                FULILIAN_INDEX_URL,
                 timeout=15,
                 follow_redirects=True,
                 headers={"Accept-Encoding": accept_encoding},
             )
             if resp.status_code != 200:
-                logger.debug("Hermes index fetch returned %d", resp.status_code)
+                logger.debug("Fulilian index fetch returned %d", resp.status_code)
                 return _load_stale_index_cache()
             data = resp.json()
             break
@@ -4276,13 +4276,13 @@ def _load_hermes_index() -> Optional[dict]:
             # Content-Encoding decode failed — retry once uncompressed before
             # giving up on the network path entirely.
             logger.debug(
-                "Hermes index decode failed (Accept-Encoding=%s): %s",
+                "Fulilian index decode failed (Accept-Encoding=%s): %s",
                 accept_encoding,
                 e,
             )
             continue
         except (httpx.HTTPError, json.JSONDecodeError) as e:
-            logger.debug("Hermes index fetch failed: %s", e)
+            logger.debug("Fulilian index fetch failed: %s", e)
             return _load_stale_index_cache()
 
     if data is None:
@@ -4294,8 +4294,8 @@ def _load_hermes_index() -> Optional[dict]:
 
     # Cache locally
     try:
-        hermes_index_cache_file.parent.mkdir(parents=True, exist_ok=True)
-        hermes_index_cache_file.write_text(json.dumps(data), encoding="utf-8")
+        fulilian_index_cache_file.parent.mkdir(parents=True, exist_ok=True)
+        fulilian_index_cache_file.write_text(json.dumps(data), encoding="utf-8")
     except OSError:
         pass
 
@@ -4304,17 +4304,17 @@ def _load_hermes_index() -> Optional[dict]:
 
 def _load_stale_index_cache() -> Optional[dict]:
     """Fall back to stale cache when the network fetch fails."""
-    hermes_index_cache_file = _hermes_index_cache_file()
-    if hermes_index_cache_file.exists():
+    fulilian_index_cache_file = _fulilian_index_cache_file()
+    if fulilian_index_cache_file.exists():
         try:
-            return json.loads(hermes_index_cache_file.read_text(encoding="utf-8"))
+            return json.loads(fulilian_index_cache_file.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             pass
     return None
 
 
-class HermesIndexSource(SkillSource):
-    """Skill source backed by the centralized Hermes Skills Index.
+class FulilianIndexSource(SkillSource):
+    """Skill source backed by the centralized Fulilian Skills Index.
 
     The index is a JSON catalog published to the docs site and rebuilt
     daily by CI.  It contains metadata + resolved GitHub paths for every
@@ -4335,7 +4335,7 @@ class HermesIndexSource(SkillSource):
 
     def _ensure_loaded(self) -> dict:
         if not self._loaded:
-            self._index = _load_hermes_index()
+            self._index = _load_fulilian_index()
             self._loaded = True
         return self._index or {}
 
@@ -4345,7 +4345,7 @@ class HermesIndexSource(SkillSource):
         return self._github
 
     def source_id(self) -> str:
-        return "hermes-index"
+        return "fulilian-index"
 
     @property
     def is_available(self) -> bool:
@@ -4432,7 +4432,7 @@ class HermesIndexSource(SkillSource):
         if resolved:
             bundle = self._get_github().fetch(resolved)
             if bundle:
-                bundle.source = entry.get("source", "hermes-index")
+                bundle.source = entry.get("source", "fulilian-index")
                 bundle.identifier = identifier
                 return bundle
 
@@ -4443,7 +4443,7 @@ class HermesIndexSource(SkillSource):
             github_id = f"{repo}/{path}"
             bundle = self._get_github().fetch(github_id)
             if bundle:
-                bundle.source = entry.get("source", "hermes-index")
+                bundle.source = entry.get("source", "fulilian-index")
                 bundle.identifier = identifier
                 return bundle
 
@@ -4492,7 +4492,7 @@ class HermesIndexSource(SkillSource):
         return SkillMeta(
             name=entry.get("name", ""),
             description=entry.get("description", ""),
-            source=entry.get("source", "hermes-index"),
+            source=entry.get("source", "fulilian-index"),
             identifier=entry.get("identifier", ""),
             trust_level=entry.get("trust_level", "community"),
             repo=entry.get("repo"),
@@ -4515,7 +4515,7 @@ def create_source_router(auth: Optional[GitHubAuth] = None) -> List[SkillSource]
 
     sources: List[SkillSource] = [
         OptionalSkillSource(auth=auth),  # Official optional skills (highest priority)
-        HermesIndexSource(auth=auth), # Centralized index (search + resolved install paths)
+        FulilianIndexSource(auth=auth), # Centralized index (search + resolved install paths)
         SkillsShSource(auth=auth),
         WellKnownSkillSource(),
         UrlSource(),                  # Direct HTTP(S) URL to a SKILL.md file
@@ -4577,7 +4577,7 @@ def parallel_search_sources(
                                   "lobehub", "well-known"})
     if _effective_filter == "all":
         for src in sources:
-            if (src.source_id() == "hermes-index"
+            if (src.source_id() == "fulilian-index"
                     and getattr(src, "is_available", False)):
                 _index_available = True
                 break

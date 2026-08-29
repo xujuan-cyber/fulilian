@@ -3,7 +3,7 @@ import { useMemo } from 'react'
 import { useI18n } from '@/i18n'
 import { compactNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import type { ContextBreakdown, ContextUsageCategory, UsageStats } from '@/types/hermes'
+import type { ContextBreakdown, ContextUsageCategory, UsageStats } from '@/types/fulilian'
 
 interface ContextUsagePanelProps {
   breakdown: ContextBreakdown | null

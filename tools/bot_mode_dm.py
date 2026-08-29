@@ -1,11 +1,11 @@
 """Bot Mode agent-to-agent DM tool — ``message_agent``.
 
 A structured, Bot-Chat-only tool that lets a Bot Mode agent message a
-teammate agent (another Hermes profile on this install, or an agent on a
+teammate agent (another Fulilian profile on this install, or an agent on a
 registered peer gateway) WITHOUT hand-assembling shell commands.
 
 Why this exists (Aug 2026): the Bot Mode teammate protocol taught agents to
-DM each other via a prompt-injected ``hermes -p <bot> chat ...`` shellout.
+DM each other via a prompt-injected ``fulilian -p <bot> chat ...`` shellout.
 That transport works, but the *invocation* was fragile — quoting traps
 (#91339/#91304), temp-file choreography, dead-profile races — and the
 Desktop's remote-mention path forwarded raw user text verbatim (#91397).
@@ -26,12 +26,12 @@ Containment contract (MUST hold — reviewers check all three):
   forged call from a session that shouldn't have the tool returns a
   structured error instead of delivering.
 - Everything here is additive. The legacy protocol transports
-  (``hermes -p`` / ``hermes peer dm``) keep working for older prompts.
+  (``fulilian -p`` / ``fulilian peer dm``) keep working for older prompts.
 
 The transports themselves are unchanged and proven:
-- local teammate  → ``hermes -p <name> chat --in ~ -c "Bot Chat"
+- local teammate  → ``fulilian -p <name> chat --in ~ -c "Bot Chat"
   --create-if-missing -Q --query-file <tmp>`` (one turn, reply on stdout)
-- peer teammate   → ``hermes peer dm <peer>[/<name>] < <tmp>``
+- peer teammate   → ``fulilian peer dm <peer>[/<name>] < <tmp>``
 
 Both run through ``terminal_tool(background=True, notify_on_complete=True)``
 so the reply lands as a completion notification on the sender's NEXT turn —
@@ -65,7 +65,7 @@ MESSAGE_MAX_CHARS = 16000
 # A runner normally owns and removes each file. This bounds the residual
 # plaintext lifetime if the machine dies after background-spawn acknowledgement
 # but before the runner reaches its ``finally`` block.
-_DM_DIR_NAME = "hermes-dm"
+_DM_DIR_NAME = "fulilian-dm"
 _DM_STALE_SECONDS = 24 * 60 * 60
 
 _PEER_TARGET_RE = re.compile(r"^([a-z0-9][a-z0-9_-]{0,63})/([a-zA-Z0-9][a-zA-Z0-9_-]{0,63})$")
@@ -107,7 +107,7 @@ def message_agent_tool_schema() -> dict:
                         "type": "string",
                         "description": (
                             "Who to message: a teammate profile name from your roster "
-                            "('researcher', 'hermes' for the default agent), or "
+                            "('researcher', 'fulilian' for the default agent), or "
                             "'<peer>' / '<peer>/<agent>' for a registered peer gateway."
                         ),
                     },
@@ -172,7 +172,7 @@ def ensure_message_agent_tool(agent: Any) -> bool:
 # ── roster resolution ────────────────────────────────────────────────────────
 
 
-def _hermes_root(home: Path) -> Path:
+def _fulilian_root(home: Path) -> Path:
     if home.parent.name == "profiles":
         return home.parent.parent
     return home
@@ -208,15 +208,15 @@ def _peers(root: Path) -> list[str]:
 
 
 def _handle(name: str) -> str:
-    return "hermes" if name == "default" else name
+    return "fulilian" if name == "default" else name
 
 
 def _resolve_local_name(target: str, roster: list[str]) -> Optional[str]:
-    """Map a target handle to a profile name ('hermes' → 'default')."""
+    """Map a target handle to a profile name ('fulilian' → 'default')."""
     want = target.strip()
     if not want:
         return None
-    if want.lower() == "hermes":
+    if want.lower() == "fulilian":
         return "default" if "default" in roster else None
     for name in roster:
         if name.lower() == want.lower():
@@ -269,7 +269,7 @@ def message_agent_tool(
     except Exception as exc:  # pragma: no cover — defensive
         return _err(f"Bot Mode gate check failed: {exc}")
 
-    root = _hermes_root(Path(home))
+    root = _fulilian_root(Path(home))
     me = _self_profile_name(Path(home))
     roster = _local_roster(root)
     peers = _peers(root)
@@ -304,7 +304,7 @@ def message_agent_tool(
         dm_target = f"{peer_name}/{peer_profile}" if peer_profile else peer_name
         label = f"@{peer_profile or peer_name} on peer '{peer_name}'"
         return _start_delivery(
-            ["hermes", "peer", "dm", dm_target],
+            ["fulilian", "peer", "dm", dm_target],
             prefix + body,
             label,
             stdin_file=True,
@@ -346,7 +346,7 @@ def message_agent_tool(
 
     return _start_delivery(
         [
-            "hermes",
+            "fulilian",
             "-p",
             resolved,
             "chat",
@@ -466,8 +466,8 @@ def cleanup_bot_dm_cache(
     # by versions predating the dedicated directory.
     temp_root = Path(tempfile.gettempdir())
     locations: list[tuple[Path, str]] = [
-        (temp_root, "hermes-dm-*.txt"),
-        (temp_root, "hermes-relay-dm-*.txt"),
+        (temp_root, "fulilian-dm-*.txt"),
+        (temp_root, "fulilian-relay-dm-*.txt"),
     ]
     try:
         locations.append((_dm_dir(), "*.txt"))
@@ -521,14 +521,14 @@ def _unlink_dm_file(path: str) -> None:
 def _delivery_lock(argv: list[str], *, stdin_file: bool):
     """Per-profile turn lock context for a LOCAL teammate delivery (#93091).
 
-    Local deliveries (``hermes -p <profile> chat …``) collide with relay
+    Local deliveries (``fulilian -p <profile> chat …``) collide with relay
     deliveries into the same profile — both run a Bot Chat turn on this
     install — so the turn window is serialized on the shared cross-process
     lock in ``tools.bot_relay``. Peer transports (stdin mode) run on the
     remote gateway; their turn is locked THERE by its own deliver path.
     """
     # The CLI element is matched by basename: local_delivery_command now
-    # resolves the venv-relative hermes next to this gateway's interpreter
+    # resolves the venv-relative fulilian next to this gateway's interpreter
     # (#93590 — service contexts lack PATH), so argv[0] may be an absolute
     # path (and on Windows carries the .exe suffix). Split on both
     # separators so the shape matches regardless of which platform built
@@ -537,14 +537,14 @@ def _delivery_lock(argv: list[str], *, stdin_file: bool):
     if (
         stdin_file
         or len(argv) < 3
-        or cli not in ("hermes", "hermes.exe")
+        or cli not in ("fulilian", "fulilian.exe")
         or argv[1] != "-p"
     ):
         return contextlib.nullcontext()
     from tools.bot_relay import acquire_turn_lock
 
-    home = Path(os.getenv("HERMES_HOME") or os.path.expanduser("~/.hermes"))
-    return acquire_turn_lock(_hermes_root(home), argv[2])
+    home = Path(os.getenv("FULILIAN_HOME") or os.path.expanduser("~/.fulilian"))
+    return acquire_turn_lock(_fulilian_root(home), argv[2])
 
 
 def _run_delivery(argv: list[str], dm_file: str, *, stdin_file: bool) -> int:
@@ -744,7 +744,7 @@ def _agent_home(agent: Any) -> str:
             return str(Path(db_path).parent)
     except Exception:
         pass
-    return os.getenv("HERMES_HOME") or os.path.expanduser("~/.hermes")
+    return os.getenv("FULILIAN_HOME") or os.path.expanduser("~/.fulilian")
 
 
 def _session_title(agent: Any) -> str:

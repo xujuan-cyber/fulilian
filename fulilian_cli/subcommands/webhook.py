@@ -1,6 +1,6 @@
-"""``hermes webhook`` subcommand parser.
+"""``fulilian webhook`` subcommand parser.
 
-Extracted verbatim from ``hermes_cli/main.py:main()`` (god-file Phase 2).
+Extracted verbatim from ``fulilian_cli/main.py:main()`` (god-file Phase 2).
 Handler injected to avoid importing ``main``.
 """
 
@@ -58,7 +58,7 @@ def build_webhook_parser(subparsers, *, cmd_webhook: Callable) -> None:
     wh_sub.add_argument(
         "--script",
         default="",
-        help="Filter/transform script under ~/.hermes/scripts/. The route "
+        help="Filter/transform script under ~/.fulilian/scripts/. The route "
         "payload is passed as JSON on stdin; empty stdout, [SILENT], or a "
         "nonzero exit code ignores the webhook.",
     )

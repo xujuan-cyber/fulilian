@@ -1,13 +1,13 @@
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { getStatus } from '@/hermes'
+import { getStatus } from '@/fulilian'
 
 import { deferred } from '../../../test/deferred'
 
 import { useStatusSnapshot } from './use-status-snapshot'
 
-vi.mock('@/hermes', () => ({
+vi.mock('@/fulilian', () => ({
   getStatus: vi.fn()
 }))
 

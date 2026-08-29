@@ -173,11 +173,11 @@ class TestResolveTaskProviderModel:
         }
         monkeypatch.setattr("agent.auxiliary_client._get_auxiliary_task_config", lambda task: {})
         monkeypatch.setattr(
-            "hermes_cli.moa_config.resolve_moa_preset",
+            "fulilian_cli.moa_config.resolve_moa_preset",
             lambda cfg, name: preset,
         )
-        monkeypatch.setattr("hermes_cli.config.load_config", lambda: {"moa": {}})
-        monkeypatch.setattr("hermes_cli.config.load_config_readonly", lambda: {"moa": {}})
+        monkeypatch.setattr("fulilian_cli.config.load_config", lambda: {"moa": {}})
+        monkeypatch.setattr("fulilian_cli.config.load_config_readonly", lambda: {"moa": {}})
 
         resolved_provider, model, base_url, api_key, api_mode = _resolve_task_provider_model(
             task="title_generation",
@@ -209,11 +209,11 @@ class TestResolveTaskProviderModel:
             lambda task: {"provider": "moa", "model": "opus-gpt"} if task == "title_generation" else {},
         )
         monkeypatch.setattr(
-            "hermes_cli.moa_config.resolve_moa_preset",
+            "fulilian_cli.moa_config.resolve_moa_preset",
             lambda cfg, name: preset,
         )
-        monkeypatch.setattr("hermes_cli.config.load_config", lambda: {"moa": {}})
-        monkeypatch.setattr("hermes_cli.config.load_config_readonly", lambda: {"moa": {}})
+        monkeypatch.setattr("fulilian_cli.config.load_config", lambda: {"moa": {}})
+        monkeypatch.setattr("fulilian_cli.config.load_config_readonly", lambda: {"moa": {}})
 
         resolved_provider, model, base_url, api_key, api_mode = _resolve_task_provider_model(
             task="title_generation",
@@ -231,11 +231,11 @@ class TestResolveTaskProviderModel:
         (literal "moa") rather than crash resolve_provider_client() harder."""
         monkeypatch.setattr("agent.auxiliary_client._get_auxiliary_task_config", lambda task: {})
         monkeypatch.setattr(
-            "hermes_cli.moa_config.resolve_moa_preset",
+            "fulilian_cli.moa_config.resolve_moa_preset",
             lambda cfg, name: (_ for _ in ()).throw(KeyError("gone-preset")),
         )
-        monkeypatch.setattr("hermes_cli.config.load_config", lambda: {"moa": {}})
-        monkeypatch.setattr("hermes_cli.config.load_config_readonly", lambda: {"moa": {}})
+        monkeypatch.setattr("fulilian_cli.config.load_config", lambda: {"moa": {}})
+        monkeypatch.setattr("fulilian_cli.config.load_config_readonly", lambda: {"moa": {}})
 
         resolved_provider, model, base_url, api_key, api_mode = _resolve_task_provider_model(
             task="title_generation",
@@ -268,7 +268,7 @@ class TestResolveTaskProviderModel:
 class TestMoaAggregatorSharedResolution:
     """The shared MoA→aggregator helper and the layers that consume it.
 
-    Real-config tests: write an actual config.yaml under a temp HERMES_HOME
+    Real-config tests: write an actual config.yaml under a temp FULILIAN_HOME
     and exercise the genuine load_config() → resolve_moa_preset() boundary —
     no mocking of the configuration-resolution chain.
     """
@@ -277,7 +277,7 @@ class TestMoaAggregatorSharedResolution:
     def _write_moa_config(tmp_path, monkeypatch, default_preset="opus-gpt"):
         import yaml
 
-        home = tmp_path / ".hermes"
+        home = tmp_path / ".fulilian"
         home.mkdir(exist_ok=True)
         (home / "config.yaml").write_text(
             yaml.safe_dump(
@@ -310,7 +310,7 @@ class TestMoaAggregatorSharedResolution:
                 }
             )
         )
-        monkeypatch.setenv("HERMES_HOME", str(home))
+        monkeypatch.setenv("FULILIAN_HOME", str(home))
         return home
 
     def test_real_config_explicit_task_provider_moa(self, tmp_path, monkeypatch):
@@ -509,9 +509,9 @@ class TestNormalizeAuxProvider:
 
 class TestReadCodexAccessToken:
     def test_valid_auth_store(self, tmp_path, monkeypatch):
-        hermes_home = tmp_path / "hermes"
-        hermes_home.mkdir(parents=True, exist_ok=True)
-        (hermes_home / "auth.json").write_text(json.dumps({
+        fulilian_home = tmp_path / "fulilian"
+        fulilian_home.mkdir(parents=True, exist_ok=True)
+        (fulilian_home / "auth.json").write_text(json.dumps({
             "version": 1,
             "providers": {
                 "openai-codex": {
@@ -519,7 +519,7 @@ class TestReadCodexAccessToken:
                 },
             },
         }))
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        monkeypatch.setenv("FULILIAN_HOME", str(fulilian_home))
         result = _read_codex_access_token()
         assert result == "tok-123"
 
@@ -540,9 +540,9 @@ class TestReadCodexAccessToken:
         payload = base64.urlsafe_b64encode(payload_data).rstrip(b"=").decode()
         expired_jwt = f"{header}.{payload}.fakesig"
 
-        hermes_home = tmp_path / "hermes"
-        hermes_home.mkdir(parents=True, exist_ok=True)
-        (hermes_home / "auth.json").write_text(json.dumps({
+        fulilian_home = tmp_path / "fulilian"
+        fulilian_home.mkdir(parents=True, exist_ok=True)
+        (fulilian_home / "auth.json").write_text(json.dumps({
             "version": 1,
             "providers": {
                 "openai-codex": {
@@ -550,7 +550,7 @@ class TestReadCodexAccessToken:
                 },
             },
         }))
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        monkeypatch.setenv("FULILIAN_HOME", str(fulilian_home))
         with patch("agent.auxiliary_client._select_pool_entry", return_value=(False, None)):
             result = _read_codex_access_token()
         assert result is None, "Expired JWT should return None"
@@ -565,9 +565,9 @@ class TestReadCodexAccessToken:
         payload = base64.urlsafe_b64encode(payload_data).rstrip(b"=").decode()
         valid_jwt = f"{header}.{payload}.fakesig"
 
-        hermes_home = tmp_path / "hermes"
-        hermes_home.mkdir(parents=True, exist_ok=True)
-        (hermes_home / "auth.json").write_text(json.dumps({
+        fulilian_home = tmp_path / "fulilian"
+        fulilian_home.mkdir(parents=True, exist_ok=True)
+        (fulilian_home / "auth.json").write_text(json.dumps({
             "version": 1,
             "providers": {
                 "openai-codex": {
@@ -575,7 +575,7 @@ class TestReadCodexAccessToken:
                 },
             },
         }))
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        monkeypatch.setenv("FULILIAN_HOME", str(fulilian_home))
         result = _read_codex_access_token()
         assert result == valid_jwt
 
@@ -585,21 +585,21 @@ class TestResolveXaiOAuthForAux:
     def test_uses_pool_backed_credentials_without_singleton(self, tmp_path, monkeypatch):
         """Auxiliary xAI OAuth must see pool-only credentials.
 
-        ``hermes auth status`` already reports these as logged in; compression
+        ``fulilian auth status`` already reports these as logged in; compression
         should not fall through to "no auxiliary provider configured" just
         because the singleton auth-store entry is absent.
         """
         from agent.credential_pool import AUTH_TYPE_OAUTH, PooledCredential, load_pool
         from fulilian_cli.auth import DEFAULT_XAI_OAUTH_BASE_URL
 
-        hermes_home = tmp_path / "hermes"
-        hermes_home.mkdir(parents=True, exist_ok=True)
-        (hermes_home / "auth.json").write_text(json.dumps({
+        fulilian_home = tmp_path / "fulilian"
+        fulilian_home.mkdir(parents=True, exist_ok=True)
+        (fulilian_home / "auth.json").write_text(json.dumps({
             "version": 1,
             "providers": {},
         }))
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
-        monkeypatch.delenv("HERMES_XAI_BASE_URL", raising=False)
+        monkeypatch.setenv("FULILIAN_HOME", str(fulilian_home))
+        monkeypatch.delenv("FULILIAN_XAI_BASE_URL", raising=False)
         monkeypatch.delenv("XAI_BASE_URL", raising=False)
 
         pool = load_pool("xai-oauth")
@@ -624,14 +624,14 @@ class TestResolveXaiOAuthForAux:
         from agent.credential_pool import AUTH_TYPE_OAUTH, PooledCredential, load_pool
         from fulilian_cli.auth import DEFAULT_XAI_OAUTH_BASE_URL
 
-        hermes_home = tmp_path / "hermes"
-        hermes_home.mkdir(parents=True, exist_ok=True)
-        (hermes_home / "auth.json").write_text(json.dumps({
+        fulilian_home = tmp_path / "fulilian"
+        fulilian_home.mkdir(parents=True, exist_ok=True)
+        (fulilian_home / "auth.json").write_text(json.dumps({
             "version": 1,
             "providers": {},
         }))
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
-        monkeypatch.setenv("HERMES_XAI_BASE_URL", "https://example.x.ai/v1/")
+        monkeypatch.setenv("FULILIAN_HOME", str(fulilian_home))
+        monkeypatch.setenv("FULILIAN_XAI_BASE_URL", "https://example.x.ai/v1/")
 
         pool = load_pool("xai-oauth")
         pool.add_entry(PooledCredential(
@@ -784,7 +784,7 @@ class TestResolveProviderClientUniversalModelFallback:
 
     Aux tasks (title generation, vision, session search, etc.) routinely
     reach this function without an explicit model — the user's main
-    provider was picked via ``hermes model``, no per-task override is
+    provider was picked via ``fulilian model``, no per-task override is
     set, and the expectation is "just use my main model for side tasks
     too."  The resolver fills in ``model`` from a 3-step universal
     fallback before any provider branch runs:
@@ -874,9 +874,9 @@ class TestExpiredCodexFallback:
         payload = base64.urlsafe_b64encode(payload_data).rstrip(b"=").decode()
         expired_jwt = f"{header}.{payload}.fakesig"
 
-        hermes_home = tmp_path / "hermes"
-        hermes_home.mkdir(parents=True, exist_ok=True)
-        (hermes_home / "auth.json").write_text(json.dumps({
+        fulilian_home = tmp_path / "fulilian"
+        fulilian_home.mkdir(parents=True, exist_ok=True)
+        (fulilian_home / "auth.json").write_text(json.dumps({
             "version": 1,
             "providers": {
                 "openai-codex": {
@@ -884,7 +884,7 @@ class TestExpiredCodexFallback:
                 },
             },
         }))
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        monkeypatch.setenv("FULILIAN_HOME", str(fulilian_home))
 
         # Set up Anthropic as fallback
         monkeypatch.setenv("ANTHROPIC_TOKEN", "sk-ant-oat01-test-fallback")
@@ -917,9 +917,9 @@ class TestExpiredCodexFallback:
         payload = base64.urlsafe_b64encode(payload_data).rstrip(b"=").decode()
         expired_jwt = f"{header}.{payload}.fakesig"
 
-        hermes_home = tmp_path / "hermes"
-        hermes_home.mkdir(parents=True, exist_ok=True)
-        (hermes_home / "auth.json").write_text(json.dumps({
+        fulilian_home = tmp_path / "fulilian"
+        fulilian_home.mkdir(parents=True, exist_ok=True)
+        (fulilian_home / "auth.json").write_text(json.dumps({
             "version": 1,
             "providers": {
                 "openai-codex": {
@@ -927,7 +927,7 @@ class TestExpiredCodexFallback:
                 },
             },
         }))
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        monkeypatch.setenv("FULILIAN_HOME", str(fulilian_home))
         monkeypatch.setenv("OPENROUTER_API_KEY", "or-test-key")
 
         with patch("agent.auxiliary_client.OpenAI") as mock_openai:
@@ -997,7 +997,7 @@ class TestOpenRouterPaidLaneGuard:
         """free_only=true + default (paid) model → OpenRouter skipped."""
         monkeypatch.setenv("OPENROUTER_API_KEY", "or-key")
         with patch("agent.auxiliary_client._select_pool_entry", return_value=(False, None)), \
-             patch("hermes_cli.config.load_config_readonly", return_value={"auxiliary": {"free_only": True}}), \
+             patch("fulilian_cli.config.load_config_readonly", return_value={"auxiliary": {"free_only": True}}), \
              patch("agent.auxiliary_client.OpenAI") as mock_openai:
             client, model = _try_openrouter()
         assert client is None
@@ -1008,7 +1008,7 @@ class TestOpenRouterPaidLaneGuard:
         """free_only=true + :free model → OpenRouter used with that model."""
         monkeypatch.setenv("OPENROUTER_API_KEY", "or-key")
         with patch("agent.auxiliary_client._select_pool_entry", return_value=(False, None)), \
-             patch("hermes_cli.config.load_config_readonly",
+             patch("fulilian_cli.config.load_config_readonly",
                    return_value={"auxiliary": {"free_only": True,
                                               "openrouter_model": "nvidia/nemotron-3-ultra-550b-a55b:free"}}), \
              patch("agent.auxiliary_client.OpenAI") as mock_openai:
@@ -1022,7 +1022,7 @@ class TestOpenRouterPaidLaneGuard:
         """auxiliary.openrouter_model replaces _OPENROUTER_MODEL."""
         monkeypatch.setenv("OPENROUTER_API_KEY", "or-key")
         with patch("agent.auxiliary_client._select_pool_entry", return_value=(False, None)), \
-             patch("hermes_cli.config.load_config_readonly",
+             patch("fulilian_cli.config.load_config_readonly",
                    return_value={"auxiliary": {"openrouter_model": "some/vendor-model"}}), \
              patch("agent.auxiliary_client.OpenAI") as mock_openai:
             mock_client = MagicMock(name="openrouter_client")
@@ -1035,7 +1035,7 @@ class TestOpenRouterPaidLaneGuard:
         """Auxiliary.<task>.model (explicit) is also gated by free_only."""
         monkeypatch.setenv("OPENROUTER_API_KEY", "or-key")
         with patch("agent.auxiliary_client._select_pool_entry", return_value=(False, None)), \
-             patch("hermes_cli.config.load_config_readonly", return_value={"auxiliary": {"free_only": True}}), \
+             patch("fulilian_cli.config.load_config_readonly", return_value={"auxiliary": {"free_only": True}}), \
              patch("agent.auxiliary_client.OpenAI") as mock_openai:
             client, model = _try_openrouter(model="google/gemini-3.6-flash")
         assert client is None
@@ -1046,7 +1046,7 @@ class TestOpenRouterPaidLaneGuard:
         """The concrete OpenRouter route gates the caller's model, not its default."""
         monkeypatch.setenv("OPENROUTER_API_KEY", "or-key")
         with patch("agent.auxiliary_client._select_pool_entry", return_value=(False, None)), \
-             patch("hermes_cli.config.load_config_readonly",
+             patch("fulilian_cli.config.load_config_readonly",
                    return_value={"auxiliary": {"free_only": True}}), \
              patch("agent.auxiliary_client.OpenAI") as mock_openai:
             mock_client = MagicMock(name="openrouter_client")
@@ -1061,7 +1061,7 @@ class TestOpenRouterPaidLaneGuard:
     def test_free_only_gate_does_not_mark_openrouter_unhealthy(self, monkeypatch):
         monkeypatch.setenv("OPENROUTER_API_KEY", "or-key")
         with patch("agent.auxiliary_client._select_pool_entry", return_value=(False, None)), \
-             patch("hermes_cli.config.load_config_readonly",
+             patch("fulilian_cli.config.load_config_readonly",
                    return_value={"auxiliary": {"free_only": True}}), \
              patch("agent.auxiliary_client._mark_provider_unhealthy") as mark_unhealthy:
             client, model = resolve_provider_client(
@@ -1077,7 +1077,7 @@ class TestOpenRouterPaidLaneGuard:
 
         monkeypatch.setenv("OPENROUTER_API_KEY", "or-key")
         with patch("agent.auxiliary_client._select_pool_entry", return_value=(False, None)), \
-             patch("hermes_cli.config.load_config_readonly",
+             patch("fulilian_cli.config.load_config_readonly",
                    return_value={"auxiliary": {"free_only": True}}), \
              caplog.at_level(logging.WARNING, logger="agent.auxiliary_client"):
             resolve_provider_client("openrouter", model="google/gemini-3.6-flash")
@@ -1094,7 +1094,7 @@ class TestOpenRouterPaidLaneGuard:
         _paid_lane_warned.discard(_OPENROUTER_MODEL)
         monkeypatch.setenv("OPENROUTER_API_KEY", "or-key")
         with patch("agent.auxiliary_client._select_pool_entry", return_value=(False, None)), \
-             patch("hermes_cli.config.load_config_readonly", return_value={"auxiliary": {}}), \
+             patch("fulilian_cli.config.load_config_readonly", return_value={"auxiliary": {}}), \
              patch("agent.auxiliary_client.OpenAI") as mock_openai:
             mock_client = MagicMock(name="openrouter_client")
             mock_openai.return_value = mock_client
@@ -1105,7 +1105,7 @@ class TestOpenRouterPaidLaneGuard:
         assert any("PAID lane engaged" in r.getMessage() for r in caplog.records)
         # Second call logs nothing new.
         with patch("agent.auxiliary_client._select_pool_entry", return_value=(False, None)), \
-             patch("hermes_cli.config.load_config_readonly", return_value={"auxiliary": {}}), \
+             patch("fulilian_cli.config.load_config_readonly", return_value={"auxiliary": {}}), \
              patch("agent.auxiliary_client.OpenAI") as mock_openai:
             caplog.clear()
             with caplog.at_level(logging.WARNING, logger="agent.auxiliary_client"):
@@ -1142,7 +1142,7 @@ class TestGetTextAuxiliaryClient:
         with (
             patch("agent.auxiliary_client.load_pool", return_value=_Pool()),
             patch("agent.auxiliary_client.OpenAI"),
-            patch("hermes_cli.auth._read_codex_tokens", side_effect=AssertionError("legacy codex store should not run")),
+            patch("fulilian_cli.auth._read_codex_tokens", side_effect=AssertionError("legacy codex store should not run")),
         ):
             from agent.auxiliary_client import _build_codex_client
 
@@ -1268,7 +1268,7 @@ class TestAuxiliaryPoolAwareness:
         with (
             patch("agent.auxiliary_client.load_pool", return_value=pool),
             patch("agent.auxiliary_client.OpenAI") as mock_openai,
-            patch("hermes_cli.models.get_nous_recommended_aux_model", return_value=None),
+            patch("fulilian_cli.models.get_nous_recommended_aux_model", return_value=None),
         ):
             from agent.auxiliary_client import _try_nous
 
@@ -1479,7 +1479,7 @@ class TestRefreshNousRecommendedModel:
         def _boom(**kw):
             raise RuntimeError("portal down")
         monkeypatch.setattr(
-            "hermes_cli.models.get_nous_recommended_aux_model", _boom)
+            "fulilian_cli.models.get_nous_recommended_aux_model", _boom)
         out = _refresh_nous_recommended_model(
             vision=False, stale_model="some/dead-model")
         assert out == _NOUS_MODEL
@@ -1488,7 +1488,7 @@ class TestRefreshNousRecommendedModel:
         """When the failed model IS the default and the Portal has nothing
         else, there's no usable alternative."""
         monkeypatch.setattr(
-            "hermes_cli.models.get_nous_recommended_aux_model",
+            "fulilian_cli.models.get_nous_recommended_aux_model",
             lambda **kw: _NOUS_MODEL,
         )
         out = _refresh_nous_recommended_model(
@@ -1899,7 +1899,7 @@ class TestAuxiliaryFallbackLayering:
 
 
     def test_fallback_entry_openai_codex_uses_oauth_pool_without_inline_key(self):
-        """Configured Codex fallback resolves through Hermes auth / credential pool."""
+        """Configured Codex fallback resolves through Fulilian auth / credential pool."""
         from agent.auxiliary_client import _resolve_fallback_entry
 
         pool_entry = MagicMock()
@@ -1986,9 +1986,9 @@ def test_resolve_api_key_provider_skips_unconfigured_anthropic(monkeypatch):
         return None, None
 
     monkeypatch.setattr("agent.auxiliary_client._try_anthropic", mock_try_anthropic)
-    monkeypatch.setattr("hermes_cli.auth.PROVIDER_REGISTRY", fake_registry)
+    monkeypatch.setattr("fulilian_cli.auth.PROVIDER_REGISTRY", fake_registry)
     monkeypatch.setattr(
-        "hermes_cli.auth.is_provider_explicitly_configured",
+        "fulilian_cli.auth.is_provider_explicitly_configured",
         lambda pid: False,
     )
 
@@ -2135,7 +2135,7 @@ class TestTransientTransportRetry:
 
 class TestAuxClientNoSdkRetries:
     """Auxiliary OpenAI clients are constructed with SDK-internal retries
-    disabled so Hermes owns the retry/timeout budget (issue #54465). The SDK
+    disabled so Fulilian owns the retry/timeout budget (issue #54465). The SDK
     default (max_retries=2 → 3 attempts) silently triples the effective wall
     time of every aux call against a slow/hung endpoint.
     """
@@ -2306,7 +2306,7 @@ class TestAuxiliaryTaskExtraBody:
             }
         }
 
-        with patch("hermes_cli.config.load_config", return_value=config), patch("hermes_cli.config.load_config_readonly", return_value=config), patch(
+        with patch("fulilian_cli.config.load_config", return_value=config), patch("fulilian_cli.config.load_config_readonly", return_value=config), patch(
             "agent.auxiliary_client._get_cached_client",
             return_value=(client, "glm-4.5-air"),
         ):
@@ -2337,7 +2337,7 @@ class TestAuxiliaryTaskExtraBody:
             }
         }
 
-        with patch("hermes_cli.config.load_config", return_value=config), patch("hermes_cli.config.load_config_readonly", return_value=config), patch(
+        with patch("fulilian_cli.config.load_config", return_value=config), patch("fulilian_cli.config.load_config_readonly", return_value=config), patch(
             "agent.auxiliary_client._get_cached_client",
             return_value=(client, "glm-4.5-air"),
         ):
@@ -2363,7 +2363,7 @@ class TestAuxiliaryTaskExtraBody:
         from agent.auxiliary_client import _get_task_extra_body
 
         config = {"auxiliary": {moa_task: {"reasoning_effort": "xhigh"}}}
-        with patch("hermes_cli.config.load_config", return_value=config), patch("hermes_cli.config.load_config_readonly", return_value=config), \
+        with patch("fulilian_cli.config.load_config", return_value=config), patch("fulilian_cli.config.load_config_readonly", return_value=config), \
              caplog.at_level(logging.WARNING, logger="agent.auxiliary_client"):
             result = _get_task_extra_body(moa_task)
 
@@ -2702,9 +2702,9 @@ class TestAuxiliaryPoolRotationRetry:
 
 
 class TestAnthropicAuxiliaryReasoningTranslation:
-    """Native Anthropic aux adapters must receive normalized Hermes reasoning.
+    """Native Anthropic aux adapters must receive normalized Fulilian reasoning.
 
-    MoA slot reasoning is carried through call_llm as a Hermes
+    MoA slot reasoning is carried through call_llm as a Fulilian
     ``reasoning_config``. The native Anthropic Messages path cannot consume the
     generic OpenAI-style ``extra_body.reasoning`` fallback, so assert the final
     ``messages.create`` kwargs contain Anthropic's provider-aware wire shape.
@@ -3733,7 +3733,7 @@ class TestNvidiaBillingHeaders:
         assert model == "nvidia/test-model"
         call_kwargs = mock_openai.call_args[1]
         headers = call_kwargs["default_headers"]
-        assert headers["X-BILLING-INVOKE-ORIGIN"] == "HermesAgent"
+        assert headers["X-BILLING-INVOKE-ORIGIN"] == "FulilianAgent"
 
     def test_resolve_provider_client_local_nim_skips_billing_origin_header(self, monkeypatch):
         monkeypatch.setenv("NVIDIA_API_KEY", "nvidia-key")
@@ -4202,7 +4202,7 @@ class TestCustomEndpointApiKeyInheritance:
             captured.update(kwargs)
             return MagicMock()
 
-        with patch("hermes_cli.config.load_config", return_value=fake_config), patch("hermes_cli.config.load_config_readonly", return_value=fake_config), \
+        with patch("fulilian_cli.config.load_config", return_value=fake_config), patch("fulilian_cli.config.load_config_readonly", return_value=fake_config), \
              patch.object(ac, "_create_openai_client", side_effect=_capture_create):
             client, model = resolve_provider_client(
                 "custom",
@@ -4230,7 +4230,7 @@ class TestCustomEndpointApiKeyInheritance:
             captured.update(kwargs)
             return MagicMock()
 
-        with patch("hermes_cli.config.load_config", return_value=fake_config), patch("hermes_cli.config.load_config_readonly", return_value=fake_config), \
+        with patch("fulilian_cli.config.load_config", return_value=fake_config), patch("fulilian_cli.config.load_config_readonly", return_value=fake_config), \
              patch.object(ac, "_create_openai_client", side_effect=_capture_create):
             client, model = resolve_provider_client(
                 "custom",
@@ -4257,7 +4257,7 @@ class TestCustomEndpointApiKeyInheritance:
 
         with patch.object(ac, "_RUNTIME_MAIN_API_KEY", "sk-runtime-key"), \
              patch.object(ac, "_RUNTIME_MAIN_BASE_URL", "https://gw.example.com/v1"), \
-             patch("hermes_cli.config.load_config", return_value={"model": {}}), patch("hermes_cli.config.load_config_readonly", return_value={"model": {}}), \
+             patch("fulilian_cli.config.load_config", return_value={"model": {}}), patch("fulilian_cli.config.load_config_readonly", return_value={"model": {}}), \
              patch.object(ac, "_create_openai_client", side_effect=_capture_create):
             client, model = resolve_provider_client(
                 "custom",
@@ -4289,7 +4289,7 @@ class TestCustomEndpointApiKeyInheritance:
             captured.update(kwargs)
             return MagicMock()
 
-        with patch("hermes_cli.config.load_config", return_value=fake_config), patch("hermes_cli.config.load_config_readonly", return_value=fake_config), \
+        with patch("fulilian_cli.config.load_config", return_value=fake_config), patch("fulilian_cli.config.load_config_readonly", return_value=fake_config), \
              patch.object(ac, "_create_openai_client", side_effect=_capture_create):
             client, model = resolve_provider_client(
                 "custom",
@@ -4588,7 +4588,7 @@ class TestFastModelTier:
             "~openai/gpt-mini-latest": {},
             "stepfun/step-3.7-flash:free": {},
         }
-        with patch("hermes_cli.models.fetch_models_with_pricing", return_value=catalog):
+        with patch("fulilian_cli.models.fetch_models_with_pricing", return_value=catalog):
             assert ac._fast_model_from_catalog("nous") == "~openai/gpt-mini-latest"
 
     def test_catalog_match_skips_reasoning_batch_and_embedding_lookalikes(self):
@@ -4601,7 +4601,7 @@ class TestFastModelTier:
             "sentence-transformers/all-minilm-l6-v2": {},
             "google/gemini-3.6-flash": {},
         }
-        with patch("hermes_cli.models.fetch_models_with_pricing", return_value=catalog):
+        with patch("fulilian_cli.models.fetch_models_with_pricing", return_value=catalog):
             assert ac._fast_model_from_catalog("nous") == "google/gemini-3.6-flash"
 
     def test_catalog_match_skips_the_non_chat_siblings_of_a_chat_model(self):
@@ -4615,7 +4615,7 @@ class TestFastModelTier:
             "openai/gpt-4o-mini-search-preview": {},
             "openai/gpt-4o-mini": {},
         }
-        with patch("hermes_cli.models.fetch_models_with_pricing", return_value=catalog):
+        with patch("fulilian_cli.models.fetch_models_with_pricing", return_value=catalog):
             assert ac._fast_model_from_catalog("nous") == "openai/gpt-4o-mini"
 
     def test_catalog_match_takes_the_newest_of_a_family(self):
@@ -4632,7 +4632,7 @@ class TestFastModelTier:
             "openai/gpt-9-mini": {},
             "openai/gpt-10-mini": {},
         }
-        with patch("hermes_cli.models.fetch_models_with_pricing", return_value=catalog):
+        with patch("fulilian_cli.models.fetch_models_with_pricing", return_value=catalog):
             assert ac._fast_model_from_catalog("nous") == "openai/gpt-10-mini"
 
     def test_catalog_fetch_is_authenticated(self):
@@ -4644,10 +4644,10 @@ class TestFastModelTier:
         from agent import auxiliary_client as ac
 
         with patch(
-            "hermes_cli.auth.resolve_api_key_provider_credentials",
+            "fulilian_cli.auth.resolve_api_key_provider_credentials",
             return_value={"api_key": "sk-test", "base_url": "https://api.example.com/v1"},
         ), patch(
-            "hermes_cli.models.fetch_models_with_pricing", return_value={}
+            "fulilian_cli.models.fetch_models_with_pricing", return_value={}
         ) as fetch:
             ac._fast_model_from_catalog("openai")
 

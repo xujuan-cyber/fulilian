@@ -151,13 +151,13 @@ class TestStartRun:
                 status = await status_resp.json()
                 assert status["run_id"] == data["run_id"]
                 assert status["status"] in {"queued", "running", "completed"}
-                assert status["object"] == "hermes.run"
+                assert status["object"] == "fulilian.run"
 
     @pytest.mark.asyncio
     async def test_start_binds_chat_id_for_delegation_wake_target(self, adapter):
         """/v1/runs must bind the raw session id as the api_server chat_id
         (like every other agent-entry route does via _run_agent): the async
-        delegation dispatch reads HERMES_SESSION_CHAT_ID to pick its wake
+        delegation dispatch reads FULILIAN_SESSION_CHAT_ID to pick its wake
         self-post target, and an empty binding forces background delegations
         on this route back to synchronous execution."""
         app = _create_runs_app(adapter)
@@ -433,7 +433,7 @@ class TestSteerRun:
 
         assert resp.status == 200
         assert payload == {
-            "object": "hermes.run.steer",
+            "object": "fulilian.run.steer",
             "run_id": "run_123",
             "accepted": True,
         }

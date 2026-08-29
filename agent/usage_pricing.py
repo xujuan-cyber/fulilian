@@ -824,7 +824,7 @@ _OFFICIAL_DOCS_PRICING: Dict[tuple[str, str], PricingEntry] = {
         source="official_docs_snapshot",
         pricing_version="minimax-pricing-2026-04",
     ),
-    # Fireworks AI — serverless pricing for the models hermes typically routes
+    # Fireworks AI — serverless pricing for the models fulilian typically routes
     # through when configured with provider="fireworks". Fireworks publishes a
     # cached_input rate per model alongside input/output, which maps to
     # cache_read_cost_per_million. No separately published cache_write rate.
@@ -1011,7 +1011,7 @@ _OFFICIAL_DOCS_PRICING: Dict[tuple[str, str], PricingEntry] = {
 
 # GPT-5.6 "-pro" high-effort variants bill at the same per-token rates as
 # their base tiers (more tokens per task, not a higher rate). Alias them
-# onto the base entries so the snapshot stays single-source. The Hermes-side
+# onto the base entries so the snapshot stays single-source. The Fulilian-side
 # "-900k" large-context Codex picker variants are the same underlying model
 # (the suffix is stripped on the wire), so they alias identically.
 for _base_56 in ("gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"):

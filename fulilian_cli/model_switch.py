@@ -10,8 +10,8 @@ share the same core pipeline:
 This module ties together the foundation layers:
 
 - ``agent.models_dev``            -- models.dev catalog, ModelInfo, ProviderInfo
-- ``hermes_cli.providers``        -- canonical provider identity + overlays
-- ``hermes_cli.model_normalize``  -- per-provider name formatting
+- ``fulilian_cli.providers``        -- canonical provider identity + overlays
+- ``fulilian_cli.model_normalize``  -- per-provider name formatting
 
 Provider switching uses the ``--provider`` flag exclusively.
 No colon-based ``provider:model`` syntax — colons are reserved for
@@ -88,7 +88,7 @@ def _declared_model_ids(value: Any) -> list[str]:
 
     if isinstance(value, dict):
         for model_id in value:
-            # Backward compat: pre-fix Hermes wrote sentinel keys inside the
+            # Backward compat: pre-fix Fulilian wrote sentinel keys inside the
             # user-facing ``models`` mapping. Never list them as model IDs.
             if model_id in {
                 "__explicit_model_allowlist__",
@@ -114,10 +114,10 @@ def _declared_model_ids(value: Any) -> list[str]:
 
 
 def _entry_models_discovered(entry: Any) -> bool:
-    """True when the entry's ``models`` mapping was auto-discovered by Hermes.
+    """True when the entry's ``models`` mapping was auto-discovered by Fulilian.
 
     The current shape is an entry-level ``models_discovered: true`` sibling of
-    ``models``. Older Hermes versions wrote an in-mapping
+    ``models``. Older Fulilian versions wrote an in-mapping
     ``__discovered_model_catalog__: true`` sentinel instead — accept that on
     read for backward compatibility (the next discovery save migrates the
     entry to the clean shape).
@@ -137,17 +137,17 @@ def _models_config_is_allowlist(value: Any, discovered: bool = False) -> bool:
     """Return True when ``models:`` is an intentional ID allowlist.
 
     A mapping like ``{model_id: {context_length: N}}`` is per-model *metadata*
-    written by ``_save_custom_provider`` / the ``hermes model`` wizard — not a
+    written by ``_save_custom_provider`` / the ``fulilian model`` wizard — not a
     catalog narrow. Treating that shape as an allowlist made Desktop/Telegram
     pickers show only the saved default for local Ollama (no ``api_key``),
-    while ``hermes model`` still live-probed the full ``/v1/models`` list.
+    while ``fulilian model`` still live-probed the full ``/v1/models`` list.
     Refresh could not help because the same gate skipped probing.
 
     List/string shapes remain allowlists for no-key endpoints. To pin a
     dict-shaped catalog, set ``discover_models: false``.
 
     ``discovered`` is the entry-level ``models_discovered`` flag (see
-    ``_entry_models_discovered``): a catalog Hermes itself persisted after a
+    ``_entry_models_discovered``): a catalog Fulilian itself persisted after a
     successful probe is never a user pin, whatever its shape.
     """
     if discovered:
@@ -219,7 +219,7 @@ def _save_discovered_models_to_config(
             # (e.g. ``{"model-a": {"context_length": 8192}}``) or a list of
             # dicts (e.g. ``[{"id": "model-a", "context_length": 8192}]``),
             # the user has curated metadata per model — do not replace it.
-            # A mapping Hermes itself discovered (``models_discovered: true``
+            # A mapping Fulilian itself discovered (``models_discovered: true``
             # or the legacy in-mapping sentinel) is ours to refresh.
             if isinstance(existing, dict) and not entry_discovered:
                 continue
@@ -355,24 +355,24 @@ def _fetch_picker_live_models(
 # Non-agentic model warning
 # ---------------------------------------------------------------------------
 
-_HERMES_MODEL_WARNING = (
+_FULILIAN_MODEL_WARNING = (
     "Nous Research Hermes 3 & 4 models are NOT agentic and are not designed "
-    "for use with Hermes Agent. They lack the tool-calling capabilities "
+    "for use with FuLiLian. They lack the tool-calling capabilities "
     "required for agent workflows. Consider using an agentic model instead "
     "(Claude, GPT, Gemini, DeepSeek, etc.)."
 )
 
 # Match only the real Nous Research Hermes 3 / Hermes 4 chat families.
-# The previous substring check (`"hermes" in name.lower()`) false-positived on
-# unrelated local Modelfiles like ``hermes-brain:qwen3-14b-ctx16k`` that just
-# happen to carry "hermes" in their tag but are fully tool-capable.
+# The previous substring check (`"fulilian" in name.lower()`) false-positived on
+# unrelated local Modelfiles like ``fulilian-brain:qwen3-14b-ctx16k`` that just
+# happen to carry "fulilian" in their tag but are fully tool-capable.
 #
 # Positive examples the regex must match:
 #   NousResearch/Hermes-3-Llama-3.1-70B, hermes-4-405b, openrouter/hermes3:70b
 # Negative examples it must NOT match:
-#   hermes-brain:qwen3-14b-ctx16k, qwen3:14b, claude-opus-4-6
-_NOUS_HERMES_NON_AGENTIC_RE = re.compile(
-    r"(?:^|[/:])hermes[-_ ]?[34](?:[-_.:]|$)",
+#   fulilian-brain:qwen3-14b-ctx16k, qwen3:14b, claude-opus-4-6
+_NOUS_FULILIAN_NON_AGENTIC_RE = re.compile(
+    r"(?:^|[/:])fulilian[-_ ]?[34](?:[-_.:]|$)",
     re.IGNORECASE,
 )
 
@@ -422,7 +422,7 @@ def format_model_for_display(model_name: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-def is_nous_hermes_non_agentic(model_name: str) -> bool:
+def is_nous_fulilian_non_agentic(model_name: str) -> bool:
     """Return True if *model_name* is a real Nous Hermes 3/4 chat model.
 
     Used to decide whether to surface the non-agentic warning at startup.
@@ -431,13 +431,13 @@ def is_nous_hermes_non_agentic(model_name: str) -> bool:
     """
     if not model_name:
         return False
-    return bool(_NOUS_HERMES_NON_AGENTIC_RE.search(model_name))
+    return bool(_NOUS_FULILIAN_NON_AGENTIC_RE.search(model_name))
 
 
-def _check_hermes_model_warning(model_name: str) -> str:
+def _check_fulilian_model_warning(model_name: str) -> str:
     """Return a warning string if *model_name* is a Nous Hermes 3/4 chat model."""
-    if is_nous_hermes_non_agentic(model_name):
-        return _HERMES_MODEL_WARNING
+    if is_nous_fulilian_non_agentic(model_name):
+        return _FULILIAN_MODEL_WARNING
     return ""
 
 
@@ -541,7 +541,7 @@ def _load_direct_aliases() -> dict[str, DirectAlias]:
             provider: custom
             base_url: "https://ollama.com/v1"
 
-    Also reads ``model.aliases`` (set by ``hermes config set model.aliases.xxx``)
+    Also reads ``model.aliases`` (set by ``fulilian config set model.aliases.xxx``)
     and converts simple string entries (``ds-flash: deepseek/deepseek-v4-flash``)
     into DirectAlias objects.  The provider is parsed from the ``provider/``
     prefix in the value; if no slash, the current provider is used.
@@ -1310,7 +1310,7 @@ async def resolve_display_context_length_async(
     ``/v1/models``, Copilot, Nous, Codex, GMI, Ollama, models.dev and
     OpenRouter).  Async gateway handlers must not run either on the event
     loop — see ``agent.model_metadata.get_model_context_length_async`` and
-    ``hermes_cli.route_identity.should_clear_context_pin_async``, which
+    ``fulilian_cli.route_identity.should_clear_context_pin_async``, which
     offload the same chains for the message path.
 
     Shares all logic with the sync version — no code duplication.
@@ -1515,7 +1515,7 @@ def switch_model(
         if pdef is None:
             _switch_err = (
                 f"Unknown provider '{explicit_provider}'. "
-                f"Check 'hermes model' for available providers, or define it "
+                f"Check 'fulilian model' for available providers, or define it "
                 f"in config.yaml under 'providers:'."
             )
             # Check for common config issues that cause provider resolution failures
@@ -1523,7 +1523,7 @@ def switch_model(
                 from fulilian_cli.config import validate_config_structure
                 _cfg_issues = validate_config_structure()
                 if _cfg_issues:
-                    _switch_err += "\n\nRun 'hermes doctor' — config issues detected:"
+                    _switch_err += "\n\nRun 'fulilian doctor' — config issues detected:"
                     for _ci in _cfg_issues[:3]:
                         _switch_err += f"\n  • {_ci.message}"
             except Exception:
@@ -2157,7 +2157,7 @@ def switch_model(
     # Anthropic SDK prepends its own /v1/messages to the base_url.  Normalize
     # symmetrically (strip /v1 for anthropic_messages, re-append it for
     # chat_completions / codex_responses).  Mirrors the same logic in
-    # hermes_cli.runtime_provider.resolve_runtime_provider; without the strip,
+    # fulilian_cli.runtime_provider.resolve_runtime_provider; without the strip,
     # /model switches into an anthropic_messages-routed OpenCode model
     # (e.g. `/model minimax-m2.7` on opencode-go, `/model claude-sonnet-4-6`
     # on opencode-zen) hit a double /v1 and returned OpenCode's website 404
@@ -2179,9 +2179,9 @@ def switch_model(
     warnings: list[str] = []
     if validation.get("message"):
         warnings.append(validation["message"])
-    hermes_warn = _check_hermes_model_warning(new_model)
-    if hermes_warn:
-        warnings.append(hermes_warn)
+    fulilian_warn = _check_fulilian_model_warning(new_model)
+    if fulilian_warn:
+        warnings.append(fulilian_warn)
 
     # --- Build result ---
     return ModelSwitchResult(
@@ -2342,7 +2342,7 @@ def _prefetch_provider_models_parallel(provider_slugs: list[str]) -> None:
     so concurrent writes to ``provider_models_cache.json`` don't clobber each
     other.
 
-    :param provider_slugs: Hermes provider IDs to prefetch (e.g. ``["openrouter",
+    :param provider_slugs: Fulilian provider IDs to prefetch (e.g. ``["openrouter",
         "anthropic", "deepseek"]``).  Unknown providers are silently skipped.
     """
     from fulilian_cli.models import cached_provider_model_ids
@@ -2425,44 +2425,44 @@ def _collect_authed_provider_slugs(
     import os
     from agent.models_dev import PROVIDER_TO_MODELS_DEV
     from fulilian_cli.auth import PROVIDER_REGISTRY, _load_auth_store
-    from fulilian_cli.providers import HERMES_OVERLAYS, ALIASES as _PROVIDER_ALIAS_TABLE
+    from fulilian_cli.providers import FULILIAN_OVERLAYS, ALIASES as _PROVIDER_ALIAS_TABLE
     from fulilian_cli.models import _AGGREGATOR_PROVIDERS as _AGG_PROVIDERS, CANONICAL_PROVIDERS
 
     _excluded_set = {str(p).strip().lower() for p in excluded if p}
     slugs: list[str] = []
     seen: set[str] = set()
 
-    # --- Section 1: Hermes-mapped providers (PROVIDER_TO_MODELS_DEV) ---
-    for hermes_id, mdev_id in PROVIDER_TO_MODELS_DEV.items():
-        _alias_target = _PROVIDER_ALIAS_TABLE.get(hermes_id)
+    # --- Section 1: Fulilian-mapped providers (PROVIDER_TO_MODELS_DEV) ---
+    for fulilian_id, mdev_id in PROVIDER_TO_MODELS_DEV.items():
+        _alias_target = _PROVIDER_ALIAS_TABLE.get(fulilian_id)
         if (
             _alias_target
-            and _alias_target != hermes_id
+            and _alias_target != fulilian_id
             and _alias_target in _AGG_PROVIDERS
         ):
             continue
-        _canonical = hermes_id
+        _canonical = fulilian_id
         try:
             from providers import get_provider_profile as _gpp
-            _prof = _gpp(hermes_id)
+            _prof = _gpp(fulilian_id)
             if _prof is not None:
                 _canonical = _prof.name
         except Exception:
             pass
-        if _canonical != hermes_id:
+        if _canonical != fulilian_id:
             continue
-        if hermes_id.lower() in seen:
+        if fulilian_id.lower() in seen:
             continue
-        if hermes_id.lower() in _excluded_set or mdev_id.lower() in _excluded_set:
+        if fulilian_id.lower() in _excluded_set or mdev_id.lower() in _excluded_set:
             continue
         pdata = models_dev_data.get(mdev_id)
         if not isinstance(pdata, dict):
             continue
-        pconfig = PROVIDER_REGISTRY.get(hermes_id)
+        pconfig = PROVIDER_REGISTRY.get(fulilian_id)
         if pconfig and pconfig.auth_type != "api_key":
             continue
         from fulilian_cli.auth import is_runtime_provider_routable
-        if not is_runtime_provider_routable(hermes_id):
+        if not is_runtime_provider_routable(fulilian_id):
             continue
         if pconfig and pconfig.api_key_env_vars:
             env_vars = list(pconfig.api_key_env_vars)
@@ -2475,27 +2475,27 @@ def _collect_authed_provider_slugs(
             try:
                 store = _load_auth_store()
                 raw_pool_present = bool(
-                    store and store.get("credential_pool", {}).get(hermes_id)
+                    store and store.get("credential_pool", {}).get(fulilian_id)
                 )
                 if raw_pool_present:
                     has_creds = _credential_pool_is_usable(
-                        hermes_id, raw_pool_present=True
+                        fulilian_id, raw_pool_present=True
                     )
             except Exception:
                 pass
         if has_creds:
-            slugs.append(hermes_id)
-            seen.add(hermes_id.lower())
+            slugs.append(fulilian_id)
+            seen.add(fulilian_id.lower())
 
-    # --- Section 2: Hermes-only providers (HERMES_OVERLAYS) ---
-    _mdev_to_hermes = {v: k for k, v in PROVIDER_TO_MODELS_DEV.items()}
-    for pid, overlay in HERMES_OVERLAYS.items():
+    # --- Section 2: Fulilian-only providers (FULILIAN_OVERLAYS) ---
+    _mdev_to_fulilian = {v: k for k, v in PROVIDER_TO_MODELS_DEV.items()}
+    for pid, overlay in FULILIAN_OVERLAYS.items():
         if pid.lower() in seen:
             continue
-        hermes_slug = _mdev_to_hermes.get(pid, pid)
-        if hermes_slug.lower() in seen:
+        fulilian_slug = _mdev_to_fulilian.get(pid, pid)
+        if fulilian_slug.lower() in seen:
             continue
-        if pid.lower() in _excluded_set or hermes_slug.lower() in _excluded_set:
+        if pid.lower() in _excluded_set or fulilian_slug.lower() in _excluded_set:
             continue
         has_creds = False
         if overlay.auth_type == "aws_sdk":
@@ -2510,7 +2510,7 @@ def _collect_authed_provider_slugs(
         elif overlay.extra_env_vars:
             has_creds = any(_scoped_key_env(ev) for ev in overlay.extra_env_vars)
         if not has_creds and overlay.auth_type == "api_key":
-            for _key in (pid, hermes_slug):
+            for _key in (pid, fulilian_slug):
                 pcfg = PROVIDER_REGISTRY.get(_key)
                 if pcfg and pcfg.api_key_env_vars:
                     if any(_scoped_key_env(ev) for ev in pcfg.api_key_env_vars):
@@ -2520,20 +2520,20 @@ def _collect_authed_provider_slugs(
             try:
                 store = _load_auth_store()
                 providers_store = store.get("providers", {}) if store else {}
-                if pid in providers_store or hermes_slug in providers_store:
+                if pid in providers_store or fulilian_slug in providers_store:
                     has_creds = True
             except Exception:
                 pass
         if not has_creds:
             try:
-                if _credential_pool_is_usable(hermes_slug):
+                if _credential_pool_is_usable(fulilian_slug):
                     has_creds = True
             except Exception:
                 pass
         if has_creds:
-            slugs.append(hermes_slug)
+            slugs.append(fulilian_slug)
             seen.add(pid.lower())
-            seen.add(hermes_slug.lower())
+            seen.add(fulilian_slug.lower())
 
     # --- Section 2b: Canonical providers cross-check ---
     for _cp in CANONICAL_PROVIDERS:
@@ -2660,7 +2660,7 @@ def list_authenticated_providers(
         return bool(probe_custom_providers or (probe_current_custom_provider and row_is_current))
 
     # Normalize the excluded-providers list once for fast membership checks.
-    # Compared against hermes_id / mdev_id (section 1), pid / hermes_slug
+    # Compared against fulilian_id / mdev_id (section 1), pid / fulilian_slug
     # (section 2) and canonical slug (section 2b) so a single entry like
     # ``copilot`` hides the provider regardless of which key it surfaces under.
     _excluded: set = {str(p).strip().lower() for p in (excluded_providers or []) if p}
@@ -2737,13 +2737,13 @@ def list_authenticated_providers(
 
     data = fetch_models_dev()
 
-    # Build curated model lists keyed by hermes provider ID
+    # Build curated model lists keyed by fulilian provider ID
     curated: dict[str, list[str]] = dict(_PROVIDER_MODELS)
     curated["openrouter"] = [mid for mid, _ in OPENROUTER_MODELS]
     # "nous" pulls from the remote model-catalog manifest published at
     # https://hermes-agent.nousresearch.com/docs/api/model-catalog.json so
     # newly added Portal models surface in the /model picker without
-    # requiring a Hermes release. Falls back to the in-repo
+    # requiring a Fulilian release. Falls back to the in-repo
     # _PROVIDER_MODELS["nous"] snapshot when the manifest is unreachable.
     curated["nous"] = get_curated_nous_model_ids()
     # Ollama Cloud uses dynamic discovery (no static curated list)
@@ -2802,10 +2802,10 @@ def list_authenticated_providers(
         except Exception:
             pass  # best-effort; serial path still works as fallback
 
-    # --- 1. Check Hermes-mapped providers ---
+    # --- 1. Check Fulilian-mapped providers ---
     from fulilian_cli.models import _AGGREGATOR_PROVIDERS as _AGG_PROVIDERS
     from fulilian_cli.providers import ALIASES as _PROVIDER_ALIAS_TABLE
-    for hermes_id, mdev_id in PROVIDER_TO_MODELS_DEV.items():
+    for fulilian_id, mdev_id in PROVIDER_TO_MODELS_DEV.items():
         # Skip vendor names that are merely aliases routing through an
         # aggregator (e.g. bare "openai" → "openrouter"). These are NOT
         # directly-routable providers: emitting them as their own picker
@@ -2814,39 +2814,39 @@ def list_authenticated_providers(
         # switching a user off their real provider onto an endpoint they
         # may have no key for (HTTP 401). The user's real provider (e.g.
         # openai-api, or a providers.openai config row) covers this vendor.
-        _alias_target = _PROVIDER_ALIAS_TABLE.get(hermes_id)
+        _alias_target = _PROVIDER_ALIAS_TABLE.get(fulilian_id)
         if (
             _alias_target
-            and _alias_target != hermes_id
+            and _alias_target != fulilian_id
             and _alias_target in _AGG_PROVIDERS
         ):
             continue
-        # Resolve the canonical provider profile name.  Skip hermes_ids
+        # Resolve the canonical provider profile name.  Skip fulilian_ids
         # that are mere aliases resolving to a different canonical profile
         # (e.g. "kimi" and "moonshot" both → "kimi-coding").  Only process
-        # entries whose hermes_id matches the canonical profile name so
+        # entries whose fulilian_id matches the canonical profile name so
         # distinct profiles (e.g. kimi-coding, kimi-coding-cn) each get
         # their own picker row.
-        _canonical = hermes_id
+        _canonical = fulilian_id
         try:
             from providers import get_provider_profile as _gpp
-            _prof = _gpp(hermes_id)
+            _prof = _gpp(fulilian_id)
             if _prof is not None:
                 _canonical = _prof.name
         except Exception:
             pass
-        if _canonical != hermes_id:
+        if _canonical != fulilian_id:
             continue
 
         # Skip duplicates: another entry with the same slug was already
         # emitted (e.g. two PROVIDER_TO_MODELS_DEV entries routing to the
-        # same hermes_id).  Distinct canonical profiles that share a
+        # same fulilian_id).  Distinct canonical profiles that share a
         # models.dev ID (e.g. kimi-coding and kimi-coding-cn → kimi-for-coding)
         # are both allowed through since they have different slugs.
-        slug = hermes_id
+        slug = fulilian_id
         if slug.lower() in seen_slugs:
             continue
-        if hermes_id.lower() in _excluded or mdev_id.lower() in _excluded:
+        if fulilian_id.lower() in _excluded or mdev_id.lower() in _excluded:
             continue
         pdata = data.get(mdev_id)
         if not isinstance(pdata, dict):
@@ -2855,16 +2855,16 @@ def list_authenticated_providers(
         # Prefer auth.py PROVIDER_REGISTRY for env var names — it's our
         # source of truth.  models.dev can have wrong mappings (e.g.
         # minimax-cn → MINIMAX_API_KEY instead of MINIMAX_CN_API_KEY).
-        pconfig = PROVIDER_REGISTRY.get(hermes_id)
+        pconfig = PROVIDER_REGISTRY.get(fulilian_id)
         # Skip non-API-key auth providers here — they are handled in
-        # section 2 (HERMES_OVERLAYS) with proper auth store checking.
+        # section 2 (FULILIAN_OVERLAYS) with proper auth store checking.
         if pconfig and pconfig.auth_type != "api_key":
             continue
-        # models.dev catalogs include providers Hermes may not route yet.
+        # models.dev catalogs include providers Fulilian may not route yet.
         # Gate on runtime capability rather than registry membership: special
         # providers and plugin aliases can be routable without a registry row.
         from fulilian_cli.auth import is_runtime_provider_routable
-        if not is_runtime_provider_routable(hermes_id):
+        if not is_runtime_provider_routable(fulilian_id):
             continue
         if pconfig and pconfig.api_key_env_vars:
             env_vars = list(pconfig.api_key_env_vars)
@@ -2880,11 +2880,11 @@ def list_authenticated_providers(
                 from fulilian_cli.auth import _load_auth_store
                 store = _load_auth_store()
                 raw_pool_present = bool(
-                    store and store.get("credential_pool", {}).get(hermes_id)
+                    store and store.get("credential_pool", {}).get(fulilian_id)
                 )
                 if raw_pool_present:
                     has_creds = _credential_pool_is_usable(
-                        hermes_id, raw_pool_present=True
+                        fulilian_id, raw_pool_present=True
                     )
             except Exception:
                 pass
@@ -2892,25 +2892,25 @@ def list_authenticated_providers(
             continue
 
         # Unified pathway: route through cached_provider_model_ids() so the
-        # /model picker sees the SAME list `hermes model` would build, with
+        # /model picker sees the SAME list `fulilian model` would build, with
         # disk caching to keep the picker open snappy. Falls back to the
         # curated static list when the live fetcher returns nothing.
-        model_ids = cached_provider_model_ids(hermes_id)
+        model_ids = cached_provider_model_ids(fulilian_id)
         if not model_ids:
-            model_ids = curated.get(hermes_id, [])
-            if hermes_id in _MODELS_DEV_PREFERRED:
-                model_ids = _merge_with_models_dev(hermes_id, model_ids)
+            model_ids = curated.get(fulilian_id, [])
+            if fulilian_id in _MODELS_DEV_PREFERRED:
+                model_ids = _merge_with_models_dev(fulilian_id, model_ids)
         # A providers.<built-in>.models block extends the provider's discovered
         # catalog. Section 3 cannot emit it later because this built-in row owns
         # the slug, so merge declarations here before applying max_models.
         configured_models: list[str] = []
         if isinstance(user_providers, dict):
-            configured = user_providers.get(hermes_id)
+            configured = user_providers.get(fulilian_id)
             if isinstance(configured, dict):
                 configured_models = _declared_model_ids(configured.get("models"))
         model_ids = list(dict.fromkeys([*configured_models, *model_ids]))
         total = len(model_ids)
-        if hermes_id in _UNCAPPED_PICKER_PROVIDERS:
+        if fulilian_id in _UNCAPPED_PICKER_PROVIDERS:
             top = model_ids  # Aggregator: show full catalog regardless of max_models
         else:
             top = model_ids[:max_models] if max_models is not None else model_ids
@@ -2923,7 +2923,7 @@ def list_authenticated_providers(
             "name": display_name,
             "is_current": (
                 slug == current_provider
-                or hermes_id == current_provider
+                or fulilian_id == current_provider
                 or mdev_id == current_provider
             ),
             "is_user_defined": False,
@@ -2934,24 +2934,24 @@ def list_authenticated_providers(
         seen_slugs.add(slug.lower())
         _record_builtin_endpoint(slug)
 
-    # --- 2. Check Hermes-only providers (nous, openai-codex, copilot, opencode-go) ---
-    from fulilian_cli.providers import HERMES_OVERLAYS
+    # --- 2. Check Fulilian-only providers (nous, openai-codex, copilot, opencode-go) ---
+    from fulilian_cli.providers import FULILIAN_OVERLAYS
     from fulilian_cli.auth import PROVIDER_REGISTRY as _auth_registry
 
-    # Build reverse mapping: models.dev ID → Hermes provider ID.
-    # HERMES_OVERLAYS keys may be models.dev IDs (e.g. "github-copilot")
-    # while _PROVIDER_MODELS and config.yaml use Hermes IDs ("copilot").
-    _mdev_to_hermes = {v: k for k, v in PROVIDER_TO_MODELS_DEV.items()}
+    # Build reverse mapping: models.dev ID → Fulilian provider ID.
+    # FULILIAN_OVERLAYS keys may be models.dev IDs (e.g. "github-copilot")
+    # while _PROVIDER_MODELS and config.yaml use Fulilian IDs ("copilot").
+    _mdev_to_fulilian = {v: k for k, v in PROVIDER_TO_MODELS_DEV.items()}
 
-    for pid, overlay in HERMES_OVERLAYS.items():
+    for pid, overlay in FULILIAN_OVERLAYS.items():
         if pid.lower() in seen_slugs:
             continue
 
-        # Resolve Hermes slug — e.g. "github-copilot" → "copilot"
-        hermes_slug = _mdev_to_hermes.get(pid, pid)
-        if hermes_slug.lower() in seen_slugs:
+        # Resolve Fulilian slug — e.g. "github-copilot" → "copilot"
+        fulilian_slug = _mdev_to_fulilian.get(pid, pid)
+        if fulilian_slug.lower() in seen_slugs:
             continue
-        if pid.lower() in _excluded or hermes_slug.lower() in _excluded:
+        if pid.lower() in _excluded or fulilian_slug.lower() in _excluded:
             continue
 
         # Check if credentials exist
@@ -2961,7 +2961,7 @@ def list_authenticated_providers(
             # there is no credential to check, so everyone is authenticated.
             has_creds = True
         elif overlay.auth_type == "aws_sdk":
-            has_creds = _has_aws_sdk_creds_for_listing(hermes_slug)
+            has_creds = _has_aws_sdk_creds_for_listing(fulilian_slug)
         elif overlay.auth_type == "vertex":
             # Vertex authenticates via OAuth2 (service-account JSON / ADC),
             # not an API key — mirror the aws_sdk gate above, otherwise the
@@ -2976,7 +2976,7 @@ def list_authenticated_providers(
             has_creds = any(os.environ.get(ev) for ev in overlay.extra_env_vars)
         # Also check api_key_env_vars from PROVIDER_REGISTRY for api_key auth_type
         if not has_creds and overlay.auth_type == "api_key":
-            for _key in (pid, hermes_slug):
+            for _key in (pid, fulilian_slug):
                 pcfg = _auth_registry.get(_key)
                 if pcfg and pcfg.api_key_env_vars:
                     if any(os.environ.get(ev) for ev in pcfg.api_key_env_vars):
@@ -2991,7 +2991,7 @@ def list_authenticated_providers(
                 from fulilian_cli.auth import _load_auth_store
                 store = _load_auth_store()
                 providers_store = store.get("providers", {})
-                if store and (pid in providers_store or hermes_slug in providers_store):
+                if store and (pid in providers_store or fulilian_slug in providers_store):
                     has_creds = True
             except Exception as exc:
                 logger.debug("Auth store check failed for %s: %s", pid, exc)
@@ -3001,7 +3001,7 @@ def list_authenticated_providers(
         # imports on demand but aren't in the raw auth.json yet.
         if not has_creds:
             try:
-                if _credential_pool_is_usable(hermes_slug):
+                if _credential_pool_is_usable(fulilian_slug):
                     has_creds = True
                 elif for_picker:
                     # For the interactive /model picker, also show providers
@@ -3012,13 +3012,13 @@ def list_authenticated_providers(
                     # are in cooldown.
                     try:
                         from agent.credential_pool import load_pool
-                        _pool = load_pool(hermes_slug)
+                        _pool = load_pool(fulilian_slug)
                         if _pool.has_credentials():
                             has_creds = True
                     except Exception:
                         pass
             except Exception as exc:
-                logger.debug("Credential pool check failed for %s: %s", hermes_slug, exc)
+                logger.debug("Credential pool check failed for %s: %s", fulilian_slug, exc)
         # Fallback: check external credential files directly.
         # The credential pool gates anthropic behind
         # is_provider_explicitly_configured() to prevent auxiliary tasks
@@ -3026,15 +3026,15 @@ def list_authenticated_providers(
         # But the /model picker is discovery-oriented — we WANT to show
         # providers the user can switch to, even if they aren't currently
         # configured.
-        if not has_creds and hermes_slug == "anthropic":
+        if not has_creds and fulilian_slug == "anthropic":
             try:
                 from agent.anthropic_adapter import (
                     read_claude_code_credentials,
-                    read_hermes_oauth_credentials,
+                    read_fulilian_oauth_credentials,
                 )
-                hermes_creds = read_hermes_oauth_credentials()
+                fulilian_creds = read_fulilian_oauth_credentials()
                 cc_creds = read_claude_code_credentials()
-                if (hermes_creds and hermes_creds.get("accessToken")) or \
+                if (fulilian_creds and fulilian_creds.get("accessToken")) or \
                    (cc_creds and cc_creds.get("accessToken")):
                     has_creds = True
             except Exception as exc:
@@ -3042,7 +3042,7 @@ def list_authenticated_providers(
         if not has_creds:
             continue
 
-        if hermes_slug in {"openai-codex", "copilot", "copilot-acp"}:
+        if fulilian_slug in {"openai-codex", "copilot", "copilot-acp"}:
             # Use live OAuth-backed discovery so the gateway /model picker
             # matches what the user's authenticated Codex/Copilot backend
             # actually serves — including ChatGPT-Pro-only Codex slugs
@@ -3050,19 +3050,19 @@ def list_authenticated_providers(
             # catalog. ``cached_provider_model_ids()`` falls back to the
             # curated list when the live endpoint is unreachable, so this
             # is safe for unauthenticated and offline cases too.
-            model_ids = cached_provider_model_ids(hermes_slug)
+            model_ids = cached_provider_model_ids(fulilian_slug)
         # For aws_sdk providers (bedrock), use live discovery so the list
         # reflects the active region (eu.*, ap.*) not the static us.* list.
         elif overlay.auth_type == "aws_sdk":
             try:
-                _ids = cached_provider_model_ids(hermes_slug)
-                model_ids = _ids if _ids else (curated.get(hermes_slug, []) or curated.get(pid, []))
+                _ids = cached_provider_model_ids(fulilian_slug)
+                model_ids = _ids if _ids else (curated.get(fulilian_slug, []) or curated.get(pid, []))
             except Exception:
-                model_ids = curated.get(hermes_slug, []) or curated.get(pid, [])
-        elif hermes_slug == "nous":
+                model_ids = curated.get(fulilian_slug, []) or curated.get(pid, [])
+        elif fulilian_slug == "nous":
             # Nous serves a large live /v1/models catalog (vendor-prefixed
             # models from many providers, returned alphabetically). The
-            # `hermes model` picker deliberately shows ONLY the curated agentic
+            # `fulilian model` picker deliberately shows ONLY the curated agentic
             # list — augmented with the Portal's free/paid recommendations so
             # newly-launched models surface without a CLI release — in curated
             # order. Mirror that exactly (see _model_flow_nous in main.py) so
@@ -3100,34 +3100,34 @@ def list_authenticated_providers(
             # Unified pathway — see Section 1 rationale. Fall back to the
             # curated dict (with models.dev merge for preferred providers)
             # when the live fetcher comes up empty.
-            model_ids = cached_provider_model_ids(hermes_slug)
+            model_ids = cached_provider_model_ids(fulilian_slug)
             if not model_ids:
-                model_ids = curated.get(hermes_slug, []) or curated.get(pid, [])
-                if hermes_slug in _MODELS_DEV_PREFERRED:
-                    model_ids = _merge_with_models_dev(hermes_slug, model_ids)
+                model_ids = curated.get(fulilian_slug, []) or curated.get(pid, [])
+                if fulilian_slug in _MODELS_DEV_PREFERRED:
+                    model_ids = _merge_with_models_dev(fulilian_slug, model_ids)
         total = len(model_ids)
-        if hermes_slug in _UNCAPPED_PICKER_PROVIDERS:
+        if fulilian_slug in _UNCAPPED_PICKER_PROVIDERS:
             top = model_ids  # Aggregator: show full catalog regardless of max_models
         else:
             top = model_ids[:max_models] if max_models is not None else model_ids
 
         results.append({
-            "slug": hermes_slug,
-            "name": get_label(hermes_slug),
-            "is_current": hermes_slug == current_provider or pid == current_provider,
+            "slug": fulilian_slug,
+            "name": get_label(fulilian_slug),
+            "is_current": fulilian_slug == current_provider or pid == current_provider,
             "is_user_defined": False,
             "models": top,
             "total_models": total,
-            "source": "hermes",
+            "source": "fulilian",
         })
         seen_slugs.add(pid.lower())
-        seen_slugs.add(hermes_slug.lower())
-        _record_builtin_endpoint(hermes_slug)
+        seen_slugs.add(fulilian_slug.lower())
+        _record_builtin_endpoint(fulilian_slug)
 
     # --- 2b. Cross-check canonical provider list ---
     # Catches providers that are in CANONICAL_PROVIDERS but weren't found
-    # in PROVIDER_TO_MODELS_DEV or HERMES_OVERLAYS (keeps /model in sync
-    # with `hermes model`).
+    # in PROVIDER_TO_MODELS_DEV or FULILIAN_OVERLAYS (keeps /model in sync
+    # with `fulilian model`).
     try:
         from fulilian_cli.models import CANONICAL_PROVIDERS as _canon_provs
     except ImportError:
@@ -3269,7 +3269,7 @@ def list_authenticated_providers(
             # custom_providers entries use, so accept either.
             default_model = ep_cfg.get("default_model", "") or ep_cfg.get("model", "")
             # Build models list from both default_model and full models array.
-            # Hermes writes ``models:`` as a dict keyed by model id, but older
+            # Fulilian writes ``models:`` as a dict keyed by model id, but older
             # or hand-edited configs may use strings or ``[{id: ...}]`` rows —
             # _declared_model_ids() owns that contract.
             entry_models: list = []
@@ -3283,7 +3283,7 @@ def list_authenticated_providers(
             if group_key not in ep_groups:
                 # Strip per-model suffix so "Palantir Claude 4.7 Opus" becomes
                 # "Palantir Claude". Em dash and " - " are the separators
-                # Hermes's own writer uses (mirrors section-4 grouping).
+                # Fulilian's own writer uses (mirrors section-4 grouping).
                 grp_display = display_name
                 for sep in ("—", " - "):
                     if sep in grp_display:
@@ -3329,7 +3329,7 @@ def list_authenticated_providers(
             # list: a singular ``default_model``/``model`` is only the active
             # selection and must not suppress discovery (see #40542 / PR
             # #61928). Dict-shaped ``models:`` is context_length metadata from
-            # ``hermes model``, not an allowlist — see
+            # ``fulilian model``, not an allowlist — see
             # ``_models_config_is_allowlist``.
             if _models_config_is_allowlist(
                 ep_cfg.get("models"), _entry_models_discovered(ep_cfg)
@@ -3366,7 +3366,7 @@ def list_authenticated_providers(
             #   narrowing (mirrors section 4 / #40542).
             # - A dict-shaped ``models:`` is per-model metadata
             #   (context_length), not an allowlist — still probe so local
-            #   Ollama/llama.cpp match ``hermes model``. Pin with
+            #   Ollama/llama.cpp match ``fulilian model``. Pin with
             #   ``discover_models: false`` instead.
             # - Without an api_key AND no allowlist: probe anyway so bare
             #   local endpoints still show their full model catalog.
@@ -3670,10 +3670,10 @@ def list_authenticated_providers(
             )
 
             # The singular ``model:`` field only holds the currently
-            # active model. Hermes's own writer (main.py::_save_custom_provider)
+            # active model. Fulilian's own writer (main.py::_save_custom_provider)
             # stores every configured model as a dict under ``models:``;
             # downstream readers (agent/models_dev.py, gateway/run.py,
-            # run_agent.py, hermes_cli/config.py) already consume that dict.
+            # run_agent.py, fulilian_cli/config.py) already consume that dict.
             default_model = (entry.get("model") or "").strip()
             if default_model and default_model not in groups[group_key]["models"]:
                 groups[group_key]["models"].append(default_model)
@@ -3755,7 +3755,7 @@ def list_authenticated_providers(
             # - A dict-shaped ``models:`` is per-model metadata written by
             #   ``_save_custom_provider`` for context_length — not an
             #   allowlist. Still probe so Desktop/Telegram match
-            #   ``hermes model``. Pin a dict catalog with
+            #   ``fulilian model``. Pin a dict catalog with
             #   ``discover_models: false``.
             # - The singular ``model:`` field is only the current active
             #   selection and must not suppress discovery.
@@ -3948,7 +3948,7 @@ def list_picker_providers(
     current install:
 
     - OpenRouter's model list is replaced with the output of
-      :func:`hermes_cli.models.fetch_openrouter_models`, which filters the
+      :func:`fulilian_cli.models.fetch_openrouter_models`, which filters the
       curated ``OPENROUTER_MODELS`` snapshot against the live OpenRouter
       catalog.  IDs the live catalog no longer carries drop out, so the
       picker never offers a model the user can't call.

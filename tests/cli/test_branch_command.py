@@ -20,17 +20,17 @@ import pytest
 @pytest.fixture
 def session_db(tmp_path):
     """Create a real SessionDB for testing."""
-    os.environ["HERMES_HOME"] = str(tmp_path / ".hermes")
-    os.makedirs(tmp_path / ".hermes", exist_ok=True)
-    from hermes_state import SessionDB
-    db = SessionDB(db_path=tmp_path / ".hermes" / "test_sessions.db")
+    os.environ["FULILIAN_HOME"] = str(tmp_path / ".fulilian")
+    os.makedirs(tmp_path / ".fulilian", exist_ok=True)
+    from fulilian_state import SessionDB
+    db = SessionDB(db_path=tmp_path / ".fulilian" / "test_sessions.db")
     yield db
     db.close()
 
 
 @pytest.fixture
 def cli_instance(tmp_path, session_db):
-    """Create a minimal HermesCLI-like object for testing _handle_branch_command."""
+    """Create a minimal FulilianCLI-like object for testing _handle_branch_command."""
     # We'll mock the CLI enough to test the branch logic without full init
     from unittest.mock import MagicMock
 
@@ -67,10 +67,10 @@ class TestBranchCommandCLI:
 
     def test_branch_creates_new_session(self, cli_instance, session_db):
         """Branching should create a new session in the DB."""
-        from cli import HermesCLI
+        from cli import FulilianCLI
 
         # Call the real method on the mock, using the real implementation
-        HermesCLI._handle_branch_command(cli_instance, "/branch")
+        FulilianCLI._handle_branch_command(cli_instance, "/branch")
 
         # Verify a new session was created
         assert cli_instance.session_id != "20260403_120000_abc123"
@@ -79,9 +79,9 @@ class TestBranchCommandCLI:
 
     def test_branch_copies_history(self, cli_instance, session_db):
         """Branching should copy all messages to the new session."""
-        from cli import HermesCLI
+        from cli import FulilianCLI
 
-        HermesCLI._handle_branch_command(cli_instance, "/branch")
+        FulilianCLI._handle_branch_command(cli_instance, "/branch")
 
         messages = session_db.get_messages_as_conversation(cli_instance.session_id)
         assert len(messages) == 4  # All 4 messages copied
@@ -90,9 +90,9 @@ class TestBranchCommandCLI:
 
     def test_branch_with_custom_name(self, cli_instance, session_db):
         """Custom branch name should be used as the title."""
-        from cli import HermesCLI
+        from cli import FulilianCLI
 
-        HermesCLI._handle_branch_command(cli_instance, "/branch refactor approach")
+        FulilianCLI._handle_branch_command(cli_instance, "/branch refactor approach")
 
         title = session_db.get_session_title(cli_instance.session_id)
         assert title == "refactor approach"
@@ -101,10 +101,10 @@ class TestBranchCommandCLI:
 
     def test_branch_no_session_db(self, cli_instance):
         """Branching without a session DB should show an error."""
-        from cli import HermesCLI
+        from cli import FulilianCLI
         cli_instance._session_db = None
 
-        HermesCLI._handle_branch_command(cli_instance, "/branch")
+        FulilianCLI._handle_branch_command(cli_instance, "/branch")
 
         # session_id should not have changed
         assert cli_instance.session_id == "20260403_120000_abc123"
@@ -112,9 +112,9 @@ class TestBranchCommandCLI:
 
     def test_branch_sets_resumed_flag(self, cli_instance, session_db):
         """Branch should set _resumed=True to prevent auto-title generation."""
-        from cli import HermesCLI
+        from cli import FulilianCLI
 
-        HermesCLI._handle_branch_command(cli_instance, "/branch")
+        FulilianCLI._handle_branch_command(cli_instance, "/branch")
 
         assert cli_instance._resumed is True
 
@@ -125,7 +125,7 @@ class TestBranchCommandCLI:
         Without this, providers that cache per-session state in
         initialize() keep writing under the old session_id. See #6672.
         """
-        from cli import HermesCLI
+        from cli import FulilianCLI
 
         # Wire a real-ish agent object with a MagicMock memory_manager
         agent = MagicMock()
@@ -134,7 +134,7 @@ class TestBranchCommandCLI:
         cli_instance.agent = agent
         original_id = cli_instance.session_id
 
-        HermesCLI._handle_branch_command(cli_instance, "/branch")
+        FulilianCLI._handle_branch_command(cli_instance, "/branch")
 
         # Hook must have been called exactly once with the new session_id,
         # parent pointing at the branched-from session, reset=False, and
@@ -171,12 +171,12 @@ class TestBranchFlushesBeforeEndSession:
     compress_context() already do."""
 
     def test_branch_flushes_when_agent_present(self, cli_instance, session_db):
-        from cli import HermesCLI
+        from cli import FulilianCLI
 
         agent = MagicMock()
         cli_instance.agent = agent
 
-        HermesCLI._handle_branch_command(cli_instance, "/branch")
+        FulilianCLI._handle_branch_command(cli_instance, "/branch")
 
         agent._flush_messages_to_session_db.assert_called_once_with(
             cli_instance.conversation_history,
@@ -211,7 +211,7 @@ class TestBranchPreservesReasoningFields:
     """
 
     def test_reasoning_fields_survive_branch(self, cli_instance, session_db):
-        from cli import HermesCLI
+        from cli import FulilianCLI
 
         cli_instance.conversation_history = [
             {"role": "user", "content": "Sort this list."},
@@ -225,7 +225,7 @@ class TestBranchPreservesReasoningFields:
             },
         ]
 
-        HermesCLI._handle_branch_command(cli_instance, "/branch")
+        FulilianCLI._handle_branch_command(cli_instance, "/branch")
 
         messages = session_db.get_messages_as_conversation(cli_instance.session_id)
         assistant = next(m for m in messages if m["role"] == "assistant")

@@ -1,7 +1,7 @@
-"""Image-authored deployment provenance for immutable Hermes runtimes.
+"""Image-authored deployment provenance for immutable Fulilian runtimes.
 
-The published image bakes ``/etc/hermes/image-provenance.json`` outside both
-``$HERMES_HOME`` and the mutable checkout.  A bind-mounted checkout (including
+The published image bakes ``/etc/fulilian/image-provenance.json`` outside both
+``$FULILIAN_HOME`` and the mutable checkout.  A bind-mounted checkout (including
 ``.git``) therefore cannot hide the build fact, and environment or config
 values cannot forge it.
 
@@ -19,7 +19,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Optional
 
-IMAGE_PROVENANCE_PATH = Path("/etc/hermes/image-provenance.json")
+IMAGE_PROVENANCE_PATH = Path("/etc/fulilian/image-provenance.json")
 IMAGE_PROVENANCE_SCHEMA = 1
 
 

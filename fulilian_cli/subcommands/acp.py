@@ -1,6 +1,6 @@
-"""``hermes acp`` subcommand parser.
+"""``fulilian acp`` subcommand parser.
 
-Extracted from ``hermes_cli/main.py:main()`` (god-file Phase 2 follow-up).
+Extracted from ``fulilian_cli/main.py:main()`` (god-file Phase 2 follow-up).
 Handler injected to avoid importing ``main``.
 """
 
@@ -15,15 +15,15 @@ def build_acp_parser(subparsers, *, cmd_acp: Callable) -> None:
     """Attach the ``acp`` subcommand to ``subparsers``."""
     acp_parser = subparsers.add_parser(
         "acp",
-        help="Run Hermes Agent as an ACP (Agent Client Protocol) server",
-        description="Start Hermes Agent in ACP mode for editor integration (VS Code, Zed, JetBrains)",
+        help="Run FuLiLian as an ACP (Agent Client Protocol) server",
+        description="Start FuLiLian in ACP mode for editor integration (VS Code, Zed, JetBrains)",
     )
     add_accept_hooks_flag(acp_parser)
     acp_parser.add_argument(
         "--version",
         action="store_true",
         dest="acp_version",
-        help="Print Hermes ACP version and exit",
+        help="Print Fulilian ACP version and exit",
     )
     acp_parser.add_argument(
         "--check",
@@ -33,12 +33,12 @@ def build_acp_parser(subparsers, *, cmd_acp: Callable) -> None:
     acp_parser.add_argument(
         "--setup",
         action="store_true",
-        help="Run interactive Hermes provider/model setup for ACP terminal auth",
+        help="Run interactive Fulilian provider/model setup for ACP terminal auth",
     )
     acp_parser.add_argument(
         "--setup-browser",
         action="store_true",
-        help="Install agent-browser + Playwright Chromium into ~/.hermes/node/ "
+        help="Install agent-browser + Playwright Chromium into ~/.fulilian/node/ "
              "for browser tool support (idempotent).",
     )
     acp_parser.add_argument(

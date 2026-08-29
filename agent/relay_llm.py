@@ -1,4 +1,4 @@
-"""Core NeMo Relay adapters for physical Hermes provider attempts."""
+"""Core NeMo Relay adapters for physical Fulilian provider attempts."""
 
 from __future__ import annotations
 
@@ -54,7 +54,7 @@ def _relay_protocol(metadata: dict[str, Any] | None) -> _RelayProtocol | None:
 
 
 def _relay_operation_name(provider_name: str, metadata: dict[str, Any] | None) -> str:
-    """Return Relay's canonical operation name when Hermes knows the API mode."""
+    """Return Relay's canonical operation name when Fulilian knows the API mode."""
     protocol = _relay_protocol(metadata)
     return protocol.operation if protocol is not None else provider_name
 
@@ -66,7 +66,7 @@ def _relay_metadata(
     relay_metadata = _jsonable(metadata or {})
     if not isinstance(relay_metadata, dict):
         relay_metadata = {}
-    relay_metadata.setdefault("hermes.provider", provider_name)
+    relay_metadata.setdefault("fulilian.provider", provider_name)
     return relay_metadata
 
 
@@ -264,7 +264,7 @@ def execute_current(
     metadata: dict[str, Any] | None = None,
     defer_logical_completion: bool = False,
 ) -> Any:
-    """Run a provider attempt under the inherited Hermes turn when present."""
+    """Run a provider attempt under the inherited Fulilian turn when present."""
     turn = relay_runtime.active_turn()
     if turn is None:
         return callback(request)
@@ -322,7 +322,7 @@ def stream_current(
     defer_logical_completion: bool = False,
     completed_response_predicate: Callable[[Any], bool] | None = None,
 ) -> Any:
-    """Run a provider stream under the inherited Hermes turn when present.
+    """Run a provider stream under the inherited Fulilian turn when present.
 
     When ``completed_response_predicate`` is set and the stream_factory returns
     a complete response instead of an iterator (e.g. AnthropicAuxiliaryClient
@@ -410,7 +410,7 @@ def stream(
 
 
 class ManagedLlmStream(Iterator[Any]):
-    """Drive Relay's async stream from Hermes's provider worker thread."""
+    """Drive Relay's async stream from Fulilian's provider worker thread."""
 
     def __init__(
         self,
@@ -461,7 +461,7 @@ class ManagedLlmStream(Iterator[Any]):
             # Relay can invoke stream surfaces while another callback still
             # owns the captured Context. A fresh copy is safe to enter.
             def guarded() -> Any:
-                # Hermes-side callbacks run while the native pipeline drives
+                # Fulilian-side callbacks run while the native pipeline drives
                 # this stream; nested relay calls they make must bypass
                 # managed execution (#77244).
                 with relay_runtime.managed_callback_guard():
@@ -913,7 +913,7 @@ class AnthropicStreamAccumulator:
         return {**self._message, "content": blocks}
 
     def response(self, base: Any = None) -> Any:
-        """Return the attribute-shaped response consumed by Hermes."""
+        """Return the attribute-shaped response consumed by Fulilian."""
         assembled = self.finalize()
         base_payload = _jsonable(base)
         if not isinstance(base_payload, dict):
@@ -951,7 +951,7 @@ def _logical_parent(
                     metadata={
                         relay_runtime.RUNTIME_SCHEMA_KEY: relay_runtime.RUNTIME_SCHEMA_VERSION,
                         relay_runtime.RUNTIME_INSTANCE_KEY: runtime.runtime_id,
-                        "hermes.call_role": str(
+                        "fulilian.call_role": str(
                             (metadata or {}).get("call_role") or "primary"
                         ),
                     },
@@ -1005,7 +1005,7 @@ def _complete_logical(
             # The provider result is authoritative. Retain the handle so turn
             # finalization can retry cleanup without changing that result.
             logger.warning(
-                "Hermes Relay logical LLM finalization failed",
+                "Fulilian Relay logical LLM finalization failed",
                 exc_info=True,
             )
             return

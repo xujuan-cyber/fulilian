@@ -30,13 +30,13 @@ def _account(**kwargs) -> NousPortalAccountInfo:
 def _logged_in_account(monkeypatch):
     """Stub the auth token + account fetch so build_credits_view runs offline."""
     monkeypatch.setattr(
-        "hermes_cli.auth.get_provider_auth_state",
+        "fulilian_cli.auth.get_provider_auth_state",
         lambda provider: {"access_token": "tok", "portal_base_url": "https://portal.example.test"},
     )
 
     def _install(account):
         monkeypatch.setattr(
-            "hermes_cli.nous_account.get_nous_portal_account_info",
+            "fulilian_cli.nous_account.get_nous_portal_account_info",
             lambda *a, **kw: account,
         )
 

@@ -6,7 +6,7 @@ consent.
 
 **This is NOT a sandbox.** In-process Python plugins remain trusted code — a
 malicious plugin can import anything, monkey-patch core, and ignore all of
-this. Capabilities govern the *host API surfaces* Hermes hands out (which
+this. Capabilities govern the *host API surfaces* Fulilian hands out (which
 registrations succeed, which ``ctx`` methods are live) and give the user an
 honest consent + audit trail. Actual isolation is a separate research track.
 
@@ -45,7 +45,7 @@ Stored under the plugin's config entry::
 
 The hash records *what the user saw* when they consented. When an update
 declares capabilities whose set hash differs, the additions stay ungranted
-until the user re-consents (``hermes plugins update`` surfaces the diff).
+until the user re-consents (``fulilian plugins update`` surfaces the diff).
 
 Ground rule: everything defaults OFF. Any failure to read consent state
 (missing config, corrupt YAML, wrong types) means **not granted**.
@@ -146,7 +146,7 @@ def parse_declared_capabilities(raw: Any, plugin_name: str = "?") -> List[str]:
     """Normalize a manifest ``capabilities:`` value into known capability ids.
 
     Unknown ids are dropped with a warning (forward compat: a plugin built
-    for a newer Hermes may declare ids this build doesn't know; they can
+    for a newer Fulilian may declare ids this build doesn't know; they can
     never be granted here, so hiding them from the consent screen is the
     fail-closed choice — the plugin must degrade gracefully).
     """

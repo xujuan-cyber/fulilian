@@ -1,5 +1,5 @@
 """
-Top-level argparse construction for the hermes CLI.
+Top-level argparse construction for the fulilian CLI.
 
 Lives in its own module so other modules (e.g. ``relaunch.py``) can
 introspect the parser to discover which flags exist without running the
@@ -15,7 +15,7 @@ from functools import lru_cache
 
 
 # `--profile` / `-p` is consumed by ``main._apply_profile_override`` before
-# argparse runs (it sets ``HERMES_HOME`` and strips itself from ``sys.argv``),
+# argparse runs (it sets ``FULILIAN_HOME`` and strips itself from ``sys.argv``),
 # so it isn't on the parser. Listed here so all "carry over on relaunch"
 # metadata lives in one file.
 PRE_ARGPARSE_INHERITED_FLAGS: list[tuple[str, bool]] = [
@@ -27,7 +27,7 @@ PRE_ARGPARSE_INHERITED_FLAGS: list[tuple[str, bool]] = [
 # Static snapshot fallback for ``top_level_value_flag_sets`` — used only if
 # introspecting the live parser fails (e.g. argparse surface broken mid-edit).
 # The derived path is authoritative; a parity test in
-# tests/hermes_cli/test_top_level_value_flags_parity.py fails CI if the parser
+# tests/fulilian_cli/test_top_level_value_flags_parity.py fails CI if the parser
 # grows a value-taking flag this snapshot lacks AND derivation regresses.
 _VALUE_FLAGS_FALLBACK: frozenset[str] = frozenset(
     {
@@ -52,7 +52,7 @@ def top_level_value_flag_sets() -> tuple[frozenset[str], frozenset[str]]:
     Introspects ``build_top_level_parser()`` (every option with nargs != 0)
     so the argv scanners in ``main.py`` (``_first_positional_argv``,
     ``_apply_profile_override``) can never drift from the argparse surface —
-    the exact drift that made ``hermes --reasoning high chat …`` misread
+    the exact drift that made ``fulilian --reasoning high chat …`` misread
     ``high`` as the subcommand and forced eager plugin discovery (#93530).
     Mirrors the ``update_cmd._holder_value_flags`` precedent, including the
     handwritten-snapshot fallback for a broken parser import. Cached per
@@ -73,7 +73,7 @@ def top_level_value_flag_sets() -> tuple[frozenset[str], frozenset[str]]:
 
 
 def _inherited_flag(parser, *args, **kwargs):
-    """Register a flag that ``hermes_cli.relaunch`` should carry over when
+    """Register a flag that ``fulilian_cli.relaunch`` should carry over when
     the CLI re-execs itself (e.g. after ``sessions browse`` picks a session,
     or after the setup wizard launches chat).
 
@@ -88,48 +88,48 @@ def _inherited_flag(parser, *args, **kwargs):
 
 _EPILOGUE = """
 Examples:
-    hermes                        Start interactive chat
-    hermes chat -q "Hello"        Single query mode
-    hermes --tui                  Launch the modern TUI (or set display.interface: tui)
-    hermes --cli                  Force the classic REPL (overrides display.interface: tui)
-    hermes -c                     Resume the most recent session
-    hermes -c "my project"        Resume a session by name (latest in lineage)
-    hermes --resume <session_id>  Resume a specific session by ID
-    hermes --resume latest        Resume the most recent session (same as -c)
-    hermes --tui --resume latest --in ./dir   Resume ./dir's latest session in the TUI
-    hermes setup                  Run setup wizard
-    hermes logout                 Clear stored authentication
-    hermes auth add <provider>    Add a pooled credential
-    hermes auth list              List pooled credentials
-    hermes auth remove <p> <t>    Remove pooled credential by index, id, or label
-    hermes auth reset <provider>  Clear exhaustion status for a provider
-    hermes model                  Select default model
-    hermes fallback [list]        Show fallback provider chain
-    hermes fallback add           Add a fallback provider (same picker as `hermes model`)
-    hermes fallback remove        Remove a fallback provider from the chain
-    hermes config                 View configuration
-    hermes config edit            Edit config in $EDITOR
-    hermes config set model gpt-4 Set a config value
-    hermes gateway                Run messaging gateway
-    hermes -s hermes-agent-dev,github-auth
-    hermes -w                     Start in isolated git worktree
-    hermes gateway install        Install gateway background service
-    hermes sessions list          List past sessions
-    hermes sessions browse        Interactive session picker
-    hermes sessions rename ID T   Rename/title a session
-    hermes logs                   View agent.log (last 50 lines)
-    hermes logs -f                Follow agent.log in real time
-    hermes logs errors            View errors.log
-    hermes logs --since 1h        Lines from the last hour
-    hermes debug share             Upload debug report for support
-    hermes console                Open the safe Hermes command console
-    hermes update                 Update to latest version
-    hermes dashboard              Start web UI dashboard (port 9119)
-    hermes dashboard --stop       Stop running dashboard processes
-    hermes dashboard --status     List running dashboard processes
+    fulilian                        Start interactive chat
+    fulilian chat -q "Hello"        Single query mode
+    fulilian --tui                  Launch the modern TUI (or set display.interface: tui)
+    fulilian --cli                  Force the classic REPL (overrides display.interface: tui)
+    fulilian -c                     Resume the most recent session
+    fulilian -c "my project"        Resume a session by name (latest in lineage)
+    fulilian --resume <session_id>  Resume a specific session by ID
+    fulilian --resume latest        Resume the most recent session (same as -c)
+    fulilian --tui --resume latest --in ./dir   Resume ./dir's latest session in the TUI
+    fulilian setup                  Run setup wizard
+    fulilian logout                 Clear stored authentication
+    fulilian auth add <provider>    Add a pooled credential
+    fulilian auth list              List pooled credentials
+    fulilian auth remove <p> <t>    Remove pooled credential by index, id, or label
+    fulilian auth reset <provider>  Clear exhaustion status for a provider
+    fulilian model                  Select default model
+    fulilian fallback [list]        Show fallback provider chain
+    fulilian fallback add           Add a fallback provider (same picker as `fulilian model`)
+    fulilian fallback remove        Remove a fallback provider from the chain
+    fulilian config                 View configuration
+    fulilian config edit            Edit config in $EDITOR
+    fulilian config set model gpt-4 Set a config value
+    fulilian gateway                Run messaging gateway
+    fulilian -s fulilian-agent-dev,github-auth
+    fulilian -w                     Start in isolated git worktree
+    fulilian gateway install        Install gateway background service
+    fulilian sessions list          List past sessions
+    fulilian sessions browse        Interactive session picker
+    fulilian sessions rename ID T   Rename/title a session
+    fulilian logs                   View agent.log (last 50 lines)
+    fulilian logs -f                Follow agent.log in real time
+    fulilian logs errors            View errors.log
+    fulilian logs --since 1h        Lines from the last hour
+    fulilian debug share             Upload debug report for support
+    fulilian console                Open the safe Fulilian command console
+    fulilian update                 Update to latest version
+    fulilian dashboard              Start web UI dashboard (port 9119)
+    fulilian dashboard --stop       Stop running dashboard processes
+    fulilian dashboard --status     List running dashboard processes
 
 For more help on a command:
-    hermes <command> --help
+    fulilian <command> --help
 """
 
 
@@ -177,7 +177,7 @@ def build_top_level_parser():
     # --model / --provider are accepted at the top level so they can pair
     # with -z without needing the `chat` subcommand.  If neither -z nor a
     # subcommand consumes them, they fall through harmlessly as None.
-    # Mirrors `hermes chat --model ... --provider ...` semantics.
+    # Mirrors `fulilian chat --model ... --provider ...` semantics.
     _inherited_flag(
         parser,
         "-m",
@@ -185,7 +185,7 @@ def build_top_level_parser():
         default=None,
         help=(
             "Model override for this invocation (e.g. anthropic/claude-sonnet-4.6). "
-            "Applies to -z/--oneshot and --tui. Also settable via HERMES_INFERENCE_MODEL env var."
+            "Applies to -z/--oneshot and --tui. Also settable via FULILIAN_INFERENCE_MODEL env var."
         ),
     )
     _inherited_flag(
@@ -195,7 +195,7 @@ def build_top_level_parser():
         help=(
             "Provider override for this invocation (e.g. openrouter, anthropic). "
             "Applies to -z/--oneshot and --tui. The persistent provider lives in config.yaml "
-            "under model.provider — use `hermes setup` or edit the file to change it."
+            "under model.provider — use `fulilian setup` or edit the file to change it."
         ),
     )
     _inherited_flag(
@@ -268,7 +268,7 @@ def build_top_level_parser():
         default=False,
         help=(
             "Auto-approve any unseen shell hooks declared in config.yaml "
-            "without a TTY prompt.  Equivalent to HERMES_ACCEPT_HOOKS=1 or "
+            "without a TTY prompt.  Equivalent to FULILIAN_ACCEPT_HOOKS=1 or "
             "hooks_auto_accept: true in config.yaml.  Use on CI / headless "
             "runs that can't prompt."
         ),
@@ -300,7 +300,7 @@ def build_top_level_parser():
         "--ignore-user-config",
         action="store_true",
         default=False,
-        help="Ignore ~/.hermes/config.yaml and fall back to built-in defaults (credentials in .env are still loaded)",
+        help="Ignore ~/.fulilian/config.yaml and fall back to built-in defaults (credentials in .env are still loaded)",
     )
     _inherited_flag(
         parser,
@@ -347,7 +347,7 @@ def build_top_level_parser():
     chat_parser = subparsers.add_parser(
         "chat",
         help="Interactive chat with the agent",
-        description="Start an interactive chat session with Hermes Agent",
+        description="Start an interactive chat session with FuLiLian",
     )
     _query_group = chat_parser.add_mutually_exclusive_group()
     _query_group.add_argument(
@@ -367,7 +367,7 @@ def build_top_level_parser():
         "--image", help="Optional local image path to attach to a single query"
     )
     # `default=argparse.SUPPRESS` on flags that are ALSO declared on the
-    # top-level parser: when the user writes `hermes -m foo chat`, argparse
+    # top-level parser: when the user writes `fulilian -m foo chat`, argparse
     # first sets `args.model = "foo"` from the top-level parser, then
     # dispatches to the chat subparser. Without SUPPRESS the chat subparser's
     # own default (`None`) would silently clobber the top-level value because
@@ -375,7 +375,7 @@ def build_top_level_parser():
     # subparser action a no-op unless the user actually passes the flag after
     # the subcommand. Matches the pattern already used for `-s/--skills` and
     # the relaunch-inherited flags `-r/--resume`, `-c/--continue`,
-    # `-w/--worktree`, `--yolo`, etc. (see tests/hermes_cli/
+    # `-w/--worktree`, `--yolo`, etc. (see tests/fulilian_cli/
     # test_argparse_flag_propagation.py).
     _inherited_flag(
         chat_parser,
@@ -491,7 +491,7 @@ def build_top_level_parser():
         default=argparse.SUPPRESS,
         help=(
             "Auto-approve any unseen shell hooks declared in config.yaml "
-            "without a TTY prompt (see also HERMES_ACCEPT_HOOKS env var and "
+            "without a TTY prompt (see also FULILIAN_ACCEPT_HOOKS env var and "
             "hooks_auto_accept: in config.yaml)."
         ),
     )
@@ -542,7 +542,7 @@ def build_top_level_parser():
         "--ignore-user-config",
         action="store_true",
         default=argparse.SUPPRESS,
-        help="Ignore ~/.hermes/config.yaml and fall back to built-in defaults (credentials in .env are still loaded). Useful for isolated CI runs, reproduction, and third-party integrations.",
+        help="Ignore ~/.fulilian/config.yaml and fall back to built-in defaults (credentials in .env are still loaded). Useful for isolated CI runs, reproduction, and third-party integrations.",
     )
     _inherited_flag(
         chat_parser,
@@ -556,7 +556,7 @@ def build_top_level_parser():
         "--safe-mode",
         action="store_true",
         default=argparse.SUPPRESS,
-        help="Troubleshooting mode: disable ALL customizations — user config, AGENTS.md/memory injection, plugins, and MCP servers (implies --ignore-user-config and --ignore-rules). Use to isolate whether a problem comes from your setup or from Hermes itself.",
+        help="Troubleshooting mode: disable ALL customizations — user config, AGENTS.md/memory injection, plugins, and MCP servers (implies --ignore-user-config and --ignore-rules). Use to isolate whether a problem comes from your setup or from Fulilian itself.",
     )
     chat_parser.add_argument(
         "--source",

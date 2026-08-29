@@ -71,10 +71,10 @@ def _enable_managed_nous_tools(monkeypatch):
     The _install_fake_tools_package() helper resets and reimports tool modules,
     so a simple monkeypatch on tool_backend_helpers doesn't survive.  We patch
     the *source* modules that the reimported modules will import from — both
-    hermes_cli.nous_account — so the function body returns True.
+    fulilian_cli.nous_account — so the function body returns True.
     """
     monkeypatch.setattr(
-        "hermes_cli.nous_account.get_nous_portal_account_info",
+        "fulilian_cli.nous_account.get_nous_portal_account_info",
         lambda: NousPortalAccountInfo(
             logged_in=True,
             source="jwt",
@@ -104,7 +104,7 @@ def _install_fake_tools_package():
     # The fake `agent` package has an empty __path__, so every real
     # agent.* submodule that production code imports needs an explicit
     # stand-in here. tools.browser_tool imports redact_cdp_url;
-    # hermes_cli.auth (imported transitively by nous_account /
+    # fulilian_cli.auth (imported transitively by nous_account /
     # tool_backend_helpers) imports sanitize_borrowed_credential_payload.
     sys.modules["agent.redact"] = types.SimpleNamespace(
         redact_cdp_url=lambda value: str(value),
@@ -219,7 +219,7 @@ def test_browser_use_explicit_local_mode_stays_local_even_when_managed_gateway_i
     env = os.environ.copy()
     env.pop("BROWSER_USE_API_KEY", None)
     env.update({
-        "HERMES_HOME": str(tmp_path),
+        "FULILIAN_HOME": str(tmp_path),
         "TOOL_GATEWAY_USER_TOKEN": "nous-token",
         "BROWSER_USE_GATEWAY_URL": "http://127.0.0.1:3009",
     })

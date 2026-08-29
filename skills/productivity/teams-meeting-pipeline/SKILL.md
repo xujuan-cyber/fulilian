@@ -2,14 +2,14 @@
 name: teams-meeting-pipeline
 description: Teams meeting summaries, job replay, Graph subscriptions.
 version: 1.1.0
-author: Hermes Agent + Teknium
+author: FuLiLian + Teknium
 license: MIT
 platforms: [linux, macos, windows]
 prerequisites:
   env_vars: [MSGRAPH_TENANT_ID, MSGRAPH_CLIENT_ID, MSGRAPH_CLIENT_SECRET]
-  commands: [hermes]
+  commands: [fulilian]
 metadata:
-  hermes:
+  fulilian:
     tags: [Teams, Microsoft Graph, Meetings, Productivity, Operations]
     related_docs:
       - /docs/guides/microsoft-graph-app-registration
@@ -21,7 +21,7 @@ metadata:
 
 Use this skill whenever the user asks about Microsoft Teams meeting summaries, transcripts, recordings, action items, Graph subscriptions, or any operational question about the Teams meeting pipeline. Works in any language — the triggers below are examples, not an exhaustive list.
 
-Everything operator-facing is a `hermes teams-pipeline` subcommand run via the terminal tool. There are no new model tools for this pipeline — the CLI is the surface.
+Everything operator-facing is a `fulilian teams-pipeline` subcommand run via the terminal tool. There are no new model tools for this pipeline — the CLI is the surface.
 
 ## When to use this skill
 
@@ -40,7 +40,7 @@ Multilingual trigger examples (not exhaustive):
 
 ## Prerequisites
 
-Before using the pipeline, verify these are set in `${HERMES_HOME:-~/.hermes}/.env`:
+Before using the pipeline, verify these are set in `${FULILIAN_HOME:-~/.fulilian}/.env`:
 
 ```bash
 MSGRAPH_TENANT_ID=...
@@ -55,36 +55,36 @@ If any are missing, direct the user to the Azure app registration guide at `/doc
 ### Status and inspection (start here)
 
 ```bash
-hermes teams-pipeline validate              # config snapshot — run first after any change
-hermes teams-pipeline token-health          # Graph token status
-hermes teams-pipeline token-health --force-refresh   # force a fresh token acquisition
-hermes teams-pipeline list                  # recent meeting jobs
-hermes teams-pipeline list --status failed  # only failed jobs
-hermes teams-pipeline show <job-id>         # full detail of one job
-hermes teams-pipeline subscriptions         # current Graph webhook subscriptions
+fulilian teams-pipeline validate              # config snapshot — run first after any change
+fulilian teams-pipeline token-health          # Graph token status
+fulilian teams-pipeline token-health --force-refresh   # force a fresh token acquisition
+fulilian teams-pipeline list                  # recent meeting jobs
+fulilian teams-pipeline list --status failed  # only failed jobs
+fulilian teams-pipeline show <job-id>         # full detail of one job
+fulilian teams-pipeline subscriptions         # current Graph webhook subscriptions
 ```
 
 ### Re-running / debugging
 
 ```bash
-hermes teams-pipeline run <job-id>          # replay a stored job (re-summarize, re-deliver)
-hermes teams-pipeline fetch --meeting-id <id>   # dry-run: resolve meeting + transcript without persisting
-hermes teams-pipeline fetch --join-web-url "<url>"   # dry-run by join URL
-hermes teams-pipeline fetch --join-web-url "<url>" --organizer-user-id <id>   # organizer-scoped lookup (required for /meet/ short URLs)
+fulilian teams-pipeline run <job-id>          # replay a stored job (re-summarize, re-deliver)
+fulilian teams-pipeline fetch --meeting-id <id>   # dry-run: resolve meeting + transcript without persisting
+fulilian teams-pipeline fetch --join-web-url "<url>"   # dry-run by join URL
+fulilian teams-pipeline fetch --join-web-url "<url>" --organizer-user-id <id>   # organizer-scoped lookup (required for /meet/ short URLs)
 ```
 
 ### Subscription management
 
 ```bash
-hermes teams-pipeline subscribe \
+fulilian teams-pipeline subscribe \
   --resource communications/onlineMeetings/getAllTranscripts \
   --notification-url https://<your-public-host>/msgraph/webhook \
   --client-state "$MSGRAPH_WEBHOOK_CLIENT_STATE"
 
-hermes teams-pipeline renew-subscription <sub-id> --expiration <iso-8601>
-hermes teams-pipeline delete-subscription <sub-id>
-hermes teams-pipeline maintain-subscriptions            # renew near-expiry ones
-hermes teams-pipeline maintain-subscriptions --dry-run  # show what would be renewed
+fulilian teams-pipeline renew-subscription <sub-id> --expiration <iso-8601>
+fulilian teams-pipeline delete-subscription <sub-id>
+fulilian teams-pipeline maintain-subscriptions            # renew near-expiry ones
+fulilian teams-pipeline maintain-subscriptions --dry-run  # show what would be renewed
 ```
 
 ## Decision tree for common asks
@@ -99,9 +99,9 @@ hermes teams-pipeline maintain-subscriptions --dry-run  # show what would be ren
 Microsoft Graph caps webhook subscriptions at 72 hours and **will not auto-renew them**. If `maintain-subscriptions` is not scheduled, meeting notifications silently stop arriving 3 days after any manual subscription creation.
 
 When the user reports "the pipeline worked yesterday but nothing is arriving today":
-1. Run `hermes teams-pipeline subscriptions` — if it's empty or all entries show `expirationDateTime` in the past, that's the cause.
+1. Run `fulilian teams-pipeline subscriptions` — if it's empty or all entries show `expirationDateTime` in the past, that's the cause.
 2. Recreate with `subscribe` as shown above.
-3. **Set up automated renewal immediately** via `hermes cron add`, a systemd timer, or plain crontab. The operator runbook at `/docs/guides/operate-teams-meeting-pipeline#automating-subscription-renewal-required-for-production` has all three options. 12-hour interval is safe (6x headroom against the 72h limit).
+3. **Set up automated renewal immediately** via `fulilian cron add`, a systemd timer, or plain crontab. The operator runbook at `/docs/guides/operate-teams-meeting-pipeline#automating-subscription-renewal-required-for-production` has all three options. 12-hour interval is safe (6x headroom against the 72h limit).
 
 ## Other pitfalls
 

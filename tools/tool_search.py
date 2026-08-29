@@ -1,13 +1,13 @@
-"""Progressive tool disclosure ("tool search") for Hermes Agent.
+"""Progressive tool disclosure ("tool search") for FuLiLian.
 
 When enabled, MCP and non-core plugin tools are replaced in the model-visible
 tools array by three bridge tools — ``tool_search``, ``tool_describe``,
-``tool_call`` — and surfaced on demand. Core Hermes tools never defer.
+``tool_call`` — and surfaced on demand. Core Fulilian tools never defer.
 
 Design constraints this module is built around (see ``openclaw-tool-search-report``
 for the full rationale):
 
-* Core tools defined in ``toolsets._HERMES_CORE_TOOLS`` are *never* deferred.
+* Core tools defined in ``toolsets._FULILIAN_CORE_TOOLS`` are *never* deferred.
   Always-load means always-load. No exceptions.
 * Session-gated GUI toolsets (``desktop_ui``, ``project``) are also never
   deferred. They stay off the core list so CLI and messaging never pay for
@@ -223,13 +223,13 @@ def _core_tool_names() -> frozenset[str]:
     and we don't want a hard cycle.
     """
     try:
-        from toolsets import _HERMES_CORE_TOOLS
-        return frozenset(_HERMES_CORE_TOOLS)
+        from toolsets import _FULILIAN_CORE_TOOLS
+        return frozenset(_FULILIAN_CORE_TOOLS)
     except Exception:
         return frozenset()
 
 
-# Session-gated GUI toolsets. Off ``_HERMES_CORE_TOOLS`` so non-GUI clients
+# Session-gated GUI toolsets. Off ``_FULILIAN_CORE_TOOLS`` so non-GUI clients
 # never pay their schema; once a session enables them they stay direct.
 _DIRECT_SURFACE_TOOLSETS = frozenset({"desktop_ui", "project"})
 
@@ -238,7 +238,7 @@ def is_deferrable_tool_name(name: str) -> bool:
     """Return True if a tool with this name is *eligible* for deferral.
 
     A tool is deferrable iff it is registered with an MCP toolset prefix
-    OR it is neither in ``_HERMES_CORE_TOOLS`` nor a session-gated GUI
+    OR it is neither in ``_FULILIAN_CORE_TOOLS`` nor a session-gated GUI
     surface toolset. Core and direct surface tools are never deferred even
     when their toolset is technically plugin-provided (this protects
     against accidental shadowing).

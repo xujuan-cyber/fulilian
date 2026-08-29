@@ -18,7 +18,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator, Optional
 
-from fulilian_constants import get_hermes_home
+from fulilian_constants import get_fulilian_home
 
 
 _DB_LOCK = threading.Lock()
@@ -26,7 +26,7 @@ _MAX_OUTPUT_SUMMARY_CHARS = 2000
 _MAX_EVIDENCE_AGE_DAYS = 30
 _MAX_EVENTS_PER_SESSION_ROOT = 100
 _MAX_TOTAL_UNREFERENCED_EVENTS = 10_000
-_AD_HOC_SCRIPT_NAME_PREFIXES = ("hermes-verify-", "hermes-ad-hoc-")
+_AD_HOC_SCRIPT_NAME_PREFIXES = ("fulilian-verify-", "fulilian-ad-hoc-")
 _VERIFY_SCHEMA_VERSION = 1
 
 
@@ -61,11 +61,11 @@ def _retention_cutoff() -> str:
 
 
 def _db_path() -> Path:
-    return get_hermes_home() / "verification_evidence.db"
+    return get_fulilian_home() / "verification_evidence.db"
 
 
 def _connect() -> sqlite3.Connection:
-    from hermes_state import apply_wal_with_fallback
+    from fulilian_state import apply_wal_with_fallback
 
     path = _db_path()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -587,14 +587,14 @@ def record_verify_run(
     root: str | Path,
     session_id: str | None = None,
     ok: bool,
-    command: str = "hermes verify",
+    command: str = "fulilian verify",
     scope: str = "full",
     output: str = "",
 ) -> Optional[dict[str, Any]]:
-    """Record a completed ``hermes verify`` run as verification evidence.
+    """Record a completed ``fulilian verify`` run as verification evidence.
 
     Explicit CLI-side write: unlike :func:`record_terminal_result` there is
-    nothing to classify — the caller (the ``hermes verify`` command) already
+    nothing to classify — the caller (the ``fulilian verify`` command) already
     knows the run was a verification pass and whether it succeeded. A passing
     run marks the workspace ``passed`` for the verify-on-stop guard exactly
     like a passing canonical test command would; a failing run records the
@@ -614,7 +614,7 @@ def record_verify_run(
     resolved = str(Path(root).resolve())
     evidence = VerificationEvidence(
         command=command,
-        canonical_command="hermes verify",
+        canonical_command="fulilian verify",
         kind="verify",
         scope=scope if scope in {"full", "targeted"} else "full",
         status="passed" if ok else "failed",

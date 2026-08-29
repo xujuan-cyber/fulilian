@@ -33,7 +33,7 @@ import {
   setAccentOverride,
   useTheme,
   useValue
-} from '@hermes/plugin-sdk'
+} from '@fulilian/plugin-sdk'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 // Named reference points, with their OKLCH hue — the ones worth comparing while

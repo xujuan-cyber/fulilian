@@ -13,7 +13,7 @@ from typing import Any, Dict, Optional, Tuple
 
 
 def resolve_profile(rid, params, err_fn) -> Tuple[Optional[Any], Optional[dict]]:
-    """Resolve the optional ``profile`` param to a HERMES_HOME override token.
+    """Resolve the optional ``profile`` param to a FULILIAN_HOME override token.
 
     Returns ``(token, error)``: ``token`` is None for the launch profile (no
     override) or an opaque reset token; ``error`` is a JSON-RPC error dict
@@ -24,20 +24,20 @@ def resolve_profile(rid, params, err_fn) -> Tuple[Optional[Any], Optional[dict]]
     if not profile:
         return None, None
     from fulilian_cli.profiles import get_profile_dir
-    from fulilian_constants import set_hermes_home_override
+    from fulilian_constants import set_fulilian_home_override
 
     profile_dir = get_profile_dir(profile)
     if not profile_dir or not profile_dir.is_dir():
         return None, err_fn(rid, 4064, f"profile '{profile}' not found")
-    return set_hermes_home_override(str(profile_dir)), None
+    return set_fulilian_home_override(str(profile_dir)), None
 
 
 def reset_profile(token) -> None:
     if token is not None:
         try:
-            from fulilian_constants import reset_hermes_home_override
+            from fulilian_constants import reset_fulilian_home_override
 
-            reset_hermes_home_override(token)
+            reset_fulilian_home_override(token)
         except Exception:
             pass
 

@@ -51,10 +51,10 @@ class TestHandleUpdateCommand:
         """Returns an error when .git does not exist."""
         runner = _make_runner()
         event = _make_event()
-        # Point _hermes_home to tmp_path and project_root to a dir without .git
+        # Point _fulilian_home to tmp_path and project_root to a dir without .git
         fake_root = tmp_path / "project"
         fake_root.mkdir()
-        with patch("gateway.run._hermes_home", tmp_path), \
+        with patch("gateway.run._fulilian_home", tmp_path), \
              patch("gateway.run.Path") as MockPath:
             # Path(__file__).parent.parent.resolve() -> fake_root
             MockPath.return_value = MagicMock()
@@ -65,11 +65,11 @@ class TestHandleUpdateCommand:
         # Simpler approach — mock at method level using a wrapper
         runner = _make_runner()
 
-        with patch("gateway.run._hermes_home", tmp_path):
+        with patch("gateway.run._fulilian_home", tmp_path):
             # The handler does Path(__file__).parent.parent.resolve()
             # We need to make project_root / '.git' not exist.
             # Since Path(__file__) resolves to the real gateway/run.py,
-            # project_root will be the real hermes-agent dir (which HAS .git).
+            # project_root will be the real fulilian-agent dir (which HAS .git).
             # Patch Path to control this.
             original_path = Path
 
@@ -91,17 +91,17 @@ class TestHandleUpdateCommand:
 
 
     @pytest.mark.asyncio
-    async def test_resolve_hermes_bin_fallback(self):
-        """_resolve_hermes_bin falls back to sys.executable argv when which fails."""
+    async def test_resolve_fulilian_bin_fallback(self):
+        """_resolve_fulilian_bin falls back to sys.executable argv when which fails."""
         import sys
-        from gateway.run import _resolve_hermes_bin
+        from gateway.run import _resolve_fulilian_bin
 
         fake_spec = MagicMock()
         with patch("shutil.which", return_value=None), \
              patch("importlib.util.find_spec", return_value=fake_spec):
-            result = _resolve_hermes_bin()
+            result = _resolve_fulilian_bin()
 
-        assert result == [sys.executable, "-m", "hermes_cli.main"]
+        assert result == [sys.executable, "-m", "fulilian_cli.main"]
 
 
     @pytest.mark.asyncio
@@ -117,16 +117,16 @@ class TestHandleUpdateCommand:
         (fake_root / "gateway").mkdir()
         (fake_root / "gateway" / "run.py").touch()
         fake_file = str(fake_root / "gateway" / "run.py")
-        hermes_home = tmp_path / "hermes"
-        hermes_home.mkdir()
+        fulilian_home = tmp_path / "fulilian"
+        fulilian_home.mkdir()
 
-        with patch("gateway.run._hermes_home", hermes_home), \
+        with patch("gateway.run._fulilian_home", fulilian_home), \
              patch("gateway.run.__file__", fake_file), \
-             patch("shutil.which", side_effect=lambda x: "/usr/bin/hermes" if x == "hermes" else "/usr/bin/setsid"), \
+             patch("shutil.which", side_effect=lambda x: "/usr/bin/fulilian" if x == "fulilian" else "/usr/bin/setsid"), \
              patch("subprocess.Popen"):
             result = await runner._handle_update_command(event)
 
-        pending_path = hermes_home / ".update_pending.json"
+        pending_path = fulilian_home / ".update_pending.json"
         assert pending_path.exists()
         data = json.loads(pending_path.read_text())
         assert data["platform"] == "telegram"
@@ -134,7 +134,7 @@ class TestHandleUpdateCommand:
         assert data["chat_type"] == "dm"
         assert data["message_id"] == "m-update"
         assert "timestamp" in data
-        assert not (hermes_home / ".update_exit_code").exists()
+        assert not (fulilian_home / ".update_exit_code").exists()
 
 
     @pytest.mark.asyncio
@@ -149,19 +149,19 @@ class TestHandleUpdateCommand:
         (fake_root / "gateway").mkdir()
         (fake_root / "gateway" / "run.py").touch()
         fake_file = str(fake_root / "gateway" / "run.py")
-        hermes_home = tmp_path / "hermes"
-        hermes_home.mkdir()
+        fulilian_home = tmp_path / "fulilian"
+        fulilian_home.mkdir()
 
         mock_popen = MagicMock()
 
         def which_no_setsid(x):
-            if x == "hermes":
-                return "/usr/bin/hermes"
+            if x == "fulilian":
+                return "/usr/bin/fulilian"
             if x == "setsid":
                 return None
             return None
 
-        with patch("gateway.run._hermes_home", hermes_home), \
+        with patch("gateway.run._fulilian_home", fulilian_home), \
              patch("gateway.run.__file__", fake_file), \
              patch("shutil.which", side_effect=which_no_setsid), \
              patch("subprocess.Popen", mock_popen):
@@ -175,7 +175,7 @@ class TestHandleUpdateCommand:
         # start_new_session=True should be in kwargs
         call_kwargs = mock_popen.call_args[1]
         assert call_kwargs.get("start_new_session") is True
-        assert "Starting Hermes update" in result
+        assert "Starting Fulilian update" in result
 
 
 # ---------------------------------------------------------------------------
@@ -218,14 +218,14 @@ class TestUpdateCommandPlatformGate:
 
         runner = _make_runner()
         event = _make_event(platform=Platform.DISCORD)
-        monkeypatch.setenv("HERMES_MANAGED", "")
+        monkeypatch.setenv("FULILIAN_MANAGED", "")
 
         with patch("subprocess.Popen"):
             result = await runner._handle_update_command(event)
 
         # The gate must NOT have rejected us — anything other than the
         # ``platform_not_messaging`` rejection string is acceptable here.
-        # Later steps may legitimately return success ("Starting Hermes
+        # Later steps may legitimately return success ("Starting Fulilian
         # update…") or fail for environment reasons.
         assert "only available from messaging platforms" not in result
 
@@ -249,7 +249,7 @@ class TestUpdateCommandPlatformGate:
 
         runner = _make_runner()
         event = _make_event(platform=Platform.HOMEASSISTANT)
-        monkeypatch.setenv("HERMES_MANAGED", "")
+        monkeypatch.setenv("FULILIAN_MANAGED", "")
 
         with patch("subprocess.Popen"):
             result = await runner._handle_update_command(event)
@@ -270,19 +270,19 @@ class TestSendUpdateNotification:
     async def test_defers_notification_while_update_still_running(self, tmp_path):
         """Returns False and keeps marker files when the update has not exited yet."""
         runner = _make_runner()
-        hermes_home = tmp_path / "hermes"
-        hermes_home.mkdir()
+        fulilian_home = tmp_path / "fulilian"
+        fulilian_home.mkdir()
 
-        pending_path = hermes_home / ".update_pending.json"
+        pending_path = fulilian_home / ".update_pending.json"
         pending_path.write_text(json.dumps({
             "platform": "telegram", "chat_id": "67890", "user_id": "12345",
         }))
-        (hermes_home / ".update_output.txt").write_text("still running")
+        (fulilian_home / ".update_output.txt").write_text("still running")
 
         mock_adapter = AsyncMock()
         runner.adapters = {Platform.TELEGRAM: mock_adapter}
 
-        with patch("gateway.run._hermes_home", hermes_home):
+        with patch("gateway.run._fulilian_home", fulilian_home):
             result = await runner._send_update_notification()
 
         assert result is False
@@ -293,20 +293,20 @@ class TestSendUpdateNotification:
     async def test_recovers_from_claimed_pending_file(self, tmp_path):
         """A claimed pending file from a crashed notifier is still deliverable."""
         runner = _make_runner()
-        hermes_home = tmp_path / "hermes"
-        hermes_home.mkdir()
+        fulilian_home = tmp_path / "fulilian"
+        fulilian_home.mkdir()
 
-        claimed_path = hermes_home / ".update_pending.claimed.json"
+        claimed_path = fulilian_home / ".update_pending.claimed.json"
         claimed_path.write_text(json.dumps({
             "platform": "telegram", "chat_id": "67890", "user_id": "12345",
         }))
-        (hermes_home / ".update_output.txt").write_text("done")
-        (hermes_home / ".update_exit_code").write_text("0")
+        (fulilian_home / ".update_output.txt").write_text("done")
+        (fulilian_home / ".update_exit_code").write_text("0")
 
         mock_adapter = AsyncMock()
         runner.adapters = {Platform.TELEGRAM: mock_adapter}
 
-        with patch("gateway.run._hermes_home", hermes_home):
+        with patch("gateway.run._fulilian_home", fulilian_home):
             result = await runner._send_update_notification()
 
         assert result is True
@@ -317,8 +317,8 @@ class TestSendUpdateNotification:
     async def test_sends_notification_with_output(self, tmp_path):
         """Sends update output to the correct platform and chat."""
         runner = _make_runner()
-        hermes_home = tmp_path / "hermes"
-        hermes_home.mkdir()
+        fulilian_home = tmp_path / "fulilian"
+        fulilian_home.mkdir()
 
         # Write pending marker
         pending = {
@@ -327,18 +327,18 @@ class TestSendUpdateNotification:
             "user_id": "12345",
             "timestamp": "2026-03-04T21:00:00",
         }
-        (hermes_home / ".update_pending.json").write_text(json.dumps(pending))
-        (hermes_home / ".update_output.txt").write_text(
+        (fulilian_home / ".update_pending.json").write_text(json.dumps(pending))
+        (fulilian_home / ".update_output.txt").write_text(
             "→ Found 3 new commit(s)\n✓ Code updated!\n✓ Update complete!"
         )
-        (hermes_home / ".update_exit_code").write_text("0")
+        (fulilian_home / ".update_exit_code").write_text("0")
 
         # Mock the adapter
         mock_adapter = AsyncMock()
         mock_adapter.send = AsyncMock()
         runner.adapters = {Platform.TELEGRAM: mock_adapter}
 
-        with patch("gateway.run._hermes_home", hermes_home):
+        with patch("gateway.run._fulilian_home", fulilian_home):
             await runner._send_update_notification()
 
         mock_adapter.send.assert_called_once()
@@ -351,12 +351,12 @@ class TestSendUpdateNotification:
     async def test_cleans_up_on_error(self, tmp_path):
         """Files are cleaned up even if notification fails."""
         runner = _make_runner()
-        hermes_home = tmp_path / "hermes"
-        hermes_home.mkdir()
+        fulilian_home = tmp_path / "fulilian"
+        fulilian_home.mkdir()
 
-        pending_path = hermes_home / ".update_pending.json"
-        output_path = hermes_home / ".update_output.txt"
-        exit_code_path = hermes_home / ".update_exit_code"
+        pending_path = fulilian_home / ".update_pending.json"
+        output_path = fulilian_home / ".update_output.txt"
+        exit_code_path = fulilian_home / ".update_exit_code"
         pending_path.write_text(json.dumps({
             "platform": "telegram", "chat_id": "111", "user_id": "222",
         }))
@@ -368,7 +368,7 @@ class TestSendUpdateNotification:
         mock_adapter.send.side_effect = RuntimeError("network error")
         runner.adapters = {Platform.TELEGRAM: mock_adapter}
 
-        with patch("gateway.run._hermes_home", hermes_home):
+        with patch("gateway.run._fulilian_home", fulilian_home):
             await runner._send_update_notification()
 
         # Files should still be cleaned up (finally block)
@@ -387,13 +387,13 @@ class TestSendUpdateNotification:
         retry can deliver once the platform is back.
         """
         runner = _make_runner()
-        hermes_home = tmp_path / "hermes"
-        hermes_home.mkdir()
+        fulilian_home = tmp_path / "fulilian"
+        fulilian_home.mkdir()
 
         pending = {"platform": "discord", "chat_id": "111", "user_id": "222"}
-        pending_path = hermes_home / ".update_pending.json"
-        output_path = hermes_home / ".update_output.txt"
-        exit_code_path = hermes_home / ".update_exit_code"
+        pending_path = fulilian_home / ".update_pending.json"
+        output_path = fulilian_home / ".update_output.txt"
+        exit_code_path = fulilian_home / ".update_exit_code"
         pending_path.write_text(json.dumps(pending))
         output_path.write_text("Done")
         exit_code_path.write_text("0")
@@ -402,7 +402,7 @@ class TestSendUpdateNotification:
         mock_adapter = AsyncMock()
         runner.adapters = {Platform.TELEGRAM: mock_adapter}
 
-        with patch("gateway.run._hermes_home", hermes_home):
+        with patch("gateway.run._fulilian_home", fulilian_home):
             result = await runner._send_update_notification()
 
         # No send (wrong platform offline) and the result is deferred.
@@ -413,7 +413,7 @@ class TestSendUpdateNotification:
         assert output_path.exists()
         assert exit_code_path.exists()
         # The marker stays in its canonical pending location (claim restored).
-        assert not (hermes_home / ".update_pending.claimed.json").exists()
+        assert not (fulilian_home / ".update_pending.claimed.json").exists()
 
     @pytest.mark.asyncio
     async def test_deferred_notification_delivers_after_reconnect(self, tmp_path):
@@ -425,19 +425,19 @@ class TestSendUpdateNotification:
         cleans up — exactly once.
         """
         runner = _make_runner()
-        hermes_home = tmp_path / "hermes"
-        hermes_home.mkdir()
+        fulilian_home = tmp_path / "fulilian"
+        fulilian_home.mkdir()
 
         pending = {"platform": "discord", "chat_id": "111", "user_id": "222"}
-        pending_path = hermes_home / ".update_pending.json"
-        output_path = hermes_home / ".update_output.txt"
-        exit_code_path = hermes_home / ".update_exit_code"
+        pending_path = fulilian_home / ".update_pending.json"
+        output_path = fulilian_home / ".update_output.txt"
+        exit_code_path = fulilian_home / ".update_exit_code"
         pending_path.write_text(json.dumps(pending))
         output_path.write_text("✓ Update complete!")
         exit_code_path.write_text("0")
 
         # First pass: target platform (discord) is still offline → defer.
-        with patch("gateway.run._hermes_home", hermes_home):
+        with patch("gateway.run._fulilian_home", fulilian_home):
             first = await runner._send_update_notification()
 
         assert first is False
@@ -447,7 +447,7 @@ class TestSendUpdateNotification:
         mock_adapter = AsyncMock()
         runner.adapters = {Platform.DISCORD: mock_adapter}
 
-        with patch("gateway.run._hermes_home", hermes_home):
+        with patch("gateway.run._fulilian_home", fulilian_home):
             second = await runner._send_update_notification()
 
         assert second is True
@@ -458,19 +458,19 @@ class TestSendUpdateNotification:
         assert not pending_path.exists()
         assert not output_path.exists()
         assert not exit_code_path.exists()
-        assert not (hermes_home / ".update_pending.claimed.json").exists()
+        assert not (fulilian_home / ".update_pending.claimed.json").exists()
 
     @pytest.mark.asyncio
     async def test_completion_notification_tolerates_invalid_utf8_output(self, tmp_path):
         """Completion-only update notifications must not crash on bad bytes."""
         runner = _make_runner()
-        hermes_home = tmp_path / "hermes"
-        hermes_home.mkdir()
+        fulilian_home = tmp_path / "fulilian"
+        fulilian_home.mkdir()
 
         pending = {"platform": "discord", "chat_id": "111", "user_id": "222"}
-        pending_path = hermes_home / ".update_pending.json"
-        output_path = hermes_home / ".update_output.txt"
-        exit_code_path = hermes_home / ".update_exit_code"
+        pending_path = fulilian_home / ".update_pending.json"
+        output_path = fulilian_home / ".update_output.txt"
+        exit_code_path = fulilian_home / ".update_exit_code"
         pending_path.write_text(json.dumps(pending))
         output_path.write_bytes(b"ok before\ninvalid byte: \x96\ncontinued after\n")
         exit_code_path.write_text("0")
@@ -478,7 +478,7 @@ class TestSendUpdateNotification:
         mock_adapter = AsyncMock()
         runner.adapters = {Platform.DISCORD: mock_adapter}
 
-        with patch("gateway.run._hermes_home", hermes_home):
+        with patch("gateway.run._fulilian_home", fulilian_home):
             delivered = await runner._send_update_notification()
 
         assert delivered is True
@@ -487,7 +487,7 @@ class TestSendUpdateNotification:
         assert "ok before" in sent_text
         assert "invalid byte" in sent_text
         assert "continued after" in sent_text
-        assert "Hermes update finished" in sent_text
+        assert "Fulilian update finished" in sent_text
         assert not pending_path.exists()
         assert not output_path.exists()
         assert not exit_code_path.exists()
@@ -515,27 +515,27 @@ class TestWatchUpdateProgress:
     @pytest.mark.asyncio
     async def test_invalid_utf8_update_output_does_not_crash_watcher(self, tmp_path):
         runner = _make_runner()
-        hermes_home = tmp_path / "hermes"
-        hermes_home.mkdir()
+        fulilian_home = tmp_path / "fulilian"
+        fulilian_home.mkdir()
 
-        (hermes_home / ".update_pending.json").write_text(json.dumps({
+        (fulilian_home / ".update_pending.json").write_text(json.dumps({
             "platform": "telegram",
             "chat_id": "67890",
             "user_id": "12345",
         }))
-        (hermes_home / ".update_output.txt").write_bytes(
+        (fulilian_home / ".update_output.txt").write_bytes(
             b"ok before\n\xe2\x9c invalid-continuation: \x96\ncontinued after\n"
         )
-        (hermes_home / ".update_exit_code").write_text("0")
+        (fulilian_home / ".update_exit_code").write_text("0")
 
         mock_adapter = AsyncMock()
         runner.adapters = {Platform.TELEGRAM: mock_adapter}
 
-        with patch("gateway.run._hermes_home", hermes_home):
+        with patch("gateway.run._fulilian_home", fulilian_home):
             await runner._watch_update_progress(poll_interval=0.01, stream_interval=0.01, timeout=1.0)
 
         sent = "\n".join(call.args[1] for call in mock_adapter.send.call_args_list)
         assert "ok before" in sent
         assert "continued after" in sent
-        assert "Hermes update finished" in sent
-        assert not (hermes_home / ".update_pending.json").exists()
+        assert "Fulilian update finished" in sent
+        assert not (fulilian_home / ".update_pending.json").exists()

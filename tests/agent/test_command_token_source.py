@@ -171,7 +171,7 @@ class TestResolutionYieldsACallable:
             }
         }
         monkeypatch.setattr(rp, "load_config", lambda *a, **k: config)
-        monkeypatch.setattr("hermes_cli.config.load_config", lambda *a, **k: config)
+        monkeypatch.setattr("fulilian_cli.config.load_config", lambda *a, **k: config)
 
         runtime = rp.resolve_runtime_provider(requested="custom:dbx")
         api_key = runtime["api_key"]
@@ -193,7 +193,7 @@ class TestResolutionYieldsACallable:
             }
         }
         monkeypatch.setattr(rp, "load_config", lambda *a, **k: config)
-        monkeypatch.setattr("hermes_cli.config.load_config", lambda *a, **k: config)
+        monkeypatch.setattr("fulilian_cli.config.load_config", lambda *a, **k: config)
 
         runtime = rp.resolve_runtime_provider(
             requested="custom:dbx", explicit_api_key="sk-explicit-override"

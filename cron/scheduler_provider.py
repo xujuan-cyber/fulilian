@@ -374,10 +374,10 @@ def fire_overdue_jobs(
     if grace_minutes <= 0:
         return 0
 
-    from cron.jobs import _ensure_aware, _hermes_now, is_job_runnable, load_jobs
+    from cron.jobs import _ensure_aware, _fulilian_now, is_job_runnable, load_jobs
 
     if now is None:
-        now = _hermes_now()
+        now = _fulilian_now()
 
     fired = 0
     for job in load_jobs():
@@ -548,8 +548,8 @@ class InProcessCronScheduler(CronScheduler):
         # When profile_homes is set (multiplex_profiles on), tick EACH profile's
         # cron store on every tick cycle so secondary-profile jobs actually fire
         # instead of languishing in a store no ticker owns (#69377). Without this,
-        # only the process-global HERMES_HOME (the default profile) is ticked.
-        # Heartbeats and recovery are also scoped per profile so `hermes cron
+        # only the process-global FULILIAN_HOME (the default profile) is ticked.
+        # Heartbeats and recovery are also scoped per profile so `fulilian cron
         # status` reflects liveness for every profile independently.
         if profile_homes:
             self._start_multiplex(
@@ -569,7 +569,7 @@ class InProcessCronScheduler(CronScheduler):
                 "Marked %d interrupted cron execution(s) unknown after restart",
                 recovered,
             )
-        # Heartbeat once before the first sleep so `hermes cron status` sees a
+        # Heartbeat once before the first sleep so `fulilian cron status` sees a
         # live ticker immediately after startup, not only after the first tick.
         record_ticker_heartbeat()
         # Exponential backoff for consecutive tick failures — most importantly
@@ -602,7 +602,7 @@ class InProcessCronScheduler(CronScheduler):
                 # re-checking stop_event keeps shutdown clean.
                 logger.error("Cron tick error: %s", e, exc_info=True)
                 # Persist the failure reason next to the heartbeat markers so
-                # `hermes cron status`/`list` (separate processes) can show
+                # `fulilian cron status`/`list` (separate processes) can show
                 # WHY ticks fail, not just that the success marker is stale —
                 # e.g. a root-rewritten jobs.json locking out the ticker's
                 # uid went unnoticed for ~14h with the reason buried in the
@@ -633,7 +633,7 @@ class InProcessCronScheduler(CronScheduler):
     ):
         """Tick every served profile's cron store when multiplex_profiles is on.
 
-        Each profile uses ``set_hermes_home_override()`` + ``use_cron_store()``
+        Each profile uses ``set_fulilian_home_override()`` + ``use_cron_store()``
         to scope its tick, heartbeat, recovery, lock file, config/.env, and
         agent execution to that profile's home — mirroring how
         ``_profile_runtime_scope`` scopes the multiplexed inbound path and
@@ -647,7 +647,7 @@ class InProcessCronScheduler(CronScheduler):
             record_ticker_heartbeat,
             use_cron_store,
         )
-        from fulilian_constants import set_hermes_home_override, reset_hermes_home_override
+        from fulilian_constants import set_fulilian_home_override, reset_fulilian_home_override
 
         logger = logging.getLogger("cron.scheduler_provider")
         logger.info(
@@ -659,7 +659,7 @@ class InProcessCronScheduler(CronScheduler):
         # Recovery + initial heartbeat for every profile.
         for entry in profile_homes:
             home = entry[1] if isinstance(entry, tuple) else entry
-            home_token = set_hermes_home_override(str(home))
+            home_token = set_fulilian_home_override(str(home))
             try:
                 with use_cron_store(home):
                     recovered = self.recover_interrupted()
@@ -671,7 +671,7 @@ class InProcessCronScheduler(CronScheduler):
                         )
                     record_ticker_heartbeat()
             finally:
-                reset_hermes_home_override(home_token)
+                reset_fulilian_home_override(home_token)
 
         consecutive_failures = 0
         while not stop_event.is_set():
@@ -683,7 +683,7 @@ class InProcessCronScheduler(CronScheduler):
                 else:
                     for entry in profile_homes:
                         home = entry[1] if isinstance(entry, tuple) else entry
-                        home_token = set_hermes_home_override(str(home))
+                        home_token = set_fulilian_home_override(str(home))
                         try:
                             with use_cron_store(home):
                                 cron_tick(
@@ -694,7 +694,7 @@ class InProcessCronScheduler(CronScheduler):
                                     can_dispatch=can_dispatch,
                                 )
                         finally:
-                            reset_hermes_home_override(home_token)
+                            reset_fulilian_home_override(home_token)
                 ok = True
             except BaseException as e:
                 logger.error("Cron tick error: %s", e, exc_info=True)
@@ -706,19 +706,19 @@ class InProcessCronScheduler(CronScheduler):
             # Record per-profile heartbeat after each tick cycle.
             for entry in profile_homes:
                 home = entry[1] if isinstance(entry, tuple) else entry
-                home_token = set_hermes_home_override(str(home))
+                home_token = set_fulilian_home_override(str(home))
                 try:
                     with use_cron_store(home):
                         record_ticker_heartbeat(success=ok)
                         # Surface the failure reason (or clear it) per profile
-                        # so `hermes cron status` can show WHY ticks fail
+                        # so `fulilian cron status` can show WHY ticks fail
                         # (#68483).
                         if ok:
                             clear_ticker_error()
                         elif _tick_error:
                             record_ticker_error(_tick_error)
                 finally:
-                    reset_hermes_home_override(home_token)
+                    reset_fulilian_home_override(home_token)
             if ok:
                 consecutive_failures = 0
             stop_event.wait(_backoff_wait_seconds(interval, consecutive_failures))

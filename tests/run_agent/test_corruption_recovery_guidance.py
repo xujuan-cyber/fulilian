@@ -12,7 +12,7 @@ The fix adds:
 2. _send_session_db_warning_notifications() — broadcasts a recovery-guidance
    message to all home channels after the gateway connects
 3. Improved "corrupt" cause wording in _format_turn_completion_explanation
-   with the full recovery path (hermes doctor, sqlite3 .recover, backups)
+   with the full recovery path (fulilian doctor, sqlite3 .recover, backups)
 """
 
 from pytest import fixture
@@ -25,7 +25,7 @@ def test_format_turn_completion_corrupt_includes_recovery_options():
     explanation = AIAgent._format_turn_completion_explanation(
         "session_persistence_failed", "corrupt"
     )
-    assert "hermes doctor" in explanation
+    assert "fulilian doctor" in explanation
     assert ".recover" in explanation
     assert "backups" in explanation
     assert "Freeing disk space will not help" in explanation

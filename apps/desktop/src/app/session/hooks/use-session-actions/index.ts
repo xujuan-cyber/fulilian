@@ -12,7 +12,7 @@ import {
   getAllSessionMessages,
   getLatestSessionMessages,
   setSessionArchived
-} from '@/hermes'
+} from '@/fulilian'
 import { useI18n } from '@/i18n'
 import {
   type ChatMessage,
@@ -125,7 +125,7 @@ import {
   saveTranscriptTail
 } from '@/store/transcript-tail-cache'
 import { isWatchWindow } from '@/store/windows'
-import type { SessionCreateResponse, SessionMessage, SessionResumeResponse, UsageStats } from '@/types/hermes'
+import type { SessionCreateResponse, SessionMessage, SessionResumeResponse, UsageStats } from '@/types/fulilian'
 
 import { navigateToWorkspacePage, NEW_CHAT_ROUTE, sessionRoute, SETTINGS_ROUTE } from '../../../routes'
 import type { ClientSessionState, SidebarNavItem } from '../../../types'

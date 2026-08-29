@@ -1,6 +1,6 @@
 """Vercel AI Gateway provider profile.
 
-AI Gateway routes to multiple backends. Hermes sends attribution
+AI Gateway routes to multiple backends. Fulilian sends attribution
 headers and full reasoning config passthrough.
 """
 
@@ -35,7 +35,7 @@ vercel = VercelAIGatewayProfile(
     base_url="https://ai-gateway.vercel.sh/v1",
     default_headers={
         "HTTP-Referer": "https://hermes-agent.nousresearch.com",
-        "X-Title": "Hermes Agent",
+        "X-Title": "FuLiLian",
     },
     default_aux_model="google/gemini-3-flash",
 )

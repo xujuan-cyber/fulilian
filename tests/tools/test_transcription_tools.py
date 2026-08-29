@@ -85,8 +85,8 @@ def clean_env(monkeypatch):
     monkeypatch.delenv("GROQ_API_KEY", raising=False)
     monkeypatch.delenv("MISTRAL_API_KEY", raising=False)
     monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
-    monkeypatch.delenv("HERMES_LOCAL_STT_COMMAND", raising=False)
-    monkeypatch.delenv("HERMES_LOCAL_STT_LANGUAGE", raising=False)
+    monkeypatch.delenv("FULILIAN_LOCAL_STT_COMMAND", raising=False)
+    monkeypatch.delenv("FULILIAN_LOCAL_STT_LANGUAGE", raising=False)
 
 
 # ============================================================================
@@ -153,7 +153,7 @@ class TestExplicitProviderRespected:
     def test_explicit_local_uses_local_command_fallback(self, monkeypatch):
         """Local-to-local_command fallback is fine — both are local."""
         monkeypatch.setenv(
-            "HERMES_LOCAL_STT_COMMAND",
+            "FULILIAN_LOCAL_STT_COMMAND",
             "whisper {input_path} --output_dir {output_dir} --language {language}",
         )
         with patch("tools.transcription_tools._HAS_FASTER_WHISPER", False):
@@ -197,7 +197,7 @@ class TestTranscribeGroq:
     def test_null_groq_subsection_is_safe(self, monkeypatch, sample_wav):
         """`stt.groq: null` in YAML yields None; must not raise, auto-detect stays intact."""
         monkeypatch.setenv("GROQ_API_KEY", "gsk-test")
-        monkeypatch.delenv("HERMES_LOCAL_STT_LANGUAGE", raising=False)
+        monkeypatch.delenv("FULILIAN_LOCAL_STT_LANGUAGE", raising=False)
 
         mock_client = MagicMock()
         mock_client.audio.transcriptions.create.return_value = "hi"
@@ -222,7 +222,7 @@ class TestTranscribeGroq:
 
 class TestTranscribeLocalCommand:
     def test_command_provider_uses_sanitized_child_env(self, monkeypatch):
-        """Salvage of #56332: command STT must not inherit Hermes secrets."""
+        """Salvage of #56332: command STT must not inherit Fulilian secrets."""
         monkeypatch.setenv("AUXILIARY_VISION_API_KEY", "sk-vision")
         monkeypatch.setenv("GATEWAY_RELAY_SECRET", "relay-secret")
         monkeypatch.setenv("OPENAI_API_KEY", "sk-openai")
@@ -267,7 +267,7 @@ class TestTranscribeLocalCommand:
         monkeypatch.setenv("OPENAI_API_KEY", "sk-openai")
         monkeypatch.setenv("MY_SAFE_LOCAL_STT", "keep")
         monkeypatch.setenv(
-            "HERMES_LOCAL_STT_COMMAND",
+            "FULILIAN_LOCAL_STT_COMMAND",
             "whisper {input_path} --model {model} --output_dir {output_dir} --language {language}",
         )
 
@@ -314,10 +314,10 @@ class TestTranscribeLocalCommand:
         out_dir.mkdir()
 
         monkeypatch.setenv(
-            "HERMES_LOCAL_STT_COMMAND",
+            "FULILIAN_LOCAL_STT_COMMAND",
             "whisper {input_path} --model {model} --output_dir {output_dir} --language {language}",
         )
-        monkeypatch.setenv("HERMES_LOCAL_STT_LANGUAGE", "en")
+        monkeypatch.setenv("FULILIAN_LOCAL_STT_LANGUAGE", "en")
 
         def fake_tempdir(prefix=None):
             class _TempDir:
@@ -677,7 +677,7 @@ class TestTranscribeAudioMistralDispatch:
 def mock_xai_http_module():
     """Inject a fake tools.xai_http module for testing."""
     fake_module = MagicMock()
-    fake_module.hermes_xai_user_agent = MagicMock(return_value="hermes-xai/test")
+    fake_module.fulilian_xai_user_agent = MagicMock(return_value="fulilian-xai/test")
     with patch.dict("sys.modules", {"tools.xai_http": fake_module}):
         yield fake_module
 
@@ -763,7 +763,7 @@ class TestTranscribeXAI:
         monkeypatch.setenv("XAI_API_KEY", "xai-test-key")
         # Explicitly set language via env to exercise the override chain
         # (config > env > DEFAULT_LOCAL_STT_LANGUAGE)
-        monkeypatch.setenv("HERMES_LOCAL_STT_LANGUAGE", "fr")
+        monkeypatch.setenv("FULILIAN_LOCAL_STT_LANGUAGE", "fr")
 
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -949,7 +949,7 @@ class TestShellSafety:
     def test_auto_detected_template_is_shlex_safe(self, monkeypatch):
         """Auto-detected whisper command should be safely splittable."""
         import shlex
-        monkeypatch.delenv("HERMES_LOCAL_STT_COMMAND", raising=False)
+        monkeypatch.delenv("FULILIAN_LOCAL_STT_COMMAND", raising=False)
         monkeypatch.setattr(
             "tools.transcription_tools._find_whisper_binary",
             lambda: "/usr/bin/whisper",
@@ -1255,7 +1255,7 @@ class TestExplicitOpenaiSelectionError:
 
     When ``_resolve_openai_audio_client_config()`` raises its
     selection-specific ValueError (managed openai-audio gateway unavailable,
-    with the ``hermes tools`` remediation for managed-Nous users), the old
+    with the ``fulilian tools`` remediation for managed-Nous users), the old
     boolean probe flattened it into False — the log said "no API key" and
     the transcription result returned the all-provider install hint,
     pointing operators at unrelated setup instead of their managed route.
@@ -1299,7 +1299,7 @@ class TestExplicitOpenaiSelectionError:
 
     def test_dispatch_returns_selection_specific_error(self, monkeypatch):
         """The final transcription result carries the managed-route error and
-        its hermes tools remediation instead of the all-provider install
+        its fulilian tools remediation instead of the all-provider install
         hint."""
         self._no_openai_credentials(monkeypatch)
         monkeypatch.setattr(
@@ -1312,7 +1312,7 @@ class TestExplicitOpenaiSelectionError:
              patch("tools.transcription_tools._HAS_FASTER_WHISPER", False), \
              patch(
                  "tools.transcription_tools.nous_tool_gateway_unavailable_message",
-                 lambda what: f"managed route down for {what}; run `hermes tools`",
+                 lambda what: f"managed route down for {what}; run `fulilian tools`",
              ):
             from tools.transcription_tools import _dispatch_stt_provider
 
@@ -1322,7 +1322,7 @@ class TestExplicitOpenaiSelectionError:
 
         assert result["success"] is False
         assert "managed route down" in result["error"]
-        assert "hermes tools" in result["error"]
+        assert "fulilian tools" in result["error"]
         assert "No STT provider available" not in result["error"]
 
     def test_auto_detect_none_keeps_generic_hint(self, monkeypatch):

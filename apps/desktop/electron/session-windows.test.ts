@@ -221,7 +221,7 @@ test('chat renderer navigation stays passive while explicit window actions may f
   const prefs = chatWindowWebPreferences('/tmp/preload.cjs')
 
   // In-page/SPA navigation can happen while a transcript keeps streaming. It
-  // must not use Electron's default navigation focus path to activate Hermes.
+  // must not use Electron's default navigation focus path to activate Fulilian.
   assert.equal(prefs.focusOnNavigation, false)
 
   // Re-opening a session is an explicit user action and must still raise the

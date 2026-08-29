@@ -2,14 +2,14 @@
  * backend-probes.ts
  *
  * Cheap "does this candidate backend actually work" checks used by
- * resolveHermesBackend (main.ts). The resolver walks a ladder of
- * candidates -- bootstrap marker, `hermes` on PATH, system Python with
- * hermes_cli installed -- and historically returned the first candidate
+ * resolveFulilianBackend (main.ts). The resolver walks a ladder of
+ * candidates -- bootstrap marker, `fulilian` on PATH, system Python with
+ * fulilian_cli installed -- and historically returned the first candidate
  * whose binary existed on disk. That assumption breaks when a user has
  * a pre-installed Python 3.11-3.13 (so findSystemPython() returns a
- * path) but no hermes_cli in its site-packages: the resolver hands back
+ * path) but no fulilian_cli in its site-packages: the resolver hands back
  * a backend the spawn step can't actually run, and the user gets a
- * dead-on-arrival "ModuleNotFoundError: No module named 'hermes_cli'"
+ * dead-on-arrival "ModuleNotFoundError: No module named 'fulilian_cli'"
  * instead of the first-launch installer.
  *
  * These probes give the resolver a way to verify a candidate before
@@ -21,10 +21,10 @@
  *
  * Both probes are deliberately fast and forgiving:
  *   - default 15s timeout (5s was too short on cold Windows disks / AV;
- *     issue #61764 death-loop) with HERMES_PROBE_TIMEOUT_MS override
+ *     issue #61764 death-loop) with FULILIAN_PROBE_TIMEOUT_MS override
  *   - one automatic retry after a timeout before declaring the runtime dead
  *   - stdio ignored (we only care about exit code; stdout/stderr are
- *     not surfaced to the user, just to recentHermesLog for forensics
+ *     not surfaced to the user, just to recentFulilianLog for forensics
  *     via the caller's catch block if it chooses)
  *   - any throw -> false (never propagate -- resolver wants a boolean)
  *
@@ -40,10 +40,10 @@ const DEFAULT_PROBE_TIMEOUT_MS = 15_000
 
 /**
  * Resolve the backend probe timeout (ms).
- * Honours HERMES_PROBE_TIMEOUT_MS when it parses as a positive integer.
+ * Honours FULILIAN_PROBE_TIMEOUT_MS when it parses as a positive integer.
  */
 function resolveProbeTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
-  const raw = env.HERMES_PROBE_TIMEOUT_MS
+  const raw = env.FULILIAN_PROBE_TIMEOUT_MS
 
   if (raw == null || raw === '') {
     return DEFAULT_PROBE_TIMEOUT_MS
@@ -107,33 +107,33 @@ function execProbeSync(
       throw err
     }
 
-    // One cold-cache / AV miss should not force hermes-setup --update (#61764).
+    // One cold-cache / AV miss should not force fulilian-setup --update (#61764).
     execFileSync(command, args, options)
   }
 }
 
 /**
- * Return the Python snippet used to verify Hermes can import far enough to
+ * Return the Python snippet used to verify Fulilian can import far enough to
  * launch the CLI. Kept exported for tests so dependency regressions are
  * caught without needing a real broken venv fixture.
  *
  * @returns {string}
  */
-function hermesRuntimeImportProbe() {
-  return 'import yaml; import dotenv; import hermes_cli.config'
+function fulilianRuntimeImportProbe() {
+  return 'import yaml; import dotenv; import fulilian_cli.config'
 }
 
 /**
- * Return true iff the Hermes runtime import probe exits 0.
+ * Return true iff the Fulilian runtime import probe exits 0.
  *
- * Used to gate the "fallback to system Python with hermes_cli installed"
- * rung of resolveHermesBackend. Without this, a system Python 3.11-3.13
+ * Used to gate the "fallback to system Python with fulilian_cli installed"
+ * rung of resolveFulilianBackend. Without this, a system Python 3.11-3.13
  * registered in PEP 514 makes findSystemPython() succeed regardless of
- * whether hermes_cli has actually been pip-installed into its
+ * whether fulilian_cli has actually been pip-installed into its
  * site-packages -- and the resolver returns a backend that immediately
  * dies on spawn.
  *
- * The probe intentionally imports hermes_cli.config, not just the top-level
+ * The probe intentionally imports fulilian_cli.config, not just the top-level
  * package: a broken/empty Windows launcher venv can still see the source tree
  * through PYTHONPATH but lack PyYAML, then die on the first real CLI import.
  *
@@ -141,13 +141,13 @@ function hermesRuntimeImportProbe() {
  * @param {object} [opts.env] - Additional environment for the probe.
  * @returns {boolean}
  */
-function canImportHermesCli(pythonPath: string, opts: { env?: Record<string, string> } = {}) {
+function canImportFulilianCli(pythonPath: string, opts: { env?: Record<string, string> } = {}) {
   if (!pythonPath) {
     return false
   }
 
   try {
-    execProbeSync(pythonPath, ['-c', hermesRuntimeImportProbe()], {
+    execProbeSync(pythonPath, ['-c', fulilianRuntimeImportProbe()], {
       env: { ...process.env, ...(opts.env || {}) },
       stdio: 'ignore',
       timeout: PROBE_TIMEOUT_MS,
@@ -161,42 +161,42 @@ function canImportHermesCli(pythonPath: string, opts: { env?: Record<string, str
 }
 
 /**
- * Return true iff `<hermesCommand> --version` exits 0.
+ * Return true iff `<fulilianCommand> --version` exits 0.
  *
- * Used to gate the "existing `hermes` on PATH" rung. Without this, a
- * stale hermes.cmd shim left behind by an uninstalled pip install (or
- * a half-built venv whose `hermes` entry-point points at a deleted
+ * Used to gate the "existing `fulilian` on PATH" rung. Without this, a
+ * stale fulilian.cmd shim left behind by an uninstalled pip install (or
+ * a half-built venv whose `fulilian` entry-point points at a deleted
  * Python) survives findOnPath() and gets selected as the backend.
  *
  * We intentionally avoid invoking the command with the dashboard args
  * here -- `--version` is the cheapest "is this binary alive" smoke
- * test that every hermes_cli entry-point has supported since 0.1.
+ * test that every fulilian_cli entry-point has supported since 0.1.
  *
- * @param {string} hermesCommand - Resolved absolute path to a hermes
+ * @param {string} fulilianCommand - Resolved absolute path to a fulilian
  *   executable (or an interpreter+script wrapper).
  * @param {boolean} [opts.shell] - Whether to run through a shell. For
  *   .cmd/.bat shims on Windows execFileSync needs shell:true to find
  *   the cmd interpreter; mirrors the same flag isCommandScript() drives
- *   in resolveHermesBackend.
+ *   in resolveFulilianBackend.
  * @returns {boolean}
  */
 /**
  * An explicit desktop backend command is a deployment contract, not a PATH
  * discovery candidate. In particular, the Nix desktop wrapper points this at
- * its immutable, matching Hermes package; it must never fall through to the
+ * its immutable, matching Fulilian package; it must never fall through to the
  * mutable install-script bootstrap path if a best-effort probe is slow.
  */
-function shouldTrustHermesOverride(hermesOverride?: string) {
-  return typeof hermesOverride === 'string' && hermesOverride.trim().length > 0
+function shouldTrustFulilianOverride(fulilianOverride?: string) {
+  return typeof fulilianOverride === 'string' && fulilianOverride.trim().length > 0
 }
 
-function verifyHermesCli(hermesCommand: string, opts?: { shell?: boolean }) {
-  if (!hermesCommand) {
+function verifyFulilianCli(fulilianCommand: string, opts?: { shell?: boolean }) {
+  if (!fulilianCommand) {
     return false
   }
 
   try {
-    execProbeSync(hermesCommand, ['--version'], {
+    execProbeSync(fulilianCommand, ['--version'], {
       stdio: 'ignore',
       timeout: PROBE_TIMEOUT_MS,
       shell: Boolean(opts?.shell),
@@ -210,12 +210,12 @@ function verifyHermesCli(hermesCommand: string, opts?: { shell?: boolean }) {
 }
 
 export {
-  canImportHermesCli,
+  canImportFulilianCli,
   DEFAULT_PROBE_TIMEOUT_MS,
   execProbeSync,
-  hermesRuntimeImportProbe,
+  fulilianRuntimeImportProbe,
   PROBE_TIMEOUT_MS,
   resolveProbeTimeoutMs,
-  shouldTrustHermesOverride,
-  verifyHermesCli
+  shouldTrustFulilianOverride,
+  verifyFulilianCli
 }

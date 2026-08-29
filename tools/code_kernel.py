@@ -72,7 +72,7 @@ _IS_WINDOWS = sys.platform == "win32"
 _RUNNER_CAPTURE_BYTES = 1_000_000
 
 KERNEL_RUNNER_SOURCE = '''\
-"""Auto-generated Hermes session-kernel runner. One exec cell per request."""
+"""Auto-generated Fulilian session-kernel runner. One exec cell per request."""
 import contextlib
 import io
 import json
@@ -80,7 +80,7 @@ import os
 import sys
 import traceback
 
-_SENTINEL = os.environ["HERMES_KERNEL_SENTINEL"]
+_SENTINEL = os.environ["FULILIAN_KERNEL_SENTINEL"]
 _CAPTURE_LIMIT = {capture_limit}
 
 # The persistent cell namespace. `__name__` is `__main__` so scripts behave
@@ -261,7 +261,7 @@ _KERNELS_LOCK = threading.Lock()
 # accumulate one live child per finished conversation — the ownership,
 # disposal, idle-reap, and cap shape here deliberately carries forward the
 # lifecycle invariants of the earlier session-persistent implementation in
-# hermes-agent#88637 by @z80dev (stable owner id, owner-teardown disposal,
+# fulilian-agent#88637 by @z80dev (stable owner id, owner-teardown disposal,
 # idle reaping, max-live bound).
 DEFAULT_MAX_SESSION_KERNELS = 4
 DEFAULT_KERNEL_IDLE_TIMEOUT = 1800
@@ -314,7 +314,7 @@ def _resolve_owner(task_id: str) -> str:
         if is_delegated_child_context():
             from gateway.session_context import get_session_env
 
-            child_id = get_session_env("HERMES_SESSION_ID", "") or (task_id or "")
+            child_id = get_session_env("FULILIAN_SESSION_ID", "") or (task_id or "")
             owner = f"{owner}::child::{child_id}"
     except Exception:
         pass
@@ -341,7 +341,7 @@ def shutdown_kernels_for_owner(owner: str) -> None:
 
     Wired into ``tools.approval.clear_session`` so kernels die at the same
     session boundary that clears the owner's approval and yolo state
-    (the /new + session-close disposal shape from hermes-agent#88637).
+    (the /new + session-close disposal shape from fulilian-agent#88637).
     """
     if not owner:
         return
@@ -410,7 +410,7 @@ def _rpc_forever(kernel: SessionKernel, max_tool_calls: int,
     ``_rpc_server_loop`` serves one connection and returns on disconnect or
     on its 300s idle timeout; a kernel legitimately sits idle longer than
     that between cells, so re-accept until the kernel is torn down. The
-    client stub reconnects on its side (HERMES_RPC_PERSISTENT).
+    client stub reconnects on its side (FULILIAN_RPC_PERSISTENT).
 
     The serving thread carries NO frozen authority of its own: every
     dispatch is routed through the CURRENT cell's ``CellAuthority``, so a
@@ -526,14 +526,14 @@ def _spawn(kernel: SessionKernel, *, task_id: str, child_python: str,
            child_cwd: str, sandbox_tools: frozenset, max_tool_calls: int) -> None:
     from tools.code_execution_tool import (
         _build_child_env,
-        generate_hermes_tools_module,
+        generate_fulilian_tools_module,
     )
 
-    kernel.tmpdir = tempfile.mkdtemp(prefix="hermes_kernel_")
+    kernel.tmpdir = tempfile.mkdtemp(prefix="fulilian_kernel_")
     _sock_tmpdir = "/tmp" if sys.platform == "darwin" else tempfile.gettempdir()
 
     kernel.rpc_token = secrets.token_urlsafe(32)
-    kernel.sentinel = "@@HERMES-KERNEL-" + secrets.token_urlsafe(16) + "@@"
+    kernel.sentinel = "@@FULILIAN-KERNEL-" + secrets.token_urlsafe(16) + "@@"
 
     if _IS_WINDOWS:
         kernel.sock_path = None
@@ -542,7 +542,7 @@ def _spawn(kernel: SessionKernel, *, task_id: str, child_python: str,
         host, port = server_sock.getsockname()[:2]
         rpc_endpoint = f"tcp://{host}:{port}"
     else:
-        kernel.sock_path = os.path.join(_sock_tmpdir, f"hermes_rpc_{uuid.uuid4().hex}.sock")
+        kernel.sock_path = os.path.join(_sock_tmpdir, f"fulilian_rpc_{uuid.uuid4().hex}.sock")
         server_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         server_sock.bind(kernel.sock_path)
         os.chmod(kernel.sock_path, 0o600)
@@ -550,10 +550,10 @@ def _spawn(kernel: SessionKernel, *, task_id: str, child_python: str,
     server_sock.listen(1)
     kernel.server_sock = server_sock
 
-    tools_src = generate_hermes_tools_module(list(sandbox_tools))
-    with open(os.path.join(kernel.tmpdir, "hermes_tools.py"), "w", encoding="utf-8") as f:
+    tools_src = generate_fulilian_tools_module(list(sandbox_tools))
+    with open(os.path.join(kernel.tmpdir, "fulilian_tools.py"), "w", encoding="utf-8") as f:
         f.write(tools_src)
-    runner_path = os.path.join(kernel.tmpdir, "hermes_kernel_runner.py")
+    runner_path = os.path.join(kernel.tmpdir, "fulilian_kernel_runner.py")
     with open(runner_path, "w", encoding="utf-8") as f:
         f.write(KERNEL_RUNNER_SOURCE)
 
@@ -563,10 +563,10 @@ def _spawn(kernel: SessionKernel, *, task_id: str, child_python: str,
         tmpdir=kernel.tmpdir,
         child_python=child_python,
     )
-    child_env["HERMES_KERNEL_SENTINEL"] = kernel.sentinel
+    child_env["FULILIAN_KERNEL_SENTINEL"] = kernel.sentinel
     # Tell the generated client to reconnect after the RPC server's idle
     # timeout — a kernel outlives the 300s window between cells.
-    child_env["HERMES_RPC_PERSISTENT"] = "1"
+    child_env["FULILIAN_RPC_PERSISTENT"] = "1"
 
     kernel.proc = subprocess.Popen(
         [child_python, runner_path],

@@ -6,7 +6,7 @@ dedupe, additive semantics, matcher rebuild), the
 plugin written at test time for the ``register()`` end-to-end path.
 
 All tests call ``redact_sensitive_text(..., force=True)`` so results
-don't depend on the HERMES_REDACT_SECRETS environment of the test run,
+don't depend on the FULILIAN_REDACT_SECRETS environment of the test run,
 and reset the plugin registry around each test so module-global state
 never leaks between tests.
 """

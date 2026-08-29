@@ -35,9 +35,9 @@ def _rows():
     return [
         {
             "profile": "default",
-            "handle": "hermes",
+            "handle": "fulilian",
             "connection_id": "cloud-1",
-            "connection_label": "Hermes Cloud",
+            "connection_label": "Fulilian Cloud",
             "title": "Moxie",
             "description": "Main cloud agent",
         },
@@ -58,7 +58,7 @@ def test_roster_roundtrip_and_validation(root):
         {"profile": "", "handle": "x", "connection_id": "c"},  # no profile
         {"profile": "bad name!", "connection_id": "c"},  # bad charset
         "not-a-dict",
-        {"profile": "default", "handle": "hermes", "connection_id": "cloud-1"},  # dupe
+        {"profile": "default", "handle": "fulilian", "connection_id": "cloud-1"},  # dupe
     ]
     count = bot_relay.write_remote_roster(root, rows)
     assert count == 2
@@ -79,12 +79,12 @@ def test_resolve_remote_target_forms(root):
     bot_relay.write_remote_roster(root, _rows())
     roster = bot_relay.read_remote_roster(root)
     assert bot_relay.resolve_remote_target("researcher", roster)["connection_id"] == "ssh-vps"
-    assert bot_relay.resolve_remote_target("@hermes", roster)["profile"] == "default"
+    assert bot_relay.resolve_remote_target("@fulilian", roster)["profile"] == "default"
     # profile name resolves too
     assert bot_relay.resolve_remote_target("default", roster)["connection_id"] == "cloud-1"
     # exact connection-qualified form
-    assert bot_relay.resolve_remote_target("hermes@cloud-1", roster)["profile"] == "default"
-    assert bot_relay.resolve_remote_target("hermes@nope", roster) is None
+    assert bot_relay.resolve_remote_target("fulilian@cloud-1", roster)["profile"] == "default"
+    assert bot_relay.resolve_remote_target("fulilian@nope", roster) is None
     assert bot_relay.resolve_remote_target("ghost", roster) is None
 
 
@@ -99,7 +99,7 @@ def test_resolve_ambiguous_handle_across_connections(root):
     assert match["connection_id"] == "ssh-vps"
     forms = bot_relay.remote_target_forms(roster)
     assert "researcher@ssh-vps" in forms and "researcher@cloud-1" in forms
-    assert "hermes" in forms  # unique handle stays bare
+    assert "fulilian" in forms  # unique handle stays bare
 
 
 # ── outbox / replies ─────────────────────────────────────────────────────────
@@ -207,7 +207,7 @@ import textwrap
 
 
 def _managed_home(tmp_path, *, legacy_soul=False):
-    home = tmp_path / ".hermes"
+    home = tmp_path / ".fulilian"
     home.mkdir(exist_ok=True)
     d = home / "profiles" / "researcher"
     d.mkdir(parents=True, exist_ok=True)
@@ -216,7 +216,7 @@ def _managed_home(tmp_path, *, legacy_soul=False):
             """\
             description: teammate for tests
             ui_meta:
-              hermes-bots:
+              fulilian-bots:
                 shape: cloud
             """
         ),
@@ -279,8 +279,8 @@ def test_tool_injects_despite_legacy_soul_protocol(tmp_path):
 def test_relay_route_queues_envelope_and_spawns_waiter(tmp_path, monkeypatch):
     home = _managed_home(tmp_path)
     bot_relay.write_remote_roster(home, [
-        {"profile": "default", "handle": "hermes", "connection_id": "cloud-1",
-         "connection_label": "Hermes Cloud", "title": "Moxie"},
+        {"profile": "default", "handle": "fulilian", "connection_id": "cloud-1",
+         "connection_label": "Fulilian Cloud", "title": "Moxie"},
     ])
 
     spawned = {}
@@ -292,15 +292,15 @@ def test_relay_route_queues_envelope_and_spawns_waiter(tmp_path, monkeypatch):
 
     monkeypatch.setattr("tools.bot_mode_dm._spawn_delivery", _fake_spawn)
     agent = _FakeAgent(home)
-    out = json.loads(message_agent_tool(target="hermes", message="ping", agent=agent))
+    out = json.loads(message_agent_tool(target="fulilian", message="ping", agent=agent))
     assert out.get("status") == "sent"
-    assert "Hermes Cloud" in spawned["label"]
+    assert "Fulilian Cloud" in spawned["label"]
     # envelope landed in the outbox with attribution prefixed
     pending = bot_relay.claim_pending_envelopes(home)
     assert len(pending) == 1
     assert pending[0]["target_connection"] == "cloud-1"
     assert pending[0]["target_profile"] == "default"
-    assert pending[0]["message"].startswith("Message from 🤖 hermes (@hermes): ping")
+    assert pending[0]["message"].startswith("Message from 🤖 fulilian (@fulilian): ping")
     # waiter watches this envelope's reply file
     assert pending[0]["id"] in spawned["command"]
 
@@ -335,12 +335,12 @@ def test_protocol_section_lists_remote_teammates(tmp_path):
 
     home = _managed_home(tmp_path)
     bot_relay.write_remote_roster(home, [
-        {"profile": "default", "handle": "hermes", "connection_id": "cloud-1",
-         "connection_label": "Hermes Cloud", "title": "Moxie"},
+        {"profile": "default", "handle": "fulilian", "connection_id": "cloud-1",
+         "connection_label": "Fulilian Cloud", "title": "Moxie"},
     ])
     section = bot_mode_probe.get_bot_mode_protocol_section(home, force_refresh=True)
     assert "OTHER connected machines" in section
-    assert "`@hermes` — on Hermes Cloud — Moxie" in section
+    assert "`@fulilian` — on Fulilian Cloud — Moxie" in section
 
 
 def test_capability_fingerprint_changes_with_relay_roster(tmp_path):
@@ -349,7 +349,7 @@ def test_capability_fingerprint_changes_with_relay_roster(tmp_path):
     home = _managed_home(tmp_path)
     before = bot_mode_probe.capability_fingerprint(home)
     bot_relay.write_remote_roster(home, [
-        {"profile": "default", "handle": "hermes", "connection_id": "cloud-1"},
+        {"profile": "default", "handle": "fulilian", "connection_id": "cloud-1"},
     ])
     after = bot_mode_probe.capability_fingerprint(home)
     assert before != after  # eternal Bot Chats refresh once on roster change
@@ -362,16 +362,16 @@ def test_cleanup_bot_relay_artifacts_sweeps_stale_plaintext(tmp_path, monkeypatc
     import os as _os
     import time as _time
 
-    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+    monkeypatch.setenv("FULILIAN_HOME", str(tmp_path))
     target = {"profile": "scout", "handle": "scout", "connection_id": "cloud-1",
               "connection_label": "", "title": "", "description": ""}
     stale_env = bot_relay.enqueue_envelope(
         tmp_path, target=target, message="old secret",
-        sender_profile="default", sender_handle="hermes",
+        sender_profile="default", sender_handle="fulilian",
     )
     fresh_env = bot_relay.enqueue_envelope(
         tmp_path, target=target, message="new secret",
-        sender_profile="default", sender_handle="hermes",
+        sender_profile="default", sender_handle="fulilian",
     )
     base = bot_relay.relay_root(tmp_path)
     stale_reply = bot_relay.write_reply(tmp_path, stale_env["id"], reply="done")
@@ -388,7 +388,7 @@ def test_cleanup_bot_relay_artifacts_sweeps_stale_plaintext(tmp_path, monkeypatc
 
 
 def test_cleanup_bot_relay_artifacts_missing_dir_is_zero(tmp_path, monkeypatch):
-    monkeypatch.setenv("HERMES_HOME", str(tmp_path / "nope"))
+    monkeypatch.setenv("FULILIAN_HOME", str(tmp_path / "nope"))
     assert bot_relay.cleanup_bot_relay_artifacts() == 0
 
 
@@ -413,7 +413,7 @@ def test_enqueue_fails_fast_when_row_explicitly_offline(root):
     with pytest.raises(bot_relay.EnvelopeRefusedError) as ei:
         bot_relay.enqueue_envelope(
             root, target=roster[0], message="hi",
-            sender_profile="default", sender_handle="hermes",
+            sender_profile="default", sender_handle="fulilian",
         )
     assert ei.value.reason == "runtime_offline"
     assert "offline" in str(ei.value)
@@ -427,7 +427,7 @@ def test_enqueue_fails_fast_when_target_absent_from_fresh_roster(root):
     with pytest.raises(bot_relay.EnvelopeRefusedError) as ei:
         bot_relay.enqueue_envelope(
             root, target=_target(), message="hi",
-            sender_profile="default", sender_handle="hermes",
+            sender_profile="default", sender_handle="fulilian",
         )
     assert ei.value.reason == "runtime_offline"
 
@@ -436,7 +436,7 @@ def test_enqueue_fails_open_when_liveness_unknown(root):
     # 1. no roster ever synced → unknown → enqueue
     env = bot_relay.enqueue_envelope(
         root, target=_target(), message="hi",
-        sender_profile="default", sender_handle="hermes",
+        sender_profile="default", sender_handle="fulilian",
     )
     assert (bot_relay.relay_root(root) / bot_relay.OUTBOX_DIR / f"{env['id']}.json").exists()
     # 2. stale roster missing the target → unknown → enqueue
@@ -446,7 +446,7 @@ def test_enqueue_fails_open_when_liveness_unknown(root):
     _os2.utime(roster_path, (old, old))
     env2 = bot_relay.enqueue_envelope(
         root, target=_target(), message="hi again",
-        sender_profile="default", sender_handle="hermes",
+        sender_profile="default", sender_handle="fulilian",
     )
     assert (bot_relay.relay_root(root) / bot_relay.OUTBOX_DIR / f"{env2['id']}.json").exists()
     # 3. fresh roster listing the target without an online flag → enqueue
@@ -454,7 +454,7 @@ def test_enqueue_fails_open_when_liveness_unknown(root):
     target = bot_relay.read_remote_roster(root)[1]  # researcher@ssh-vps
     env3 = bot_relay.enqueue_envelope(
         root, target=target, message="hello",
-        sender_profile="default", sender_handle="hermes",
+        sender_profile="default", sender_handle="fulilian",
     )
     assert (bot_relay.relay_root(root) / bot_relay.OUTBOX_DIR / f"{env3['id']}.json").exists()
 
@@ -462,7 +462,7 @@ def test_enqueue_fails_open_when_liveness_unknown(root):
 def test_drain_expires_old_envelope_with_queued_expired_reply(root):
     env = bot_relay.enqueue_envelope(
         root, target=_target(), message="too late",
-        sender_profile="default", sender_handle="hermes",
+        sender_profile="default", sender_handle="fulilian",
     )
     base = bot_relay.relay_root(root)
     out_path = base / bot_relay.OUTBOX_DIR / f"{env['id']}.json"
@@ -485,7 +485,7 @@ def test_drain_expires_old_envelope_with_queued_expired_reply(root):
 def test_drain_delivers_fresh_envelope_under_ttl(root):
     env = bot_relay.enqueue_envelope(
         root, target=_target(), message="on time",
-        sender_profile="default", sender_handle="hermes",
+        sender_profile="default", sender_handle="fulilian",
     )
     claimed = bot_relay.claim_pending_envelopes(root)
     assert [e["id"] for e in claimed] == [env["id"]]
@@ -498,7 +498,7 @@ def test_drain_ttl_zero_disables_expiry(root, monkeypatch):
     monkeypatch.setattr(bot_relay, "_envelope_ttl_seconds", lambda: 0)
     env = bot_relay.enqueue_envelope(
         root, target=_target(), message="never expires",
-        sender_profile="default", sender_handle="hermes",
+        sender_profile="default", sender_handle="fulilian",
     )
     base = bot_relay.relay_root(root)
     out_path = base / bot_relay.OUTBOX_DIR / f"{env['id']}.json"
@@ -514,7 +514,7 @@ def test_ttl_config_read_is_lazy_and_defensive(monkeypatch):
     real_import = builtins.__import__
 
     def _boom(name, *a, **k):
-        if name.startswith("hermes_cli"):
+        if name.startswith("fulilian_cli"):
             raise ImportError("config unavailable")
         return real_import(name, *a, **k)
 
@@ -525,15 +525,15 @@ def test_ttl_config_read_is_lazy_and_defensive(monkeypatch):
 def test_message_agent_surfaces_runtime_offline_refusal(tmp_path, monkeypatch):
     home = _managed_home(tmp_path)
     bot_relay.write_remote_roster(home, [
-        {"profile": "default", "handle": "hermes", "connection_id": "cloud-1",
-         "connection_label": "Hermes Cloud", "online": False},
+        {"profile": "default", "handle": "fulilian", "connection_id": "cloud-1",
+         "connection_label": "Fulilian Cloud", "online": False},
     ])
     monkeypatch.setattr(
         "tools.bot_mode_dm._spawn_delivery",
         lambda *a, **k: json.dumps({"status": "sent"}),
     )
     agent = _FakeAgent(home)
-    out = json.loads(message_agent_tool(target="hermes", message="ping", agent=agent))
+    out = json.loads(message_agent_tool(target="fulilian", message="ping", agent=agent))
     assert out.get("reason") == "runtime_offline"
     assert "offline" in out.get("error", "")
     # fail-fast means no envelope was queued

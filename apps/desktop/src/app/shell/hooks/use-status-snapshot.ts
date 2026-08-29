@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 
-import { getStatus } from '@/hermes'
+import { getStatus } from '@/fulilian'
 import { evaluateRuntimeReadiness, type RuntimeReadinessResult } from '@/lib/runtime-readiness'
-import type { StatusResponse } from '@/types/hermes'
+import type { StatusResponse } from '@/types/fulilian'
 
 // Statusbar health is ambient chrome, not live data — nothing the user acts on
 // within seconds. 60s + an actively-viewed check keeps traffic low; focus and

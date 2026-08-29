@@ -55,7 +55,7 @@ from tools.code_execution_tool import (
     _usable_python_cache,
     _resolve_child_cwd,
     _resolve_child_python,
-    _uses_hermes_python_environment,
+    _uses_fulilian_python_environment,
     build_execute_code_schema,
     execute_code,
 )
@@ -248,13 +248,13 @@ class TestExecuteCodeModeIntegration(unittest.TestCase):
     def test_strict_mode_runs_in_tmpdir(self):
         """Strict mode: script's os.getcwd() is a staging tmpdir, never the
         session cwd. Behavior contract, not a prefix snapshot: the per-call
-        path stages in hermes_sandbox_*, the session kernel in
-        hermes_kernel_* — either satisfies strict mode's isolation promise."""
+        path stages in fulilian_sandbox_*, the session kernel in
+        fulilian_kernel_* — either satisfies strict mode's isolation promise."""
         result = self._run("import os; print(os.getcwd())", mode="strict")
         self.assertEqual(result["status"], "success")
         cwd = result["output"].strip()
         self.assertTrue(
-            "hermes_sandbox_" in cwd or "hermes_kernel_" in cwd,
+            "fulilian_sandbox_" in cwd or "fulilian_kernel_" in cwd,
             f"strict-mode cwd is not a staging tmpdir: {cwd!r}",
         )
         self.assertNotEqual(os.path.realpath(cwd), os.path.realpath(os.getcwd()))
@@ -263,7 +263,7 @@ class TestExecuteCodeModeIntegration(unittest.TestCase):
     def test_project_mode_interpreter_is_venv_python(self):
         """Project mode: sys.executable inside the child is the venv's python
         when VIRTUAL_ENV is set to a real venv."""
-        # The hermes-agent venv is always active during tests, so this also
+        # The fulilian-agent venv is always active during tests, so this also
         # happens to equal sys.executable of the parent. What we're asserting
         # is: resolver picked a venv-bin/python path, not that it differs
         # from sys.executable.
@@ -278,16 +278,16 @@ class TestExecuteCodeModeIntegration(unittest.TestCase):
                 f"project-mode python should be under VIRTUAL_ENV={ve} or sys.executable={sys.executable}, got {output}",
             )
 
-    def test_project_mode_can_still_import_hermes_tools(self):
-        """Regression: hermes_tools still importable from non-tmpdir CWD.
+    def test_project_mode_can_still_import_fulilian_tools(self):
+        """Regression: fulilian_tools still importable from non-tmpdir CWD.
 
         This is the PYTHONPATH fix — without it, switching to session CWD
-        breaks `from hermes_tools import terminal`.
+        breaks `from fulilian_tools import terminal`.
         """
         import tempfile
         with tempfile.TemporaryDirectory() as td:
             code = (
-                "from hermes_tools import terminal\n"
+                "from fulilian_tools import terminal\n"
                 "r = terminal('echo x')\n"
                 "print(r.get('output', 'MISSING'))\n"
             )
@@ -295,10 +295,10 @@ class TestExecuteCodeModeIntegration(unittest.TestCase):
             self.assertEqual(result["status"], "success")
             self.assertIn("mock", result["output"])
 
-    def test_strict_mode_can_still_import_hermes_tools(self):
+    def test_strict_mode_can_still_import_fulilian_tools(self):
         """Regression: strict mode's tmpdir CWD still works for imports."""
         code = (
-            "from hermes_tools import terminal\n"
+            "from fulilian_tools import terminal\n"
             "r = terminal('echo x')\n"
             "print(r.get('output', 'MISSING'))\n"
         )
@@ -401,7 +401,7 @@ class TestSecurityInvariantsAcrossModes(unittest.TestCase):
         # execute_code is NOT in SANDBOX_ALLOWED_TOOLS (no recursion)
         self.assertNotIn("execute_code", SANDBOX_ALLOWED_TOOLS)
         code = (
-            "import hermes_tools as ht\n"
+            "import fulilian_tools as ht\n"
             "print('execute_code_available:', hasattr(ht, 'execute_code'))\n"
             "print('delegate_task_available:', hasattr(ht, 'delegate_task'))\n"
         )
@@ -413,7 +413,7 @@ class TestSecurityInvariantsAcrossModes(unittest.TestCase):
     def test_tool_whitelist_enforced_in_project_mode(self):
         """CRITICAL: project mode does NOT widen the tool whitelist."""
         code = (
-            "import hermes_tools as ht\n"
+            "import fulilian_tools as ht\n"
             "print('execute_code_available:', hasattr(ht, 'execute_code'))\n"
             "print('delegate_task_available:', hasattr(ht, 'delegate_task'))\n"
         )
@@ -424,7 +424,7 @@ class TestSecurityInvariantsAcrossModes(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# _python_environment_prefix / _uses_hermes_python_environment
+# _python_environment_prefix / _uses_fulilian_python_environment
 # ---------------------------------------------------------------------------
 
 class TestPythonEnvironmentPrefix(unittest.TestCase):
@@ -480,7 +480,7 @@ class TestPythonEnvironmentPrefix(unittest.TestCase):
     def test_failure_is_not_cached(self):
         """A transient probe failure must not stick — the next call retries.
 
-        A sticky cached failure would silently drop the hermes root from
+        A sticky cached failure would silently drop the fulilian root from
         every subsequent execute_code call in the process.
         """
         with patch("subprocess.run",
@@ -496,8 +496,8 @@ class TestPythonEnvironmentPrefix(unittest.TestCase):
         self.assertEqual(result, os.path.realpath("/recovered/prefix"))
 
 
-class TestUsesHermesPythonEnvironment(unittest.TestCase):
-    """Unit tests for _uses_hermes_python_environment."""
+class TestUsesFulilianPythonEnvironment(unittest.TestCase):
+    """Unit tests for _uses_fulilian_python_environment."""
 
     def setUp(self):
         _python_prefix_cache.clear()
@@ -507,46 +507,46 @@ class TestUsesHermesPythonEnvironment(unittest.TestCase):
 
     def test_true_for_current_interpreter(self):
         """sys.executable always belongs to the current environment."""
-        self.assertTrue(_uses_hermes_python_environment(sys.executable))
+        self.assertTrue(_uses_fulilian_python_environment(sys.executable))
 
     def test_true_for_current_interpreter_without_probe(self):
         """sys.executable short-circuits — no subprocess probe on the default path.
 
         Guards the strict-mode invariant: a flaky probe (timeout under load)
-        must never drop the hermes root for the interpreter Hermes itself runs.
+        must never drop the fulilian root for the interpreter Fulilian itself runs.
         """
         with patch("subprocess.run",
                    side_effect=subprocess.TimeoutExpired(cmd=[], timeout=5)) as mock_run:
-            self.assertTrue(_uses_hermes_python_environment(sys.executable))
+            self.assertTrue(_uses_fulilian_python_environment(sys.executable))
         mock_run.assert_not_called()
 
     def test_false_for_different_prefix(self):
         """An interpreter reporting a different prefix is external."""
         with patch("tools.code_execution_tool._python_environment_prefix",
                    return_value="/some/other/venv"):
-            self.assertFalse(_uses_hermes_python_environment("/other/python"))
+            self.assertFalse(_uses_fulilian_python_environment("/other/python"))
 
     def test_false_when_prefix_is_empty(self):
         """If prefix cannot be determined (error path), treat as external."""
         with patch("tools.code_execution_tool._python_environment_prefix",
                    return_value=""):
-            self.assertFalse(_uses_hermes_python_environment("/bad/python"))
+            self.assertFalse(_uses_fulilian_python_environment("/bad/python"))
 
     def test_true_when_prefix_matches_sys_prefix(self):
-        hermes_prefix = os.path.realpath(sys.prefix)
+        fulilian_prefix = os.path.realpath(sys.prefix)
         with patch("tools.code_execution_tool._python_environment_prefix",
-                   return_value=hermes_prefix):
-            self.assertTrue(_uses_hermes_python_environment("/same/env/python"))
+                   return_value=fulilian_prefix):
+            self.assertTrue(_uses_fulilian_python_environment("/same/env/python"))
 
 
 # ---------------------------------------------------------------------------
-# PYTHONPATH composition — hermes root included only for same-env interpreters
+# PYTHONPATH composition — fulilian root included only for same-env interpreters
 # ---------------------------------------------------------------------------
 
 class TestPythonPathComposition(unittest.TestCase):
-    """Verify hermes root inclusion in PYTHONPATH depends on env match.
+    """Verify fulilian root inclusion in PYTHONPATH depends on env match.
 
-    Patches ``_uses_hermes_python_environment`` directly so these tests are
+    Patches ``_uses_fulilian_python_environment`` directly so these tests are
     independent of subprocess availability — the unit tests above already
     cover the detection logic end-to-end.
     """
@@ -562,7 +562,7 @@ class TestPythonPathComposition(unittest.TestCase):
             env = kwargs.get("env") or {}
             captured["PYTHONPATH"] = env.get("PYTHONPATH", "")
             # cmd is [python, <staging_dir>/script.py] (per-call) or
-            # [python, <staging_dir>/hermes_kernel_runner.py] (session
+            # [python, <staging_dir>/fulilian_kernel_runner.py] (session
             # kernel) — staging dir derivation is identical.
             captured["staging_dir"] = os.path.dirname(cmd[1])
             # Abort the spawn after capture: returning a MagicMock proc
@@ -575,7 +575,7 @@ class TestPythonPathComposition(unittest.TestCase):
 
         with patch("tools.code_execution_tool._load_config", return_value={"mode": "strict"}), \
              patch("model_tools.handle_function_call", side_effect=_mock_handle_function_call), \
-             patch("tools.code_execution_tool._uses_hermes_python_environment",
+             patch("tools.code_execution_tool._uses_fulilian_python_environment",
                    return_value=same_env), \
              patch("subprocess.Popen", side_effect=_fake_popen):
             try:
@@ -592,24 +592,24 @@ class TestPythonPathComposition(unittest.TestCase):
                       "execute_code never spawned the child process")
         return captured["PYTHONPATH"], captured["staging_dir"]
 
-    def _hermes_root(self) -> str:
+    def _fulilian_root(self) -> str:
         import tools.code_execution_tool as _cet
         tools_dir = os.path.dirname(os.path.abspath(_cet.__file__))
         return os.path.dirname(tools_dir)
 
-    def test_hermes_root_included_when_same_env(self):
-        """When interpreter is in the Hermes env, hermes root is in PYTHONPATH."""
+    def test_fulilian_root_included_when_same_env(self):
+        """When interpreter is in the Fulilian env, fulilian root is in PYTHONPATH."""
         pythonpath, _ = self._capture_pythonpath(same_env=True)
         parts = pythonpath.split(os.pathsep)
-        self.assertIn(self._hermes_root(), parts,
-                      "hermes root must be in PYTHONPATH for same-env interpreters")
+        self.assertIn(self._fulilian_root(), parts,
+                      "fulilian root must be in PYTHONPATH for same-env interpreters")
 
-    def test_hermes_root_excluded_when_external_env(self):
-        """When interpreter is external, hermes root must NOT be in PYTHONPATH."""
+    def test_fulilian_root_excluded_when_external_env(self):
+        """When interpreter is external, fulilian root must NOT be in PYTHONPATH."""
         pythonpath, _ = self._capture_pythonpath(same_env=False)
         parts = pythonpath.split(os.pathsep)
-        self.assertNotIn(self._hermes_root(), parts,
-                         "hermes root must not leak into an external interpreter's PYTHONPATH")
+        self.assertNotIn(self._fulilian_root(), parts,
+                         "fulilian root must not leak into an external interpreter's PYTHONPATH")
 
     def test_staging_dir_always_first(self):
         """The staging tmpdir must always be the first PYTHONPATH entry."""

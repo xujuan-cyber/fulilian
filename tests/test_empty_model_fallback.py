@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 
 class TestGetDefaultModelForProvider:
-    """Unit tests for hermes_cli.models.get_default_model_for_provider."""
+    """Unit tests for fulilian_cli.models.get_default_model_for_provider."""
 
     def test_known_provider_returns_first_model(self):
         from fulilian_cli.models import get_default_model_for_provider
@@ -26,7 +26,7 @@ class TestGetDefaultModelForProvider:
         from fulilian_cli import models as models_mod
 
         with patch(
-            "hermes_cli.model_catalog.get_default_model_from_cache",
+            "fulilian_cli.model_catalog.get_default_model_from_cache",
             return_value="qwen/qwen3.8-max",
         ):
             assert (

@@ -14,7 +14,7 @@ description: "使用 torchtitan 提供 PyTorch 原生分布式 LLM 预训练，�
 
 | | |
 |---|---|
-| 来源 | 可选 — 通过 `hermes skills install official/mlops/torchtitan` 安装 |
+| 来源 | 可选 — 通过 `fulilian skills install official/mlops/torchtitan` 安装 |
 | 路径 | `optional-skills/mlops/torchtitan` |
 | 版本 | `1.0.0` |
 | 作者 | Orchestra Research |
@@ -26,7 +26,7 @@ description: "使用 torchtitan 提供 PyTorch 原生分布式 LLM 预训练，�
 ## 参考：完整 SKILL.md
 
 :::info
-以下是 Hermes 在触发该 skill 时加载的完整 skill 定义。这是 agent 在 skill 激活时所看到的指令内容。
+以下是 Fulilian 在触发该 skill 时加载的完整 skill 定义。这是 agent 在 skill 激活时所看到的指令内容。
 :::
 
 # TorchTitan - PyTorch 原生分布式 LLM 预训练

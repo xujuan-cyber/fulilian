@@ -48,7 +48,7 @@ Writes always target `settings`; they do not rewrite or delete legacy values.
 ### Namespace jail
 
 The API does not accept full config paths. A plugin can never use it to inspect
-or change arbitrary Hermes configuration.
+or change arbitrary Fulilian configuration.
 
 Accepted:
 
@@ -68,11 +68,11 @@ ctx.set_config(r"..\..\model.provider", "attacker-proxy")
 ```
 
 There is no global read allowlist: `ctx.profile_name` already exposes the only
-small host fact requested by the RFC. Settings writes use Hermes'
+small host fact requested by the RFC. Settings writes use Fulilian'
 profile-aware config loader/saver and atomic YAML replacement. The bridge
 validates the existing YAML before writing so malformed config is never
 silently replaced. Every operation resolves the active context-local
-`HERMES_HOME`, so one globally loaded plugin context follows multiplexed
+`FULILIAN_HOME`, so one globally loaded plugin context follows multiplexed
 profile turns without crossing profile data.
 
 ## Durable state API
@@ -89,7 +89,7 @@ def register(ctx):
 The facade stores one JSON object at:
 
 ```text
-<HERMES_HOME>/plugin-data/<plugin-data-namespace>/state.json
+<FULILIAN_HOME>/plugin-data/<plugin-data-namespace>/state.json
 ```
 
 Portable Agent Plugins use their existing `PLUGIN_DATA` namespace exactly.
@@ -101,7 +101,7 @@ location.
 ### State guarantees
 
 - **Profile isolation:** the data root resolves from the active context-local
-  Hermes home on every operation.
+  Fulilian home on every operation.
 - **Atomic replacement:** state writes use temp-file + `fsync` + `os.replace`.
 - **Concurrent updates:** a sibling lock file serializes read-modify-write across
   threads and processes (`fcntl` on POSIX, `msvcrt` on Windows).
@@ -126,7 +126,7 @@ semantics.
 
 ## Verification contract
 
-The implementation is covered with real temporary-Hermes-home tests for:
+The implementation is covered with real temporary-Fulilian-home tests for:
 
 - fixture-plugin discovery and config/state round trips;
 - canonical `settings` writes and legacy `config` read fallback;

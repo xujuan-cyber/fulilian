@@ -61,13 +61,13 @@ def _auth_error_message(exc: BaseException) -> str:
     return (
         "Honcho rejected our credentials and a forced token refresh did not "
         f"recover: {_redact_tokens(str(exc))}. "
-        "Re-authenticate with 'hermes honcho setup'."
+        "Re-authenticate with 'fulilian honcho setup'."
     )
 
 
 _REAUTH_REQUIRED_MESSAGE = (
     "Honcho OAuth grant is revoked and cannot be refreshed; "
-    "re-authenticate with 'hermes honcho setup'."
+    "re-authenticate with 'fulilian honcho setup'."
 )
 
 
@@ -119,7 +119,7 @@ class HonchoSessionManager:
     """
     Manages conversation sessions using Honcho.
 
-    Runs alongside hermes' existing SQLite state and file-based memory,
+    Runs alongside fulilian' existing SQLite state and file-based memory,
     adding persistent cross-session user modeling via Honcho's AI-native memory.
     """
 
@@ -623,7 +623,7 @@ class HonchoSessionManager:
         user_peer_id = self._resolve_user_peer_id(key)
 
         assistant_peer_id = self._sanitize_id(
-            self._config.ai_peer if self._config else "hermes-assistant"
+            self._config.ai_peer if self._config else "fulilian-assistant"
         )
 
         # All expensive I/O outside the lock — Honcho's persistence is source of truth
@@ -935,7 +935,7 @@ class HonchoSessionManager:
 
         try:
             result = self._authed_call("dialectic query", _chat_once)
-            # Only automatic injection uses the Hermes-side character cap.
+            # Only automatic injection uses the Fulilian-side character cap.
             if (
                 apply_injection_cap
                 and result
@@ -1036,7 +1036,7 @@ class HonchoSessionManager:
         except Exception as e:
             logger.warning("Failed to fetch user context from Honcho: %s", e)
 
-        # Also fetch AI peer's own representation so Hermes knows itself.
+        # Also fetch AI peer's own representation so Fulilian knows itself.
         try:
             ai_ctx = self._fetch_peer_context(session.assistant_peer_id, target=session.assistant_peer_id)
             result["ai_representation"] = ai_ctx["representation"]
@@ -1130,7 +1130,7 @@ class HonchoSessionManager:
 
         Args:
             session_key: The session key to associate files with.
-            memory_dir: Path to the memories directory (~/.hermes/memories/).
+            memory_dir: Path to the memories directory (~/.fulilian/memories/).
 
         Returns:
             True if at least one file was uploaded, False otherwise.

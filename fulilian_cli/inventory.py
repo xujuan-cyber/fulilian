@@ -153,7 +153,7 @@ def build_models_payload(
     - ``pricing``: enrich each row with formatted per-model pricing and,
       for Nous, ``free_tier``/``unavailable_models`` so the GUI picker can
       show $/Mtok columns and gate paid models on free accounts —
-      mirroring the ``hermes model`` CLI picker. Adds network calls
+      mirroring the ``fulilian model`` CLI picker. Adds network calls
       (pricing fetch + Nous tier check); only set for interactive pickers.
     - ``capabilities``: add a per-row ``capabilities`` map
       ``{model: {fast, reasoning}}`` so pickers can gate the model-options
@@ -354,7 +354,7 @@ def build_aux_picker_rows(
     MoA reference fan-out, and ``auxiliary_client`` unwraps a ``moa``
     provider to its aggregator slot anyway (see ``_resolve_auto``), so
     offering it here would be a choice silently rewritten behind the user's
-    back. Mirrors the same filter in ``hermes_cli/moa_cmd.py``.
+    back. Mirrors the same filter in ``fulilian_cli/moa_cmd.py``.
 
     Rows are the standard ``list_authenticated_providers`` shape. Pair with
     :func:`format_aux_picker_entries` to render them.
@@ -576,7 +576,7 @@ def _apply_custom_aliases(rows: list[dict]) -> None:
     the bare config key as ``slug``. GUI pickers compare the two to decide
     which row is active; exact equality never matches for custom providers
     (#87035). Exposing ``aliases`` — every current and legacy spelling from
-    :func:`hermes_cli.providers.custom_provider_aliases` — lets the frontend
+    :func:`fulilian_cli.providers.custom_provider_aliases` — lets the frontend
     do a membership check instead.
     """
     from fulilian_cli.providers import custom_provider_aliases
@@ -634,7 +634,7 @@ def _append_unconfigured_rows(
                 f"Configured provider missing usable credentials; paste {key_env} to reactivate. "
                 "Showing the saved model only."
                 if auth_type == "api_key" and key_env
-                else "Configured provider is not authenticated; run `hermes model` to reactivate. "
+                else "Configured provider is not authenticated; run `fulilian model` to reactivate. "
                 "Showing the saved model only."
             )
             extras.append(
@@ -671,7 +671,7 @@ def _anthropic_oauth_credentials_present() -> bool:
     """True when the user explicitly authenticated Anthropic via OAuth.
 
     Two deliberate flows leave no trace in active_provider /
-    model.provider / API-key env vars: Hermes' own Anthropic device flow
+    model.provider / API-key env vars: Fulilian' own Anthropic device flow
     (token in auth.json) and a Claude Code login (~/.claude/.credentials.json).
     ``list_authenticated_providers`` already accepts both readers as real
     credentials when discovering rows; this mirrors that acceptance so the
@@ -682,11 +682,11 @@ def _anthropic_oauth_credentials_present() -> bool:
     try:
         from agent.anthropic_adapter import (
             read_claude_code_credentials,
-            read_hermes_oauth_credentials,
+            read_fulilian_oauth_credentials,
         )
 
-        hermes_creds = read_hermes_oauth_credentials() or {}
-        if hermes_creds.get("accessToken"):
+        fulilian_creds = read_fulilian_oauth_credentials() or {}
+        if fulilian_creds.get("accessToken"):
             return True
         cc_creds = read_claude_code_credentials() or {}
         if cc_creds.get("accessToken"):
@@ -719,7 +719,7 @@ def _filter_explicit_provider_rows(rows: list[dict], ctx: ConfigContext) -> list
 
     ``list_authenticated_providers`` intentionally discovers ambient / auto-
     seeded credentials (for example GitHub CLI -> Copilot). Desktop chat model
-    pickers want the narrower subset the user explicitly configured for Hermes.
+    pickers want the narrower subset the user explicitly configured for Fulilian.
     """
     from fulilian_cli.auth import is_provider_explicitly_configured
 
@@ -751,7 +751,7 @@ def _filter_explicit_provider_rows(rows: list[dict], ctx: ConfigContext) -> list
             kept.append(row)
             continue
         if slug == "anthropic" and _anthropic_oauth_credentials_present():
-            # Anthropic OAuth logins (Hermes device flow / Claude Code) are
+            # Anthropic OAuth logins (Fulilian device flow / Claude Code) are
             # deliberate sign-ins that leave no trace in active_provider,
             # model.provider, or API-key env vars. The strict gate below
             # would drop the row even though list_authenticated_providers
@@ -764,10 +764,10 @@ def _filter_explicit_provider_rows(rows: list[dict], ctx: ConfigContext) -> list
 
 
 def _provider_is_keyless(slug: str) -> bool:
-    """True when the provider's Hermes overlay declares it keyless."""
+    """True when the provider's Fulilian overlay declares it keyless."""
     try:
-        from fulilian_cli.providers import HERMES_OVERLAYS
-        overlay = HERMES_OVERLAYS.get(slug)
+        from fulilian_cli.providers import FULILIAN_OVERLAYS
+        overlay = FULILIAN_OVERLAYS.get(slug)
         return bool(overlay is not None and getattr(overlay, "keyless", False))
     except Exception:
         return False
@@ -851,7 +851,7 @@ def _apply_picker_hints(rows: list[dict]) -> None:
         row["warning"] = (
             f"paste {key_env} to activate"
             if auth_type == "api_key" and key_env
-            else f"run `hermes model` to configure ({auth_type})"
+            else f"run `fulilian model` to configure ({auth_type})"
         )
 
 
@@ -990,7 +990,7 @@ def _moa_provider_row(current_provider: str = "") -> dict | None:
     """Build the virtual ``moa`` provider row for model pickers.
 
     Shared by the CLI inventory (:func:`build_models_payload`) and the gateway
-    picker path (:func:`hermes_cli.model_switch.list_picker_providers`) so the
+    picker path (:func:`fulilian_cli.model_switch.list_picker_providers`) so the
     row shape stays in one place. Returns ``None`` when no MoA presets exist.
     """
     try:

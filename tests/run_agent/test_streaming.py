@@ -551,7 +551,7 @@ class TestStreamingFallback:
         with pytest.raises(OAIAPIError):
             agent._interruptible_streaming_api_call({})
 
-        # Should retry 3 times (default HERMES_STREAM_RETRIES=2 → 3 attempts)
+        # Should retry 3 times (default FULILIAN_STREAM_RETRIES=2 → 3 attempts)
         assert mock_client.chat.completions.create.call_count == 3
         # Connection cleanup should happen for each failed retry
         assert mock_close.call_count >= 2
@@ -845,7 +845,7 @@ class TestAnthropicStreamCallbacks:
         )
         agent.api_mode = "anthropic_messages"
         agent._interrupt_requested = False
-        monkeypatch.setenv("HERMES_STREAM_RETRIES", "1")
+        monkeypatch.setenv("FULILIAN_STREAM_RETRIES", "1")
 
         class _BadStream:
             response = None
@@ -902,7 +902,7 @@ class TestAnthropicStreamCallbacks:
         )
         agent.api_mode = "anthropic_messages"
         agent._interrupt_requested = False
-        monkeypatch.setenv("HERMES_STREAM_RETRIES", "1")
+        monkeypatch.setenv("FULILIAN_STREAM_RETRIES", "1")
 
         agent._anthropic_client = MagicMock()
         agent._anthropic_client.messages.stream.side_effect = ValueError(
@@ -1017,15 +1017,15 @@ class TestPartialToolCallWarning:
         agent._current_streamed_assistant_text = "Let me write the audit: "
 
         import os as _os
-        _prev = _os.environ.get("HERMES_STREAM_RETRIES")
-        _os.environ["HERMES_STREAM_RETRIES"] = "0"
+        _prev = _os.environ.get("FULILIAN_STREAM_RETRIES")
+        _os.environ["FULILIAN_STREAM_RETRIES"] = "0"
         try:
             response = agent._interruptible_streaming_api_call({})
         finally:
             if _prev is None:
-                _os.environ.pop("HERMES_STREAM_RETRIES", None)
+                _os.environ.pop("FULILIAN_STREAM_RETRIES", None)
             else:
-                _os.environ["HERMES_STREAM_RETRIES"] = _prev
+                _os.environ["FULILIAN_STREAM_RETRIES"] = _prev
 
         content = response.choices[0].message.content or ""
         assert "Let me write the audit:" in content, (
@@ -1095,15 +1095,15 @@ class TestPartialToolCallWarning:
         agent._current_streamed_assistant_text = ""
 
         import os as _os
-        _prev = _os.environ.get("HERMES_STREAM_RETRIES")
-        _os.environ["HERMES_STREAM_RETRIES"] = "0"
+        _prev = _os.environ.get("FULILIAN_STREAM_RETRIES")
+        _os.environ["FULILIAN_STREAM_RETRIES"] = "0"
         try:
             response = agent._interruptible_streaming_api_call({})
         finally:
             if _prev is None:
-                _os.environ.pop("HERMES_STREAM_RETRIES", None)
+                _os.environ.pop("FULILIAN_STREAM_RETRIES", None)
             else:
-                _os.environ["HERMES_STREAM_RETRIES"] = _prev
+                _os.environ["FULILIAN_STREAM_RETRIES"] = _prev
 
         # The stub must be RECOGNIZABLY empty so the loop guard can skip it.
         assert getattr(response, "id", "") == PARTIAL_STREAM_STUB_ID
@@ -1186,15 +1186,15 @@ class TestSilentRetryMidToolCall:
         agent._fire_stream_delta = lambda text: fired_deltas.append(text)
 
         import os as _os
-        _prev = _os.environ.get("HERMES_STREAM_RETRIES")
-        _os.environ["HERMES_STREAM_RETRIES"] = "2"
+        _prev = _os.environ.get("FULILIAN_STREAM_RETRIES")
+        _os.environ["FULILIAN_STREAM_RETRIES"] = "2"
         try:
             response = agent._interruptible_streaming_api_call({})
         finally:
             if _prev is None:
-                _os.environ.pop("HERMES_STREAM_RETRIES", None)
+                _os.environ.pop("FULILIAN_STREAM_RETRIES", None)
             else:
-                _os.environ["HERMES_STREAM_RETRIES"] = _prev
+                _os.environ["FULILIAN_STREAM_RETRIES"] = _prev
 
         assert attempts["n"] == 2, (
             f"Expected silent retry (2 attempts), got {attempts['n']}"
@@ -1260,15 +1260,15 @@ class TestSilentRetryMidToolCall:
         agent._fire_stream_delta = lambda text: fired_deltas.append(text)
 
         import os as _os
-        _prev = _os.environ.get("HERMES_STREAM_RETRIES")
-        _os.environ["HERMES_STREAM_RETRIES"] = "1"
+        _prev = _os.environ.get("FULILIAN_STREAM_RETRIES")
+        _os.environ["FULILIAN_STREAM_RETRIES"] = "1"
         try:
             response = agent._interruptible_streaming_api_call({})
         finally:
             if _prev is None:
-                _os.environ.pop("HERMES_STREAM_RETRIES", None)
+                _os.environ.pop("FULILIAN_STREAM_RETRIES", None)
             else:
-                _os.environ["HERMES_STREAM_RETRIES"] = _prev
+                _os.environ["FULILIAN_STREAM_RETRIES"] = _prev
 
         # After retries exhaust, the stub-with-warning path must engage.
         content = response.choices[0].message.content or ""
@@ -1316,15 +1316,15 @@ class TestSilentRetryMidToolCall:
         agent._current_streamed_assistant_text = "Here's my answer so far"
 
         import os as _os
-        _prev = _os.environ.get("HERMES_STREAM_RETRIES")
-        _os.environ["HERMES_STREAM_RETRIES"] = "2"
+        _prev = _os.environ.get("FULILIAN_STREAM_RETRIES")
+        _os.environ["FULILIAN_STREAM_RETRIES"] = "2"
         try:
             response = agent._interruptible_streaming_api_call({})
         finally:
             if _prev is None:
-                _os.environ.pop("HERMES_STREAM_RETRIES", None)
+                _os.environ.pop("FULILIAN_STREAM_RETRIES", None)
             else:
-                _os.environ["HERMES_STREAM_RETRIES"] = _prev
+                _os.environ["FULILIAN_STREAM_RETRIES"] = _prev
 
         # Only one attempt: text-only stall short-circuits retry.
         assert attempts["n"] == 1, (
@@ -1619,8 +1619,8 @@ class TestBedrockStreamLivenessWatchdog:
 
         # Tiny stale timeout so the watchdog trips quickly; give-up threshold
         # kept above 1 so a single call raises TimeoutError (not the breaker).
-        monkeypatch.setenv("HERMES_STREAM_STALE_TIMEOUT", "0.5")
-        monkeypatch.setenv("HERMES_STREAM_STALE_GIVEUP", "5")
+        monkeypatch.setenv("FULILIAN_STREAM_STALE_TIMEOUT", "0.5")
+        monkeypatch.setenv("FULILIAN_STREAM_STALE_GIVEUP", "5")
 
         agent = self._make_bedrock_agent()
         agent._consecutive_stale_streams = 0
@@ -1649,7 +1649,7 @@ class TestBedrockStreamLivenessWatchdog:
         RuntimeError — Bedrock never even opens a stream (cross-turn breaker)."""
         pytest.importorskip("botocore.exceptions", reason="botocore (with working exceptions module) required")
 
-        monkeypatch.setenv("HERMES_STREAM_STALE_GIVEUP", "5")
+        monkeypatch.setenv("FULILIAN_STREAM_STALE_GIVEUP", "5")
 
         agent = self._make_bedrock_agent()
         agent._consecutive_stale_streams = 5
@@ -1671,7 +1671,7 @@ class TestBedrockStreamLivenessWatchdog:
         streak so a recovered provider doesn't carry it into later turns."""
         pytest.importorskip("botocore.exceptions", reason="botocore (with working exceptions module) required")
 
-        monkeypatch.setenv("HERMES_STREAM_STALE_TIMEOUT", "60")
+        monkeypatch.setenv("FULILIAN_STREAM_STALE_TIMEOUT", "60")
 
         agent = self._make_bedrock_agent()
         agent._consecutive_stale_streams = 3  # simulate a prior wedged streak

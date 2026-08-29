@@ -13,7 +13,7 @@ If unset, :func:`get_active_provider` applies fallback logic:
 
 1. If exactly one *available* provider is registered, use it.
 2. Otherwise return ``None`` (the tool surfaces a helpful error pointing
-   the user at ``hermes tools``).
+   the user at ``fulilian tools``).
 
 Mirrors ``agent/image_gen_registry.py`` so the two surfaces behave the
 same: the unconfigured fallback is filtered by ``is_available()`` so a box
@@ -29,7 +29,7 @@ import threading
 from typing import Dict, List, Optional
 
 from agent.video_gen_provider import VideoGenProvider
-from fulilian_constants import hermes_home_key
+from fulilian_constants import fulilian_home_key
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +69,7 @@ def list_providers(*, scope: Optional[str] = None) -> List[VideoGenProvider]:
     """Return all registered providers, sorted by name."""
     with _lock:
         merged = dict(_providers)
-        merged.update(_scoped_providers.get(scope or hermes_home_key(), {}))
+        merged.update(_scoped_providers.get(scope or fulilian_home_key(), {}))
         items = list(merged.values())
     return sorted(items, key=lambda p: p.name)
 
@@ -80,7 +80,7 @@ def get_provider(name: str, *, scope: Optional[str] = None) -> Optional[VideoGen
         return None
     with _lock:
         key = name.strip()
-        return _scoped_providers.get(scope or hermes_home_key(), {}).get(key) or _providers.get(key)
+        return _scoped_providers.get(scope or fulilian_home_key(), {}).get(key) or _providers.get(key)
 
 
 def snapshot_registration(
@@ -146,7 +146,7 @@ def get_active_provider() -> Optional[VideoGenProvider]:
 
     with _lock:
         snapshot = dict(_providers)
-        snapshot.update(_scoped_providers.get(hermes_home_key(), {}))
+        snapshot.update(_scoped_providers.get(fulilian_home_key(), {}))
 
     if configured:
         provider = snapshot.get(configured)

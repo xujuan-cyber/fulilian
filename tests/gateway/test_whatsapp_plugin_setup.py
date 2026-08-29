@@ -1,8 +1,8 @@
 """Tests for the WhatsApp plugin's interactive_setup wizard home-channel flow.
 
 The interactive_setup wizard lazy-imports its CLI helpers from
-``hermes_cli.config`` (get_env_value / save_env_value / remove_env_value) and
-``hermes_cli.cli_output`` (prompt / prompt_yes_no / print_*); we patch those
+``fulilian_cli.config`` (get_env_value / save_env_value / remove_env_value) and
+``fulilian_cli.cli_output`` (prompt / prompt_yes_no / print_*); we patch those
 source modules. Covers the home-channel clear-on-blank behavior added in
 PR #58421 and extended in the follow-up.
 """
@@ -42,7 +42,7 @@ class TestWhatsAppHomeChannelClear:
     """Blank home-channel answer must clear WHATSAPP_HOME_CHANNEL (#12423)."""
 
     def test_blank_removes_existing_home_channel(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        monkeypatch.setenv("FULILIAN_HOME", str(tmp_path))
         saved, removed = {}, []
         _patch_setup_io(
             monkeypatch,

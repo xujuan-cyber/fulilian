@@ -55,7 +55,7 @@ def test_dashboard_ticket_identity_is_carried_forward_without_trusting_rpc_param
     ws = _fake_ticket_ws(ticket)
 
     assert web_server._ws_auth_ok(ws) is True
-    assert ws._hermes_auth_identity == {
+    assert ws._fulilian_auth_identity == {
         "user_id": "user-fixture",
         "provider": "provider-fixture",
     }
@@ -68,11 +68,11 @@ def test_dashboard_ticket_subprotocol_carries_the_same_server_identity(gated_das
     ws = _fake_ticket_subprotocol_ws(ticket)
 
     assert web_server._ws_auth_ok(ws) is True
-    assert ws._hermes_auth_identity == {
+    assert ws._fulilian_auth_identity == {
         "user_id": "subprotocol-user",
         "provider": "provider-fixture",
     }
-    assert ws._hermes_ws_subprotocol == web_server._GATEWAY_WS_PROTOCOL
+    assert ws._fulilian_ws_subprotocol == web_server._GATEWAY_WS_PROTOCOL
 
 
 def test_ws_transport_records_only_server_authenticated_identity():
@@ -101,11 +101,11 @@ def test_cloud_agent_context_binds_registration_principal_and_transport_family()
     tokens = []
     try:
         tokens = server._set_session_context("stored-context-session")
-        assert get_session_env("HERMES_BROWSER_CONTROL_PRINCIPAL") == _principal_digest(
+        assert get_session_env("FULILIAN_BROWSER_CONTROL_PRINCIPAL") == _principal_digest(
             identity
         )
         assert (
-            get_session_env("HERMES_BROWSER_CONTROL_TRANSPORT_FAMILY")
+            get_session_env("FULILIAN_BROWSER_CONTROL_TRANSPORT_FAMILY")
             == "cloud-ticket-ws"
         )
     finally:

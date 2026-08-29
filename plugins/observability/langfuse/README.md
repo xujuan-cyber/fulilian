@@ -1,6 +1,6 @@
 # Langfuse Observability Plugin
 
-This plugin ships bundled with Hermes but is **opt-in** — it only loads when
+This plugin ships bundled with Fulilian but is **opt-in** — it only loads when
 you explicitly enable it.
 
 ## Enable
@@ -9,21 +9,21 @@ Pick one:
 
 ```bash
 # Interactive: walks you through credentials + SDK install + enable
-hermes tools  # → Langfuse Observability
+fulilian tools  # → Langfuse Observability
 
 # Manual
 pip install langfuse
-hermes plugins enable observability/langfuse
+fulilian plugins enable observability/langfuse
 ```
 
 ## Required credentials
 
-Set these in `~/.hermes/.env` (or via `hermes tools`):
+Set these in `~/.fulilian/.env` (or via `fulilian tools`):
 
 ```bash
-HERMES_LANGFUSE_PUBLIC_KEY=pk-lf-...
-HERMES_LANGFUSE_SECRET_KEY=sk-lf-...
-HERMES_LANGFUSE_BASE_URL=https://cloud.langfuse.com   # or your self-hosted URL
+FULILIAN_LANGFUSE_PUBLIC_KEY=pk-lf-...
+FULILIAN_LANGFUSE_SECRET_KEY=sk-lf-...
+FULILIAN_LANGFUSE_BASE_URL=https://cloud.langfuse.com   # or your self-hosted URL
 ```
 
 Without the SDK or credentials the hooks no-op silently — the plugin fails
@@ -32,28 +32,28 @@ open.
 ## Verify
 
 ```bash
-hermes plugins list                 # observability/langfuse should show "enabled"
-hermes chat -q "hello"              # then check Langfuse for a "Hermes turn" trace
+fulilian plugins list                 # observability/langfuse should show "enabled"
+fulilian chat -q "hello"              # then check Langfuse for a "Fulilian turn" trace
 ```
 
-Generation observations include the Hermes system prompt when the provider
+Generation observations include the Fulilian system prompt when the provider
 uses a separate `system` param (Anthropic Messages API). Open an **LLM call**
-child span to inspect `role: system` (truncated via `HERMES_LANGFUSE_MAX_CHARS`).
+child span to inspect `role: system` (truncated via `FULILIAN_LANGFUSE_MAX_CHARS`).
 
 ## Optional tuning
 
 ```bash
-HERMES_LANGFUSE_ENV=production       # environment tag
-HERMES_LANGFUSE_RELEASE=v1.0.0       # release tag
-HERMES_LANGFUSE_SAMPLE_RATE=0.5      # sample 50% of traces
-HERMES_LANGFUSE_MAX_CHARS=12000      # max chars per field (default: 12000)
-HERMES_LANGFUSE_CAPTURE=sanitized    # content capture mode (see below)
-HERMES_LANGFUSE_DEBUG=true           # verbose plugin logging
+FULILIAN_LANGFUSE_ENV=production       # environment tag
+FULILIAN_LANGFUSE_RELEASE=v1.0.0       # release tag
+FULILIAN_LANGFUSE_SAMPLE_RATE=0.5      # sample 50% of traces
+FULILIAN_LANGFUSE_MAX_CHARS=12000      # max chars per field (default: 12000)
+FULILIAN_LANGFUSE_CAPTURE=sanitized    # content capture mode (see below)
+FULILIAN_LANGFUSE_DEBUG=true           # verbose plugin logging
 ```
 
 ## Capture modes
 
-`HERMES_LANGFUSE_CAPTURE` controls how much *content* (prompts, responses,
+`FULILIAN_LANGFUSE_CAPTURE` controls how much *content* (prompts, responses,
 tool arguments/results) is exported. Structural metadata — IDs, roles, tool
 names, token usage, cost, timing — is always captured in every mode.
 
@@ -79,5 +79,5 @@ For personal sessions or shared Langfuse projects, prefer `metadata`.
 ## Disable
 
 ```bash
-hermes plugins disable observability/langfuse
+fulilian plugins disable observability/langfuse
 ```

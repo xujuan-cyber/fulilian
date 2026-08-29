@@ -2,7 +2,7 @@
 
 Same class of bug as ``tools/tts_tool.py`` (fixed in PR #17163): the STT
 provider call sites read API keys via ``os.getenv()``, which bypasses
-``~/.hermes/.env`` entries. These tests confirm each STT provider now
+``~/.fulilian/.env`` entries. These tests confirm each STT provider now
 consults ``get_env_value()`` and the provider auto-detect + explicit
 selection gate (``_get_provider``) do the same.
 """
@@ -35,14 +35,14 @@ def isolate_env(monkeypatch):
 
 class TestProviderSelectionGate:
     """``_get_provider`` picks the STT backend. If it only consulted
-    ``os.environ`` a user with keys in ``~/.hermes/.env`` would be told
+    ``os.environ`` a user with keys in ``~/.fulilian/.env`` would be told
     "no STT available" even though the actual transcribe call would
     succeed. The gate lives behind ``is_stt_enabled(stt_config)``, so
     configure ``{"enabled": True, "provider": ...}`` for explicit tests.
     """
 
     def test_import_after_config_env_patch_uses_restored_dotenv_loader(self):
-        """Importing STT while hermes_cli.config.get_env_value is patched must
+        """Importing STT while fulilian_cli.config.get_env_value is patched must
         not freeze that temporary helper into this module forever.
         """
         import importlib
@@ -57,7 +57,7 @@ class TestProviderSelectionGate:
             with patch.object(tt, "_HAS_FASTER_WHISPER", False), \
                  patch.object(tt, "_HAS_OPENAI", True), \
                  patch.object(tt, "_has_local_command", return_value=False), \
-                 patch("hermes_cli.config.load_env",
+                 patch("fulilian_cli.config.load_env",
                        return_value={"GROQ_API_KEY": "dotenv-secret"}):
                 assert tt._get_provider({"enabled": True, "provider": "groq"}) == "groq"
         finally:
@@ -75,13 +75,13 @@ class TestProviderSelectionGate:
 
         try:
             with patch(
-                "hermes_cli.runtime_provider.resolve_runtime_provider",
+                "fulilian_cli.runtime_provider.resolve_runtime_provider",
                 side_effect=RuntimeError("no oauth"),
             ), patch(
-                "hermes_cli.auth.resolve_xai_oauth_runtime_credentials",
+                "fulilian_cli.auth.resolve_xai_oauth_runtime_credentials",
                 return_value={},
             ), patch(
-                "hermes_cli.config.load_env",
+                "fulilian_cli.config.load_env",
                 return_value={"XAI_API_KEY": "dotenv-secret"},
             ):
                 creds = xai_http.resolve_xai_http_credentials()
@@ -102,7 +102,7 @@ class TestProviderSelectionGate:
              patch.object(tt, "_HAS_MISTRAL", False), \
              patch.object(tt, "_has_local_command", return_value=False), \
              patch.object(tt, "_has_openai_audio_backend", return_value=False), \
-             patch("hermes_cli.config.load_env",
+             patch("fulilian_cli.config.load_env",
                    return_value={"GROQ_API_KEY": "dotenv-secret"}):
             # No "provider" key → explicit=False → auto-detect branch
             assert tt._get_provider({"enabled": True}) == "groq"
@@ -205,8 +205,8 @@ class TestTranscribeCallSitesReadDotenv:
 
 
 class TestEndToEndRegressionGuard:
-    """End-to-end probe: patch ``hermes_cli.config.load_env`` to simulate
-    ``~/.hermes/.env`` carrying the key while ``os.environ`` does not.
+    """End-to-end probe: patch ``fulilian_cli.config.load_env`` to simulate
+    ``~/.fulilian/.env`` carrying the key while ``os.environ`` does not.
     Before the fix ``_transcribe_xai`` called ``os.getenv("XAI_API_KEY")``
     directly and returned ``XAI_API_KEY not set``."""
 
@@ -225,7 +225,7 @@ class TestEndToEndRegressionGuard:
             response.json.return_value = {"text": "ok"}
             return response
 
-        with patch("hermes_cli.config.load_env",
+        with patch("fulilian_cli.config.load_env",
                    return_value={"XAI_API_KEY": "dotenv-secret"}):
             # Sanity: get_env_value resolves through load_env when
             # os.environ is empty.

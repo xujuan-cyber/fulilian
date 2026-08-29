@@ -31,7 +31,7 @@ from agent.conversation_compression import (
     CompressionCommitFence,
     _is_real_user_message,
 )
-from hermes_state import SessionDB
+from fulilian_state import SessionDB
 
 
 def _build_agent_with_db(db: SessionDB, session_id: str, platform: str = "telegram"):
@@ -116,8 +116,8 @@ class TestGoalMigratesOnRotation:
         agent = _build_agent_with_db(db, parent)
 
         # Set a persistent goal on the parent via the real persistence path.
-        with patch.dict(os.environ, {"HERMES_HOME": str(tmp_path / ".hermes")}):
-            (tmp_path / ".hermes").mkdir(exist_ok=True)
+        with patch.dict(os.environ, {"FULILIAN_HOME": str(tmp_path / ".fulilian")}):
+            (tmp_path / ".fulilian").mkdir(exist_ok=True)
             import fulilian_cli.goals as goals
             goals._DB_CACHE.clear()
             # Point the goal DB at the same state.db the agent uses.
@@ -818,7 +818,7 @@ class TestRotationChildFlushDedup:
         )
 
         # (f) Markers on BOTH views. Note: the adopted view's rows are
-        # "born durable" (hermes_state stamps _DB_PERSISTED_MARKER on rows
+        # "born durable" (fulilian_state stamps _DB_PERSISTED_MARKER on rows
         # materialized from the DB), so the adopted assert holds even
         # pre-fix; the DISCRIMINATING assert is the twin's — the old live
         # view is a constructed list the production code only stamps via

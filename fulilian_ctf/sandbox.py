@@ -7,7 +7,7 @@ pre_tool_call 阶段读取环境变量 ``FULILIAN_SANDBOX_MODE``（或 config）
 三档语义：
 - READ_ONLY（0）：只读侦察——禁止任何写入类命令
 - WORKSPACE_WRITE（1）：只允许写题目工作区——重定向到工作区外被拦截
-- DANGER_FULL（2）：全访问——危险命令交由 Hermes approval 机制审批
+- DANGER_FULL（2）：全访问——危险命令交由 Fulilian approval 机制审批
 """
 
 from __future__ import annotations
@@ -133,7 +133,7 @@ def enforce_sandbox(
         (allowed, reason)——allowed=False 时 reason 说明拦截原因
     """
     if mode == SandboxMode.DANGER_FULL:
-        # 全访问：危险命令交由 Hermes approval / hardline 机制处理
+        # 全访问：危险命令交由 Fulilian approval / hardline 机制处理
         return True, ""
 
     if mode == SandboxMode.READ_ONLY:

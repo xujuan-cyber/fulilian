@@ -25,22 +25,22 @@ def _reset_resolver_state(monkeypatch):
 
 
 class TestCloudProviderCachePolicy:
-    def test_cache_is_isolated_by_hermes_home(self, tmp_path, monkeypatch):
+    def test_cache_is_isolated_by_fulilian_home(self, tmp_path, monkeypatch):
         from fulilian_constants import (
-            get_hermes_home,
-            reset_hermes_home_override,
-            set_hermes_home_override,
+            get_fulilian_home,
+            reset_fulilian_home_override,
+            set_fulilian_home_override,
         )
 
         monkeypatch.setattr(
-            "hermes_cli.config.read_raw_config",
+            "fulilian_cli.config.read_raw_config",
             lambda: {"browser": {"cloud_provider": "profile-provider"}},
         )
         providers = {}
         resolutions = []
 
         def resolve(_name):
-            home = str(get_hermes_home())
+            home = str(get_fulilian_home())
             resolutions.append(home)
             return providers[home]
 
@@ -52,11 +52,11 @@ class TestCloudProviderCachePolicy:
         providers[str(home_b)] = Mock(name="provider-b")
 
         def resolve_for(home):
-            token = set_hermes_home_override(home)
+            token = set_fulilian_home_override(home)
             try:
                 return browser_tool._get_cloud_provider()
             finally:
-                reset_hermes_home_override(token)
+                reset_fulilian_home_override(token)
 
         assert resolve_for(home_a) is providers[str(home_a)]
         assert resolve_for(home_b) is providers[str(home_b)]
@@ -69,8 +69,8 @@ class TestCloudProviderCachePolicy:
         from agent.browser_provider import BrowserProvider
         import agent.browser_registry as browser_registry
         from fulilian_constants import (
-            reset_hermes_home_override,
-            set_hermes_home_override,
+            reset_fulilian_home_override,
+            set_fulilian_home_override,
         )
 
         class Provider(BrowserProvider):
@@ -97,11 +97,11 @@ class TestCloudProviderCachePolicy:
         first = Provider("first")
         second = Provider("second")
         monkeypatch.setattr(
-            "hermes_cli.config.read_raw_config",
+            "fulilian_cli.config.read_raw_config",
             lambda: {"browser": {"cloud_provider": "cache-replacement"}},
         )
         monkeypatch.setattr(browser_tool, "_ensure_browser_plugins_loaded", lambda: None)
-        token = set_hermes_home_override(home)
+        token = set_fulilian_home_override(home)
         try:
             browser_registry.register_provider(first, scope=home)
             assert browser_tool._get_cloud_provider() is first
@@ -115,7 +115,7 @@ class TestCloudProviderCachePolicy:
                 browser_registry.restore_registration(
                     "cache-replacement", current, None, scope=home
                 )
-            reset_hermes_home_override(token)
+            reset_fulilian_home_override(token)
 
     def test_concurrent_registry_replacement_discards_stale_resolution(
         self, tmp_path, monkeypatch
@@ -126,8 +126,8 @@ class TestCloudProviderCachePolicy:
         from agent.browser_provider import BrowserProvider
         import agent.browser_registry as browser_registry
         from fulilian_constants import (
-            reset_hermes_home_override,
-            set_hermes_home_override,
+            reset_fulilian_home_override,
+            set_fulilian_home_override,
         )
 
         class Provider(BrowserProvider):
@@ -168,7 +168,7 @@ class TestCloudProviderCachePolicy:
             return resolved
 
         monkeypatch.setattr(
-            "hermes_cli.config.read_raw_config",
+            "fulilian_cli.config.read_raw_config",
             lambda: {"browser": {"cloud_provider": "cache-race"}},
         )
         monkeypatch.setattr(browser_tool, "_ensure_browser_plugins_loaded", lambda: None)
@@ -176,11 +176,11 @@ class TestCloudProviderCachePolicy:
         browser_registry.register_provider(first, scope=home)
 
         def resolve():
-            token = set_hermes_home_override(home)
+            token = set_fulilian_home_override(home)
             try:
                 return browser_tool._get_cloud_provider()
             finally:
-                reset_hermes_home_override(token)
+                reset_fulilian_home_override(token)
 
         try:
             with ThreadPoolExecutor(max_workers=1) as pool:
@@ -201,7 +201,7 @@ class TestCloudProviderCachePolicy:
     def test_explicit_local_caches_permanently(self, monkeypatch):
         """`cloud_provider: local` is a positive choice and must stick."""
         monkeypatch.setattr(
-            "hermes_cli.config.read_raw_config",
+            "fulilian_cli.config.read_raw_config",
             lambda: {"browser": {"cloud_provider": "local"}},
         )
 
@@ -210,7 +210,7 @@ class TestCloudProviderCachePolicy:
 
         # Even if config later changes, the cache stays.
         monkeypatch.setattr(
-            "hermes_cli.config.read_raw_config",
+            "fulilian_cli.config.read_raw_config",
             lambda: {"browser": {"cloud_provider": "browser-use"}},
         )
         assert browser_tool._get_cloud_provider() is None
@@ -219,7 +219,7 @@ class TestCloudProviderCachePolicy:
     def test_no_credentials_yet_does_not_cache_none(self, monkeypatch):
         """Auto-detect path with no creds: must NOT poison the cache."""
         monkeypatch.setattr(
-            "hermes_cli.config.read_raw_config",
+            "fulilian_cli.config.read_raw_config",
             lambda: {"browser": {}},
         )
 
@@ -257,7 +257,7 @@ class TestCloudProviderCachePolicy:
             browser_tool, "_PROVIDER_REGISTRY", {"browser-use": exploding_factory}
         )
         monkeypatch.setattr(
-            "hermes_cli.config.read_raw_config",
+            "fulilian_cli.config.read_raw_config",
             lambda: {"browser": {"cloud_provider": "browser-use"}},
         )
 

@@ -50,11 +50,11 @@ class TestDiscordToolPreviewFormatting:
 
         adapter = _make_discord_adapter()
         url = "https://hermes-agent.nousresearch.com/docs/gateway/discord/tool-progress"
-        visible = "https://hermes-agent.nousresearch..."
+        visible = "https://fulilian-agent.nousresearch..."
 
         out = adapter.format_tool_preview(ToolPreview(visible, truncated=True, url=url))
 
-        assert out == f"[hermes-agent.nousresearch...](<{url}>)"
+        assert out == f"[fulilian-agent.nousresearch...](<{url}>)"
 
     def test_truncated_url_label_is_not_a_second_url_target(self):
         from agent.display import ToolPreview

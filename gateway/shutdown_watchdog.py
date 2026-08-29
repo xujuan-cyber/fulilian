@@ -12,7 +12,7 @@ This module provides:
    completed within ``restart_drain_timeout + grace``, it dumps all-thread
    stacks via ``faulthandler`` plus a metadata snapshot, then ``os._exit`` so
    the service manager can revive the process.
-2. An event-loop heartbeat file at ``<HERMES_HOME>/state/gateway.heartbeat`` so
+2. An event-loop heartbeat file at ``<FULILIAN_HOME>/state/gateway.heartbeat`` so
    external supervision can distinguish "process alive" from "loop frozen"
    (``gateway_state.json`` alone can't — it only rewrites on transitions/turns).
 3. A lifetime thread watchdog that can still diagnose and hard-exit when the
@@ -36,7 +36,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
 from gateway.restart import GATEWAY_SERVICE_RESTART_EXIT_CODE
-from fulilian_constants import get_hermes_home
+from fulilian_constants import get_fulilian_home
 from utils import atomic_json_write
 
 logger = logging.getLogger(__name__)
@@ -215,17 +215,17 @@ def start_loop_liveness_watchdog(
     return _LoopLivenessWatchdogHandle(stop_event, thread)
 
 
-def _process_hermes_home() -> Path:
-    """HERMES_HOME for process-level identity files (ignore profile overrides)."""
-    val = os.environ.get("HERMES_HOME", "").strip()
+def _process_fulilian_home() -> Path:
+    """FULILIAN_HOME for process-level identity files (ignore profile overrides)."""
+    val = os.environ.get("FULILIAN_HOME", "").strip()
     if val:
         return Path(val)
-    return get_hermes_home()
+    return get_fulilian_home()
 
 
 def get_loop_heartbeat_path(home: Optional[Path] = None) -> Path:
-    """Return ``<HERMES_HOME>/state/gateway.heartbeat``."""
-    base = home if home is not None else _process_hermes_home()
+    """Return ``<FULILIAN_HOME>/state/gateway.heartbeat``."""
+    base = home if home is not None else _process_fulilian_home()
     return base.joinpath(*_HEARTBEAT_RELATIVE)
 
 
@@ -234,14 +234,14 @@ def get_loop_tick_socket_path(
 ) -> Path:
     """Return the loop-scheduling witness socket for ``pid``.
 
-    ``<HERMES_HOME>/state/gateway.loop-tick.<pid>.sock`` — PID-suffixed so a
+    ``<FULILIAN_HOME>/state/gateway.loop-tick.<pid>.sock`` — PID-suffixed so a
     leftover node from a previous process can never be mistaken for this
     gateway's witness. Served by the gateway loop itself (see
     ``_tick_socket_handler``): an answer is direct proof that the loop is
     dispatching, which is exactly the property the heartbeat file lost when
     its write moved off-loop (#90502).
     """
-    base = home if home is not None else _process_hermes_home()
+    base = home if home is not None else _process_fulilian_home()
     return base.joinpath(
         "state", f"gateway.loop-tick.{int(pid if pid is not None else os.getpid())}.sock"
     )
@@ -249,7 +249,7 @@ def get_loop_tick_socket_path(
 
 def get_shutdown_watchdog_dump_path(home: Optional[Path] = None) -> Path:
     """Return the faulthandler / metadata dump path for a fired watchdog."""
-    base = home if home is not None else _process_hermes_home()
+    base = home if home is not None else _process_fulilian_home()
     return base.joinpath(*_WATCHDOG_DUMP_RELATIVE)
 
 
@@ -432,7 +432,7 @@ def arm_shutdown_watchdog(
         except Exception:
             pass
         try:
-            from hermes_logging import drain_log_queue
+            from fulilian_logging import drain_log_queue
             drain_log_queue(timeout=1.0)
         except Exception:
             pass
@@ -513,7 +513,7 @@ async def loop_heartbeat_forever(
     loop itself (``_tick_socket_handler``) — and records whether it is armed in
     the heartbeat payload (``loop_tick_socket``). External probes must require
     the witness to agree with file staleness before classifying a loop as
-    wedged; see ``hermes_cli.gateway.probe_gateway_loop_liveness`` for the
+    wedged; see ``fulilian_cli.gateway.probe_gateway_loop_liveness`` for the
     two-witness contract.
     """
     try:

@@ -1,13 +1,13 @@
 """ZAI / GLM provider profile.
 
 Z.AI's GLM-4.5-and-later chat models default to thinking-mode ON when the
-request omits ``thinking``.  Hermes' ``reasoning_config = {"enabled": False}``
+request omits ``thinking``.  Fulilian' ``reasoning_config = {"enabled": False}``
 was previously a silent no-op on this route — the base profile emits nothing,
 so users who turned thinking off (desktop toggle, ``/reasoning none``,
 ``reasoning_effort: none``/``false`` in config.yaml) kept burning thinking
 tokens on every turn.
 
-:meth:`ZaiProfile.build_api_kwargs_extras` translates the Hermes reasoning
+:meth:`ZaiProfile.build_api_kwargs_extras` translates the Fulilian reasoning
 config into the wire shape Z.AI's OpenAI-compat endpoint expects:
 
     {"extra_body": {"thinking": {"type": "enabled" | "disabled"}}}
@@ -19,7 +19,7 @@ untouched.
 
 GLM-5.2 additionally exposes a native ``reasoning_effort`` knob with exactly
 two enabled levels — ``high`` and ``max`` — on the OpenAI-compatible endpoint
-(per Z.AI / BigModel docs).  Hermes' richer effort scale is collapsed onto
+(per Z.AI / BigModel docs).  Fulilian' richer effort scale is collapsed onto
 those two so the user's effort preference actually reaches the model instead
 of being silently dropped.
 """
@@ -81,7 +81,7 @@ def _is_glm_5_3(model: str | None) -> bool:
 def _glm_5_2_reasoning_effort(
     reasoning_config: dict | None, *, model: str | None = None
 ) -> str | None:
-    """Map Hermes reasoning effort onto GLM's native vocabulary.
+    """Map Fulilian reasoning effort onto GLM's native vocabulary.
 
     GLM-5.2 supports two enabled effort levels (``high``/``max``);
     GLM-5.3 supports the graded ``low``/``medium``/``high``/``max`` scale.

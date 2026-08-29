@@ -1,11 +1,11 @@
 """Audit log for dashboard-auth events.
 
-Profile-aware location: ``$HERMES_HOME/logs/dashboard-auth.log``.
+Profile-aware location: ``$FULILIAN_HOME/logs/dashboard-auth.log``.
 Format: one JSON object per line. Token-like fields are stripped before
 serialisation to avoid leaking refresh tokens or JWTs to disk.
 
 This module deliberately keeps a minimal dependency surface — no imports
-from ``hermes_constants`` or other hermes_cli modules — so it can be
+from ``fulilian_constants`` or other fulilian_cli modules — so it can be
 imported safely from middleware code that loads early in the startup
 sequence.
 """
@@ -57,15 +57,15 @@ class AuditEvent(enum.Enum):
 
 
 def _resolve_log_path() -> Path:
-    """``$HERMES_HOME/logs/dashboard-auth.log``.
+    """``$FULILIAN_HOME/logs/dashboard-auth.log``.
 
-    Uses ``hermes_constants.get_hermes_home()`` (a leaf module — no import
+    Uses ``fulilian_constants.get_fulilian_home()`` (a leaf module — no import
     cycle) so profile overrides and the native-Windows ``%LOCALAPPDATA%``
     fallback are honored.
     """
-    from fulilian_constants import get_hermes_home
+    from fulilian_constants import get_fulilian_home
 
-    return get_hermes_home() / "logs" / "dashboard-auth.log"
+    return get_fulilian_home() / "logs" / "dashboard-auth.log"
 
 
 def audit_log(event: AuditEvent, **fields: Any) -> None:

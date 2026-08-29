@@ -26,12 +26,12 @@ from tools.tool_backend_helpers import (
 
 
 _DEFAULT_PLATFORM_TOOLSETS = {
-    "cli": "hermes-cli",
+    "cli": "fulilian-cli",
 }
 
 # Maps a tools_config provider's ``managed_nous_feature`` to the tool-pool
-# coverage category (hermes_cli.nous_account.TOOL_COVERAGE_CATEGORIES). Lets the
-# `hermes tools` picker scope its entitlement gate to the selected backend, so a
+# coverage category (fulilian_cli.nous_account.TOOL_COVERAGE_CATEGORIES). Lets the
+# `fulilian tools` picker scope its entitlement gate to the selected backend, so a
 # free-tool-pool user is allowed image gen but denied video gen at select time —
 # consistent with the per-category feature gates in get_nous_subscription_features.
 MANAGED_FEATURE_COVERAGE_CATEGORY: Dict[str, str] = {
@@ -61,7 +61,7 @@ def _selected_provider(section: object, name_key: str = "provider") -> Optional[
     an in-memory section dict: ``"nous"`` for the managed selection (stored
     ``nous`` value or legacy ``use_gateway: true``), a vendor name for BYOK
     picks, or ``None`` when no selection is stored. Keeping this in lockstep
-    with the runtime resolver is what stops ``hermes status`` from lying.
+    with the runtime resolver is what stops ``fulilian status`` from lying.
     """
     if not isinstance(section, dict):
         return None
@@ -201,12 +201,12 @@ def _has_agent_browser() -> bool:
         if agent_browser_runnable(shutil.which("agent-browser")):
             return True
 
-        # Hermes-managed Node dirs (Windows installer / POSIX $HERMES_HOME/node)
+        # Fulilian-managed Node dirs (Windows installer / POSIX $FULILIAN_HOME/node)
         # are prepended to PATH at runtime but usually absent from the *probe*
         # process's PATH. Without this rung a successful install keeps
         # reporting "needs setup" on Windows.
-        from fulilian_constants import with_hermes_node_path
-        managed_path = with_hermes_node_path().get("PATH", "")
+        from fulilian_constants import with_fulilian_node_path
+        managed_path = with_fulilian_node_path().get("PATH", "")
         if managed_path:
             managed_hit = shutil.which("agent-browser", path=managed_path)
             if managed_hit and agent_browser_runnable(managed_hit):
@@ -302,7 +302,7 @@ def _local_stt_backend_available() -> bool:
     ``apply_nous_managed_defaults`` from flipping a working local setup
     to the managed gateway.
     """
-    if get_env_value("HERMES_LOCAL_STT_COMMAND"):
+    if get_env_value("FULILIAN_LOCAL_STT_COMMAND"):
         return True
     try:
         from tools.transcription_tools import _HAS_FASTER_WHISPER
@@ -506,7 +506,7 @@ def get_nous_subscription_features(
     direct_firecrawl = bool(get_env_value("FIRECRAWL_API_KEY") or get_env_value("FIRECRAWL_API_URL"))
     direct_parallel = bool(get_env_value("PARALLEL_API_KEY"))
     direct_tavily = bool(get_env_value("TAVILY_API_KEY"))
-    # Keyless Tavily is opt-in: selecting it in `hermes tools` / setup writes
+    # Keyless Tavily is opt-in: selecting it in `fulilian tools` / setup writes
     # web.backend (or a per-capability override) without requiring a key.
     tavily_selected = "tavily" in {web_backend, web_search_backend, web_extract_backend}
     direct_searxng = bool(get_env_value("SEARXNG_URL"))
@@ -530,10 +530,10 @@ def get_nous_subscription_features(
     try:
         from tools.transcription_tools import _HAS_FASTER_WHISPER
         local_stt_available = bool(_HAS_FASTER_WHISPER) or bool(
-            get_env_value("HERMES_LOCAL_STT_COMMAND")
+            get_env_value("FULILIAN_LOCAL_STT_COMMAND")
         )
     except Exception:
-        local_stt_available = bool(get_env_value("HERMES_LOCAL_STT_COMMAND"))
+        local_stt_available = bool(get_env_value("FULILIAN_LOCAL_STT_COMMAND"))
 
     # When use_gateway is set, suppress direct credentials for managed detection
     if web_use_gateway:
@@ -1328,7 +1328,7 @@ def prompt_enable_tool_gateway(
 
 
 # ---------------------------------------------------------------------------
-# Inline Nous Portal login for the Tool Gateway picker (`hermes tools`)
+# Inline Nous Portal login for the Tool Gateway picker (`fulilian tools`)
 # ---------------------------------------------------------------------------
 
 
@@ -1340,8 +1340,8 @@ def ensure_nous_portal_access(
     """Make sure the user is entitled to the Nous Tool Gateway, logging in if
     needed.
 
-    Used by ``hermes tools`` when a user selects a Nous-managed Tool Gateway
-    backend (e.g. "Firecrawl (Nous Portal)").  Unlike ``hermes model``'s Nous
+    Used by ``fulilian tools`` when a user selects a Nous-managed Tool Gateway
+    backend (e.g. "Firecrawl (Nous Portal)").  Unlike ``fulilian model``'s Nous
     login, this:
 
     - does NOT change the inference provider (``model.provider`` is untouched),

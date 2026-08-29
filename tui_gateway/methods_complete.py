@@ -20,7 +20,7 @@ def _(rid, params: dict) -> dict:
 
     _paste_counter += 1
     line_count = text.count("\n") + 1
-    paste_dir = _hermes_home / "pastes"
+    paste_dir = _fulilian_home / "pastes"
     paste_dir.mkdir(parents=True, exist_ok=True)
 
     from datetime import datetime
@@ -53,7 +53,7 @@ def _(rid, params: dict) -> dict:
         another agent profile; completing profile names alongside path refs
         makes that discoverable. Bare-word matches only — never for
         `@kind:` directive queries. The primary profile is also offered
-        under the 'hermes' alias when no real profile claims that name.
+        under the 'fulilian' alias when no real profile claims that name.
         """
         out: list[dict] = []
         try:
@@ -74,11 +74,11 @@ def _(rid, params: dict) -> dict:
                             "meta": desc or "agent profile",
                         }
                     )
-            if "hermes".startswith(prefix.lower()) and "hermes" not in seen:
+            if "fulilian".startswith(prefix.lower()) and "fulilian" not in seen:
                 out.append(
                     {
-                        "text": "@hermes",
-                        "display": "@hermes",
+                        "text": "@fulilian",
+                        "display": "@fulilian",
                         "meta": "agent profile (primary)",
                     }
                 )
@@ -521,12 +521,12 @@ def _(rid, params: dict) -> dict:
                 rid,
                 4003,
                 f"{pconfig.name} uses {pconfig.auth_type} auth — "
-                f"run `hermes model` to configure",
+                f"run `fulilian model` to configure",
             )
         if not pconfig.api_key_env_vars:
             return _err(rid, 4004, f"no env var defined for {pconfig.name}")
 
-        # Save the key to ~/.hermes/.env via the unified credential lifecycle
+        # Save the key to ~/.fulilian/.env via the unified credential lifecycle
         # so any stale config.yaml mirror of the previous key (model.api_key,
         # custom_providers[*].api_key) is rotated in the same action (#62269).
         env_var = pconfig.api_key_env_vars[0]

@@ -1,4 +1,4 @@
-"""Slash command definitions and autocomplete for the Hermes CLI.
+"""Slash command definitions and autocomplete for the Fulilian CLI.
 
 Central registry for all slash commands. Every consumer -- CLI help, gateway
 dispatch, Telegram BotCommands, Slack subcommand mapping, autocomplete --
@@ -119,9 +119,9 @@ class CommandDef:
     # enqueue, /model's custom busy-reject text).
     busy_handler: str | None = None
     # Registry-owned shared execution (thin slice, informational commands).
-    # Names a key in ``hermes_cli.slash_exec.EXECUTORS`` — a pure formatter
+    # Names a key in ``fulilian_cli.slash_exec.EXECUTORS`` — a pure formatter
     # producing the canonical, surface-independent core text.  Surfaces
-    # resolve it via ``hermes_cli.slash_exec.run_execute`` and apply only
+    # resolve it via ``fulilian_cli.slash_exec.run_execute`` and apply only
     # their own decoration (Rich markup, emoji/markdown, telegramize).  A
     # string key (not a callable) keeps this module import-light: the
     # gateway can import commands.py without prompt_toolkit and without
@@ -179,7 +179,7 @@ COMMAND_REGISTRY: list[CommandDef] = [
                aliases=("compact",), args_hint="[here [N] | focus topic | --preview|--dry-run]"),
     CommandDef("rollback", "List or restore filesystem checkpoints (restores keep your hand-edits; --all overrides)", "Session",
                args_hint="[number] [--all]"),
-    CommandDef("snapshot", "Create or restore state snapshots of Hermes config/state", "Session",
+    CommandDef("snapshot", "Create or restore state snapshots of Fulilian config/state", "Session",
                cli_only=True, aliases=("snap",), args_hint="[create|restore <id>|prune]",
                desktop="terminal"),
     CommandDef("export", "Export a profile (config, skills, theme) to a shareable archive", "Configuration",
@@ -210,7 +210,7 @@ COMMAND_REGISTRY: list[CommandDef] = [
                busy_policy="dispatch", busy_handler="queue"),
     CommandDef("steer", "Inject a message after the next tool call without interrupting", "Session",
                args_hint="<prompt>", busy_policy="dispatch", busy_handler="steer"),
-    CommandDef("goal", "Set a standing goal Hermes works on across turns until achieved", "Session",
+    CommandDef("goal", "Set a standing goal Fulilian works on across turns until achieved", "Session",
                args_hint="[text | draft <text> | show | gate add <cmd> | pause | resume | clear | status | wait <pid> | unwait]",
                argument_mode="mixed", busy_policy="dispatch", busy_handler="goal"),
     CommandDef("heartbeat", "Set a recurring prompt that re-enters this session when idle", "Session",
@@ -305,10 +305,10 @@ COMMAND_REGISTRY: list[CommandDef] = [
     CommandDef("voice", "Toggle voice mode", "Configuration",
                args_hint="[on|off|tts|status]", subcommands=("on", "off", "tts", "status"),
                desktop="composer-voice"),
-    CommandDef("wake", "Toggle the 'Hey Hermes' wake word listener", "Configuration",
+    CommandDef("wake", "Toggle the 'Hey Fulilian' wake word listener", "Configuration",
                cli_only=True, args_hint="[on|off|status]",
                subcommands=("on", "off", "status")),
-    CommandDef("busy", "Control what Enter does while Hermes is working", "Configuration",
+    CommandDef("busy", "Control what Enter does while Fulilian is working", "Configuration",
                cli_only=True, args_hint="[queue|steer|interrupt|status]",
                subcommands=("queue", "steer", "interrupt", "status"),
                desktop="terminal"),
@@ -365,7 +365,7 @@ COMMAND_REGISTRY: list[CommandDef] = [
                cli_only=True, desktop="terminal"),
     CommandDef("reload-mcp", "Reload MCP servers from config", "Tools & Skills",
                aliases=("reload_mcp",), desktop="advanced"),
-    CommandDef("reload-skills", "Re-scan ~/.hermes/skills/ for newly installed or removed skills",
+    CommandDef("reload-skills", "Re-scan ~/.fulilian/skills/ for newly installed or removed skills",
                "Tools & Skills", aliases=("reload_skills",), desktop="advanced"),
     CommandDef("browser", "Connect browser tools to your live Chromium-family browser via CDP, or switch to Browser Use mode", "Tools & Skills",
                cli_only=True, args_hint="[connect|disconnect|status|use]",
@@ -400,9 +400,9 @@ COMMAND_REGISTRY: list[CommandDef] = [
                cli_only=True, desktop="terminal"),
     CommandDef("image", "Attach a local image file for your next prompt", "Info",
                cli_only=True, args_hint="<path>", desktop="terminal"),
-    CommandDef("update", "Update Hermes Agent to the latest version", "Info",
+    CommandDef("update", "Update FuLiLian to the latest version", "Info",
                busy_policy="dispatch", desktop="terminal"),
-    CommandDef("version", "Show Hermes Agent version", "Info", aliases=("v",),
+    CommandDef("version", "Show FuLiLian version", "Info", aliases=("v",),
                busy_policy="dispatch", execute="version"),
     CommandDef("debug", "Upload debug report (system info + logs) and get shareable links", "Info",
                args_hint="[nous|local]"),
@@ -684,9 +684,9 @@ def _iter_plugin_command_entries() -> list[tuple[str, str, str]]:
     """Yield (name, description, args_hint) tuples for all plugin slash commands.
 
     Plugin commands are registered via
-    :func:`hermes_cli.plugins.PluginContext.register_command`. They behave
+    :func:`fulilian_cli.plugins.PluginContext.register_command`. They behave
     like ``CommandDef`` entries for gateway surfacing: they appear in the
-    Telegram command menu, in Slack's ``/hermes`` subcommand mapping, and
+    Telegram command menu, in Slack's ``/fulilian`` subcommand mapping, and
     (via :func:`plugins.platforms.discord.adapter._register_slash_commands`) in
     Discord's native slash command picker.
 
@@ -746,7 +746,7 @@ def telegram_bot_commands() -> list[tuple[str, str]]:
     return result
 
 
-# Telegram allows up to 100 BotCommands. Hermes ships ~50 built-in commands;
+# Telegram allows up to 100 BotCommands. Fulilian ships ~50 built-in commands;
 # a 60-slot default keeps every built-in plus common skill commands visible in
 # the `/` menu while staying comfortably under Telegram's ~4KB payload limit.
 # Users can tune this via platforms.telegram.extra.command_menu.max_commands.
@@ -786,7 +786,7 @@ _TELEGRAM_MENU_PRIORITY = (
 )
 """Built-in commands that should stay visible in Telegram's capped menu.
 
-Telegram only displays a small BotCommand menu in practice.  The full Hermes
+Telegram only displays a small BotCommand menu in practice.  The full Fulilian
 registry is still dispatchable when typed manually, but operational commands
 need to survive the visible menu cap ahead of lower-priority built-ins.
 """
@@ -1049,7 +1049,7 @@ def _collect_gateway_skill_entries(
         # Ensure each prefix ends
         # with ``/`` so ``/my-skills`` does not also match ``/my-skills-extra``.
         # Without this widening, external skills are visible in
-        # ``hermes skills list`` and the agent's ``/skill-name`` dispatch but
+        # ``fulilian skills list`` and the agent's ``/skill-name`` dispatch but
         # silently excluded from gateway slash menus (#8110).
         _allowed_prefixes = [_skills_dir.rstrip("/") + "/"]
         _allowed_prefixes.extend(
@@ -1109,7 +1109,7 @@ def telegram_menu_commands(max_commands: int = 100) -> tuple[list[tuple[str, str
 
     Skills are the only tier that gets trimmed when the cap is hit.
     User-installed hub skills are excluded — accessible via /skills.
-    Skills disabled for the ``"telegram"`` platform (via ``hermes skills
+    Skills disabled for the ``"telegram"`` platform (via ``fulilian skills
     config``) are excluded from the menu entirely.
 
     Returns:
@@ -1178,7 +1178,7 @@ def discord_skill_commands_by_category(
     Scan roots include the local ``SKILLS_DIR`` **and** any configured
     ``skills.external_dirs`` — matching the widened filter applied to the
     flat ``discord_skill_commands()`` collector in #18741. Without this
-    parity, external-dir skills are visible via ``hermes skills list`` and
+    parity, external-dir skills are visible via ``fulilian skills list`` and
     the agent's ``/skill-name`` dispatch but silently absent from Discord's
     ``/skill`` autocomplete.
 
@@ -1358,60 +1358,60 @@ _SLACK_RESERVED_COMMANDS = frozenset({
 # registry fills up. Without this, adding a new canonical command silently
 # clamps off low-priority aliases (they're added in the second pass), so a
 # long-standing native slash like /btw could disappear just because an
-# unrelated command landed. These claim their slots right after /hermes,
+# unrelated command landed. These claim their slots right after /fulilian,
 # ahead of both canonical names and the rest of the aliases. Anything not
-# listed here still degrades gracefully (reachable via /hermes <command>).
+# listed here still degrades gracefully (reachable via /fulilian <command>).
 # Keep this list TIGHT: every pinned alias takes a slot a canonical command
 # would otherwise get, and the Telegram-parity test fails when a canonical
 # gets clamped ("reset" was unpinned for exactly that — /new keeps its
-# native slot, the alias spelling stays reachable via /hermes reset).
+# native slot, the alias spelling stays reachable via /fulilian reset).
 _SLACK_PRIORITY_ALIASES = ("btw", "bg")
 
 # Canonical commands intentionally NOT given a native Slack slash slot. Slack
 # caps apps at 50 slash commands and the registry is at that ceiling; rather
 # than let the clamp silently drop whichever command sorts last (and break
 # Telegram parity), we explicitly route a few low-frequency commands through
-# ``/hermes <command>`` on Slack only. They remain native on every other
+# ``/fulilian <command>`` on Slack only. They remain native on every other
 # surface (CLI, TUI, Telegram, Discord). Keep this list TIGHT and intentional —
 # the telegram-parity test reads it so an entry here is a deliberate
-# "Slack-via-/hermes" decision, not a silent clamp.
-#   - topup: the billing/balance surface; reached via /hermes topup on Slack.
+# "Slack-via-/fulilian" decision, not a silent clamp.
+#   - topup: the billing/balance surface; reached via /fulilian topup on Slack.
 #     (the rehaul folded the old /credits + /billing surfaces into /topup.)
-#   - moa: high-cost slash mode, available through /hermes moa to avoid
+#   - moa: high-cost slash mode, available through /fulilian moa to avoid
 #     displacing existing native Slack slash commands at the 50-command cap.
-#   - debug: the log/report upload surface; reached via /hermes debug on Slack.
-#   - egress: Docker-only proxy status; reachable as /hermes egress on Slack.
+#   - debug: the log/report upload surface; reached via /fulilian debug on Slack.
+#   - egress: Docker-only proxy status; reachable as /fulilian egress on Slack.
 #   - init: repo-scan AGENTS.md bootstrap — a cwd-centric dev command that is
-#     rare from Slack; reachable as /hermes init. Without this entry, adding
+#     rare from Slack; reachable as /fulilian init. Without this entry, adding
 #     /init clamps /version off the native list and breaks Telegram parity.
-#   - version: low-frequency info command; reachable as /hermes version on
+#   - version: low-frequency info command; reachable as /fulilian version on
 #     Slack. Demoted when /context claimed a native slot (context is a
 #     recurring inspection surface; version is a one-off lookup); the demotion
 #     also absorbs the native slot /approvals now consumes at the 50-cap.
-#   - diff: git working-tree diff; reached via /hermes diff on Slack so it
+#   - diff: git working-tree diff; reached via /fulilian diff on Slack so it
 #     doesn't displace an existing native slash at the 50-command cap.
 #   - update: low-frequency self-update maintenance command; reached via
-#     /hermes update on Slack. Demoted to free the native slot /approvals now
+#     /fulilian update on Slack. Demoted to free the native slot /approvals now
 #     claims — without this entry /approvals tips the registry past the 50-cap
 #     and silently clamps /update off, breaking Telegram parity.
-#   - heartbeat: session heartbeat management; reached via /hermes heartbeat
+#   - heartbeat: session heartbeat management; reached via /fulilian heartbeat
 #     on Slack. Added at the 50-cap — a native slot would clamp /insights.
-#   - refine: on-demand memory/skill review; reached via /hermes refine on
+#   - refine: on-demand memory/skill review; reached via /fulilian refine on
 #     Slack. Added at the 50-cap — a native slot would clamp an existing
 #     native slash.
-#   - pause: global emergency stop; reached via /hermes pause [off] on
+#   - pause: global emergency stop; reached via /fulilian pause [off] on
 #     Slack. Added at the 50-cap — a native slot would clamp /platform.
-#   - whoami: one-off identity lookup; reached via /hermes whoami on Slack.
+#   - whoami: one-off identity lookup; reached via /fulilian whoami on Slack.
 #     Demoted when /loop claimed a native slot (loop is a recurring
 #     interactive surface; whoami is a rare debug lookup) — without this
 #     entry /loop tips the registry past the 50-cap and silently clamps
 #     /platform, breaking Telegram parity.
 #   - platform: informational platform/environment lookup; reached via
-#     /hermes platform on Slack. Demoted when /save became gateway-available
+#     /fulilian platform on Slack. Demoted when /save became gateway-available
 #     (session export is an interactive surface; platform is a rare
 #     informational lookup) — without this entry /save tips the registry
 #     past the 50-cap and silently clamps /platform, breaking parity.
-_SLACK_VIA_HERMES_ONLY = frozenset({"topup", "moa", "debug", "egress", "init", "version", "diff", "update", "heartbeat", "refine", "review", "pause", "whoami", "platform"})
+_SLACK_VIA_FULILIAN_ONLY = frozenset({"topup", "moa", "debug", "egress", "init", "version", "diff", "update", "heartbeat", "refine", "review", "pause", "whoami", "platform"})
 
 
 def _sanitize_slack_name(raw: str) -> str:
@@ -1432,7 +1432,7 @@ def slack_native_slashes() -> list[tuple[str, str, str]]:
     Every gateway-available command in ``COMMAND_REGISTRY`` is surfaced as
     a standalone Slack slash command (e.g. ``/btw``, ``/stop``, ``/model``),
     matching Discord's and Telegram's model where every command is a
-    first-class slash and not a ``/hermes <verb>`` subcommand.
+    first-class slash and not a ``/fulilian <verb>`` subcommand.
 
     Both canonical names and aliases are included so users can type any
     documented form (e.g. ``/background``, ``/bg``, and ``/btw`` all work).
@@ -1440,20 +1440,20 @@ def slack_native_slashes() -> list[tuple[str, str, str]]:
 
     Commands whose sanitized name collides with a Slack built-in
     (e.g. ``/status``, ``/me``, ``/join``) are silently skipped.  Users
-    can still reach them via ``/hermes <command>``.
+    can still reach them via ``/fulilian <command>``.
 
     Results are clamped to Slack's 50-command limit with duplicate-name
-    avoidance. ``/hermes`` is always reserved as the first entry so the
-    legacy ``/hermes <subcommand>`` form keeps working for anything that
+    avoidance. ``/fulilian`` is always reserved as the first entry so the
+    legacy ``/fulilian <subcommand>`` form keeps working for anything that
     gets dropped by the clamp or for free-form questions.
     """
     overrides = _resolve_config_gates()
     entries: list[tuple[str, str, str]] = []
     seen: set[str] = set()
 
-    # Reserve /hermes as the catch-all top-level command.
-    entries.append(("hermes", "Talk to Hermes or run a subcommand", "[subcommand] [args]"))
-    seen.add("hermes")
+    # Reserve /fulilian as the catch-all top-level command.
+    entries.append(("fulilian", "Talk to Fulilian or run a subcommand", "[subcommand] [args]"))
+    seen.add("fulilian")
 
     def _add(name: str, desc: str, hint: str) -> None:
         slack_name = _sanitize_slack_name(name)
@@ -1461,8 +1461,8 @@ def slack_native_slashes() -> list[tuple[str, str, str]]:
             return
         if slack_name in _SLACK_RESERVED_COMMANDS:
             return
-        if slack_name in _SLACK_VIA_HERMES_ONLY:
-            # Intentionally Slack-via-/hermes only (see _SLACK_VIA_HERMES_ONLY).
+        if slack_name in _SLACK_VIA_FULILIAN_ONLY:
+            # Intentionally Slack-via-/fulilian only (see _SLACK_VIA_FULILIAN_ONLY).
             return
         if len(entries) >= _SLACK_MAX_SLASH_COMMANDS:
             return
@@ -1471,7 +1471,7 @@ def slack_native_slashes() -> list[tuple[str, str, str]]:
         seen.add(slack_name)
 
     # Priority pass: pin high-value aliases (e.g. /btw, /bg, /reset) ahead of
-    # everything except /hermes, so a new canonical command can never silently
+    # everything except /fulilian, so a new canonical command can never silently
     # clamp them off the 50-slash cap. Each alias borrows its parent command's
     # description and hint.
     _alias_to_cmd = {
@@ -1507,7 +1507,7 @@ def slack_native_slashes() -> list[tuple[str, str, str]]:
     return entries
 
 
-def slack_app_manifest(request_url: str = "https://hermes-agent.local/slack/commands") -> dict[str, Any]:
+def slack_app_manifest(request_url: str = "https://fulilian-agent.local/slack/commands") -> dict[str, Any]:
     """Generate a Slack app manifest with all gateway commands as slashes.
 
     ``request_url`` is required by Slack's manifest schema for every slash
@@ -1535,12 +1535,12 @@ def slack_app_manifest(request_url: str = "https://hermes-agent.local/slack/comm
 
 
 def slack_subcommand_map() -> dict[str, str]:
-    """Return subcommand -> /command mapping for Slack /hermes handler.
+    """Return subcommand -> /command mapping for Slack /fulilian handler.
 
-    Maps both canonical names and aliases so /hermes bg do stuff works
-    the same as /hermes background do stuff.
+    Maps both canonical names and aliases so /fulilian bg do stuff works
+    the same as /fulilian background do stuff.
 
-    Plugin-registered slash commands are included so ``/hermes <plugin-cmd>``
+    Plugin-registered slash commands are included so ``/fulilian <plugin-cmd>``
     routes through the plugin handler.
     """
     overrides = _resolve_config_gates()
@@ -2168,7 +2168,7 @@ class SlashCommandCompleter(Completer):
 
     @staticmethod
     def _personality_completions(sub_text: str, sub_lower: str):
-        """Yield completions for /personality via hermes_cli.personality."""
+        """Yield completions for /personality via fulilian_cli.personality."""
         try:
             # Single owner: built-ins + user overrides from agent.personalities.
             from cli import load_cli_config

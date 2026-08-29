@@ -67,7 +67,7 @@ def _cleanup(mcp_tool_module, name: str) -> None:
 def test_precall_dead_children_signal_reconnect(monkeypatch, tmp_path):
     """Dead-at-call-time subprocess → clean reconnecting error + reconnect
     signal, instead of a bare fast-fail that leaves the server dead."""
-    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+    monkeypatch.setenv("FULILIAN_HOME", str(tmp_path))
     from tools import mcp_tool
     from tools.mcp_tool import _make_tool_handler
 
@@ -99,7 +99,7 @@ def test_precall_dead_children_signal_reconnect(monkeypatch, tmp_path):
 def test_midcall_child_exit_signals_reconnect(monkeypatch, tmp_path):
     """Subprocess dies while the RPC is in flight → fast-fail error AND a
     reconnect signal so the next call lands on a respawned transport."""
-    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+    monkeypatch.setenv("FULILIAN_HOME", str(tmp_path))
     from tools import mcp_tool
     from tools.mcp_tool import _make_tool_handler
 

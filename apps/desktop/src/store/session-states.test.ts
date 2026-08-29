@@ -575,7 +575,7 @@ describe('$focusedStoredSessionId in Bot Mode (#96062)', () => {
   it('a Bots-pane click keeps the main-zone bot tile focused instead of collapsing to a null selection edge', () => {
     // Bot chats open as TILES and never set $selectedStoredSessionId. Clicking
     // a roster row moves the interaction tracker to the sidebar group, whose
-    // active pane is chrome ('hermes-bots:pane'), not a session tile. The old
+    // active pane is chrome ('fulilian-bots:pane'), not a session tile. The old
     // derivation then fell back to the null primary selection and published a
     // NULL "focused session" edge — which the Bots plugin read as "the chat
     // lost the center", releasing its open claim and re-asserting the Bots
@@ -584,7 +584,7 @@ describe('$focusedStoredSessionId in Bot Mode (#96062)', () => {
     $selectedStoredSessionId.set(null)
     $layoutTree.set(
       split('row', [
-        group(['sessions', 'hermes-bots:pane'], { active: 'hermes-bots:pane', id: 'grp-sessions' }),
+        group(['sessions', 'fulilian-bots:pane'], { active: 'fulilian-bots:pane', id: 'grp-sessions' }),
         group(['workspace', tilePane('chat-b')], { active: tilePane('chat-b'), id: 'grp-main' })
       ])
     )
@@ -607,7 +607,7 @@ describe('$focusedStoredSessionId in Bot Mode (#96062)', () => {
     $selectedStoredSessionId.set(null)
     $layoutTree.set(
       split('row', [
-        group(['sessions', 'hermes-bots:pane'], { active: 'hermes-bots:pane', id: 'grp-sessions' }),
+        group(['sessions', 'fulilian-bots:pane'], { active: 'fulilian-bots:pane', id: 'grp-sessions' }),
         group(['workspace'], { active: 'workspace', id: 'grp-main' })
       ])
     )

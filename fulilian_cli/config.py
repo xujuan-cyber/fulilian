@@ -1,17 +1,17 @@
 """
-Configuration management for Hermes Agent.
+Configuration management for FuLiLian.
 
-Config files are stored in ~/.hermes/ for easy access:
-- ~/.hermes/config.yaml  - All settings (model, toolsets, terminal, etc.)
-- ~/.hermes/.env         - API keys and secrets
+Config files are stored in ~/.fulilian/ for easy access:
+- ~/.fulilian/config.yaml  - All settings (model, toolsets, terminal, etc.)
+- ~/.fulilian/.env         - API keys and secrets
 
 This module provides:
-- hermes config          - Show current configuration
-- hermes config edit     - Open config in editor
-- hermes config get      - Print a resolved configuration value
-- hermes config set      - Set a specific value
-- hermes config unset    - Remove a user configuration value
-- hermes config wizard   - Re-run setup wizard
+- fulilian config          - Show current configuration
+- fulilian config edit     - Open config in editor
+- fulilian config get      - Print a resolved configuration value
+- fulilian config set      - Set a specific value
+- fulilian config unset    - Remove a user configuration value
+- fulilian config wizard   - Re-run setup wizard
 """
 
 import copy
@@ -51,13 +51,13 @@ def _backup_corrupt_config(config_path: Path) -> Optional[Path]:
     When the YAML can't be parsed, ``load_config()`` silently falls back to
     ``DEFAULT_CONFIG`` and the user's broken file stays on disk untouched.
     That file is still the user's only copy of their intended overrides — if
-    they re-run the setup wizard or ``hermes config set`` (which rewrites
+    they re-run the setup wizard or ``fulilian config set`` (which rewrites
     ``config.yaml``), the broken-but-recoverable content is gone for good.
 
     This snapshots the corrupted file to ``config.yaml.corrupt.<ts>.bak`` so
     the user can diff/repair it. Unlike Gemini CLI's policy-file recovery
     (which resets the live file to a clean state), we deliberately leave
-    ``config.yaml`` in place: hermes never silently mutates the user's config,
+    ``config.yaml`` in place: fulilian never silently mutates the user's config,
     and leaving it means a hand-fixed file is re-read on the next load. The
     backup is best-effort — any failure (permissions, symlink, disk full) is
     swallowed so config loading is never blocked by backup problems.
@@ -104,20 +104,20 @@ def _warn_config_parse_failure(
 ) -> None:
     """Surface a config.yaml parse failure to user, log, and stderr.
 
-    A YAML parse error in ``~/.hermes/config.yaml`` causes ``load_config()``
+    A YAML parse error in ``~/.fulilian/config.yaml`` causes ``load_config()``
     to silently fall back to ``DEFAULT_CONFIG``, which means every user
     override (auxiliary providers, fallback chain, model overrides, etc.)
     is dropped. Before this helper that was a one-line ``print(...)`` that
     scrolled off-screen on the first invocation and was never seen again.
 
     Now: warn once per (path, mtime_ns, size) on stderr **and** in
-    ``agent.log`` / ``errors.log`` at WARNING level so ``hermes logs``
+    ``agent.log`` / ``errors.log`` at WARNING level so ``fulilian logs``
     surfaces it. Re-warns automatically if the file changes (different
     mtime/size), so users editing the config see the next failure. On the
     first warning for a given broken file we also snapshot it to a
     timestamped ``.bak`` (best-effort) so the user's recoverable content
     survives any later rewrite of ``config.yaml`` by the setup wizard or
-    ``hermes config set``.
+    ``fulilian config set``.
 
     ``fallback`` selects the message wording: ``"defaults"`` (fresh process,
     nothing else to serve) or ``"last-known-good"`` (in-process retention of
@@ -145,7 +145,7 @@ def _warn_config_parse_failure(
         msg = (
             f"Failed to parse {config_path}: {exc}. "
             f"REFUSING to write config.yaml so the existing file is preserved. "
-            f"Fix the YAML (hermes config edit) and retry."
+            f"Fix the YAML (fulilian config edit) and retry."
         )
     else:
         msg = (
@@ -158,7 +158,7 @@ def _warn_config_parse_failure(
         msg += f" A copy of the corrupted file was saved to {backup_path}."
     logger.warning(msg)
     try:
-        sys.stderr.write(f"⚠️  hermes config: {msg}\n")
+        sys.stderr.write(f"⚠️  fulilian config: {msg}\n")
         sys.stderr.flush()
     except Exception:
         pass
@@ -172,31 +172,31 @@ _ENV_VAR_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 #
 # * ``LD_PRELOAD`` / ``LD_LIBRARY_PATH`` / ``LD_AUDIT`` — Linux dynamic
 #   loader. ``DYLD_*`` — macOS equivalent. Planting a path here means
-#   the next ``subprocess.run([...])`` Hermes makes loads attacker code
+#   the next ``subprocess.run([...])`` Fulilian makes loads attacker code
 #   before main().
 # * ``PYTHONPATH`` / ``PYTHONHOME`` / ``PYTHONSTARTUP`` /
-#   ``PYTHONUSERBASE`` — Python interpreter init. Hermes itself starts
+#   ``PYTHONUSERBASE`` — Python interpreter init. Fulilian itself starts
 #   from one of these on every restart.
 # * ``NODE_OPTIONS`` / ``NODE_PATH`` — Node interpreter; affects npm,
-#   ``hermes update``, the TUI build.
+#   ``fulilian update``, the TUI build.
 # * ``PATH`` — too broad to allow. The dashboard never needs to rewrite
 #   the operator's PATH; if a tool can't be found, the fix is to add an
 #   absolute path in the integration config, not to mutate PATH globally.
 # * ``GIT_SSH_COMMAND`` / ``GIT_EXEC_PATH`` — git rewrites that fire
-#   on every plugin install / ``hermes update``.
+#   on every plugin install / ``fulilian update``.
 # * ``BROWSER`` / ``EDITOR`` / ``VISUAL`` / ``PAGER`` — commands the
 #   shell or CLI invokes implicitly. Wrong values here = RCE on next
 #   ``$EDITOR``.
 # * ``SHELL`` — what subprocess uses with ``shell=True`` (we try to
 #   avoid that, but defense in depth).
-# * ``HERMES_HOME`` / ``HERMES_PROFILE`` / ``HERMES_CONFIG`` /
-#   ``HERMES_ENV`` — Hermes runtime location flags. Writing these into
+# * ``FULILIAN_HOME`` / ``FULILIAN_PROFILE`` / ``FULILIAN_CONFIG`` /
+#   ``FULILIAN_ENV`` — Fulilian runtime location flags. Writing these into
 #   ``.env`` would relocate state in ways the user did not request from
 #   the dashboard. ``config.yaml`` is the supported surface for these.
 #
-# IMPORTANT: ``HERMES_*`` overall is NOT blocked. Many legitimate
-# integration credentials follow that prefix (HERMES_LANGFUSE_PUBLIC_KEY,
-# HERMES_SPOTIFY_CLIENT_ID, ...). The
+# IMPORTANT: ``FULILIAN_*`` overall is NOT blocked. Many legitimate
+# integration credentials follow that prefix (FULILIAN_LANGFUSE_PUBLIC_KEY,
+# FULILIAN_SPOTIFY_CLIENT_ID, ...). The
 # denylist is name-by-name on purpose so the gate stays narrow and
 # doesn't accidentally break provider setup wizards.
 #
@@ -218,24 +218,24 @@ _ENV_VAR_NAME_DENYLIST: frozenset[str] = frozenset({
     "PATH", "SHELL", "BROWSER", "EDITOR", "VISUAL", "PAGER",
     # Git
     "GIT_SSH_COMMAND", "GIT_EXEC_PATH", "GIT_SHELL",
-    # Hermes runtime location — never via dashboard env writer.
-    # NOT a HERMES_* blanket: integration credentials (HERMES_GEMINI_*,
-    # HERMES_LANGFUSE_*, HERMES_SPOTIFY_*, ...) ARE allowed.
-    "HERMES_HOME", "HERMES_PROFILE", "HERMES_CONFIG", "HERMES_ENV",
-    "HERMES_CONFIG_PATH", "HERMES_ENV_PATH",
+    # Fulilian runtime location — never via dashboard env writer.
+    # NOT a FULILIAN_* blanket: integration credentials (FULILIAN_GEMINI_*,
+    # FULILIAN_LANGFUSE_*, FULILIAN_SPOTIFY_*, ...) ARE allowed.
+    "FULILIAN_HOME", "FULILIAN_PROFILE", "FULILIAN_CONFIG", "FULILIAN_ENV",
+    "FULILIAN_CONFIG_PATH", "FULILIAN_ENV_PATH",
     # MCP catalog trust root. Package-manager wrappers may still provide this
     # in the process environment; only generic persistence writes are blocked.
-    "HERMES_OPTIONAL_MCPS",
+    "FULILIAN_OPTIONAL_MCPS",
     # Local ACP subprocess selection. Existing operator/package-manager values
     # remain readable; generic writers cannot acquire executable/argv authority.
-    "HERMES_COPILOT_ACP_COMMAND", "HERMES_COPILOT_ACP_ARGS",
-    # Hermes security policy / approval-routing context. These remain available
+    "FULILIAN_COPILOT_ACP_COMMAND", "FULILIAN_COPILOT_ACP_ARGS",
+    # Fulilian security policy / approval-routing context. These remain available
     # through their dedicated CLI/config/session controls, but a generic
     # credential writer must not persist them for the next process startup.
-    "HERMES_YOLO_MODE", "HERMES_ACCEPT_HOOKS", "HERMES_REDACT_SECRETS",
-    "HERMES_INTERACTIVE", "HERMES_EXEC_ASK", "HERMES_GATEWAY_SESSION",
-    "HERMES_CRON_SESSION", "HERMES_SINGLE_QUERY_SESSION",
-    "HERMES_SESSION_KEY", "HERMES_SESSION_PLATFORM",
+    "FULILIAN_YOLO_MODE", "FULILIAN_ACCEPT_HOOKS", "FULILIAN_REDACT_SECRETS",
+    "FULILIAN_INTERACTIVE", "FULILIAN_EXEC_ASK", "FULILIAN_GATEWAY_SESSION",
+    "FULILIAN_CRON_SESSION", "FULILIAN_SINGLE_QUERY_SESSION",
+    "FULILIAN_SESSION_KEY", "FULILIAN_SESSION_PLATFORM",
 })
 
 
@@ -260,11 +260,11 @@ def _reject_denylisted_env_var(key: str) -> None:
         raise ValueError(
             f"Environment variable {key!r} is on the writer denylist. "
             "Names that influence subprocess execution (LD_PRELOAD, "
-            "PYTHONPATH, PATH, EDITOR, ...) or Hermes runtime location "
-            "and security policy (HERMES_HOME, HERMES_YOLO_MODE, ...) "
+            "PYTHONPATH, PATH, EDITOR, ...) or Fulilian runtime location "
+            "and security policy (FULILIAN_HOME, FULILIAN_YOLO_MODE, ...) "
             "cannot be persisted via "
             "the env writer. If you really need this, edit "
-            "~/.hermes/.env directly."
+            "~/.fulilian/.env directly."
         )
 
 
@@ -338,37 +338,37 @@ _EXTRA_ENV_KEYS = frozenset({
     "IRC_SERVER", "IRC_PORT", "IRC_NICKNAME", "IRC_CHANNEL",
     "IRC_USE_TLS", "IRC_SERVER_PASSWORD", "IRC_NICKSERV_PASSWORD",
     "TERMINAL_ENV", "TERMINAL_SSH_KEY", "TERMINAL_SSH_PORT",
-    # HERMES_TOOL_PROGRESS_MODE is deprecated (replaced by display.tool_progress
+    # FULILIAN_TOOL_PROGRESS_MODE is deprecated (replaced by display.tool_progress
     # in config.yaml) but STILL READ at runtime by the gateway as a back-compat
     # fallback, so it must stay known to reload/compat paths. The boolean
-    # HERMES_TOOL_PROGRESS variant is fully unsupported since the v12 config
+    # FULILIAN_TOOL_PROGRESS variant is fully unsupported since the v12 config
     # support floor retired its only consumer (the v3→4 migration): it is no
     # longer listed here and doctor flags it as ignored.
-    "HERMES_TOOL_PROGRESS_MODE",
+    "FULILIAN_TOOL_PROGRESS_MODE",
     "WHATSAPP_MODE", "WHATSAPP_ENABLED",
     "MATTERMOST_HOME_CHANNEL", "MATTERMOST_HOME_CHANNEL_NAME", "MATTERMOST_REPLY_MODE",
     "MATRIX_PASSWORD", "MATRIX_ENCRYPTION", "MATRIX_DEVICE_ID", "MATRIX_HOME_ROOM",
     "MATRIX_REQUIRE_MENTION", "MATRIX_FREE_RESPONSE_ROOMS", "MATRIX_AUTO_THREAD", "MATRIX_DM_AUTO_THREAD",
     "MATRIX_RECOVERY_KEY",
     # Langfuse observability plugin — optional tuning keys + standard SDK vars.
-    # Activation is via plugins.enabled (opt-in through `hermes plugins enable
-    # observability/langfuse` or `hermes tools → Langfuse`); credentials gate
+    # Activation is via plugins.enabled (opt-in through `fulilian plugins enable
+    # observability/langfuse` or `fulilian tools → Langfuse`); credentials gate
     # the plugin at runtime.
-    "HERMES_LANGFUSE_ENV",
-    "HERMES_LANGFUSE_RELEASE",
-    "HERMES_LANGFUSE_SAMPLE_RATE",
-    "HERMES_LANGFUSE_MAX_CHARS",
-    "HERMES_LANGFUSE_CAPTURE",
-    "HERMES_LANGFUSE_DEBUG",
+    "FULILIAN_LANGFUSE_ENV",
+    "FULILIAN_LANGFUSE_RELEASE",
+    "FULILIAN_LANGFUSE_SAMPLE_RATE",
+    "FULILIAN_LANGFUSE_MAX_CHARS",
+    "FULILIAN_LANGFUSE_CAPTURE",
+    "FULILIAN_LANGFUSE_DEBUG",
     "LANGFUSE_PUBLIC_KEY",
     "LANGFUSE_SECRET_KEY",
     "LANGFUSE_BASE_URL",
     # ACP (Agent Client Protocol) keys — profile-isolable so different
     # profiles can use different ACP backends without cross-leak.
-    "HERMES_ACP_AUTH_METHOD",
-    "HERMES_ACP_AUTO_APPROVE",
-    "HERMES_COPILOT_ACP_COMMAND",
-    "HERMES_COPILOT_ACP_ARGS",
+    "FULILIAN_ACP_AUTH_METHOD",
+    "FULILIAN_ACP_AUTO_APPROVE",
+    "FULILIAN_COPILOT_ACP_COMMAND",
+    "FULILIAN_COPILOT_ACP_ARGS",
     "COPILOT_CLI_PATH",
     "COPILOT_ACP_BASE_URL",
 })
@@ -388,7 +388,7 @@ _NIX_MANAGED_SYSTEMS = {"nixos", "home-manager"}
 # legacy signals name that system.
 _LEGACY_MANAGED_SYSTEM = "nixos"
 # The Nix store root. Used by detect_install_method to identify installs
-# from `nix run` / `nix profile install` (which don't set HERMES_MANAGED).
+# from `nix run` / `nix profile install` (which don't set FULILIAN_MANAGED).
 # A module-level constant so tests can patch it without creating files
 # under the real /nix/store.
 _NIX_STORE = Path("/nix/store")
@@ -401,14 +401,14 @@ _IGNORED_MANAGED_VALUES = frozenset({"brew", "homebrew"})
 
 def get_managed_system() -> Optional[str]:
     """Return the package manager owning this install, if any."""
-    raw = os.getenv("HERMES_MANAGED", "").strip()
+    raw = os.getenv("FULILIAN_MANAGED", "").strip()
     marker = None
     if raw:
         marker = raw.lower()
     else:
-        managed_marker = get_hermes_home() / ".managed"
+        managed_marker = get_fulilian_home() / ".managed"
         # An interactive shell reads the marker, because it does not see the
-        # HERMES_MANAGED variable of the service. A marker with content
+        # FULILIAN_MANAGED variable of the service. A marker with content
         # names the system that manages the install.
         if managed_marker.exists():
             try:
@@ -429,10 +429,10 @@ def get_managed_system() -> Optional[str]:
 
 
 def is_managed() -> bool:
-    """Check if Hermes is running in package-manager-managed mode.
+    """Check if Fulilian is running in package-manager-managed mode.
 
-    Two signals: the HERMES_MANAGED env var (set by the systemd service),
-    or a .managed marker file in HERMES_HOME (set by the NixOS activation
+    Two signals: the FULILIAN_MANAGED env var (set by the systemd service),
+    or a .managed marker file in FULILIAN_HOME (set by the NixOS activation
     script, so interactive shells also see it).
     """
     return get_managed_system() is not None
@@ -442,7 +442,7 @@ def is_managed() -> bool:
 # home-manager), and the running process cannot tell which one. Thus this text
 # names the routes instead of one command.
 _NIX_UPDATE_MSG = (
-    "Update Hermes through the Nix source that installed it "
+    "Update Fulilian through the Nix source that installed it "
     "(e.g. nix profile upgrade, or update your flake input and rebuild with nixos-rebuild or home-manager switch)"
 )
 
@@ -458,9 +458,9 @@ def get_managed_update_command() -> Optional[str]:
 def _install_method_project_root(project_root: Optional[Path] = None) -> Path:
     """Resolve the directory that holds the *running code* (the install tree).
 
-    This is the parent of ``hermes_cli/`` — i.e. the git checkout for source
-    installs, ``/opt/hermes`` inside the published image. It is a property of
-    the running interpreter, NOT of ``$HERMES_HOME``, which is why a
+    This is the parent of ``fulilian_cli/`` — i.e. the git checkout for source
+    installs, ``/opt/fulilian`` inside the published image. It is a property of
+    the running interpreter, NOT of ``$FULILIAN_HOME``, which is why a
     code-scoped stamp here is immune to two installs sharing one data
     directory.
     """
@@ -470,30 +470,30 @@ def _install_method_project_root(project_root: Optional[Path] = None) -> Path:
 
 
 def detect_install_method(project_root: Optional[Path] = None) -> str:
-    """Detect how Hermes was installed: 'apt', 'docker', 'nix', 'nixos',
+    """Detect how Fulilian was installed: 'apt', 'docker', 'nix', 'nixos',
     'home-manager', 'git', or 'unknown'.
 
     Resolution order:
     1. Code-scoped stamp ``<install tree>/.install_method`` (next to the
        running code) — the authoritative marker.
-    2. Legacy home-scoped stamp ``$HERMES_HOME/.install_method`` — read for
+    2. Legacy home-scoped stamp ``$FULILIAN_HOME/.install_method`` — read for
        backward compatibility, but a ``docker`` value is IGNORED when we are
        not actually running inside a container (see below).
-    3. HERMES_MANAGED env / .managed marker (NixOS managed mode)
+    3. FULILIAN_MANAGED env / .managed marker (NixOS managed mode)
     4. /nix/store/ path detection -> 'nix' (nix run / nix profile install)
     5. .git directory presence -> 'git'
     6. Fallback -> 'unknown'
 
-    Why the stamp is code-scoped, not home-scoped (issue: shared ``~/.hermes``)
+    Why the stamp is code-scoped, not home-scoped (issue: shared ``~/.fulilian``)
     --------------------------------------------------------------------------
     The install method describes *the binary that is running*, but
-    ``$HERMES_HOME`` is a shared DATA directory — the Docker docs deliberately
-    bind-mount it (``~/.hermes:/opt/data``) so config/sessions/memory persist
+    ``$FULILIAN_HOME`` is a shared DATA directory — the Docker docs deliberately
+    bind-mount it (``~/.fulilian:/opt/data``) so config/sessions/memory persist
     and can be shared with a host-side Desktop/CLI install. When a
-    containerised gateway and a host install share one ``$HERMES_HOME``, a
+    containerised gateway and a host install share one ``$FULILIAN_HOME``, a
     home-scoped stamp is a single slot describing two different installs:
     the container stamps ``docker`` on every boot, the host install then reads
-    ``docker`` and ``hermes update`` refuses to run ("doesn't apply inside the
+    ``docker`` and ``fulilian update`` refuses to run ("doesn't apply inside the
     Docker container") even though the host binary is a perfectly updatable
     git/pip install. Scoping the stamp to the install tree gives each install
     its own truthful marker.
@@ -508,8 +508,8 @@ def detect_install_method(project_root: Optional[Path] = None) -> str:
     The supported installs self-identify via the code-scoped stamp:
       - the curl installer (scripts/install.sh, the README/website install
         command) git-clones the repo and stamps ``git`` next to the code;
-      - the published ``nousresearch/hermes-agent`` image bakes a ``docker``
-        stamp into ``/opt/hermes`` at build time.
+      - the published ``nousresearch/fulilian-agent`` image bakes a ``docker``
+        stamp into ``/opt/fulilian`` at build time.
     An unsupported manual install dropped into a container (no stamp) falls
     through to the ``.git`` checks and behaves like any off-path install.
     See issue #34397.
@@ -524,7 +524,7 @@ def detect_install_method(project_root: Optional[Path] = None) -> str:
     # home-manager install gives "unknown".
     supported_methods = {"apt", "docker", "nix", "nixos", "home-manager", "git", "unknown"}
 
-    # 1. Code-scoped stamp — authoritative, immune to shared $HERMES_HOME.
+    # 1. Code-scoped stamp — authoritative, immune to shared $FULILIAN_HOME.
     try:
         method = (root / ".install_method").read_text(encoding="utf-8").strip().lower()
         if method in supported_methods:
@@ -534,11 +534,11 @@ def detect_install_method(project_root: Optional[Path] = None) -> str:
 
     # 2. Legacy home-scoped stamp — back-compat. Ignore a ``docker`` value
     #    when we are not actually containerised: that is the signature of a
-    #    host install whose shared $HERMES_HOME was stamped by a co-located
-    #    container, and honouring it wrongly blocks ``hermes update``.
+    #    host install whose shared $FULILIAN_HOME was stamped by a co-located
+    #    container, and honouring it wrongly blocks ``fulilian update``.
     try:
         method = (
-            (get_hermes_home() / ".install_method")
+            (get_fulilian_home() / ".install_method")
             .read_text(encoding="utf-8")
             .strip()
             .lower()
@@ -552,7 +552,7 @@ def detect_install_method(project_root: Optional[Path] = None) -> str:
     if managed:
         return managed.lower().replace(" ", "-")
 
-    # detect Nix installs that don't set HERMES_MANAGED (e.g. ``nix run``,
+    # detect Nix installs that don't set FULILIAN_MANAGED (e.g. ``nix run``,
     # ``nix profile install``). The code lives under /nix/store/ which is the
     # hallmark of a nix-built install — no other supported install path puts
     # code there.
@@ -580,7 +580,7 @@ def detect_install_method(project_root: Optional[Path] = None) -> str:
 
 
 def _running_in_container() -> bool:
-    """Thin wrapper around ``hermes_constants.is_container`` (import-safe)."""
+    """Thin wrapper around ``fulilian_constants.is_container`` (import-safe)."""
     try:
         from fulilian_constants import is_container
 
@@ -593,12 +593,12 @@ def stamp_install_method(method: str, project_root: Optional[Path] = None) -> No
     """Write the install method next to the running code (code-scoped stamp).
 
     The stamp lives in the install tree (``<install tree>/.install_method``),
-    not in ``$HERMES_HOME``, so that two installs sharing one data directory
+    not in ``$FULILIAN_HOME``, so that two installs sharing one data directory
     do not overwrite each other's marker. See ``detect_install_method`` for
     the full rationale.
 
     Best-effort: if the install tree is read-only (e.g. the immutable
-    ``/opt/hermes`` in the published image, which instead bakes the stamp at
+    ``/opt/fulilian`` in the published image, which instead bakes the stamp at
     build time) the write silently no-ops and detection falls back to its
     other signals.
     """
@@ -625,12 +625,12 @@ def recommended_update_command_for_method(method: str) -> str:
     if is_nix_install_method(method):
         return _NIX_UPDATE_MSG
     if method == "docker":
-        return "docker pull nousresearch/hermes-agent:latest"
+        return "docker pull nousresearch/fulilian-agent:latest"
     if method == "apt":
         # By contract, the current "apt" install method is the Termux APT
         # distribution. It deliberately uses Termux's `pkg` frontend.
-        return "pkg upgrade hermes-agent"
-    return "hermes update"
+        return "pkg upgrade fulilian-agent"
+    return "fulilian update"
 
 
 def recommended_update_command() -> str:
@@ -645,9 +645,9 @@ def recommended_update_command() -> str:
     return recommended_update_command_for_method(method)
 
 
-# Long-form text for ``hermes update`` / ``--check`` when running inside the
+# Long-form text for ``fulilian update`` / ``--check`` when running inside the
 # Docker image.  Surfaced by ``cmd_update`` and ``_cmd_update_check`` in
-# hermes_cli/main.py; lives here so the wording stays consistent and we
+# fulilian_cli/main.py; lives here so the wording stays consistent and we
 # don't grow two slightly-different copies.
 #
 # Why this matters:
@@ -655,32 +655,32 @@ def recommended_update_command() -> str:
 #     git-based update path can never succeed inside the container.
 #   - The pre-existing fallback message ("✗ Not a git repository. Please
 #     reinstall: curl ... install.sh") is actively misleading inside Docker
-#     — that script installs a *new* host-side Hermes, it doesn't update
+#     — that script installs a *new* host-side Fulilian, it doesn't update
 #     the running container.
 #   - The right action is ``docker pull`` + restart the container; this
 #     helper spells that out, with notes on tag pinning and config
 #     persistence so users don't get blindsided.
 _DOCKER_UPDATE_MESSAGE = """\
-✗ ``hermes update`` doesn't apply inside the Docker container.
+✗ ``fulilian update`` doesn't apply inside the Docker container.
 
-Hermes Agent runs as a published image (nousresearch/hermes-agent), not a
+FuLiLian runs as a published image (nousresearch/fulilian-agent), not a
 git checkout — the container has no working tree to pull into.  Update by
 pulling a fresh image and restarting your container instead:
 
-  docker pull nousresearch/hermes-agent:latest
+  docker pull nousresearch/fulilian-agent:latest
   # then restart whatever started the container, e.g.:
-  docker compose up -d --force-recreate hermes-agent
+  docker compose up -d --force-recreate fulilian-agent
   # or, for ad-hoc runs, exit the current container and `docker run` again
 
 Verify the new version after restart:
-  docker run --rm nousresearch/hermes-agent:latest --version
+  docker run --rm nousresearch/fulilian-agent:latest --version
 
 Notes:
   • If you pinned a specific tag (e.g. ``:v0.14.0``) the ``:latest`` tag
     won't move your container — pull the newer tag you actually want, or
     switch to ``:latest`` / ``:main`` for rolling updates.  See available
-    tags at https://hub.docker.com/r/nousresearch/hermes-agent/tags
-  • Your config and session history live under ``$HERMES_HOME`` (``/opt/data``
+    tags at https://hub.docker.com/r/nousresearch/fulilian-agent/tags
+  • Your config and session history live under ``$FULILIAN_HOME`` (``/opt/data``
     in the container, typically bind-mounted from the host) and persist
     across image upgrades — re-pulling doesn't lose any state.
   • Running a fork?  Build your own image with this repo's ``Dockerfile``
@@ -688,7 +688,7 @@ Notes:
 
 
 def format_docker_update_message() -> str:
-    """Return the user-facing message for ``hermes update`` inside Docker.
+    """Return the user-facing message for ``fulilian update`` inside Docker.
 
     Centralised so ``cmd_update`` (the apply path) and ``_cmd_update_check``
     (the dry-run path) share the same wording.  See ``_DOCKER_UPDATE_MESSAGE``
@@ -697,12 +697,12 @@ def format_docker_update_message() -> str:
     return _DOCKER_UPDATE_MESSAGE
 
 
-def format_managed_message(action: str = "modify this Hermes installation") -> str:
+def format_managed_message(action: str = "modify this Fulilian installation") -> str:
     """Build a user-facing error for managed installs."""
     managed_system = get_managed_system() or "a package manager"
     return (
-        f"Cannot {action}: this Hermes installation is managed by {managed_system}.\n"
-        "Use your package manager to upgrade or reinstall Hermes."
+        f"Cannot {action}: this Fulilian installation is managed by {managed_system}.\n"
+        "Use your package manager to upgrade or reinstall Fulilian."
     )
 
 def managed_error(action: str = "modify configuration"):
@@ -715,24 +715,24 @@ def managed_error(action: str = "modify configuration"):
 # =============================================================================
 
 def get_container_exec_info() -> Optional[dict]:
-    """Read container mode metadata from HERMES_HOME/.container-mode.
+    """Read container mode metadata from FULILIAN_HOME/.container-mode.
 
-    Returns a dict with keys: backend, container_name, exec_user, hermes_bin
+    Returns a dict with keys: backend, container_name, exec_user, fulilian_bin
     or None if container mode is not active, we're already inside the
-    container, or HERMES_DEV=1 is set.
+    container, or FULILIAN_DEV=1 is set.
 
     The .container-mode file is written by the NixOS activation script when
     container.enable = true. It tells the host CLI to exec into the container
     instead of running locally.
     """
-    if os.environ.get("HERMES_DEV") == "1":
+    if os.environ.get("FULILIAN_DEV") == "1":
         return None
 
     from fulilian_constants import is_container
     if is_container():
         return None
 
-    container_mode_file = get_hermes_home() / ".container-mode"
+    container_mode_file = get_fulilian_home() / ".container-mode"
 
     try:
         info = {}
@@ -747,15 +747,15 @@ def get_container_exec_info() -> Optional[dict]:
     # All other exceptions (PermissionError, malformed data, etc.) propagate
 
     backend = info.get("backend", "docker")
-    container_name = info.get("container_name", "hermes-agent")
-    exec_user = info.get("exec_user", "hermes")
-    hermes_bin = info.get("hermes_bin", "/data/current-package/bin/hermes")
+    container_name = info.get("container_name", "fulilian-agent")
+    exec_user = info.get("exec_user", "fulilian")
+    fulilian_bin = info.get("fulilian_bin", "/data/current-package/bin/fulilian")
 
     return {
         "backend": backend,
         "container_name": container_name,
         "exec_user": exec_user,
-        "hermes_bin": hermes_bin,
+        "fulilian_bin": fulilian_bin,
     }
 
 
@@ -764,28 +764,28 @@ def get_container_exec_info() -> Optional[dict]:
 # =============================================================================
 
 # Re-export from fulilian_constants — canonical definition lives there.
-from fulilian_constants import get_hermes_home, get_process_hermes_home  # noqa: F811,E402
+from fulilian_constants import get_fulilian_home, get_process_fulilian_home  # noqa: F811,E402
 from utils import atomic_replace, fast_safe_load
 
 def get_config_path() -> Path:
     """Get the main config file path."""
-    return get_hermes_home() / "config.yaml"
+    return get_fulilian_home() / "config.yaml"
 
 def get_env_path() -> Path:
     """Get the .env file path (for API keys)."""
-    return get_hermes_home() / ".env"
+    return get_fulilian_home() / ".env"
 
 def get_project_root() -> Path:
     """Get the project installation directory."""
     return Path(__file__).parent.parent.resolve()
 
-def _resolve_hermes_uid_gid() -> tuple[Optional[int], Optional[int]]:
-    """Read the HERMES_UID / HERMES_GID env vars set by Docker deployments.
+def _resolve_fulilian_uid_gid() -> tuple[Optional[int], Optional[int]]:
+    """Read the FULILIAN_UID / FULILIAN_GID env vars set by Docker deployments.
 
-    Docker containers running Hermes commonly set these to map the in-container
+    Docker containers running Fulilian commonly set these to map the in-container
     user to a host user so volume-mounted state files end up with the right
-    ownership. The entrypoint chowns the top-level HERMES_HOME once, but
-    subdirectories created at runtime by ``ensure_hermes_home()`` (especially
+    ownership. The entrypoint chowns the top-level FULILIAN_HOME once, but
+    subdirectories created at runtime by ``ensure_fulilian_home()`` (especially
     for profile namespaces under ``profiles/<name>/``) need the same chown
     or they land as ``root:root`` and block subsequent uid-mapped workers
     with ``PermissionError [Errno 13]``. See #34107.
@@ -796,8 +796,8 @@ def _resolve_hermes_uid_gid() -> tuple[Optional[int], Optional[int]]:
     """
     if sys.platform == "win32":
         return None, None
-    uid_str = os.environ.get("HERMES_UID", "").strip()
-    gid_str = os.environ.get("HERMES_GID", "").strip()
+    uid_str = os.environ.get("FULILIAN_UID", "").strip()
+    gid_str = os.environ.get("FULILIAN_GID", "").strip()
     try:
         uid = int(uid_str) if uid_str else None
     except ValueError:
@@ -809,8 +809,8 @@ def _resolve_hermes_uid_gid() -> tuple[Optional[int], Optional[int]]:
     return uid, gid
 
 
-def _chown_to_hermes_uid(path) -> None:
-    """Chown ``path`` to ``HERMES_UID:HERMES_GID`` if those env vars are set.
+def _chown_to_fulilian_uid(path) -> None:
+    """Chown ``path`` to ``FULILIAN_UID:FULILIAN_GID`` if those env vars are set.
 
     No-op when:
       - Either env var is unset/invalid
@@ -818,10 +818,10 @@ def _chown_to_hermes_uid(path) -> None:
       - On Windows (chown semantics don't apply)
 
     Used by :func:`_secure_dir` to keep ownership consistent across all
-    directories created by :func:`ensure_hermes_home` on Docker deployments.
+    directories created by :func:`ensure_fulilian_home` on Docker deployments.
     See #34107.
     """
-    uid, gid = _resolve_hermes_uid_gid()
+    uid, gid = _resolve_fulilian_uid_gid()
     if uid is None and gid is None:
         return
     try:
@@ -842,16 +842,16 @@ def _secure_dir(path):
     """Set directory to owner-only access (0700 by default). No-op on Windows.
 
     Skipped in managed mode — the NixOS module sets group-readable
-    permissions (0750) so interactive users in the hermes group can
+    permissions (0750) so interactive users in the fulilian group can
     share state with the gateway service.
 
-    The mode can be overridden via the HERMES_HOME_MODE environment variable
-    (e.g. HERMES_HOME_MODE=0701) for deployments where a web server (nginx,
-    caddy, etc.) needs to traverse HERMES_HOME to reach a served subdirectory.
+    The mode can be overridden via the FULILIAN_HOME_MODE environment variable
+    (e.g. FULILIAN_HOME_MODE=0701) for deployments where a web server (nginx,
+    caddy, etc.) needs to traverse FULILIAN_HOME to reach a served subdirectory.
     The execute-only bit on a directory permits cd-through without exposing
     directory listings.
 
-    Also applies ``HERMES_UID``/``HERMES_GID``-based ownership when those env
+    Also applies ``FULILIAN_UID``/``FULILIAN_GID``-based ownership when those env
     vars are set (#34107 — Docker deployments need this so profile subdirs
     created at runtime by kanban workers don't land as root:root and block
     subsequent uid-mapped workers).
@@ -859,7 +859,7 @@ def _secure_dir(path):
     if is_managed():
         return
     try:
-        mode_str = os.environ.get("HERMES_HOME_MODE", "").strip()
+        mode_str = os.environ.get("FULILIAN_HOME_MODE", "").strip()
         mode = int(mode_str, 8) if mode_str else 0o700
     except ValueError:
         mode = 0o700
@@ -867,19 +867,19 @@ def _secure_dir(path):
         os.chmod(path, mode)
     except (OSError, NotImplementedError):
         pass
-    _chown_to_hermes_uid(path)
+    _chown_to_fulilian_uid(path)
 
 
 def _is_container() -> bool:
     """Detect if we're running inside a Docker/Podman/LXC container.
 
-    When Hermes runs in a container with volume-mounted config files, forcing
+    When Fulilian runs in a container with volume-mounted config files, forcing
     0o600 permissions breaks multi-process setups where the gateway and
     dashboard run as different UIDs or the volume mount requires broader
     permissions.
     """
     # Explicit opt-out
-    if os.environ.get("HERMES_CONTAINER") or os.environ.get("HERMES_SKIP_CHMOD"):
+    if os.environ.get("FULILIAN_CONTAINER") or os.environ.get("FULILIAN_SKIP_CHMOD"):
         return True
     # Docker / Podman marker file
     if os.path.exists("/.dockerenv"):
@@ -902,7 +902,7 @@ def _secure_file(path):
     group-readable permissions (0640) on config files.
 
     Skipped in containers — Docker/Podman volume mounts often need broader
-    permissions.  Set HERMES_SKIP_CHMOD=1 to force-skip on other systems.
+    permissions.  Set FULILIAN_SKIP_CHMOD=1 to force-skip on other systems.
     """
     if is_managed() or _is_container():
         return
@@ -914,7 +914,7 @@ def _secure_file(path):
 
 
 def _ensure_default_soul_md(home: Path) -> None:
-    """Seed a default SOUL.md into HERMES_HOME, upgrading legacy empty templates.
+    """Seed a default SOUL.md into FULILIAN_HOME, upgrading legacy empty templates.
 
     First run: write DEFAULT_SOUL_MD. Existing installs whose SOUL.md is still
     the old comment-only scaffold (seeded by older install.sh / install.ps1 /
@@ -935,13 +935,13 @@ def _ensure_default_soul_md(home: Path) -> None:
 
 
 # Home paths whose directory skeleton has been created this process — see
-# ensure_hermes_home(). Only successful passes are recorded, so a raised
+# ensure_fulilian_home(). Only successful passes are recorded, so a raised
 # managed-mode/missing-profile error keeps re-checking on later loads.
-_HERMES_HOME_ENSURED: set = set()
+_FULILIAN_HOME_ENSURED: set = set()
 
 
-def ensure_hermes_home():
-    """Ensure ~/.hermes directory structure exists with secure permissions.
+def ensure_fulilian_home():
+    """Ensure ~/.fulilian directory structure exists with secure permissions.
 
     In managed mode (NixOS), dirs are created by the activation script with
     setgid + group-writable (2770). We skip mkdir and set umask(0o007) so
@@ -950,19 +950,19 @@ def ensure_hermes_home():
     Memoized per home path: this runs on EVERY ``load_config()`` (inside the
     config lock), and the ~14 mkdir/chmod syscalls per call made repeated
     config loads the dominant cost of hot read paths like ``model.options``.
-    After the first successful pass for a given ``HERMES_HOME`` we only re-run
+    After the first successful pass for a given ``FULILIAN_HOME`` we only re-run
     the full walk if the home directory itself has vanished (a deleted home is
     recreated on the next load, as before). Profile switches change
-    ``get_hermes_home()`` and therefore re-run for the new path.
+    ``get_fulilian_home()`` and therefore re-run for the new path.
     """
-    home = get_hermes_home()
+    home = get_fulilian_home()
     key = str(home)
 
-    if key in _HERMES_HOME_ENSURED and home.is_dir():
+    if key in _FULILIAN_HOME_ENSURED and home.is_dir():
         return
-    # Named profiles must be created explicitly (e.g. ``hermes profile create``).
+    # Named profiles must be created explicitly (e.g. ``fulilian profile create``).
     # If a stale process keeps running after the profile was renamed/deleted,
-    # silently mkdir-ing the old HERMES_HOME would resurrect an empty skeleton
+    # silently mkdir-ing the old FULILIAN_HOME would resurrect an empty skeleton
     # and make the deleted profile reappear in Desktop/profile lists.
     if home.parent.name == "profiles" and not home.exists():
         raise FileNotFoundError(
@@ -972,7 +972,7 @@ def ensure_hermes_home():
     if is_managed():
         old_umask = os.umask(0o007)
         try:
-            _ensure_hermes_home_managed(home)
+            _ensure_fulilian_home_managed(home)
         finally:
             os.umask(old_umask)
     else:
@@ -987,14 +987,14 @@ def ensure_hermes_home():
             _secure_dir(d)
         _ensure_default_soul_md(home)
 
-    _HERMES_HOME_ENSURED.add(key)
+    _FULILIAN_HOME_ENSURED.add(key)
 
 
-def _ensure_hermes_home_managed(home: Path):
+def _ensure_fulilian_home_managed(home: Path):
     """Managed-mode variant: verify dirs exist (activation creates them), seed SOUL.md."""
     if not home.is_dir():
         raise RuntimeError(
-            f"HERMES_HOME {home} does not exist."
+            f"FULILIAN_HOME {home} does not exist."
         )
     for subdir in ("cron", "sessions", "logs", "memories"):
         d = home / subdir
@@ -1222,7 +1222,7 @@ def _unset_nested(config, dotted_key: str) -> bool:
 
 
 def _is_env_config_key(key: str) -> bool:
-    """Return whether `hermes config set` routes this key to .env."""
+    """Return whether `fulilian config set` routes this key to .env."""
     if "." in key:
         return False
     key_upper = key.upper()
@@ -1289,7 +1289,7 @@ def get_missing_config_fields() -> List[Dict[str, Any]]:
 def get_missing_skill_config_vars() -> List[Dict[str, Any]]:
     """Return skill-declared config vars that are missing or empty in config.yaml.
 
-    Scans all enabled skills for ``metadata.hermes.config`` entries, then checks
+    Scans all enabled skills for ``metadata.fulilian.config`` entries, then checks
     which ones are absent or empty under ``skills.config.<key>`` in the user's
     config.yaml.  Returns a list of dicts suitable for prompting.
     """
@@ -1302,7 +1302,7 @@ def get_missing_skill_config_vars() -> List[Dict[str, Any]]:
         all_vars = discover_all_skill_config_vars()
     except Exception as e:
         # A malformed SKILL.md, unreadable external skill dir, or similar
-        # should never break `hermes update`.  Skill-config prompting is a
+        # should never break `fulilian update`.  Skill-config prompting is a
         # post-migration nicety, not a blocker.
         import logging
         logging.getLogger(__name__).debug(
@@ -1474,7 +1474,7 @@ def _normalize_custom_provider_entry(
         entry["key_env"] = entry["api_key_env"]
     _KNOWN_KEYS = {
         # ``provider`` duplicates the ``providers.<name>`` mapping key and is
-        # unused here, but Hermes' own config writer has historically emitted it
+        # unused here, but Fulilian' own config writer has historically emitted it
         # into provider entries. Accept it silently so those (self-written)
         # configs don't warn on every load.
         "provider",
@@ -1564,8 +1564,8 @@ def _normalize_custom_provider_entry(
         normalized["model"] = model_name.strip()
 
     # Entry-level marker: the ``models`` mapping was auto-discovered by
-    # Hermes (``_save_discovered_models_to_config``), not hand-curated.
-    # Older Hermes versions wrote an in-mapping ``__discovered_model_catalog__``
+    # Fulilian (``_save_discovered_models_to_config``), not hand-curated.
+    # Older Fulilian versions wrote an in-mapping ``__discovered_model_catalog__``
     # sentinel instead; accept it on read and strip it from the models
     # mapping so sentinel keys never surface as model IDs.
     models_discovered = entry.get("models_discovered") is True
@@ -1582,7 +1582,7 @@ def _normalize_custom_provider_entry(
         if models_copy:
             normalized["models"] = models_copy
     elif isinstance(models, list) and models:
-        # Hand-edited configs (and older Hermes versions) may write
+        # Hand-edited configs (and older Fulilian versions) may write
         # ``models`` as a plain list of ids or as ``[{id: ...}]`` rows.
         # Preserve both by converting to the dict shape downstream code
         # expects; otherwise normalize silently drops the list and /model
@@ -1905,7 +1905,7 @@ def get_custom_provider_context_length(
     used by:
       * ``AIAgent.__init__`` (startup resolution)
       * ``AIAgent.switch_model`` (mid-session ``/model`` switch)
-      * ``hermes_cli.model_switch.resolve_display_context_length`` (``/model`` confirmation display)
+      * ``fulilian_cli.model_switch.resolve_display_context_length`` (``/model`` confirmation display)
       * ``gateway.run._format_session_info`` (``/info`` display)
       * ``agent.model_metadata.get_model_context_length`` (when custom_providers is threaded through)
 
@@ -2084,12 +2084,12 @@ _EXTRA_KNOWN_ROOT_KEYS = {
     # intentionally absent from DEFAULT_CONFIG:
     "image_gen",         # image-generation provider config (agent/image_gen_registry.py)
     "video_gen",         # video-generation provider config (agent/video_gen_registry.py)
-    "plugins",           # plugin enable/disable lists (hermes_cli/plugins_cmd.py)
-    "smart_model_routing",   # written by the setup wizard (hermes_cli/setup.py)
-    "platform_toolsets",     # written by the setup wizard (hermes_cli/setup.py)
-    "known_plugin_toolsets", # written/read by hermes_cli/tools_config.py toolset-save flow
+    "plugins",           # plugin enable/disable lists (fulilian_cli/plugins_cmd.py)
+    "smart_model_routing",   # written by the setup wizard (fulilian_cli/setup.py)
+    "platform_toolsets",     # written by the setup wizard (fulilian_cli/setup.py)
+    "known_plugin_toolsets", # written/read by fulilian_cli/tools_config.py toolset-save flow
     "known_builtin_toolsets",  # ditto — which builtin toolsets a platform's checklist has offered
-    "tool_gateway_declined_tools",  # per-tool Tool Gateway offer declines (hermes_cli/nous_subscription.py, #92647)
+    "tool_gateway_declined_tools",  # per-tool Tool Gateway offer declines (fulilian_cli/nous_subscription.py, #92647)
     "session_reset",         # top-level form read by gateway/config.py + setup
     "group_sessions_per_user",   # top-level form bridged by gateway/config.py
     "thread_sessions_per_user",  # top-level form bridged by gateway/config.py
@@ -2142,7 +2142,7 @@ def validate_config_structure(config: Optional[Dict[str, Any]] = None) -> List["
         try:
             config = load_config()
         except Exception:
-            return [ConfigIssue("error", "Could not load config.yaml", "Run 'hermes setup' to create a valid config")]
+            return [ConfigIssue("error", "Could not load config.yaml", "Run 'fulilian setup' to create a valid config")]
 
     issues: List[ConfigIssue] = []
 
@@ -2266,7 +2266,7 @@ def validate_config_structure(config: Optional[Dict[str, Any]] = None) -> List["
     if cp and not model_cfg:
         issues.append(ConfigIssue(
             "warning",
-            "custom_providers defined but no 'model' section — Hermes won't know which provider to use",
+            "custom_providers defined but no 'model' section — Fulilian won't know which provider to use",
             "Add a model section:\n"
             "  model:\n"
             "    provider: custom\n"
@@ -2277,7 +2277,7 @@ def validate_config_structure(config: Optional[Dict[str, Any]] = None) -> List["
     # ── Root-level keys that look misplaced ──────────────────────────────
     # Only provider-like fields (base_url, api_key, …) are flagged. Arbitrary
     # unknown top-level keys are deliberately NOT warned about: top-level
-    # scalars are bridged into os.environ (gateway/run.py, hermes send) so
+    # scalars are bridged into os.environ (gateway/run.py, fulilian send) so
     # users can feed skills and external apps env-style keys from config.yaml
     # — a closed-world allowlist can never enumerate those.
     for key in config:
@@ -2311,7 +2311,7 @@ def print_config_warnings(config: Optional[Dict[str, Any]] = None) -> None:
     for ci in issues:
         marker = "\033[31m✗\033[0m" if ci.severity == "error" else "\033[33m⚠\033[0m"
         lines.append(f"  {marker} {ci.message}")
-    lines.append("  \033[2mRun 'hermes doctor' for fix suggestions.\033[0m")
+    lines.append("  \033[2mRun 'fulilian doctor' for fix suggestions.\033[0m")
     sys.stderr.write("\n".join(lines) + "\n\n")
 
 
@@ -2343,9 +2343,9 @@ def warn_deprecated_cwd_env_vars() -> None:
             f"this is deprecated."
         )
     if lines:
-        from fulilian_constants import display_hermes_home
+        from fulilian_constants import display_fulilian_home
 
-        hint_path = display_hermes_home()
+        hint_path = display_fulilian_home()
         lines.insert(0, "\033[33m⚠ Deprecated .env settings detected:\033[0m")
         lines.append(
             "  \033[2mMove to config.yaml instead:  "
@@ -2367,7 +2367,7 @@ def _persist_migration(config: Dict[str, Any]) -> None:
     them at read time, so writing them adds nothing and actively shadows future
     default changes (see ``save_config``'s docstring). Materialising defaults on
     every version bump is what rewrote hand-curated configs into full
-    DEFAULT_CONFIG dumps (the "hermes update / hermes -p blows up my config"
+    DEFAULT_CONFIG dumps (the "fulilian update / fulilian -p blows up my config"
     reports).
 
     Every migration step MUST route its write through this helper instead of
@@ -2440,12 +2440,12 @@ def migrate_config(interactive: bool = True, quiet: bool = False) -> Dict[str, A
         results["warnings"].append(msg)
         # stderr so it is visible even on quiet startup paths, matching the
         # corrupt-config warning posture in _warn_config_parse_failure().
-        sys.stderr.write(f"⚠ hermes config: {msg}\n")
+        sys.stderr.write(f"⚠ fulilian config: {msg}\n")
         if not quiet:
             print(f"  ⚠ {msg}")
     else:
         # ── Versioned migration ladder (table-driven) ──
-        # The per-version steps live in hermes_cli.config_migrations as a
+        # The per-version steps live in fulilian_cli.config_migrations as a
         # (target_version, fn) registry; the driver applies every step whose
         # target exceeds current_ver, in strict ascending order, preserving the
         # original sequential if-block semantics byte-for-byte. Imported lazily
@@ -2585,7 +2585,7 @@ def migrate_config(interactive: bool = True, quiet: bool = False) -> Dict[str, A
                         print(f"  ✓ Saved {name}")
                     print()
             else:
-                print("  Set later with: hermes config set <key> <value>")
+                print("  Set later with: fulilian config set <key> <value>")
     
     # Check for missing config fields.
     #
@@ -2593,7 +2593,7 @@ def migrate_config(interactive: bool = True, quiet: bool = False) -> Dict[str, A
     # DEFAULT_CONFIG at read time, so a missing key already takes effect with
     # its default (see _persist_migration's invariant). We surface the list for
     # the informational "N new config option(s) available" display in
-    # `hermes update`, but only the version bump is persisted.
+    # `fulilian update`, but only the version bump is persisted.
     missing_config = get_missing_config_fields()
     if missing_config:
         results["config_added"].extend(field["key"] for field in missing_config)
@@ -2605,7 +2605,7 @@ def migrate_config(interactive: bool = True, quiet: bool = False) -> Dict[str, A
 
     # ── Skill-declared config vars ──────────────────────────────────────
     # Skills can declare config.yaml settings they need via
-    # metadata.hermes.config in their SKILL.md frontmatter.
+    # metadata.fulilian.config in their SKILL.md frontmatter.
     # Prompt for any that are missing/empty.
     missing_skill_config = get_missing_skill_config_vars()
     if missing_skill_config and interactive and not quiet:
@@ -2644,7 +2644,7 @@ def migrate_config(interactive: bool = True, quiet: bool = False) -> Dict[str, A
                 print()
             _persist_migration(config)
         else:
-            print("  Set later with: hermes config set <key> <value>")
+            print("  Set later with: fulilian config set <key> <value>")
 
     return results
 
@@ -2747,7 +2747,7 @@ def _env_expand_match(m: re.Match) -> str:
         if val is not None:
             return val
         logger.warning(
-            "Config ref %r: %s is not set (check ~/.hermes/.env); "
+            "Config ref %r: %s is not set (check ~/.fulilian/.env); "
             "keeping the literal placeholder", raw, name,
         )
         return raw
@@ -2803,7 +2803,7 @@ def _env_ref_snapshot(obj, snapshot=None):
     Stored alongside cached ``load_config()`` results so a cache hit can
     detect that the cached expansion was made against a *different*
     environment — e.g. a ``load_config()`` that ran before
-    ``load_hermes_dotenv()`` populated the process env, or an env var
+    ``load_fulilian_dotenv()`` populated the process env, or an env var
     rotated in-process after the first load. File mtime/size alone cannot
     see either case (#58514).
 
@@ -2985,7 +2985,7 @@ def split_model_config_default(raw_default: Any) -> tuple[str, str]:
     A dict-valued default (``model.default: {provider: ..., model: ...}``)
     pairs the model string with the provider it must be routed through. The
     dict is flattened here at the shared boundary so both halves stay
-    together through ``HermesCLI`` construction: the model becomes a plain
+    together through ``FulilianCLI`` construction: the model becomes a plain
     string and the provider is returned explicitly instead of being lost to
     the outer merged ``model.provider`` default (often ``"auto"``, which
     runtime resolution treats as authoritative and would otherwise route the
@@ -3011,7 +3011,7 @@ def _normalize_root_model_keys(config: Dict[str, Any]) -> Dict[str, Any]:
     confusion on subsequent loads.
 
     Also aliases ``api_base`` → ``base_url`` (issue #8919). ``api_base`` is the
-    intuitive name OpenAI-SDK / LiteLLM users reach for, and ``hermes config set``
+    intuitive name OpenAI-SDK / LiteLLM users reach for, and ``fulilian config set``
     blindly accepts any dotted key — so ``model.api_base`` got written, confirmed,
     and then silently ignored by the runtime resolver (which reads only
     ``model.base_url``), causing requests to fall back to OpenRouter. We migrate
@@ -3024,7 +3024,7 @@ def _normalize_root_model_keys(config: Dict[str, Any]) -> Dict[str, Any]:
     but ``model.name`` was not, so a custom-provider config like
     ``model: {name: <id>, provider: <custom>}`` resolved to an empty model and
     the API request went out with ``model=`` (HTTP 400 from OpenAI-compatible
-    backends) — while display paths (``hermes status``/``dump``) read ``name``
+    backends) — while display paths (``fulilian status``/``dump``) read ``name``
     and *showed* the model, making the failure silent. Normalizing here (the
     single load/save chokepoint) means every reader, present and future, sees a
     populated ``default`` and the stale alias is migrated out of config.yaml on
@@ -3171,7 +3171,7 @@ def is_provider_enabled(provider_cfg: Optional[Dict[str, Any]]) -> bool:
 
 # Sentinel used when the user requests an unlimited turn budget.
 # ``sys.maxsize`` (9,223,372,036,854,775,807) is chosen so it:
-#   - survives the ``str() → int()`` round-trip through the HERMES_MAX_ITERATIONS
+#   - survives the ``str() → int()`` round-trip through the FULILIAN_MAX_ITERATIONS
 #     env-var bridge in gateway/run.py,
 #   - works correctly in every ``<``, ``>=``, and ``remaining = max - used``
 #     comparison in agent/iteration_budget.py and agent/conversation_loop.py
@@ -3260,7 +3260,7 @@ def cfg_get(cfg: Optional[Dict[str, Any]], *keys: str, default: Any = None) -> A
       3. ``cfg is None`` (callers sometimes pass ``load_config() or None``).
 
     Named ``cfg_get`` rather than ``cfg_path`` to avoid shadowing the
-    ubiquitous ``cfg_path = _hermes_home / "config.yaml"`` local variable
+    ubiquitous ``cfg_path = _fulilian_home / "config.yaml"`` local variable
     that appears in gateway/run.py, cron/scheduler.py, main.py, etc.
 
     Explicit ``None`` values are returned as-is (matches ``dict.get(key,
@@ -3292,14 +3292,14 @@ def cfg_get(cfg: Optional[Dict[str, Any]], *keys: str, default: Any = None) -> A
     return node
 
 
-# Back-compat alias — canonical set lives in hermes_cli.personality.
+# Back-compat alias — canonical set lives in fulilian_cli.personality.
 from fulilian_cli.personality import NEUTRAL_PERSONALITY_NAMES as _NEUTRAL_PERSONALITY_NAMES  # noqa: F401
 
 
 def _prompt_text(value: Any) -> str:
     """Normalize config prompt values from YAML before handing them to AIAgent.
 
-    Delegates to :mod:`hermes_cli.personality` — the single owner of
+    Delegates to :mod:`fulilian_cli.personality` — the single owner of
     personality/overlay semantics. Kept as a re-export for existing importers.
     """
     from fulilian_cli.personality import prompt_text
@@ -3319,9 +3319,9 @@ def resolve_ephemeral_system_prompt_from_config(cfg: Optional[Dict[str, Any]]) -
 
     ``display.personality`` is the selected named personality and wins when set.
     Otherwise fall back to the user-owned ``agent.system_prompt``. Callers should
-    still prefer ``HERMES_EPHEMERAL_SYSTEM_PROMPT`` when that env var is set.
+    still prefer ``FULILIAN_EPHEMERAL_SYSTEM_PROMPT`` when that env var is set.
 
-    Delegates to :mod:`hermes_cli.personality` (single owner).
+    Delegates to :mod:`fulilian_cli.personality` (single owner).
     """
     from fulilian_cli.personality import resolve_ephemeral_system_prompt
 
@@ -3329,7 +3329,7 @@ def resolve_ephemeral_system_prompt_from_config(cfg: Optional[Dict[str, Any]]) -
 
 
 def read_raw_config() -> Dict[str, Any]:
-    """Read ~/.hermes/config.yaml as-is, without merging defaults or migrating.
+    """Read ~/.fulilian/config.yaml as-is, without merging defaults or migrating.
 
     Returns the raw YAML dict, or ``{}`` if the file doesn't exist or can't
     be parsed.  Use this for lightweight config reads where you just need a
@@ -3403,7 +3403,7 @@ def read_user_config_raw(config_path: Optional[Path] = None) -> Dict[str, Any]:
 
     ``config_path`` defaults to :func:`get_config_path` (profile-aware).
     Pass an explicit path when the caller resolves its own home (gateway
-    ``_hermes_home``, tui profile override, multi-profile probes).
+    ``_fulilian_home``, tui profile override, multi-profile probes).
     """
     if config_path is None:
         config_path = get_config_path()
@@ -3572,13 +3572,13 @@ def atomic_config_write(config_path: Path, data: Any, **kwargs: Any) -> None:
 
 
 def load_config() -> Dict[str, Any]:
-    """Load configuration from ~/.hermes/config.yaml.
+    """Load configuration from ~/.fulilian/config.yaml.
 
     Cached on the config file's (mtime_ns, size). Returns a deepcopy of
     the cached value when unchanged, since most call sites mutate the
     result (e.g. ``cfg["model"]["default"] = ...`` before ``save_config``).
     The cache is keyed on ``str(config_path)`` so profile switches
-    (which change ``HERMES_HOME`` and therefore ``get_config_path()``)
+    (which change ``FULILIAN_HOME`` and therefore ``get_config_path()``)
     don't collide.
 
     Read-only callers should use ``load_config_readonly()`` to skip the
@@ -3711,7 +3711,7 @@ def terminal_config_env_var_for_key(key: str) -> Optional[str]:
 def _is_ssh_remote_tilde_cwd(backend: str, cwd: str) -> bool:
     """Return whether the remote SSH shell must expand *cwd* itself.
 
-    Expanding ``~`` on the Hermes host rewrites it to the host or container
+    Expanding ``~`` on the Fulilian host rewrites it to the host or container
     home before SSH sees it. Preserve ``~`` and ``~/...`` so they follow the
     user selected by the SSH connection.
     """
@@ -3785,7 +3785,7 @@ def apply_terminal_config_to_env(
 
 def _load_config_impl(*, want_deepcopy: bool) -> Dict[str, Any]:
     with _CONFIG_LOCK:
-        ensure_hermes_home()
+        ensure_fulilian_home()
         config_path = get_config_path()
         path_key = str(config_path)
 
@@ -3796,7 +3796,7 @@ def _load_config_impl(*, want_deepcopy: bool) -> Dict[str, Any]:
             user_sig = None
 
         # Managed scope: fold the managed config file's (mtime, size) into the
-        # cache signature so editing /etc/hermes/config.yaml invalidates the
+        # cache signature so editing /etc/fulilian/config.yaml invalidates the
         # cached merged result. (0, 0) means "no managed config file".
         from fulilian_cli import managed_scope
 
@@ -3826,7 +3826,7 @@ def _load_config_impl(*, want_deepcopy: bool) -> Dict[str, Any]:
         if cached is not None and cache_sig is not None and cached[:4] == cache_sig:
             # File signatures match, but the cached expansion is only valid if
             # every ${VAR} it was expanded against still has the same value.
-            # Without this, a load_config() that ran before load_hermes_dotenv()
+            # Without this, a load_config() that ran before load_fulilian_dotenv()
             # pins unexpanded literals (e.g. auxiliary.<task>.api_key) for the
             # life of the process (#58514).
             env_snapshot = cached[5] if len(cached) > 5 else {}
@@ -3967,8 +3967,8 @@ _FALLBACK_COMMENT = """
 #
 # Supported providers:
 #   openrouter   (OPENROUTER_API_KEY)  — routes to any model
-#   openai-codex (OAuth — hermes auth) — OpenAI Codex
-#   nous         (OAuth — hermes auth) — Nous Portal
+#   openai-codex (OAuth — fulilian auth) — OpenAI Codex
+#   nous         (OAuth — fulilian auth) — Nous Portal
 #   zai          (ZAI_API_KEY)         — Z.AI / GLM
 #   kimi-coding  (KIMI_API_KEY)        — Kimi / Moonshot
 #   kimi-coding-cn (KIMI_CN_API_KEY)   — Kimi / Moonshot (China)
@@ -3999,8 +3999,8 @@ _COMMENTED_SECTIONS = """
 #
 # Supported providers:
 #   openrouter   (OPENROUTER_API_KEY)  — routes to any model
-#   openai-codex (OAuth — hermes auth) — OpenAI Codex
-#   nous         (OAuth — hermes auth) — Nous Portal
+#   openai-codex (OAuth — fulilian auth) — OpenAI Codex
+#   nous         (OAuth — fulilian auth) — Nous Portal
 #   zai          (ZAI_API_KEY)         — Z.AI / GLM
 #   kimi-coding  (KIMI_API_KEY)        — Kimi / Moonshot
 #   kimi-coding-cn (KIMI_CN_API_KEY)   — Kimi / Moonshot (China)
@@ -4023,7 +4023,7 @@ def save_config(
     preserve_keys: Optional[Set[Tuple[str, ...]]] = None,
     merge_existing: bool = False,
 ):
-    """Save configuration to ~/.hermes/config.yaml.\n
+    """Save configuration to ~/.fulilian/config.yaml.\n
 
     Default values from ``DEFAULT_CONFIG`` are not written to disk unless
     the user explicitly set them (i.e. the path exists in the raw config
@@ -4059,7 +4059,7 @@ def save_config(
                 )
         from utils import atomic_yaml_write
 
-        ensure_hermes_home()
+        ensure_fulilian_home()
         config_path = get_config_path()
         require_readable_config_before_write(config_path)
         # Compute explicit user paths BEFORE any normalisation --------
@@ -4133,7 +4133,7 @@ def save_config(
 
 
 def _parse_env_value(raw_value: str) -> str:
-    """Parse the small .env value subset Hermes writes itself."""
+    """Parse the small .env value subset Fulilian writes itself."""
     value = raw_value.strip()
     if len(value) >= 2 and value[0] == value[-1] == '"':
         quoted = value[1:-1]
@@ -4156,16 +4156,16 @@ def _parse_env_value(raw_value: str) -> str:
 
 
 def load_env() -> Dict[str, str]:
-    """Load environment variables from ~/.hermes/.env.
+    """Load environment variables from ~/.fulilian/.env.
 
     Normalizes line endings before parsing while treating each assignment's
     value as opaque data for boundary discovery.
 
     The parsed dict is memoised keyed on the .env file mtime, because
     ``get_env_value()`` is called dozens-to-hundreds of times per
-    interactive menu render (`hermes tools`, `hermes setup`, status
+    interactive menu render (`fulilian tools`, `fulilian setup`, status
     panels). Sanitisation is O(lines), so re-parsing the
-    same file on every call was burning ~300ms of CPU per `hermes tools`
+    same file on every call was burning ~300ms of CPU per `fulilian tools`
     menu paint on top of the OAuth-refresh slowness. The mtime check
     invalidates the cache when the user edits .env mid-process.
     """
@@ -4257,7 +4257,7 @@ def _sanitize_env_lines(lines: list) -> list:
 
 
 def sanitize_env_file() -> int:
-    """Read, sanitize, and rewrite ~/.hermes/.env in place.
+    """Read, sanitize, and rewrite ~/.fulilian/.env in place.
 
     Returns the number of lines whose safe formatting was normalized. Returns
     0 when no changes are needed.
@@ -4388,7 +4388,7 @@ def _env_line_defines_key(
 
 
 def save_env_value(key: str, value: str):
-    """Save or update a value in ~/.hermes/.env."""
+    """Save or update a value in ~/.fulilian/.env."""
     if is_managed():
         managed_error(f"set {key}")
         return
@@ -4409,7 +4409,7 @@ def save_env_value(key: str, value: str):
     value = value.replace("\n", "").replace("\r", "")
     # API keys / tokens must be ASCII — strip non-ASCII with a warning.
     value = _check_non_ascii_credential(key, value)
-    ensure_hermes_home()
+    ensure_fulilian_home()
     env_path = get_env_path()
 
     # On Windows, open() defaults to the system locale (cp1252) which can
@@ -4489,17 +4489,17 @@ def custom_endpoint_key_env(identity: str) -> str:
     - It keys off the endpoint's own identity, not just its hostname, so two
       endpoints on one host (``127.0.0.1:8000`` and ``:8001``) get separate
       slots instead of the second save clobbering the first's credential.
-    - The fixed ``HERMES_CUSTOM_`` prefix keeps the result a valid POSIX name
+    - The fixed ``FULILIAN_CUSTOM_`` prefix keeps the result a valid POSIX name
       even when the slug starts with a digit, which every IP-based local
       endpoint does (``127.0.0.1`` → ``127_0_0_1``). ``save_env_value``
       rejects digit-leading names outright.
     """
     slug = re.sub(r"[^A-Z0-9]+", "_", str(identity or "").upper()).strip("_")
-    return f"HERMES_CUSTOM_{slug}_API_KEY" if slug else "HERMES_CUSTOM_API_KEY"
+    return f"FULILIAN_CUSTOM_{slug}_API_KEY" if slug else "FULILIAN_CUSTOM_API_KEY"
 
 
 def remove_env_value(key: str) -> bool:
-    """Remove a key from ~/.hermes/.env and os.environ.
+    """Remove a key from ~/.fulilian/.env and os.environ.
 
     Returns True if the key was found and removed, False otherwise.
     """
@@ -4608,10 +4608,10 @@ def save_env_value_secure(key: str, value: str) -> Dict[str, Any]:
 
 
 def reload_env() -> int:
-    """Re-read ~/.hermes/.env into os.environ. Returns count of vars updated.
+    """Re-read ~/.fulilian/.env into os.environ. Returns count of vars updated.
 
     Adds/updates vars that changed and removes vars that were deleted from
-    the .env file (but only vars known to Hermes — OPTIONAL_ENV_VARS and
+    the .env file (but only vars known to Fulilian — OPTIONAL_ENV_VARS and
     _EXTRA_ENV_KEYS — to avoid clobbering unrelated environment).
     """
     env_vars = load_env()
@@ -4621,7 +4621,7 @@ def reload_env() -> int:
         if os.environ.get(key) != value:
             os.environ[key] = value
             count += 1
-    # Remove known Hermes vars that are no longer in .env
+    # Remove known Fulilian vars that are no longer in .env
     for key in known_keys:
         if key not in env_vars and key in os.environ:
             del os.environ[key]
@@ -4630,7 +4630,7 @@ def reload_env() -> int:
 
 
 def get_env_value(key: str) -> Optional[str]:
-    """Get a value from ``os.environ`` or ``~/.hermes/.env``, scope-aware.
+    """Get a value from ``os.environ`` or ``~/.fulilian/.env``, scope-aware.
 
     The ``os.environ`` read routes through ``agent.secret_scope.get_secret``
     so that, under an active profile scope (multiplexed gateway turn), this
@@ -4667,9 +4667,9 @@ def get_env_value(key: str) -> Optional[str]:
 
 
 def get_env_value_prefer_dotenv(key: str) -> Optional[str]:
-    """Resolve a credential env value, preferring ``~/.hermes/.env`` over ``os.environ``.
+    """Resolve a credential env value, preferring ``~/.fulilian/.env`` over ``os.environ``.
 
-    Used for Hermes-managed credentials where a deliberate edit to ``.env``
+    Used for Fulilian-managed credentials where a deliberate edit to ``.env``
     must take precedence over a stale value inherited from the parent shell
     (Codex CLI, test scripts, login profile exports). Without this, rotating
     a key in ``.env`` mid-session leaves callers serving the stale shell
@@ -4774,7 +4774,7 @@ def show_config():
 
     print()
     print(color("┌─────────────────────────────────────────────────────────┐", Colors.CYAN))
-    print(color("│              ⚕ Hermes Configuration                    │", Colors.CYAN))
+    print(color("│              ⚕ Fulilian Configuration                    │", Colors.CYAN))
     print(color("└─────────────────────────────────────────────────────────┘", Colors.CYAN))
 
     # Managed scope: surface that some settings are administrator-pinned so the
@@ -4839,15 +4839,15 @@ def show_config():
     print(f"  Model:        {redact_config_value(config.get('model', 'not set'))}")
     _cfg_max_turns = config.get('agent', {}).get('max_turns', DEFAULT_CONFIG['agent']['max_turns'])
     print(f"  Max turns:    {_cfg_max_turns}")
-    # Warn on stale HERMES_MAX_ITERATIONS ghost in .env that disagrees with
+    # Warn on stale FULILIAN_MAX_ITERATIONS ghost in .env that disagrees with
     # config.yaml (issue #17534). Read the .env FILE directly so we catch the
     # ghost even when the gateway bridge already overrode os.environ.
     try:
-        _env_ghost = load_env().get("HERMES_MAX_ITERATIONS")
+        _env_ghost = load_env().get("FULILIAN_MAX_ITERATIONS")
         if _env_ghost is not None and str(_env_ghost).strip() != str(_cfg_max_turns).strip():
             print(color(
-                f"                ⚠ .env has stale HERMES_MAX_ITERATIONS={_env_ghost} "
-                f"(run 'hermes doctor --fix' to remove)",
+                f"                ⚠ .env has stale FULILIAN_MAX_ITERATIONS={_env_ghost} "
+                f"(run 'fulilian doctor --fix' to remove)",
                 Colors.YELLOW,
             ))
     except Exception:
@@ -4985,9 +4985,9 @@ def show_config():
 
     print()
     print(color("─" * 60, Colors.DIM))
-    print(color("  hermes config edit     # Edit config file", Colors.DIM))
-    print(color("  hermes config set <key> <value>", Colors.DIM))
-    print(color("  hermes setup           # Run setup wizard", Colors.DIM))
+    print(color("  fulilian config edit     # Edit config file", Colors.DIM))
+    print(color("  fulilian config set <key> <value>", Colors.DIM))
+    print(color("  fulilian setup           # Run setup wizard", Colors.DIM))
     print()
 
 
@@ -5107,13 +5107,13 @@ def resolve_cron_model_drift_defaults(
     """Resolve the global provider/model values cron compares against snapshots.
 
     Mirrors the scheduler's global-model precedence: a truthy configured model
-    wins ``HERMES_MODEL``; the environment is only a fallback. Per-job and cron
+    wins ``FULILIAN_MODEL``; the environment is only a fallback. Per-job and cron
     fleet defaults are handled by the caller/classifier because they suppress a
     drift axis rather than changing the global assignment.
     """
     env = os.environ if environ is None else environ
     provider = ""
-    model = _model_assignment_text(env.get("HERMES_MODEL", ""))
+    model = _model_assignment_text(env.get("FULILIAN_MODEL", ""))
     model_config = config.get("model") if isinstance(config, dict) else None
     if isinstance(model_config, str):
         configured_model = model_config.strip()
@@ -5299,8 +5299,8 @@ def warn_unpinned_cron_jobs_after_model_config_change(
         f"⚠️  {affected} enabled unpinned cron {noun} {verb} stored "
         f"{snapshot_field} values that differ from the new global {axis}. "
         "They will fail closed on their next run instead of silently using the "
-        "changed model/provider. Inspect with `hermes cron list`, then pin the "
-        "intended values with `hermes cron edit <job_id> --provider <provider> "
+        "changed model/provider. Inspect with `fulilian cron list`, then pin the "
+        "intended values with `fulilian cron edit <job_id> --provider <provider> "
         "--model <model>`."
     )
 
@@ -5352,9 +5352,9 @@ _SCHEMA_DEFINED_DICT_KEYS = frozenset({
     # MCP server template / dynamic auth dicts
     "sessions", "checkpoints",
     # Plugin settings — enable/disable lists plus index_url override
-    # (hermes_cli/plugins_cmd.py, hermes_cli/plugin_index.py). Absent from
+    # (fulilian_cli/plugins_cmd.py, fulilian_cli/plugin_index.py). Absent from
     # DEFAULT_CONFIG (written only when used), so listed here for
-    # `hermes config set plugins.index_url ...` validation.
+    # `fulilian config set plugins.index_url ...` validation.
     "plugins",
 })
 
@@ -5379,7 +5379,7 @@ def _known_top_level_keys() -> set[str]:
 
     Combines :data:`DEFAULT_CONFIG` with the dynamic categories that
     accept user-supplied child keys.  Used by :func:`_validate_config_key`
-    to decide whether a ``hermes config set`` invocation is targeting a
+    to decide whether a ``fulilian config set`` invocation is targeting a
     known shape.
     """
     keys = set(DEFAULT_CONFIG.keys())
@@ -5391,7 +5391,7 @@ def _known_top_level_keys() -> set[str]:
 
 def _suggest_closest_key(key: str, candidates: set[str], cutoff: float = 0.6) -> Optional[str]:
     """Return the closest valid key name from ``candidates`` if any are
-    similar enough to ``key``, else None.  Used by ``hermes config set``
+    similar enough to ``key``, else None.  Used by ``fulilian config set``
     to point users at the right path when they've typo'd a top-level key.
 
     Uses :func:`difflib.get_close_matches` with a conservative cutoff so
@@ -5582,7 +5582,7 @@ def set_config_value(key: str, value: str, force: bool = False):
             scalar (e.g. ``--force model gpt-x`` replaces the whole ``model:``
             mapping). Without --force, scalar writes over mapping sections are
             refused (bare ``model`` is redirected to ``model.default``). The
-            CLI exposes this via ``hermes config set --force``.
+            CLI exposes this via ``fulilian config set --force``.
     """
     if is_managed():
         managed_error("set configuration values")
@@ -5676,9 +5676,9 @@ def set_config_value(key: str, value: str, force: bool = False):
             coerced_value = _coerce_float(_stripped)
         elif _looks_structured_value(value):
             # List/mapping literals -- e.g.
-            #   hermes config set platform_toolsets.line '["file","web"]'
+            #   fulilian config set platform_toolsets.line '["file","web"]'
             # or a multi-line YAML block:
-            #   hermes config set custom_providers '- name: foo
+            #   fulilian config set custom_providers '- name: foo
             #     base_url: https://...'
             # Without this, such values were stored as a raw STRING, and every
             # reader that gates on isinstance(..., list) (``_get_platform_tools``,
@@ -5709,7 +5709,7 @@ def set_config_value(key: str, value: str, force: bool = False):
 
     value = coerced_value
     # Normalize a scalar ``model`` key before writing sub-keys so that
-    # ``hermes config set model.provider openai`` doesn't silently
+    # ``fulilian config set model.provider openai`` doesn't silently
     # destroy the model id when ``model`` is a bare string shorthand
     # (e.g. ``model: gpt-4o``).  Without this _set_nested replaces the
     # scalar with an empty dict, dropping the model id permanently.
@@ -5720,7 +5720,7 @@ def set_config_value(key: str, value: str, force: bool = False):
             user_config["model"] = {"default": _model_val}
     # Guard against #74995: a single-segment key that names an existing
     # mapping would silently overwrite the entire section with a scalar
-    # (e.g. ``hermes config set model gpt-5.6-sol`` when model already
+    # (e.g. ``fulilian config set model gpt-5.6-sol`` when model already
     # contains default/provider/context_length).  Bare ``model`` is a
     # documented shorthand — redirect to ``model.default`` and preserve
     # siblings.  All other mapping sections are rejected unless --force.
@@ -5763,7 +5763,7 @@ def set_config_value(key: str, value: str, force: bool = False):
                     file=sys.stderr,
                 )
                 print(
-                    f"    hermes config set {key}.<sub-key> <value>",
+                    f"    fulilian config set {key}.<sub-key> <value>",
                     file=sys.stderr,
                 )
                 print(
@@ -5771,13 +5771,13 @@ def set_config_value(key: str, value: str, force: bool = False):
                     file=sys.stderr,
                 )
                 print(
-                    f"    hermes config set --force {key} {value!r}",
+                    f"    fulilian config set --force {key} {value!r}",
                     file=sys.stderr,
                 )
                 sys.exit(1)
     _set_nested(user_config, key, value)
     # Normalize the api_base → base_url alias at set-time too (issue #8919),
-    # so a fresh `hermes config set model.api_base ...` lands on the canonical
+    # so a fresh `fulilian config set model.api_base ...` lands on the canonical
     # key the runtime resolver actually reads, instead of being silently
     # ignored. Mirrors the load-time migration in _normalize_root_model_keys.
     _alias_norm = key.strip().lower()
@@ -5786,7 +5786,7 @@ def set_config_value(key: str, value: str, force: bool = False):
         key = "model.base_url"
         print("  (note: 'api_base' is an alias — saved as model.base_url)")
     # Write only user config back (not the full merged defaults)
-    ensure_hermes_home()
+    ensure_fulilian_home()
     from utils import atomic_yaml_write
     atomic_yaml_write(config_path, user_config, sort_keys=False)
     
@@ -5803,14 +5803,14 @@ def set_config_value(key: str, value: str, force: bool = False):
     # their signature.
     if key == "display.skin" and isinstance(value, str) and value:
         try:
-            skin_file = get_hermes_home() / "skins" / f"{value}.yaml"
+            skin_file = get_fulilian_home() / "skins" / f"{value}.yaml"
             if skin_file.exists():
                 skin_file.touch()
         except Exception:
             pass  # best-effort: the config write above already succeeded
 
     # Mask the echoed value when the (possibly nested) key is credential-shaped
-    # — e.g. `hermes config set model.api_key cfut_...` routes to config.yaml
+    # — e.g. `fulilian config set model.api_key cfut_...` routes to config.yaml
     # (lowercase, so it misses the .env api_keys list above) and would otherwise
     # print the raw secret to the terminal.
     _leaf_key = key.rsplit(".", 1)[-1].lower()
@@ -5827,7 +5827,7 @@ def set_config_value(key: str, value: str, force: bool = False):
     if not is_known and not force:
         print(color(
             f"⚠ '{key}' is not a recognized config key — it was saved anyway, "
-            "but Hermes may not read it.",
+            "but Fulilian may not read it.",
             Colors.YELLOW,
         ))
         if suggestion:
@@ -5876,7 +5876,7 @@ def unset_config_value(key: str):
 
     if _is_env_config_key(key):
         # Unified lifecycle: prune env-seeded credential_pool entries and
-        # model-cache rows too, so `hermes config unset <KEY>` fully removes
+        # model-cache rows too, so `fulilian config unset <KEY>` fully removes
         # the provider instead of leaving it resurrectable (#51071 family).
         from fulilian_cli.credential_lifecycle import remove_provider_env_credential
 
@@ -5902,7 +5902,7 @@ def unset_config_value(key: str):
         print(f"Config key not set: {key}", file=sys.stderr)
         sys.exit(1)
 
-    ensure_hermes_home()
+    ensure_fulilian_home()
     from utils import atomic_yaml_write
     atomic_yaml_write(config_path, user_config, sort_keys=False)
     print(f"✓ Unset {key} from {config_path}")
@@ -5925,12 +5925,12 @@ def config_command(args):
     elif subcmd == "get":
         key = getattr(args, 'key', None)
         if not key:
-            print("Usage: hermes config get <key> [--json]")
+            print("Usage: fulilian config get <key> [--json]")
             print()
             print("Examples:")
-            print("  hermes config get model")
-            print("  hermes config get terminal.backend")
-            print("  hermes config get skills.config --json")
+            print("  fulilian config get model")
+            print("  fulilian config get terminal.backend")
+            print("  fulilian config get skills.config --json")
             sys.exit(1)
         get_config_value(key, as_json=getattr(args, 'json', False))
 
@@ -5939,12 +5939,12 @@ def config_command(args):
         value = getattr(args, 'value', None)
         force = bool(getattr(args, 'force', False))
         if not key or value is None:
-            print("Usage: hermes config set [--force] <key> <value>")
+            print("Usage: fulilian config set [--force] <key> <value>")
             print()
             print("Examples:")
-            print("  hermes config set model anthropic/claude-sonnet-4")
-            print("  hermes config set terminal.backend docker")
-            print("  hermes config set OPENROUTER_API_KEY sk-or-...")
+            print("  fulilian config set model anthropic/claude-sonnet-4")
+            print("  fulilian config set terminal.backend docker")
+            print("  fulilian config set OPENROUTER_API_KEY sk-or-...")
             print()
             print("  --force: skip the unknown-key notice for unrecognized keys,")
             print("           and allow a scalar to replace a whole mapping section")
@@ -5960,12 +5960,12 @@ def config_command(args):
     elif subcmd == "unset":
         key = getattr(args, 'key', None)
         if not key:
-            print("Usage: hermes config unset <key>")
+            print("Usage: fulilian config unset <key>")
             print()
             print("Examples:")
-            print("  hermes config unset model")
-            print("  hermes config unset terminal.backend")
-            print("  hermes config unset OPENROUTER_API_KEY")
+            print("  fulilian config unset model")
+            print("  fulilian config unset terminal.backend")
+            print("  fulilian config unset OPENROUTER_API_KEY")
             sys.exit(1)
         try:
             unset_config_value(key)
@@ -6070,7 +6070,7 @@ def config_command(args):
         if missing_config:
             print()
             print(color(f"  {len(missing_config)} new config option(s) available", Colors.YELLOW))
-            print("    Run 'hermes config migrate' to add them")
+            print("    Run 'fulilian config migrate' to add them")
         
         print()
     
@@ -6078,15 +6078,15 @@ def config_command(args):
         print(f"Unknown config command: {subcmd}")
         print()
         print("Available commands:")
-        print("  hermes config           Show current configuration")
-        print("  hermes config edit      Open config in editor")
-        print("  hermes config get <key>          Print a resolved config value")
-        print("  hermes config set <key> <value>   Set a config value")
-        print("  hermes config unset <key>        Remove a config value")
-        print("  hermes config check     Check for missing/outdated config")
-        print("  hermes config migrate   Update config with new options")
-        print("  hermes config path      Show config file path")
-        print("  hermes config env-path  Show .env file path")
+        print("  fulilian config           Show current configuration")
+        print("  fulilian config edit      Open config in editor")
+        print("  fulilian config get <key>          Print a resolved config value")
+        print("  fulilian config set <key> <value>   Set a config value")
+        print("  fulilian config unset <key>        Remove a config value")
+        print("  fulilian config check     Check for missing/outdated config")
+        print("  fulilian config migrate   Update config with new options")
+        print("  fulilian config path      Show config file path")
+        print("  fulilian config env-path  Show .env file path")
         sys.exit(1)
 
 
@@ -6135,7 +6135,7 @@ _inject_profile_env_vars()
 # ── Platform-plugin env var injection ────────────────────────────────────────
 # Bundled platform plugins under ``plugins/platforms/*/plugin.yaml`` declare
 # their required env vars via ``requires_env``.  This mirror of
-# ``_inject_profile_env_vars`` surfaces them in ``hermes config`` UI so users
+# ``_inject_profile_env_vars`` surfaces them in ``fulilian config`` UI so users
 # can configure Teams / IRC / Google Chat without the core repo ever needing
 # to know they exist.
 #

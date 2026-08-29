@@ -1,7 +1,7 @@
 """E2E tests for the per-profile MCP lifecycle RPCs (mcp.servers.*).
 
 These drive the real registered gateway handlers against a real temp
-``HERMES_HOME`` with named profile dirs — no mocks of the config/mcp layer — and
+``FULILIAN_HOME`` with named profile dirs — no mocks of the config/mcp layer — and
 assert that every write lands in the RIGHT profile's ``config.yaml`` / ``.env``
 and NEVER leaks into the launch (default) profile.
 
@@ -20,21 +20,21 @@ import tui_gateway.server as server
 
 
 @pytest.fixture
-def hermes_root(tmp_path, monkeypatch):
-    """A temp HERMES_HOME root with two named profiles: 'work' and 'other'.
+def fulilian_root(tmp_path, monkeypatch):
+    """A temp FULILIAN_HOME root with two named profiles: 'work' and 'other'.
 
-    Pointing HERMES_HOME at a dir outside ~/.hermes makes it the profile ROOT
-    (get_default_hermes_root's Docker/custom branch), so named profiles live at
+    Pointing FULILIAN_HOME at a dir outside ~/.fulilian makes it the profile ROOT
+    (get_default_fulilian_root's Docker/custom branch), so named profiles live at
     ``<root>/profiles/<name>/`` and the launch/default profile is ``<root>``.
     """
-    root = tmp_path / "hermes_home"
+    root = tmp_path / "fulilian_home"
     (root / "profiles" / "work").mkdir(parents=True)
     (root / "profiles" / "other").mkdir(parents=True)
-    monkeypatch.setenv("HERMES_HOME", str(root))
+    monkeypatch.setenv("FULILIAN_HOME", str(root))
     # Make sure no stale process-wide home override leaks in from another test.
-    from fulilian_constants import get_hermes_home_override
+    from fulilian_constants import get_fulilian_home_override
 
-    assert get_hermes_home_override() is None
+    assert get_fulilian_home_override() is None
     return root
 
 
@@ -58,8 +58,8 @@ def _read_yaml(path: Path) -> dict:
         return yaml.safe_load(f) or {}
 
 
-def test_add_lands_in_named_profile_only(hermes_root):
-    root = hermes_root
+def test_add_lands_in_named_profile_only(fulilian_root):
+    root = fulilian_root
     resp = _call(
         "mcp.servers.add",
         {
@@ -84,7 +84,7 @@ def test_add_lands_in_named_profile_only(hermes_root):
     assert "weather" not in other_cfg.get("mcp_servers", {})
 
 
-def test_list_reflects_the_scoped_profile(hermes_root):
+def test_list_reflects_the_scoped_profile(fulilian_root):
     _result(
         _call(
             "mcp.servers.add",
@@ -110,8 +110,8 @@ def test_list_reflects_the_scoped_profile(hermes_root):
     assert work_server["command"] == "svc-a-bin"
 
 
-def test_set_api_key_writes_env_and_header_to_right_profile(hermes_root):
-    root = hermes_root
+def test_set_api_key_writes_env_and_header_to_right_profile(fulilian_root):
+    root = fulilian_root
     _result(
         _call(
             "mcp.servers.add",
@@ -147,8 +147,8 @@ def test_set_api_key_writes_env_and_header_to_right_profile(hermes_root):
     assert "sk-secret-123" not in str(work_cfg)
 
 
-def test_set_api_key_stdio_references_env_block(hermes_root):
-    root = hermes_root
+def test_set_api_key_stdio_references_env_block(fulilian_root):
+    root = fulilian_root
     _result(
         _call(
             "mcp.servers.add",
@@ -175,8 +175,8 @@ def test_set_api_key_stdio_references_env_block(hermes_root):
     assert "LOCALTOOL_TOKEN=tok-xyz" in work_env
 
 
-def test_remove_scoped_to_profile(hermes_root):
-    root = hermes_root
+def test_remove_scoped_to_profile(fulilian_root):
+    root = fulilian_root
     _result(
         _call(
             "mcp.servers.add",
@@ -199,7 +199,7 @@ def test_remove_scoped_to_profile(hermes_root):
     assert "temp" in _read_yaml(root / "profiles" / "other" / "config.yaml").get("mcp_servers", {})
 
 
-def test_add_duplicate_and_missing_errors(hermes_root):
+def test_add_duplicate_and_missing_errors(fulilian_root):
     _result(
         _call(
             "mcp.servers.add",
@@ -225,21 +225,21 @@ def test_add_duplicate_and_missing_errors(hermes_root):
     assert bad_profile["error"]["code"] == 4064
 
 
-def test_add_requires_transport(hermes_root):
+def test_add_requires_transport(fulilian_root):
     resp = _call("mcp.servers.add", {"profile": "work", "name": "empty", "config": {}})
     assert "error" in resp
     assert resp["error"]["code"] == 4063
 
 
-def test_default_profile_add_when_profile_omitted(hermes_root):
-    root = hermes_root
+def test_default_profile_add_when_profile_omitted(fulilian_root):
+    root = fulilian_root
     _result(
         _call(
             "mcp.servers.add",
             {"name": "rootsvc", "config": {"command": "rootsvc-bin"}},
         )
     )
-    # Omitted profile → launch/default profile == HERMES_HOME root config.yaml.
+    # Omitted profile → launch/default profile == FULILIAN_HOME root config.yaml.
     default_cfg = _read_yaml(root / "config.yaml")
     assert "rootsvc" in default_cfg.get("mcp_servers", {})
     # ...and NOT in a named profile.

@@ -30,7 +30,7 @@ import threading
 from typing import Dict, List, Optional
 
 from agent.terminal_env_provider import TerminalEnvironmentProvider
-from fulilian_constants import hermes_home_key
+from fulilian_constants import fulilian_home_key
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +101,7 @@ def list_providers(*, scope: Optional[str] = None) -> List[TerminalEnvironmentPr
     """Return all registered providers, sorted by name."""
     with _lock:
         merged = dict(_providers)
-        merged.update(_scoped_providers.get(scope or hermes_home_key(), {}))
+        merged.update(_scoped_providers.get(scope or fulilian_home_key(), {}))
         items = list(merged.values())
     return sorted(items, key=lambda p: p.name)
 
@@ -115,7 +115,7 @@ def get_provider(
     key = name.strip().lower()
     with _lock:
         return (
-            _scoped_providers.get(scope or hermes_home_key(), {}).get(key)
+            _scoped_providers.get(scope or fulilian_home_key(), {}).get(key)
             or _providers.get(key)
         )
 
@@ -179,7 +179,7 @@ def snapshot_registration(
 
 def registry_generation(*, scope: Optional[str] = None) -> tuple:
     """Return a cache fingerprint for the global base and one profile."""
-    active_scope = scope or hermes_home_key()
+    active_scope = scope or fulilian_home_key()
     with _lock:
         return _generation, _scoped_generations.get(active_scope, 0)
 

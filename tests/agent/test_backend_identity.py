@@ -2,7 +2,7 @@
 
 This module is the single owner of the "same backend?" question — tests
 live HERE, against the predicate, not against each call site (see
-references/never-patch-predicates.md in hermes-agent-dev). Each test names
+references/never-patch-predicates.md in fulilian-agent-dev). Each test names
 the incident whose semantics it pins.
 """
 
@@ -72,7 +72,7 @@ class TestSameDeployment:
     def test_incident_70893_first_class_pair_same_host_is_not_same(self):
         """xai-oauth vs xai share api.x.ai but are distinct backends."""
         fake_registry = {"xai": object(), "xai-oauth": object()}
-        with patch("hermes_cli.auth.PROVIDER_REGISTRY", fake_registry):
+        with patch("fulilian_cli.auth.PROVIDER_REGISTRY", fake_registry):
             a = _id("xai-oauth", "grok-4.5", "https://api.x.ai/v1")
             b = _id("xai", "grok-4.5", "https://api.x.ai/v1")
             assert not same_deployment(a, b)
@@ -90,7 +90,7 @@ class TestSameCredentialSurface:
 
     def test_incident_70893_distinct_first_class_providers_differ(self):
         fake_registry = {"xai": object(), "xai-oauth": object()}
-        with patch("hermes_cli.auth.PROVIDER_REGISTRY", fake_registry):
+        with patch("fulilian_cli.auth.PROVIDER_REGISTRY", fake_registry):
             a = _id("xai", "grok-4.5", "https://api.x.ai/v1")
             b = _id("xai-oauth", "grok-4.5", "https://api.x.ai/v1")
             assert not same_credential_surface(a, b)

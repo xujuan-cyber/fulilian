@@ -58,23 +58,23 @@ def _setup_isolated_home(tmp_path, monkeypatch, model_yaml_value):
     """Write a config.yaml with the given ``model:`` value and stub the heavy bits."""
     import gateway.run as gateway_run
 
-    hermes_home = tmp_path / ".hermes"
-    hermes_home.mkdir()
-    cfg_path = hermes_home / "config.yaml"
+    fulilian_home = tmp_path / ".fulilian"
+    fulilian_home.mkdir()
+    cfg_path = fulilian_home / "config.yaml"
     cfg_path.write_text(
         yaml.safe_dump({"model": model_yaml_value, "providers": {}}),
         encoding="utf-8",
     )
 
-    monkeypatch.setattr(gateway_run, "_hermes_home", hermes_home)
+    monkeypatch.setattr(gateway_run, "_fulilian_home", fulilian_home)
     monkeypatch.setattr("agent.models_dev.fetch_models_dev", lambda: {})
     monkeypatch.setattr(
-        "hermes_cli.model_switch.switch_model",
+        "fulilian_cli.model_switch.switch_model",
         lambda **kw: _fake_switch_result(),
     )
-    # save_config writes to ``get_hermes_home() / config.yaml`` — point it here.
-    monkeypatch.setattr("hermes_constants.get_hermes_home", lambda: hermes_home)
-    monkeypatch.setattr("hermes_cli.config.get_hermes_home", lambda: hermes_home)
+    # save_config writes to ``get_fulilian_home() / config.yaml`` — point it here.
+    monkeypatch.setattr("fulilian_constants.get_fulilian_home", lambda: fulilian_home)
+    monkeypatch.setattr("fulilian_cli.config.get_fulilian_home", lambda: fulilian_home)
     return cfg_path
 
 
@@ -112,19 +112,19 @@ async def test_model_global_persists_when_config_has_missing_model(tmp_path, mon
     """
     import gateway.run as gateway_run
 
-    hermes_home = tmp_path / ".hermes"
-    hermes_home.mkdir()
-    cfg_path = hermes_home / "config.yaml"
+    fulilian_home = tmp_path / ".fulilian"
+    fulilian_home.mkdir()
+    cfg_path = fulilian_home / "config.yaml"
     cfg_path.write_text(yaml.safe_dump({"providers": {}}), encoding="utf-8")
 
-    monkeypatch.setattr(gateway_run, "_hermes_home", hermes_home)
+    monkeypatch.setattr(gateway_run, "_fulilian_home", fulilian_home)
     monkeypatch.setattr("agent.models_dev.fetch_models_dev", lambda: {})
     monkeypatch.setattr(
-        "hermes_cli.model_switch.switch_model",
+        "fulilian_cli.model_switch.switch_model",
         lambda **kw: _fake_switch_result(),
     )
-    monkeypatch.setattr("hermes_constants.get_hermes_home", lambda: hermes_home)
-    monkeypatch.setattr("hermes_cli.config.get_hermes_home", lambda: hermes_home)
+    monkeypatch.setattr("fulilian_constants.get_fulilian_home", lambda: fulilian_home)
+    monkeypatch.setattr("fulilian_cli.config.get_fulilian_home", lambda: fulilian_home)
 
     result = await _make_runner()._handle_model_command(
         _make_event("/model gpt-5.5 --global")

@@ -22,16 +22,16 @@ import pytest
 
 @pytest.fixture
 def curator_env(tmp_path, monkeypatch):
-    home = tmp_path / ".hermes"
+    home = tmp_path / ".fulilian"
     home.mkdir()
     (home / "skills").mkdir()
     (home / "logs").mkdir()
-    monkeypatch.setenv("HERMES_HOME", str(home))
+    monkeypatch.setenv("FULILIAN_HOME", str(home))
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
     import importlib
     import fulilian_constants
-    importlib.reload(hermes_constants)
+    importlib.reload(fulilian_constants)
     from agent import curator
     importlib.reload(curator)
     yield curator
@@ -345,16 +345,16 @@ def test_reconcile_absorbed_into_beats_everything_else(curator_env):
         removed=["pr-review-format"],
         heuristic={"consolidated": [], "pruned": [{"name": "pr-review-format"}]},
         model_block={"consolidations": [], "prunings": []},  # model forgot YAML block
-        destinations={"hermes-agent-dev"},
+        destinations={"fulilian-agent-dev"},
         absorbed_declarations={
-            "pr-review-format": {"into": "hermes-agent-dev", "declared": True},
+            "pr-review-format": {"into": "fulilian-agent-dev", "declared": True},
         },
     )
     assert len(out["consolidated"]) == 1
     assert out["pruned"] == []
     e = out["consolidated"][0]
     assert e["name"] == "pr-review-format"
-    assert e["into"] == "hermes-agent-dev"
+    assert e["into"] == "fulilian-agent-dev"
     assert "absorbed_into" in e["source"]
 
 
@@ -406,7 +406,7 @@ def test_reconcile_mixed_declarations_and_legacy_calls(curator_env):
 # ---------------------------------------------------------------------------
 # _build_rename_summary — surfaces the "where did my skills go?" map to the
 # user-visible curator summary (gateway 💾 line, CLI Rich panel,
-# `hermes curator status`). The full data has always been in REPORT.md on
+# `fulilian curator status`). The full data has always been in REPORT.md on
 # disk; this helper makes it visible without digging.
 # ---------------------------------------------------------------------------
 
@@ -509,7 +509,7 @@ def test_rename_summary_mixed_consolidation_and_pruning(curator_env):
 
 
 # ---------------------------------------------------------------------------
-# Pin hint — surfaces `hermes curator pin <umbrella>` in the rename block so
+# Pin hint — surfaces `fulilian curator pin <umbrella>` in the rename block so
 # users learn the command exists at the moment they care (a consolidation
 # just landed against their library). The hint is gated on having at least
 # one umbrella destination — pruned-only runs skip it.

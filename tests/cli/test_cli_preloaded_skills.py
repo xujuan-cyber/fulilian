@@ -19,7 +19,7 @@ def _make_real_cli(**kwargs):
         "agent": {},
         "terminal": {"env_type": "local"},
     }
-    clean_env = {"LLM_MODEL": "", "HERMES_MAX_ITERATIONS": ""}
+    clean_env = {"LLM_MODEL": "", "FULILIAN_MAX_ITERATIONS": ""}
     prompt_toolkit_stubs = {
         "prompt_toolkit": MagicMock(),
         "prompt_toolkit.history": MagicMock(),
@@ -45,7 +45,7 @@ def _make_real_cli(**kwargs):
         with patch.object(cli_mod, "get_tool_definitions", return_value=[]), patch.dict(
             cli_mod.__dict__, {"CLI_CONFIG": clean_config}
         ):
-            return cli_mod.HermesCLI(**kwargs)
+            return cli_mod.FulilianCLI(**kwargs)
 
 
 class _DummyCLI:
@@ -69,13 +69,13 @@ class _DummyCLI:
 
 
 def _real_finalize(cli_obj):
-    """Call the real HermesCLI.finalize_preloaded_skills on a dummy object."""
+    """Call the real FulilianCLI.finalize_preloaded_skills on a dummy object."""
     return _REAL_FINALIZE(cli_obj)
 
 
 def _capture_real_finalize():
     import cli as cli_mod
-    return cli_mod.HermesCLI.__dict__["finalize_preloaded_skills"]
+    return cli_mod.FulilianCLI.__dict__["finalize_preloaded_skills"]
 
 
 _REAL_FINALIZE = _capture_real_finalize()
@@ -90,15 +90,15 @@ def test_main_applies_preloaded_skills_to_system_prompt(monkeypatch):
         created["cli"] = _DummyCLI(**kwargs)
         return created["cli"]
 
-    monkeypatch.setattr(cli_mod, "HermesCLI", fake_cli)
+    monkeypatch.setattr(cli_mod, "FulilianCLI", fake_cli)
     monkeypatch.setattr(
         cli_mod,
         "build_preloaded_skills_prompt",
-        lambda skills, task_id=None: ("skill prompt", ["hermes-agent-dev", "github-auth"], []),
+        lambda skills, task_id=None: ("skill prompt", ["fulilian-agent-dev", "github-auth"], []),
     )
 
     with pytest.raises(SystemExit):
-        cli_mod.main(skills="hermes-agent-dev,github-auth", list_tools=True)
+        cli_mod.main(skills="fulilian-agent-dev,github-auth", list_tools=True)
 
     cli_obj = created["cli"]
     # The preload now runs in a background thread and is folded in at agent
@@ -106,7 +106,7 @@ def test_main_applies_preloaded_skills_to_system_prompt(monkeypatch):
     # the finalize explicitly — the same call _init_agent makes.
     _real_finalize(cli_obj)
     assert cli_obj.system_prompt == "base prompt\n\nskill prompt"
-    assert cli_obj.preloaded_skills == ["hermes-agent-dev", "github-auth"]
+    assert cli_obj.preloaded_skills == ["fulilian-agent-dev", "github-auth"]
 
 
 def test_main_raises_for_unknown_preloaded_skill(monkeypatch):
@@ -118,7 +118,7 @@ def test_main_raises_for_unknown_preloaded_skill(monkeypatch):
         created["cli"] = _DummyCLI(**kwargs)
         return created["cli"]
 
-    monkeypatch.setattr(cli_mod, "HermesCLI", fake_cli)
+    monkeypatch.setattr(cli_mod, "FulilianCLI", fake_cli)
     monkeypatch.setattr(
         cli_mod,
         "build_preloaded_skills_prompt",
@@ -137,7 +137,7 @@ def test_main_raises_for_unknown_preloaded_skill(monkeypatch):
 def test_show_banner_does_not_print_skills():
     """show_banner() no longer prints the activated skills line — it moved to run()."""
     cli_obj = _make_real_cli(compact=False)
-    cli_obj.preloaded_skills = ["hermes-agent-dev", "github-auth"]
+    cli_obj.preloaded_skills = ["fulilian-agent-dev", "github-auth"]
     cli_obj.console = MagicMock()
 
     with patch("cli.build_welcome_banner") as mock_banner, patch(

@@ -81,13 +81,13 @@ def _async_capturing_caller(captured: Dict[str, Any]):
 def _set_registry(monkeypatch, entries: List[Dict[str, Any]]) -> None:
     """Point ``_resolve_task_ownership`` at a controlled plugin registry."""
     monkeypatch.setattr(
-        "hermes_cli.plugins.get_plugin_auxiliary_tasks", lambda: list(entries)
+        "fulilian_cli.plugins.get_plugin_auxiliary_tasks", lambda: list(entries)
     )
 
 
 def _set_builtins(monkeypatch, keys: List[str]) -> None:
     monkeypatch.setattr(
-        "hermes_cli.main._AUX_TASKS", [(k, k.title(), "") for k in keys]
+        "fulilian_cli.main._AUX_TASKS", [(k, k.title(), "") for k in keys]
     )
 
 
@@ -442,7 +442,7 @@ class TestOwnershipIntegration:
         manager = self._make_manager()
         self._register(manager, name="Display Name", key="my_key", task_key="classifier")
         monkeypatch.setattr(
-            "hermes_cli.plugins._ensure_plugins_discovered", lambda: manager
+            "fulilian_cli.plugins._ensure_plugins_discovered", lambda: manager
         )
         _set_builtins(monkeypatch, ["vision"])
 
@@ -457,7 +457,7 @@ class TestOwnershipIntegration:
         manager = self._make_manager()
         self._register(manager, name="p", key="", task_key="classifier")
         monkeypatch.setattr(
-            "hermes_cli.plugins._ensure_plugins_discovered", lambda: manager
+            "fulilian_cli.plugins._ensure_plugins_discovered", lambda: manager
         )
         _set_builtins(monkeypatch, ["vision"])
 
@@ -474,9 +474,9 @@ class TestOwnershipIntegration:
         from agent import auxiliary_client as auxiliary_mod
         from fulilian_cli import config as config_mod
 
-        hermes_home = tmp_path / ".hermes"
-        hermes_home.mkdir()
-        (hermes_home / "config.yaml").write_text(
+        fulilian_home = tmp_path / ".fulilian"
+        fulilian_home.mkdir()
+        (fulilian_home / "config.yaml").write_text(
             """
 auxiliary:
   classifier:
@@ -487,13 +487,13 @@ auxiliary:
 """,
             encoding="utf-8",
         )
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        monkeypatch.setenv("FULILIAN_HOME", str(fulilian_home))
         monkeypatch.setattr(config_mod, "_LOAD_CONFIG_CACHE", {})
         monkeypatch.setattr(config_mod, "_RAW_CONFIG_CACHE", {})
 
         manager = self._make_manager()
         ctx = self._register(manager, name="my-plugin", key="my-plugin", task_key="classifier")
-        monkeypatch.setattr("hermes_cli.plugins._ensure_plugins_discovered", lambda: manager)
+        monkeypatch.setattr("fulilian_cli.plugins._ensure_plugins_discovered", lambda: manager)
         _set_builtins(monkeypatch, [])
         monkeypatch.setattr("agent.auxiliary_client._read_main_provider", lambda: "")
         monkeypatch.setattr("agent.auxiliary_client._read_main_model", lambda: "")
@@ -557,9 +557,9 @@ auxiliary:
     def test_sync_fallback_reports_the_successful_route(self, tmp_path, monkeypatch):
         from fulilian_cli import config as config_mod
 
-        hermes_home = tmp_path / ".hermes"
-        hermes_home.mkdir()
-        (hermes_home / "config.yaml").write_text(
+        fulilian_home = tmp_path / ".fulilian"
+        fulilian_home.mkdir()
+        (fulilian_home / "config.yaml").write_text(
             """
 auxiliary:
   classifier:
@@ -571,7 +571,7 @@ auxiliary:
 """,
             encoding="utf-8",
         )
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        monkeypatch.setenv("FULILIAN_HOME", str(fulilian_home))
         monkeypatch.setattr(config_mod, "_LOAD_CONFIG_CACHE", {})
         monkeypatch.setattr(config_mod, "_RAW_CONFIG_CACHE", {})
         _set_registry(monkeypatch, [{"key": "classifier", "plugin": "my-plugin"}])
@@ -605,9 +605,9 @@ auxiliary:
     def test_async_fallback_reports_the_successful_route(self, tmp_path, monkeypatch):
         from fulilian_cli import config as config_mod
 
-        hermes_home = tmp_path / ".hermes"
-        hermes_home.mkdir()
-        (hermes_home / "config.yaml").write_text(
+        fulilian_home = tmp_path / ".fulilian"
+        fulilian_home.mkdir()
+        (fulilian_home / "config.yaml").write_text(
             """
 auxiliary:
   classifier:
@@ -619,7 +619,7 @@ auxiliary:
 """,
             encoding="utf-8",
         )
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        monkeypatch.setenv("FULILIAN_HOME", str(fulilian_home))
         monkeypatch.setattr(config_mod, "_LOAD_CONFIG_CACHE", {})
         monkeypatch.setattr(config_mod, "_RAW_CONFIG_CACHE", {})
         _set_registry(monkeypatch, [{"key": "classifier", "plugin": "my-plugin"}])

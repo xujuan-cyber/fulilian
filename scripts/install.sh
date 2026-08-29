@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================================
-# Hermes Agent Installer
+# FuLiLian Installer
 # ============================================================================
 # Installation script for Linux, macOS, and Android/Termux.
 # Uses uv for desktop/server installs and Python's stdlib venv + pip on Termux.
@@ -16,7 +16,7 @@
 set -e
 
 # Guard against environment leakage when the installer is launched from another
-# Python-driven tool session (e.g. Hermes terminal tool). A pre-set PYTHONPATH
+# Python-driven tool session (e.g. Fulilian terminal tool). A pre-set PYTHONPATH
 # can force pip/entrypoints to import a different checkout than the one being
 # installed, which makes fresh installs appear broken or stale.
 if [ -n "${PYTHONPATH:-}" ]; then
@@ -45,12 +45,12 @@ BOLD='\033[1m'
 # Configuration
 REPO_URL_SSH="git@github.com:NousResearch/hermes-agent.git"
 REPO_URL_HTTPS="https://github.com/NousResearch/hermes-agent.git"
-HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
+FULILIAN_HOME="${FULILIAN_HOME:-$HOME/.fulilian}"
 # INSTALL_DIR is resolved AFTER arg parsing and OS detection so we can pick an
 # FHS-style layout for root installs.  Track whether the user gave us an
 # explicit directory — if so we never override it.
-if [ -n "${HERMES_INSTALL_DIR:-}" ]; then
-    INSTALL_DIR="$HERMES_INSTALL_DIR"
+if [ -n "${FULILIAN_INSTALL_DIR:-}" ]; then
+    INSTALL_DIR="$FULILIAN_INSTALL_DIR"
     INSTALL_DIR_EXPLICIT=true
 else
     INSTALL_DIR=""
@@ -60,8 +60,8 @@ PYTHON_VERSION="3.11"
 NODE_VERSION="26"
 
 # FHS-style root install layout (set by resolve_install_layout when applicable):
-#   code at /usr/local/lib/hermes-agent, command at /usr/local/bin/hermes,
-#   data still at /root/.hermes (HERMES_HOME).  Matches Claude Code / Codex CLI
+#   code at /usr/local/lib/fulilian-agent, command at /usr/local/bin/fulilian,
+#   data still at /root/.fulilian (FULILIAN_HOME).  Matches Claude Code / Codex CLI
 #   and keeps Docker bind-mounted /root/ volumes lean.
 ROOT_FHS_LAYOUT=false
 DETECTED_BROWSER_EXECUTABLE=""
@@ -152,8 +152,8 @@ while [[ $# -gt 0 ]]; do
             INSTALL_DIR_EXPLICIT=true
             shift 2
             ;;
-        --hermes-home)
-            HERMES_HOME="$2"
+        --fulilian-home)
+            FULILIAN_HOME="$2"
             shift 2
             ;;
         --ensure)
@@ -162,7 +162,7 @@ while [[ $# -gt 0 ]]; do
             ;;
 
         -h|--help)
-            echo "Hermes Agent Installer"
+            echo "FuLiLian Installer"
             echo ""
             echo "Usage: install.sh [OPTIONS]"
             echo ""
@@ -172,8 +172,8 @@ while [[ $# -gt 0 ]]; do
             echo "  --skip-browser Skip Playwright/Chromium install (browser tools won't work)"
             echo "  --skip-computer-use  Skip the cua-driver (Computer Use) install"
             echo "  --no-skills    Start with a blank slate — seed no bundled skills, and"
-            echo "                   write \$HERMES_HOME/.no-bundled-skills so future"
-            echo "                   'hermes update' runs never inject bundled skills either"
+            echo "                   write \$FULILIAN_HOME/.no-bundled-skills so future"
+            echo "                   'fulilian update' runs never inject bundled skills either"
             echo "  --branch NAME  Git branch to install (default: main)"
             echo "  --commit SHA   Pin checkout to a specific commit after clone/update"
             echo "                   (ignored when it would roll an existing install back)"
@@ -182,21 +182,21 @@ while [[ $# -gt 0 ]]; do
             echo "  --stage NAME   Run one desktop bootstrap stage"
             echo "  --json         Print a JSON result frame for --stage"
             echo "  --non-interactive  Skip stages that require user input"
-            echo "  --include-desktop  Also build the desktop app (apps/desktop -> Hermes.app)"
+            echo "  --include-desktop  Also build the desktop app (apps/desktop -> Fulilian.app)"
             echo "  --dir PATH     Installation directory"
-            echo "                   default (non-root):  ~/.hermes/hermes-agent"
-            echo "                   default (root, Linux): /usr/local/lib/hermes-agent"
-            echo "  --hermes-home PATH  Data directory (default: ~/.hermes, or \$HERMES_HOME)"
+            echo "                   default (non-root):  ~/.fulilian/fulilian-agent"
+            echo "                   default (root, Linux): /usr/local/lib/fulilian-agent"
+            echo "  --fulilian-home PATH  Data directory (default: ~/.fulilian, or \$FULILIAN_HOME)"
             echo "  -h, --help     Show this help"
             echo ""
             echo "Notes:"
-            echo "  When running as root on Linux, Hermes installs the code under"
-            echo "  /usr/local/lib/hermes-agent and links the command into"
-            echo "  /usr/local/bin/hermes (FHS layout — matches Claude Code / Codex CLI)."
-            echo "  Data, config, sessions, and logs still live in \$HERMES_HOME"
-            echo "  (default /root/.hermes).  This keeps Docker bind-mounted volumes"
+            echo "  When running as root on Linux, Fulilian installs the code under"
+            echo "  /usr/local/lib/fulilian-agent and links the command into"
+            echo "  /usr/local/bin/fulilian (FHS layout — matches Claude Code / Codex CLI)."
+            echo "  Data, config, sessions, and logs still live in \$FULILIAN_HOME"
+            echo "  (default /root/.fulilian).  This keeps Docker bind-mounted volumes"
             echo "  small and ensures the command is on PATH for all shells."
-            echo "  Existing installs at \$HERMES_HOME/hermes-agent are preserved in-place."
+            echo "  Existing installs at \$FULILIAN_HOME/fulilian-agent are preserved in-place."
             echo "  --ensure DEPS  Install only specified deps (comma-separated)"
             echo "                   Supported: node, browser, ripgrep, ffmpeg"
             echo "                   Does NOT clone repo or create venv"
@@ -218,7 +218,7 @@ print_banner() {
     echo ""
     echo -e "${MAGENTA}${BOLD}"
     echo "┌─────────────────────────────────────────────────────────┐"
-    echo "│             ⚕ Hermes Agent Installer                    │"
+    echo "│             ⚕ FuLiLian Installer                    │"
     echo "├─────────────────────────────────────────────────────────┤"
     echo "│  An open source AI agent by Nous Research.              │"
     echo "└─────────────────────────────────────────────────────────┘"
@@ -251,7 +251,7 @@ json_escape() {
 
 # npm rewrites tracked package-lock.json files non-deterministically during
 # `npm install` / `npm run pack`. On a managed install those diffs are never
-# intentional, but they leave the checkout dirty — which forces `hermes update`
+# intentional, but they leave the checkout dirty — which forces `fulilian update`
 # to autostash on every run and makes branch switches fragile. Restore them so
 # a fresh install ends with a clean tree. Best-effort; only touches lockfiles.
 restore_dirty_lockfiles() {
@@ -320,7 +320,7 @@ EOF
 
 emit_manifest() {
     # Stage-Desktop is included only with --include-desktop, mirroring
-    # install.ps1: the signed bootstrap installer (Hermes-Setup) passes it so
+    # install.ps1: the signed bootstrap installer (Fulilian-Setup) passes it so
     # a GUI install ends up with a launchable app; the Electron app's own
     # first-launch bootstrap and the CLI one-liner omit it (building the
     # desktop from inside the already-running app would clobber it).
@@ -328,7 +328,7 @@ emit_manifest() {
     if [ "$INCLUDE_DESKTOP" = true ]; then
         desktop_stage='{"name":"desktop","title":"Build desktop app","category":"runtime","needs_user_input":false},'
     fi
-    printf '%s' '{"protocol_version":1,"stages":[{"name":"prerequisites","title":"System prerequisites","category":"runtime","needs_user_input":false},{"name":"repository","title":"Download Hermes Agent","category":"runtime","needs_user_input":false},{"name":"venv","title":"Create Python virtual environment","category":"runtime","needs_user_input":false},{"name":"python-deps","title":"Install Python dependencies","category":"runtime","needs_user_input":false},{"name":"node-deps","title":"Install browser-tool dependencies","category":"runtime","needs_user_input":false},{"name":"path","title":"Install hermes command","category":"runtime","needs_user_input":false},{"name":"config","title":"Prepare config and skills","category":"configuration","needs_user_input":false},{"name":"setup","title":"Configure API keys and settings","category":"configuration","needs_user_input":true},{"name":"gateway","title":"Configure gateway service","category":"configuration","needs_user_input":true},'"$desktop_stage"'{"name":"complete","title":"Finish install","category":"runtime","needs_user_input":false}]}'
+    printf '%s' '{"protocol_version":1,"stages":[{"name":"prerequisites","title":"System prerequisites","category":"runtime","needs_user_input":false},{"name":"repository","title":"Download FuLiLian","category":"runtime","needs_user_input":false},{"name":"venv","title":"Create Python virtual environment","category":"runtime","needs_user_input":false},{"name":"python-deps","title":"Install Python dependencies","category":"runtime","needs_user_input":false},{"name":"node-deps","title":"Install browser-tool dependencies","category":"runtime","needs_user_input":false},{"name":"path","title":"Install fulilian command","category":"runtime","needs_user_input":false},{"name":"config","title":"Prepare config and skills","category":"configuration","needs_user_input":false},{"name":"setup","title":"Configure API keys and settings","category":"configuration","needs_user_input":true},{"name":"gateway","title":"Configure gateway service","category":"configuration","needs_user_input":true},'"$desktop_stage"'{"name":"complete","title":"Finish install","category":"runtime","needs_user_input":false}]}'
     printf '\n'
 }
 
@@ -396,29 +396,29 @@ is_termux() {
     [ -n "${TERMUX_VERSION:-}" ] || [[ "${PREFIX:-}" == *"com.termux/files/usr"* ]]
 }
 
-# Decide where the repo checkout + venv live, and where the `hermes` command
+# Decide where the repo checkout + venv live, and where the `fulilian` command
 # symlink goes.  Called after detect_os so $OS/$DISTRO are known.
 #
 # Defaults:
-#   - Non-root, any OS:       INSTALL_DIR = $HERMES_HOME/hermes-agent
+#   - Non-root, any OS:       INSTALL_DIR = $FULILIAN_HOME/fulilian-agent
 #                             command link in $HOME/.local/bin
-#   - Termux (any uid):       INSTALL_DIR = $HERMES_HOME/hermes-agent
+#   - Termux (any uid):       INSTALL_DIR = $FULILIAN_HOME/fulilian-agent
 #                             command link in $PREFIX/bin (already on PATH)
-#   - Root on Linux (new):    INSTALL_DIR = /usr/local/lib/hermes-agent
+#   - Root on Linux (new):    INSTALL_DIR = /usr/local/lib/fulilian-agent
 #                             command link in /usr/local/bin
 #                             (unless a legacy install already exists at
-#                              $HERMES_HOME/hermes-agent — then preserve it)
+#                              $FULILIAN_HOME/fulilian-agent — then preserve it)
 #
-# Always no-op when the user set --dir or $HERMES_INSTALL_DIR.
+# Always no-op when the user set --dir or $FULILIAN_INSTALL_DIR.
 resolve_install_layout() {
     if [ "$INSTALL_DIR_EXPLICIT" = true ]; then
         log_info "Install directory: $INSTALL_DIR (explicit)"
         return 0
     fi
 
-    # Termux: package manager manages /data/data/..., keep code in HERMES_HOME.
+    # Termux: package manager manages /data/data/..., keep code in FULILIAN_HOME.
     if is_termux; then
-        INSTALL_DIR="$HERMES_HOME/hermes-agent"
+        INSTALL_DIR="$FULILIAN_HOME/fulilian-agent"
         return 0
     fi
 
@@ -426,31 +426,31 @@ resolve_install_layout() {
     # macOS root installs keep the legacy layout because /usr/local/ on macOS
     # is Homebrew territory and we don't want to fight that.
     if [ "$OS" = "linux" ] && [ "$(id -u)" -eq 0 ]; then
-        if [ -d "$HERMES_HOME/hermes-agent/.git" ]; then
-            INSTALL_DIR="$HERMES_HOME/hermes-agent"
+        if [ -d "$FULILIAN_HOME/fulilian-agent/.git" ]; then
+            INSTALL_DIR="$FULILIAN_HOME/fulilian-agent"
             log_info "Existing install detected at $INSTALL_DIR — keeping legacy layout"
-            log_info "  (new root installs use /usr/local/lib/hermes-agent)"
+            log_info "  (new root installs use /usr/local/lib/fulilian-agent)"
             return 0
         fi
-        INSTALL_DIR="/usr/local/lib/hermes-agent"
+        INSTALL_DIR="/usr/local/lib/fulilian-agent"
         ROOT_FHS_LAYOUT=true
         # Place uv-managed Python under /usr/local/share so the venv interpreter
         # is world-readable.  Default uv paths land in /root/.local/share/uv,
         # which non-root users can't traverse — leaving the shared
-        # /usr/local/bin/hermes wrapper unable to exec the bad-interpreter venv
+        # /usr/local/bin/fulilian wrapper unable to exec the bad-interpreter venv
         # python.  See #21457.
         export UV_PYTHON_INSTALL_DIR="${UV_PYTHON_INSTALL_DIR:-/usr/local/share/uv/python}"
         export UV_PYTHON_BIN_DIR="${UV_PYTHON_BIN_DIR:-/usr/local/share/uv/bin}"
         log_info "Root install on Linux — using FHS layout"
         log_info "  Code:    $INSTALL_DIR"
-        log_info "  Command: /usr/local/bin/hermes"
-        log_info "  Data:    $HERMES_HOME (unchanged)"
+        log_info "  Command: /usr/local/bin/fulilian"
+        log_info "  Data:    $FULILIAN_HOME (unchanged)"
         log_info "  uv Python: $UV_PYTHON_INSTALL_DIR (world-readable)"
         return 0
     fi
 
     # Default: non-root, non-Termux → legacy user-scoped layout.
-    INSTALL_DIR="$HERMES_HOME/hermes-agent"
+    INSTALL_DIR="$FULILIAN_HOME/fulilian-agent"
 }
 
 get_command_link_dir() {
@@ -473,32 +473,32 @@ get_command_link_display_dir() {
     fi
 }
 
-# Point a Hermes-managed Node's `npm install -g` at a directory that is on
+# Point a Fulilian-managed Node's `npm install -g` at a directory that is on
 # PATH. npm's default global prefix for a bundled Node is the Node dir itself,
-# so global package binaries land in $HERMES_HOME/node/bin — which is NOT on
+# so global package binaries land in $FULILIAN_HOME/node/bin — which is NOT on
 # PATH (only the command link dir is) and is wiped on every Node upgrade.
 # Redirecting the prefix to the link dir's parent makes global bins resolve to
 # the command link dir (node/npm/npx live there too, already on PATH) and
 # survive upgrades. Scoped to the managed Node via its prefix-local global
 # npmrc, so the user's other Node installs and their ~/.npmrc are untouched.
-# Hermes's own global installs pass an explicit --prefix and are unaffected.
-# Idempotent and a no-op when there is no Hermes-managed npm, so calling it on
+# Fulilian's own global installs pass an explicit --prefix and are unaffected.
+# Idempotent and a no-op when there is no Fulilian-managed npm, so calling it on
 # every install run repairs pre-existing installs, not just fresh ones.
 configure_managed_node_npm_prefix() {
-    [ -x "$HERMES_HOME/node/bin/npm" ] || return 0
+    [ -x "$FULILIAN_HOME/node/bin/npm" ] || return 0
     local link_dir
     link_dir="$(get_command_link_dir)"
-    mkdir -p "$HERMES_HOME/node/etc"
-    printf 'prefix=%s\n' "$(dirname "$link_dir")" > "$HERMES_HOME/node/etc/npmrc"
+    mkdir -p "$FULILIAN_HOME/node/etc"
+    printf 'prefix=%s\n' "$(dirname "$link_dir")" > "$FULILIAN_HOME/node/etc/npmrc"
 }
 
-get_hermes_command_path() {
+get_fulilian_command_path() {
     local link_dir
     link_dir="$(get_command_link_dir)"
-    if [ -x "$link_dir/hermes" ]; then
-        echo "$link_dir/hermes"
+    if [ -x "$link_dir/fulilian" ]; then
+        echo "$link_dir/fulilian"
     else
-        echo "hermes"
+        echo "fulilian"
     fi
 }
 
@@ -559,11 +559,11 @@ install_uv() {
         return 0
     fi
 
-    # Hermes owns its own uv at $HERMES_HOME/bin/uv.  Always install there —
+    # Fulilian owns its own uv at $FULILIAN_HOME/bin/uv.  Always install there —
     # no PATH probing, no conda guards, no multi-location resolution chains.
-    # The runtime update path (hermes_cli/managed_uv.py) looks in the same
-    # place, so install.sh and `hermes update` stay in sync.
-    local _managed_uv="$HERMES_HOME/bin/uv"
+    # The runtime update path (fulilian_cli/managed_uv.py) looks in the same
+    # place, so install.sh and `fulilian update` stay in sync.
+    local _managed_uv="$FULILIAN_HOME/bin/uv"
 
     if [ -x "$_managed_uv" ]; then
         UV_CMD="$_managed_uv"
@@ -572,15 +572,15 @@ install_uv() {
         return 0
     fi
 
-    log_info "Installing managed uv into $HERMES_HOME/bin ..."
-    mkdir -p "$HERMES_HOME/bin"
+    log_info "Installing managed uv into $FULILIAN_HOME/bin ..."
+    mkdir -p "$FULILIAN_HOME/bin"
 
     # Two-stage: download the installer, then run it.  Piping
     # `curl | sh` masks curl failures (sh exits 0 on empty stdin)
     # and conflates network errors with installer errors.
     local _uv_install_log _uv_installer
-    _uv_install_log="$(mktemp 2>/dev/null || echo "/tmp/hermes-uv-install.$$.log")"
-    _uv_installer="$(mktemp 2>/dev/null || echo "/tmp/hermes-uv-installer.$$.sh")"
+    _uv_install_log="$(mktemp 2>/dev/null || echo "/tmp/fulilian-uv-install.$$.log")"
+    _uv_installer="$(mktemp 2>/dev/null || echo "/tmp/fulilian-uv-installer.$$.sh")"
     if ! curl -LsSf https://astral.sh/uv/install.sh -o "$_uv_installer" 2>"$_uv_install_log"; then
         log_error "Failed to download uv installer from https://astral.sh/uv/install.sh"
         log_info "curl output:"
@@ -590,8 +590,8 @@ install_uv() {
         exit 1
     fi
     # UV_UNMANAGED_INSTALL tells the astral installer to place the binary
-    # directly into $HERMES_HOME/bin instead of ~/.local/bin.
-    if UV_UNMANAGED_INSTALL="$HERMES_HOME/bin" sh "$_uv_installer" >>"$_uv_install_log" 2>&1; then
+    # directly into $FULILIAN_HOME/bin instead of ~/.local/bin.
+    if UV_UNMANAGED_INSTALL="$FULILIAN_HOME/bin" sh "$_uv_installer" >>"$_uv_install_log" 2>&1; then
         rm -f "$_uv_installer"
         if [ -x "$_managed_uv" ]; then
             UV_CMD="$_managed_uv"
@@ -888,7 +888,7 @@ check_cxx_compiler() {
 # proceed to a `npm ci` that then dies with EBADENGINE, and a gate stricter than
 # the manifest replaces a working user toolchain for nothing. Returns 0 when the
 # given `node --version` string clears the floor; anything below it is replaced
-# with the Hermes-managed Node $NODE_VERSION.
+# with the Fulilian-managed Node $NODE_VERSION.
 node_satisfies_build() {
     local ver="${1#v}"
     local major="${ver%%.*}"
@@ -922,7 +922,7 @@ npm_supports_npmrc() {
 check_node() {
     log_info "Checking Node.js (for browser tools)..."
 
-    # Repair pre-existing Hermes-managed installs where `npm install -g` lands
+    # Repair pre-existing Fulilian-managed installs where `npm install -g` lands
     # off PATH. No-op when there's no managed Node, so this is safe to run on
     # every install — including re-runs that skip the Node (re)install below.
     configure_managed_node_npm_prefix
@@ -946,24 +946,24 @@ check_node() {
             return 0
         fi
         log_warn "npm $(npm --version) cannot honor this repo's .npmrc (npm 11.10-11.16 ignore"
-        log_warn "min-release-age-exclude) — installing Hermes-managed Node $NODE_VERSION instead..."
+        log_warn "min-release-age-exclude) — installing Fulilian-managed Node $NODE_VERSION instead..."
         install_node
         return
     fi
 
-    # Prefer a Hermes-managed Node from a previous run over a too-old system one.
-    if [ -x "$HERMES_HOME/node/bin/node" ] && [ -x "$HERMES_HOME/node/bin/npm" ] \
-        && node_satisfies_build "$("$HERMES_HOME/node/bin/node" --version)"; then
-        export PATH="$HERMES_HOME/node/bin:$PATH"
-        log_success "Node.js $("$HERMES_HOME/node/bin/node" --version) found (Hermes-managed)"
+    # Prefer a Fulilian-managed Node from a previous run over a too-old system one.
+    if [ -x "$FULILIAN_HOME/node/bin/node" ] && [ -x "$FULILIAN_HOME/node/bin/npm" ] \
+        && node_satisfies_build "$("$FULILIAN_HOME/node/bin/node" --version)"; then
+        export PATH="$FULILIAN_HOME/node/bin:$PATH"
+        log_success "Node.js $("$FULILIAN_HOME/node/bin/node" --version) found (Fulilian-managed)"
         HAS_NODE=true
         return 0
     fi
 
     if command -v node &> /dev/null && ! command -v npm &> /dev/null; then
-        log_warn "node found but npm is not on PATH (stray node symlink?) — installing Hermes-managed Node $NODE_VERSION LTS..."
+        log_warn "node found but npm is not on PATH (stray node symlink?) — installing Fulilian-managed Node $NODE_VERSION LTS..."
     elif command -v node &> /dev/null; then
-        log_warn "Node.js $(node --version) is too old (Hermes requires Node >=26) — installing Hermes-managed Node $NODE_VERSION..."
+        log_warn "Node.js $(node --version) is too old (Fulilian requires Node >=26) — installing Fulilian-managed Node $NODE_VERSION..."
     elif [ "$DISTRO" = "termux" ]; then
         log_info "Node.js not found — installing Node.js via pkg..."
     else
@@ -1045,7 +1045,7 @@ install_node() {
         return 0
     fi
 
-    log_info "Extracting to ~/.hermes/node/..."
+    log_info "Extracting to ~/.fulilian/node/..."
     if [[ "$tarball_name" == *.tar.xz ]]; then
         tar xf "$tmp_dir/$tarball_name" -C "$tmp_dir"
     else
@@ -1062,28 +1062,28 @@ install_node() {
         return 0
     fi
 
-    # Place into ~/.hermes/node/ and symlink binaries into the same bin dir
-    # the hermes command uses (get_command_link_dir): /usr/local/bin for root
+    # Place into ~/.fulilian/node/ and symlink binaries into the same bin dir
+    # the fulilian command uses (get_command_link_dir): /usr/local/bin for root
     # FHS installs, $PREFIX/bin on Termux, ~/.local/bin otherwise.
-    rm -rf "$HERMES_HOME/node"
-    mkdir -p "$HERMES_HOME"
-    mv "$extracted_dir" "$HERMES_HOME/node"
+    rm -rf "$FULILIAN_HOME/node"
+    mkdir -p "$FULILIAN_HOME"
+    mv "$extracted_dir" "$FULILIAN_HOME/node"
     rm -rf "$tmp_dir"
 
     local node_link_dir
     node_link_dir="$(get_command_link_dir)"
     mkdir -p "$node_link_dir"
-    ln -sf "$HERMES_HOME/node/bin/node" "$node_link_dir/node"
-    ln -sf "$HERMES_HOME/node/bin/npm"  "$node_link_dir/npm"
-    ln -sf "$HERMES_HOME/node/bin/npx"  "$node_link_dir/npx"
+    ln -sf "$FULILIAN_HOME/node/bin/node" "$node_link_dir/node"
+    ln -sf "$FULILIAN_HOME/node/bin/npm"  "$node_link_dir/npm"
+    ln -sf "$FULILIAN_HOME/node/bin/npx"  "$node_link_dir/npx"
 
     configure_managed_node_npm_prefix
 
-    export PATH="$HERMES_HOME/node/bin:$PATH"
+    export PATH="$FULILIAN_HOME/node/bin:$PATH"
 
     local installed_ver
-    installed_ver=$("$HERMES_HOME/node/bin/node" --version 2>/dev/null)
-    log_success "Node.js $installed_ver installed to ~/.hermes/node/"
+    installed_ver=$("$FULILIAN_HOME/node/bin/node" --version 2>/dev/null)
+    log_success "Node.js $installed_ver installed to ~/.fulilian/node/"
     HAS_NODE=true
 }
 
@@ -1138,7 +1138,7 @@ check_network_prerequisites() {
         log_info "If mirrors are stale: termux-change-repo"
         log_info "Then test: curl -I https://pypi.org/simple/ && curl -I https://duckduckgo.com/"
     else
-        log_warn "Network checks failed. Hermes install may complete, but web search and dependency downloads can fail."
+        log_warn "Network checks failed. Fulilian install may complete, but web search and dependency downloads can fail."
         log_info "Verify internet/DNS and retry if pip install fails."
     fi
 }
@@ -1262,7 +1262,7 @@ install_system_packages() {
             if [ "$IS_INTERACTIVE" = true ]; then
                 echo ""
                 log_info "sudo is needed ONLY to install optional system packages (${pkgs[*]}) via your package manager."
-                log_info "Hermes Agent itself does not require or retain root access."
+                log_info "FuLiLian itself does not require or retain root access."
                 if prompt_yes_no "Install ${description}? (requires sudo)" "no"; then
                     if sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a $install_cmd; then
                         [ "$need_ripgrep" = true ] && HAS_RIPGREP=true && log_success "ripgrep installed"
@@ -1278,7 +1278,7 @@ install_system_packages() {
                 # but opening fails with ENXIO. See #16746.
                 echo ""
                 log_info "sudo is needed ONLY to install optional system packages (${pkgs[*]}) via your package manager."
-                log_info "Hermes Agent itself does not require or retain root access."
+                log_info "FuLiLian itself does not require or retain root access."
                 if prompt_yes_no "Install ${description}?" "yes"; then
                     if sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a $install_cmd < /dev/tty; then
                         [ "$need_ripgrep" = true ] && HAS_RIPGREP=true && log_success "ripgrep installed"
@@ -1368,14 +1368,14 @@ clone_repo() {
                 # the whole install at the repository stage. Clear the conflict
                 # markers with `git reset` first -- this keeps working-tree
                 # changes (they're still stashed just below) and only drops the
-                # index-level conflict state. Mirrors the `hermes update` path
+                # index-level conflict state. Mirrors the `fulilian update` path
                 # (#4735).
                 if [ -n "$(git ls-files --unmerged)" ]; then
                     log_info "Clearing unmerged index entries from a previous conflict..."
                     git reset -q
                 fi
                 local stash_name
-                stash_name="hermes-install-autostash-$(date -u +%Y%m%d-%H%M%S)"
+                stash_name="fulilian-install-autostash-$(date -u +%Y%m%d-%H%M%S)"
                 log_info "Local changes detected, stashing before update..."
                 git stash push --include-untracked -m "$stash_name"
                 autostash_ref="stash@{0}"
@@ -1390,7 +1390,7 @@ clone_repo() {
             git checkout "$BRANCH"
             # Managed installs should follow origin/$BRANCH exactly. If the
             # checkout has diverged (or has local-only commits), ff-only pull
-            # cannot succeed — mirror ``hermes update`` and reset to the
+            # cannot succeed — mirror ``fulilian update`` and reset to the
             # fetched remote so bootstrap/install can recover.
             if ! git pull --ff-only origin "$BRANCH"; then
                 log_warn "Fast-forward not possible; resetting managed install to origin/$BRANCH..."
@@ -1425,7 +1425,7 @@ clone_repo() {
                     if [ "$restore_ok" = "yes" ] && [ -z "$conflicted_files" ]; then
                         git stash drop "$autostash_ref" >/dev/null
                         log_warn "Local changes were restored on top of the updated codebase."
-                        log_warn "Review git diff / git status if Hermes behaves unexpectedly."
+                        log_warn "Review git diff / git status if Fulilian behaves unexpectedly."
                     else
                         log_error "Update pulled new code, but restoring local changes hit conflicts."
                         if [ -n "$restore_output" ]; then
@@ -1662,7 +1662,7 @@ install_deps() {
                     log_success "Build tools installed"
                 else
                     log_info "sudo is needed ONLY to install build tools (build-essential, python3-dev, libffi-dev) via apt."
-                    log_info "Hermes Agent itself does not require or retain root access."
+                    log_info "FuLiLian itself does not require or retain root access."
                     if prompt_yes_no "Install build tools?" "yes"; then
                         sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get install -y -qq build-essential python3-dev libffi-dev >/dev/null 2>&1 || true
                         log_success "Build tools installed"
@@ -1753,7 +1753,7 @@ try:
     specs = data["project"]["optional-dependencies"]["all"]
     extras = []
     for s in specs:
-        m = re.search(r"hermes-agent\[([\w-]+)\]", s)
+        m = re.search(r"fulilian-agent\[([\w-]+)\]", s)
         if m:
             extras.append(m.group(1))
     print(",".join(extras))
@@ -1826,22 +1826,22 @@ PY
 }
 
 setup_path() {
-    log_info "Setting up hermes command..."
+    log_info "Setting up fulilian command..."
 
     if [ "$USE_VENV" = true ]; then
-        HERMES_BIN="$INSTALL_DIR/venv/bin/python"
-        HERMES_ENTRYPOINT="$INSTALL_DIR/hermes"
+        FULILIAN_BIN="$INSTALL_DIR/venv/bin/python"
+        FULILIAN_ENTRYPOINT="$INSTALL_DIR/fulilian"
     else
-        HERMES_BIN="$(which hermes 2>/dev/null || echo "")"
-        if [ -z "$HERMES_BIN" ]; then
-            log_warn "hermes not found on PATH after install"
+        FULILIAN_BIN="$(which hermes 2>/dev/null || echo "")"
+        if [ -z "$FULILIAN_BIN" ]; then
+            log_warn "fulilian not found on PATH after install"
             return 0
         fi
     fi
 
     # Verify the interpreter and the checked-in entrypoint needed by the launcher.
-    if [ ! -x "$HERMES_BIN" ] || { [ "$USE_VENV" = true ] && [ ! -f "$HERMES_ENTRYPOINT" ]; }; then
-        log_warn "Hermes launcher prerequisites not found"
+    if [ ! -x "$FULILIAN_BIN" ] || { [ "$USE_VENV" = true ] && [ ! -f "$FULILIAN_ENTRYPOINT" ]; }; then
+        log_warn "Fulilian launcher prerequisites not found"
         log_info "This usually means the Python package install didn't complete successfully."
         if [ "$DISTRO" = "termux" ]; then
             log_info "Try: cd $INSTALL_DIR && python -m pip install -e '.[termux-all]' -c constraints-termux.txt"
@@ -1856,88 +1856,88 @@ setup_path() {
     command_link_dir="$(get_command_link_dir)"
     command_link_display_dir="$(get_command_link_display_dir)"
 
-    # Create a user-facing shim for the hermes command.
+    # Create a user-facing shim for the fulilian command.
     # We intentionally clear PYTHONPATH/PYTHONHOME here so inherited env vars
     # can't make this launcher import modules from another checkout.
     mkdir -p "$command_link_dir"
-    # Older installs created this path as a symlink to $HERMES_BIN. Without
+    # Older installs created this path as a symlink to $FULILIAN_BIN. Without
     # the rm, `cat >` follows the symlink and overwrites the venv pip entry
-    # point with this shim — making `exec "$HERMES_BIN"` self-recurse. (#21454)
-    rm -f "$command_link_dir/hermes"
+    # point with this shim — making `exec "$FULILIAN_BIN"` self-recurse. (#21454)
+    rm -f "$command_link_dir/fulilian"
     if [ "$USE_VENV" = true ]; then
         # uv-generated console scripts resolve themselves through `realpath`,
         # which stock macOS does not provide. Run the checked-in entrypoint
         # with the venv interpreter instead, so the public launcher remains
         # independent of non-standard shell utilities.
-        cat > "$command_link_dir/hermes" <<EOF
+        cat > "$command_link_dir/fulilian" <<EOF
 #!/usr/bin/env bash
 unset PYTHONPATH
 unset PYTHONHOME
-exec "$HERMES_BIN" "$HERMES_ENTRYPOINT" "\$@"
+exec "$FULILIAN_BIN" "$FULILIAN_ENTRYPOINT" "\$@"
 EOF
     else
-        cat > "$command_link_dir/hermes" <<EOF
+        cat > "$command_link_dir/fulilian" <<EOF
 #!/usr/bin/env bash
 unset PYTHONPATH
 unset PYTHONHOME
-exec "$HERMES_BIN" "\$@"
+exec "$FULILIAN_BIN" "\$@"
 EOF
     fi
-    chmod +x "$command_link_dir/hermes"
-    log_success "Installed hermes launcher → $command_link_display_dir/hermes"
+    chmod +x "$command_link_dir/fulilian"
+    log_success "Installed fulilian launcher → $command_link_display_dir/fulilian"
 
-    # Also expose `hermes-agent`. The `hermes-agent` console script declared in
+    # Also expose `fulilian-agent`. The `fulilian-agent` console script declared in
     # pyproject.toml's [project.scripts] lives inside the venv, which is not on
     # the login-shell PATH. Without this launcher users can't invoke the agent
     # entrypoint directly from outside the venv. (#74819)
-    rm -f "$command_link_dir/hermes-agent"
+    rm -f "$command_link_dir/fulilian-agent"
     if [ "$USE_VENV" = true ]; then
-        cat > "$command_link_dir/hermes-agent" <<EOF
+        cat > "$command_link_dir/fulilian-agent" <<EOF
 #!/usr/bin/env bash
 unset PYTHONPATH
 unset PYTHONHOME
-exec "$HERMES_BIN" "$INSTALL_DIR/run_agent.py" "\$@"
+exec "$FULILIAN_BIN" "$INSTALL_DIR/run_agent.py" "\$@"
 EOF
     else
-        cat > "$command_link_dir/hermes-agent" <<EOF
+        cat > "$command_link_dir/fulilian-agent" <<EOF
 #!/usr/bin/env bash
 unset PYTHONPATH
 unset PYTHONHOME
-exec "$HERMES_BIN" run_agent.py "\$@"
+exec "$FULILIAN_BIN" run_agent.py "\$@"
 EOF
     fi
-    chmod +x "$command_link_dir/hermes-agent"
-    log_success "Installed hermes-agent launcher → $command_link_display_dir/hermes-agent"
+    chmod +x "$command_link_dir/fulilian-agent"
+    log_success "Installed fulilian-agent launcher → $command_link_display_dir/fulilian-agent"
 
-    # Also expose `hermes-acp`. ACP hosts (Zed, JetBrains, Buzz) resolve the
-    # agent by command name on the login-shell PATH, and the `hermes-acp`
+    # Also expose `fulilian-acp`. ACP hosts (Zed, JetBrains, Buzz) resolve the
+    # agent by command name on the login-shell PATH, and the `fulilian-acp`
     # console script lives inside the venv, which is not on that PATH. Without
-    # this launcher those hosts report Hermes as not installed. (#21454 applies
+    # this launcher those hosts report Fulilian as not installed. (#21454 applies
     # here too: clear the path first so `cat >` cannot follow an old symlink
     # into the venv and overwrite the console script.)
-    rm -f "$command_link_dir/hermes-acp"
+    rm -f "$command_link_dir/fulilian-acp"
     if [ "$USE_VENV" = true ]; then
-        cat > "$command_link_dir/hermes-acp" <<EOF
+        cat > "$command_link_dir/fulilian-acp" <<EOF
 #!/usr/bin/env bash
 unset PYTHONPATH
 unset PYTHONHOME
-exec "$HERMES_BIN" "$HERMES_ENTRYPOINT" acp "\$@"
+exec "$FULILIAN_BIN" "$FULILIAN_ENTRYPOINT" acp "\$@"
 EOF
     else
-        cat > "$command_link_dir/hermes-acp" <<EOF
+        cat > "$command_link_dir/fulilian-acp" <<EOF
 #!/usr/bin/env bash
 unset PYTHONPATH
 unset PYTHONHOME
-exec "$HERMES_BIN" acp "\$@"
+exec "$FULILIAN_BIN" acp "\$@"
 EOF
     fi
-    chmod +x "$command_link_dir/hermes-acp"
-    log_success "Installed hermes-acp launcher → $command_link_display_dir/hermes-acp"
+    chmod +x "$command_link_dir/fulilian-acp"
+    log_success "Installed fulilian-acp launcher → $command_link_display_dir/fulilian-acp"
 
     if [ "$DISTRO" = "termux" ]; then
         export PATH="$command_link_dir:$PATH"
         log_info "$command_link_display_dir is the native Termux command path"
-        log_success "hermes command ready"
+        log_success "fulilian command ready"
         return 0
     fi
 
@@ -1952,16 +1952,16 @@ EOF
         # Probe a fresh non-login interactive bash the way the user will use it.
         # `bash -i -c` sources ~/.bashrc but NOT ~/.bash_profile or /etc/profile,
         # which is the exact scenario where RHEL root loses /usr/local/bin.
-        if env -i HOME="$HOME" TERM="${TERM:-dumb}" bash -i -c 'command -v hermes' \
+        if env -i HOME="$HOME" TERM="${TERM:-dumb}" bash -i -c 'command -v fulilian' \
                 >/dev/null 2>&1; then
             log_info "/usr/local/bin is already on PATH for all shells"
-            log_success "hermes command ready"
+            log_success "fulilian command ready"
             return 0
         fi
 
-        log_info "hermes not on PATH in non-login shells (common on RHEL-family)"
+        log_info "fulilian not on PATH in non-login shells (common on RHEL-family)"
         PATH_LINE='export PATH="/usr/local/bin:$PATH"'
-        PATH_COMMENT='# Hermes Agent — ensure /usr/local/bin is on PATH (RHEL non-login shells)'
+        PATH_COMMENT='# FuLiLian — ensure /usr/local/bin is on PATH (RHEL non-login shells)'
         for SHELL_CONFIG in "$HOME/.bashrc" "$HOME/.bash_profile"; do
             [ -f "$SHELL_CONFIG" ] || continue
             if ! grep -v '^[[:space:]]*#' "$SHELL_CONFIG" 2>/dev/null \
@@ -1972,7 +1972,7 @@ EOF
                 log_success "Added /usr/local/bin to PATH in $SHELL_CONFIG"
             fi
         done
-        log_success "hermes command ready"
+        log_success "fulilian command ready"
         return 0
     fi
 
@@ -2018,7 +2018,7 @@ EOF
         for SHELL_CONFIG in "${SHELL_CONFIGS[@]}"; do
             if ! grep -v '^[[:space:]]*#' "$SHELL_CONFIG" 2>/dev/null | grep -qE 'PATH=.*\.local/bin'; then
                 echo "" >> "$SHELL_CONFIG"
-                echo "# Hermes Agent — ensure ~/.local/bin is on PATH" >> "$SHELL_CONFIG"
+                echo "# FuLiLian — ensure ~/.local/bin is on PATH" >> "$SHELL_CONFIG"
                 echo "$PATH_LINE" >> "$SHELL_CONFIG"
                 log_success "Added ~/.local/bin to PATH in $SHELL_CONFIG"
             fi
@@ -2028,7 +2028,7 @@ EOF
         if [ "$IS_FISH" = "true" ]; then
             if ! grep -q 'fish_add_path.*\.local/bin' "$FISH_CONFIG" 2>/dev/null; then
                 echo "" >> "$FISH_CONFIG"
-                echo "# Hermes Agent — ensure ~/.local/bin is on PATH" >> "$FISH_CONFIG"
+                echo "# FuLiLian — ensure ~/.local/bin is on PATH" >> "$FISH_CONFIG"
                 echo 'fish_add_path "$HOME/.local/bin"' >> "$FISH_CONFIG"
                 log_success "Added ~/.local/bin to PATH in $FISH_CONFIG"
             fi
@@ -2042,80 +2042,80 @@ EOF
         log_info "~/.local/bin already on PATH"
     fi
 
-    # Export for current session so hermes works immediately
+    # Export for current session so fulilian works immediately
     export PATH="$command_link_dir:$PATH"
 
-    log_success "hermes command ready"
+    log_success "fulilian command ready"
 }
 
 copy_config_templates() {
     log_info "Setting up configuration files..."
 
-    # Create ~/.hermes directory structure (config at top level, code in subdir)
-    mkdir -p "$HERMES_HOME"/{cron,sessions,logs,pairing,hooks,image_cache,audio_cache,memories,skills}
+    # Create ~/.fulilian directory structure (config at top level, code in subdir)
+    mkdir -p "$FULILIAN_HOME"/{cron,sessions,logs,pairing,hooks,image_cache,audio_cache,memories,skills}
 
-    # Create .env at ~/.hermes/.env (top level, easy to find)
-    if [ ! -f "$HERMES_HOME/.env" ]; then
+    # Create .env at ~/.fulilian/.env (top level, easy to find)
+    if [ ! -f "$FULILIAN_HOME/.env" ]; then
         if [ -f "$INSTALL_DIR/.env.example" ]; then
-            cp "$INSTALL_DIR/.env.example" "$HERMES_HOME/.env"
-            log_success "Created ~/.hermes/.env from template"
+            cp "$INSTALL_DIR/.env.example" "$FULILIAN_HOME/.env"
+            log_success "Created ~/.fulilian/.env from template"
         else
-            touch "$HERMES_HOME/.env"
-            log_success "Created ~/.hermes/.env"
+            touch "$FULILIAN_HOME/.env"
+            log_success "Created ~/.fulilian/.env"
         fi
     else
-        log_info "~/.hermes/.env already exists, keeping it"
+        log_info "~/.fulilian/.env already exists, keeping it"
     fi
     # Restrict .env permissions — this file holds API keys and tokens.
     # 0600 ensures only the file owner can read/write, matching standard
     # practice for credential files (.netrc, .aws/credentials, .ssh/config).
-    chmod 600 "$HERMES_HOME/.env"
+    chmod 600 "$FULILIAN_HOME/.env"
     configure_browser_env_from_system_browser
 
-    # Create config.yaml at ~/.hermes/config.yaml (top level, easy to find)
-    if [ ! -f "$HERMES_HOME/config.yaml" ]; then
+    # Create config.yaml at ~/.fulilian/config.yaml (top level, easy to find)
+    if [ ! -f "$FULILIAN_HOME/config.yaml" ]; then
         if [ -f "$INSTALL_DIR/cli-config.yaml.example" ]; then
-            cp "$INSTALL_DIR/cli-config.yaml.example" "$HERMES_HOME/config.yaml"
-            log_success "Created ~/.hermes/config.yaml from template"
+            cp "$INSTALL_DIR/cli-config.yaml.example" "$FULILIAN_HOME/config.yaml"
+            log_success "Created ~/.fulilian/config.yaml from template"
         fi
     else
-        log_info "~/.hermes/config.yaml already exists, keeping it"
+        log_info "~/.fulilian/config.yaml already exists, keeping it"
     fi
 
     # Create SOUL.md if it doesn't exist (global persona file).
-    # This MUST match DEFAULT_SOUL_MD in hermes_cli/default_soul.py — the
+    # This MUST match DEFAULT_SOUL_MD in fulilian_cli/default_soul.py — the
     # runtime (_ensure_default_soul_md) treats the old comment-only scaffold as
     # "never customized" and upgrades it to this text on next run, so any drift
     # here is self-healing, but keep them in sync to avoid a churn on first run.
-    if [ ! -f "$HERMES_HOME/SOUL.md" ]; then
-        cat > "$HERMES_HOME/SOUL.md" << 'SOUL_EOF'
-You are Hermes Agent, an intelligent AI assistant created by Nous Research. You are helpful, knowledgeable, and direct. You assist users with a wide range of tasks including answering questions, writing and editing code, analyzing information, creative work, and executing actions via your tools. You communicate clearly, admit uncertainty when appropriate, and prioritize being genuinely useful over being verbose unless otherwise directed below. Be targeted and efficient in your exploration and investigations.
+    if [ ! -f "$FULILIAN_HOME/SOUL.md" ]; then
+        cat > "$FULILIAN_HOME/SOUL.md" << 'SOUL_EOF'
+You are FuLiLian, an intelligent AI assistant created by Nous Research. You are helpful, knowledgeable, and direct. You assist users with a wide range of tasks including answering questions, writing and editing code, analyzing information, creative work, and executing actions via your tools. You communicate clearly, admit uncertainty when appropriate, and prioritize being genuinely useful over being verbose unless otherwise directed below. Be targeted and efficient in your exploration and investigations.
 SOUL_EOF
-        log_success "Created ~/.hermes/SOUL.md (edit to customize personality)"
+        log_success "Created ~/.fulilian/SOUL.md (edit to customize personality)"
     fi
 
-    log_success "Configuration directory ready: ~/.hermes/"
+    log_success "Configuration directory ready: ~/.fulilian/"
 
-    # Seed bundled skills into ~/.hermes/skills/ (manifest-based, one-time per skill)
+    # Seed bundled skills into ~/.fulilian/skills/ (manifest-based, one-time per skill)
     if [ "$NO_SKILLS" = true ]; then
         # Blank-slate install: write the opt-out marker and skip seeding.
-        # skills_sync.py and `hermes update` both honor this marker, so the
+        # skills_sync.py and `fulilian update` both honor this marker, so the
         # default profile stays empty across future updates too.
         printf '%s\n' \
             "This profile opted out of bundled-skill seeding (installed with --no-skills)." \
-            "Delete this file to re-enable sync on the next 'hermes update'." \
-            > "$HERMES_HOME/.no-bundled-skills" 2>/dev/null || true
-        log_info "Skipping bundled skills (--no-skills). Wrote $HERMES_HOME/.no-bundled-skills"
-        log_info "  Future 'hermes update' runs will not inject bundled skills. Delete the marker to opt back in."
+            "Delete this file to re-enable sync on the next 'fulilian update'." \
+            > "$FULILIAN_HOME/.no-bundled-skills" 2>/dev/null || true
+        log_info "Skipping bundled skills (--no-skills). Wrote $FULILIAN_HOME/.no-bundled-skills"
+        log_info "  Future 'fulilian update' runs will not inject bundled skills. Delete the marker to opt back in."
     else
-        log_info "Syncing bundled skills to ~/.hermes/skills/ ..."
+        log_info "Syncing bundled skills to ~/.fulilian/skills/ ..."
         if "$INSTALL_DIR/venv/bin/python" "$INSTALL_DIR/tools/skills_sync.py" 2>/dev/null; then
-            log_success "Skills synced to ~/.hermes/skills/"
+            log_success "Skills synced to ~/.fulilian/skills/"
         else
             # Fallback: simple directory copy if Python sync fails
-            if [ -d "$INSTALL_DIR/skills" ] && [ ! "$(ls -A "$HERMES_HOME/skills/" 2>/dev/null | grep -v '.bundled_manifest')" ]; then
-                cp -r "$INSTALL_DIR/skills/"* "$HERMES_HOME/skills/" 2>/dev/null || true
-                log_success "Skills copied to ~/.hermes/skills/"
+            if [ -d "$INSTALL_DIR/skills" ] && [ ! "$(ls -A "$FULILIAN_HOME/skills/" 2>/dev/null | grep -v '.bundled_manifest')" ]; then
+                cp -r "$INSTALL_DIR/skills/"* "$FULILIAN_HOME/skills/" 2>/dev/null || true
+                log_success "Skills copied to ~/.fulilian/skills/"
             fi
         fi
     fi
@@ -2164,17 +2164,17 @@ strip_snap_browser_override() {
     # snap-pointing override here (and its auto-written comment) so the bundled
     # Chromium download runs and the agent stops using the broken binary. A
     # deliberately-set non-snap override is left untouched.
-    local env_file="$HERMES_HOME/.env"
+    local env_file="$FULILIAN_HOME/.env"
 
     [ -f "$env_file" ] || return 0
     grep -Eq '^AGENT_BROWSER_EXECUTABLE_PATH=/snap/' "$env_file" 2>/dev/null || return 0
 
     local tmp
     tmp="$(mktemp)" || return 0
-    if grep -Ev '^AGENT_BROWSER_EXECUTABLE_PATH=/snap/|^# Hermes Agent browser tools' "$env_file" > "$tmp"; then
+    if grep -Ev '^AGENT_BROWSER_EXECUTABLE_PATH=/snap/|^# FuLiLian browser tools' "$env_file" > "$tmp"; then
         mv "$tmp" "$env_file"
         log_warn "Removed stale Snap browser override (AGENT_BROWSER_EXECUTABLE_PATH=/snap/...) from $env_file"
-        log_info "Hermes will use the bundled Chromium instead."
+        log_info "Fulilian will use the bundled Chromium instead."
         # Drop it from this process too so the rest of the run doesn't re-detect it.
         unset AGENT_BROWSER_EXECUTABLE_PATH
     else
@@ -2372,7 +2372,7 @@ run_playwright_install() {
 }
 
 configure_browser_env_from_system_browser() {
-    local env_file="$HERMES_HOME/.env"
+    local env_file="$FULILIAN_HOME/.env"
     local browser_path="${DETECTED_BROWSER_EXECUTABLE:-}"
 
     if [ -z "$browser_path" ]; then
@@ -2383,7 +2383,7 @@ configure_browser_env_from_system_browser() {
         return 0
     fi
 
-    mkdir -p "$HERMES_HOME"
+    mkdir -p "$FULILIAN_HOME"
     if [ ! -f "$env_file" ]; then
         touch "$env_file"
     fi
@@ -2395,7 +2395,7 @@ configure_browser_env_from_system_browser() {
 
     {
         echo ""
-        echo "# Hermes Agent browser tools — explicit browser override."
+        echo "# FuLiLian browser tools — explicit browser override."
         echo "AGENT_BROWSER_EXECUTABLE_PATH=$browser_path"
     } >> "$env_file"
     log_success "Configured browser tools to use $browser_path"
@@ -2556,7 +2556,7 @@ install_node_deps() {
         log_success "TUI dependencies installed"
     fi
 
-    # Keep the checkout clean so `hermes update` doesn't autostash every run.
+    # Keep the checkout clean so `fulilian update` doesn't autostash every run.
     restore_dirty_lockfiles "$INSTALL_DIR"
 }
 
@@ -2565,7 +2565,7 @@ install_browser_use_cli() {
     # (tools/browser_use_cli.py). Provision it here so fresh installs don't
     # silently fall back to the built-in browser tools. Best-effort: any
     # failure is non-fatal because browser_exec can still run via uvx and
-    # `hermes tools` can install it later.
+    # `fulilian tools` can install it later.
     if [ "$SKIP_BROWSER" = true ]; then
         log_info "Skipping Browser Use CLI install (--skip-browser)"
         return 0
@@ -2577,23 +2577,23 @@ install_browser_use_cli() {
         log_info "Skipping Browser Use CLI install (uv unavailable)"
         return 0
     fi
-    # MANAGED-FIRST: only Hermes' managed copy short-circuits. A browser-use
+    # MANAGED-FIRST: only Fulilian' managed copy short-circuits. A browser-use
     # on the user's PATH is a side install — resolution prefers the managed
     # copy, so it must be provisioned regardless.
-    if [ -x "$HERMES_HOME/bin/browser-use" ]; then
+    if [ -x "$FULILIAN_HOME/bin/browser-use" ]; then
         log_success "Browser Use CLI already installed"
         return 0
     fi
 
     log_info "Installing Browser Use CLI (default browser backend)..."
-    # UV_TOOL_BIN_DIR keeps the binary inside Hermes' managed bin dir, where
+    # UV_TOOL_BIN_DIR keeps the binary inside Fulilian' managed bin dir, where
     # the browser tool resolves it — no reliance on the user's PATH.
-    if run_with_timeout 600 env UV_NO_CONFIG=1 UV_TOOL_BIN_DIR="$HERMES_HOME/bin" \
+    if run_with_timeout 600 env UV_NO_CONFIG=1 UV_TOOL_BIN_DIR="$FULILIAN_HOME/bin" \
         "$UV_CMD" tool install browser-use >/dev/null 2>&1; then
         log_success "Browser Use CLI installed"
     else
         log_warn "Browser Use CLI install failed — browser automation falls back to built-in tools."
-        log_info "Install later with: $UV_CMD tool install browser-use  (or via 'hermes tools')"
+        log_info "Install later with: $UV_CMD tool install browser-use  (or via 'fulilian tools')"
     fi
 }
 
@@ -2631,9 +2631,9 @@ cua_driver_runtime_compatible() {
 install_computer_use_driver() {
     # cua-driver powers the computer_use toolset (background desktop control).
     # Provision it at install time so enabling the tool later — via
-    # `hermes tools`, the dashboard, or the desktop app — is a config flip,
+    # `fulilian tools`, the dashboard, or the desktop app — is a config flip,
     # not a surprise multi-minute binary fetch (the confusion this fixes:
-    # users had to discover `hermes computer-use install` on their own).
+    # users had to discover `fulilian computer-use install` on their own).
     # Best-effort and non-fatal: the enable paths still lazy-install via
     # install_cua_driver() when this step was skipped or failed.
     if [ "$SKIP_COMPUTER_USE" = true ]; then
@@ -2660,20 +2660,20 @@ install_computer_use_driver() {
     fi
 
     log_info "Installing Computer Use driver (cua-driver)..."
-    # Same upstream installer `hermes computer-use install` runs; time-boxed
-    # so a stalled GitHub download can't hang the Hermes install. The
+    # Same upstream installer `fulilian computer-use install` runs; time-boxed
+    # so a stalled GitHub download can't hang the Fulilian install. The
     # upstream installer serializes with its own lock (600s stale window),
-    # so give it a ceiling above that — matching Hermes'
+    # so give it a ceiling above that — matching Fulilian'
     # _CUA_INSTALLER_TIMEOUT (660s).
     local cua_log
     cua_log="$(mktemp)"
     if run_with_timeout 660 /bin/bash -c \
         'curl -fsSL https://raw.githubusercontent.com/trycua/cua/main/libs/cua-driver/scripts/install.sh | /bin/bash' \
         >"$cua_log" 2>&1; then
-        log_success "Computer Use driver installed (enable via 'hermes tools' → Computer Use)"
+        log_success "Computer Use driver installed (enable via 'fulilian tools' → Computer Use)"
     else
         log_warn "Computer Use driver install failed — it will install on demand when you enable the tool."
-        log_info "Install later with: hermes computer-use install"
+        log_info "Install later with: fulilian computer-use install"
         tail -n 5 "$cua_log" >&2 || true
     fi
     rm -f "$cua_log"
@@ -2694,7 +2694,7 @@ run_setup_wizard() {
     # but opening fails with ENXIO, so the wizard would proceed and
     # then crash on `< /dev/tty` below.
     if ! (: </dev/tty) 2>/dev/null; then
-        log_info "Setup wizard skipped (no terminal available). Run 'hermes setup' after install."
+        log_info "Setup wizard skipped (no terminal available). Run 'fulilian setup' after install."
         return 0
     fi
 
@@ -2704,18 +2704,18 @@ run_setup_wizard() {
 
     cd "$INSTALL_DIR"
 
-    # Run hermes setup using the venv Python directly (no activation needed).
+    # Run fulilian setup using the venv Python directly (no activation needed).
     # Redirect stdin from /dev/tty so interactive prompts work when piped from curl.
     if [ "$USE_VENV" = true ]; then
-        "$INSTALL_DIR/venv/bin/python" -m hermes_cli.main setup < /dev/tty
+        "$INSTALL_DIR/venv/bin/python" -m fulilian_cli.main setup < /dev/tty
     else
-        python -m hermes_cli.main setup < /dev/tty
+        python -m fulilian_cli.main setup < /dev/tty
     fi
 }
 
 maybe_start_gateway() {
     # Check if any messaging platform tokens were configured
-    ENV_FILE="$HERMES_HOME/.env"
+    ENV_FILE="$FULILIAN_HOME/.env"
     if [ ! -f "$ENV_FILE" ]; then
         return 0
     fi
@@ -2735,23 +2735,23 @@ maybe_start_gateway() {
 
     echo ""
     log_info "Messaging platform token detected!"
-    log_info "The gateway needs to be running for Hermes to send/receive messages."
+    log_info "The gateway needs to be running for Fulilian to send/receive messages."
 
     # If WhatsApp is enabled and no session exists yet, run foreground first for QR scan
     WHATSAPP_VAL=$(grep "^WHATSAPP_ENABLED=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2-)
-    WHATSAPP_SESSION="$HERMES_HOME/whatsapp/session/creds.json"
+    WHATSAPP_SESSION="$FULILIAN_HOME/whatsapp/session/creds.json"
     if [ "$WHATSAPP_VAL" = "true" ] && [ ! -f "$WHATSAPP_SESSION" ]; then
         if [ "$IS_INTERACTIVE" = true ]; then
             echo ""
             log_info "WhatsApp is enabled but not yet paired."
-            log_info "Running 'hermes whatsapp' to pair via QR code..."
+            log_info "Running 'fulilian whatsapp' to pair via QR code..."
             echo ""
             if prompt_yes_no "Pair WhatsApp now?" "yes"; then
-                HERMES_CMD="$(get_hermes_command_path)"
-                $HERMES_CMD whatsapp || true
+                FULILIAN_CMD="$(get_fulilian_command_path)"
+                $FULILIAN_CMD whatsapp || true
             fi
         else
-            log_info "WhatsApp pairing skipped (non-interactive). Run 'hermes whatsapp' to pair."
+            log_info "WhatsApp pairing skipped (non-interactive). Run 'fulilian whatsapp' to pair."
         fi
     fi
 
@@ -2759,7 +2759,7 @@ maybe_start_gateway() {
     # in Docker builds where the device node is in the mount namespace
     # but opening fails with ENXIO. See #16746.
     if ! (: </dev/tty) 2>/dev/null; then
-        log_info "Gateway setup skipped (no terminal available). Run 'hermes gateway install' later."
+        log_info "Gateway setup skipped (no terminal available). Run 'fulilian gateway install' later."
         return 0
     fi
 
@@ -2776,19 +2776,19 @@ maybe_start_gateway() {
     fi
 
     if [ "$should_install_gateway" = true ]; then
-        HERMES_CMD="$(get_hermes_command_path)"
+        FULILIAN_CMD="$(get_fulilian_command_path)"
 
         if [ "$DISTRO" != "termux" ] && command -v systemctl &> /dev/null; then
             log_info "Installing systemd service..."
-            if $HERMES_CMD gateway install 2>/dev/null; then
+            if $FULILIAN_CMD gateway install 2>/dev/null; then
                 log_success "Gateway service installed"
-                if $HERMES_CMD gateway start 2>/dev/null; then
+                if $FULILIAN_CMD gateway start 2>/dev/null; then
                     log_success "Gateway started! Your bot is now online."
                 else
-                    log_warn "Service installed but failed to start. Try: hermes gateway start"
+                    log_warn "Service installed but failed to start. Try: fulilian gateway start"
                 fi
             else
-                log_warn "Systemd install failed. You can start manually: hermes gateway"
+                log_warn "Systemd install failed. You can start manually: fulilian gateway"
             fi
         else
             if [ "$DISTRO" = "termux" ]; then
@@ -2796,22 +2796,22 @@ maybe_start_gateway() {
             else
                 log_info "systemd not available — starting gateway in background..."
             fi
-            nohup $HERMES_CMD gateway > "$HERMES_HOME/logs/gateway.log" 2>&1 &
+            nohup $FULILIAN_CMD gateway > "$FULILIAN_HOME/logs/gateway.log" 2>&1 &
             GATEWAY_PID=$!
-            log_success "Gateway started (PID $GATEWAY_PID). Logs: ~/.hermes/logs/gateway.log"
+            log_success "Gateway started (PID $GATEWAY_PID). Logs: ~/.fulilian/logs/gateway.log"
             log_info "To stop: kill $GATEWAY_PID"
-            log_info "To restart later: hermes gateway"
+            log_info "To restart later: fulilian gateway"
             if [ "$DISTRO" = "termux" ]; then
                 log_warn "Android may stop background processes when Termux is suspended or the system reclaims resources."
             fi
         fi
     else
-        log_info "Skipped. Start the gateway later with: hermes gateway"
+        log_info "Skipped. Start the gateway later with: fulilian gateway"
     fi
 }
 
 write_bootstrap_marker() {
-    # Writes $INSTALL_DIR/.hermes-bootstrap-complete, which tells the Hermes
+    # Writes $INSTALL_DIR/.fulilian-bootstrap-complete, which tells the Fulilian
     # desktop app (apps/desktop/electron/main.ts) and the macOS launcher fast
     # path (apps/bootstrap-installer) "a real install finished here -- don't
     # re-run first-run bootstrap."
@@ -2840,7 +2840,7 @@ write_bootstrap_marker() {
         return 0
     fi
 
-    local marker_path="$INSTALL_DIR/.hermes-bootstrap-complete"
+    local marker_path="$INSTALL_DIR/.fulilian-bootstrap-complete"
     local tmp_path="$marker_path.tmp"
 
     # Atomic publish: the macOS launcher predicate only checks existence, so a
@@ -2864,9 +2864,9 @@ print_success() {
     # Show file locations
     echo -e "${CYAN}${BOLD}📁 Your files:${NC}"
     echo ""
-    echo -e "   ${YELLOW}Config:${NC}    $HERMES_HOME/config.yaml"
-    echo -e "   ${YELLOW}API Keys:${NC}  $HERMES_HOME/.env"
-    echo -e "   ${YELLOW}Data:${NC}      $HERMES_HOME/cron/, sessions/, logs/"
+    echo -e "   ${YELLOW}Config:${NC}    $FULILIAN_HOME/config.yaml"
+    echo -e "   ${YELLOW}API Keys:${NC}  $FULILIAN_HOME/.env"
+    echo -e "   ${YELLOW}Data:${NC}      $FULILIAN_HOME/cron/, sessions/, logs/"
     echo -e "   ${YELLOW}Code:${NC}      $INSTALL_DIR"
     echo ""
 
@@ -2874,24 +2874,24 @@ print_success() {
     echo ""
     echo -e "${CYAN}${BOLD}🚀 Commands:${NC}"
     echo ""
-    echo -e "   ${GREEN}hermes${NC}              Start chatting"
-    echo -e "   ${GREEN}hermes setup${NC}        Configure API keys & settings"
-    echo -e "   ${GREEN}hermes config${NC}       View/edit configuration"
-    echo -e "   ${GREEN}hermes config edit${NC}  Open config in editor"
-    echo -e "   ${GREEN}hermes gateway install${NC} Install gateway service (messaging + cron)"
-    echo -e "   ${GREEN}hermes update${NC}       Update to latest version"
+    echo -e "   ${GREEN}fulilian${NC}              Start chatting"
+    echo -e "   ${GREEN}fulilian setup${NC}        Configure API keys & settings"
+    echo -e "   ${GREEN}fulilian config${NC}       View/edit configuration"
+    echo -e "   ${GREEN}fulilian config edit${NC}  Open config in editor"
+    echo -e "   ${GREEN}fulilian gateway install${NC} Install gateway service (messaging + cron)"
+    echo -e "   ${GREEN}fulilian update${NC}       Update to latest version"
     echo ""
 
     echo -e "${CYAN}─────────────────────────────────────────────────────────${NC}"
     echo ""
     if [ "$DISTRO" = "termux" ]; then
-        echo -e "${YELLOW}⚡ 'hermes' was linked into $(get_command_link_display_dir), which is already on PATH in Termux.${NC}"
+        echo -e "${YELLOW}⚡ 'fulilian' was linked into $(get_command_link_display_dir), which is already on PATH in Termux.${NC}"
         echo ""
     elif [ "$ROOT_FHS_LAYOUT" = true ]; then
-        echo -e "${YELLOW}⚡ 'hermes' was linked into /usr/local/bin and is ready to use — no shell reload needed.${NC}"
+        echo -e "${YELLOW}⚡ 'fulilian' was linked into /usr/local/bin and is ready to use — no shell reload needed.${NC}"
         echo ""
     else
-        echo -e "${YELLOW}⚡ Reload your shell to use 'hermes' command:${NC}"
+        echo -e "${YELLOW}⚡ Reload your shell to use 'fulilian' command:${NC}"
         echo ""
         LOGIN_SHELL="$(basename "${SHELL:-/bin/bash}")"
         if [ "$LOGIN_SHELL" = "zsh" ]; then
@@ -2935,9 +2935,9 @@ print_success() {
 
 ensure_browser() {
     if ! command -v node >/dev/null 2>&1; then
-        local node_bin="$HERMES_HOME/node/bin/node"
+        local node_bin="$FULILIAN_HOME/node/bin/node"
         if [ -x "$node_bin" ]; then
-            export PATH="$HERMES_HOME/node/bin:$PATH"
+            export PATH="$FULILIAN_HOME/node/bin:$PATH"
         else
             log_error "Node.js not found. Run with --ensure node first."
             return 1
@@ -2945,7 +2945,7 @@ ensure_browser() {
     fi
 
     local npm_bin
-    npm_bin="$(command -v npm 2>/dev/null || echo "$HERMES_HOME/node/bin/npm")"
+    npm_bin="$(command -v npm 2>/dev/null || echo "$FULILIAN_HOME/node/bin/npm")"
     if [ ! -x "$npm_bin" ]; then
         log_error "npm not found"
         return 1
@@ -2953,7 +2953,7 @@ ensure_browser() {
 
     # agent-browser itself is intentionally NOT installed here (#43564 /
     # PR #44772 review): it resolves lazily via `npx agent-browser` instead,
-    # which every consumer (tools/browser_tool.py, `hermes update`'s npx
+    # which every consumer (tools/browser_tool.py, `fulilian update`'s npx
     # cache warm) already goes through. Eagerly npm-installing a second,
     # separately version-pinned copy here -- only reachable via this
     # explicit --ensure browser fallback in the first place -- was redundant
@@ -2964,7 +2964,7 @@ ensure_browser() {
     log_file="$(mktemp)"
     # Time-boxed (#39219): a stalled npm registry fetch here would otherwise
     # hang the installer with no progress, same class as the desktop build.
-    if ! run_with_timeout "$NODE_DEPS_TIMEOUT" "$npm_bin" install -g --prefix "$HERMES_HOME/node" --silent --ignore-scripts \
+    if ! run_with_timeout "$NODE_DEPS_TIMEOUT" "$npm_bin" install -g --prefix "$FULILIAN_HOME/node" --silent --ignore-scripts \
         "@askjo/camofox-browser@^1.5.2" \
         >"$log_file" 2>&1; then
         log_error "npm install failed or timed out:"
@@ -2973,7 +2973,7 @@ ensure_browser() {
         return 1
     fi
     rm -f "$log_file"
-    export PATH="$HERMES_HOME/node/bin:$PATH"
+    export PATH="$FULILIAN_HOME/node/bin:$PATH"
 
     strip_snap_browser_override
     local sys_browser
@@ -3028,10 +3028,10 @@ ensure_mode() {
 # next `npm run pack` re-downloads and re-stages from scratch. A corrupt zip in
 # the per-user Electron download cache - most often a partial/resumed download
 # that leaves concatenated junk - makes electron-builder's `unpack-electron`
-# extract a tree MISSING the electron binary, so the `electron`->`Hermes` rename
+# extract a tree MISSING the electron binary, so the `electron`->`Fulilian` rename
 # dies with ENOENT and every re-run repeats the broken extraction forever. This
 # is the bash sibling of install.ps1's Clear-ElectronBuildCache and the Python
-# _purge_electron_build_cache() used by `hermes desktop`; install.sh was the only
+# _purge_electron_build_cache() used by `fulilian desktop`; install.sh was the only
 # build path lacking it. Echoes the removed paths (one per line); best-effort.
 clear_electron_build_cache() {
     local desktop_dir="$1"
@@ -3220,7 +3220,7 @@ install_desktop() {
     # with no app and a confusing "couldn't find a built desktop" at launch.
     # Always re-resolve Node here. Stages run in separate processes, so we can't
     # trust an earlier check; more importantly check_node now enforces the build
-    # floor (Node >=26) and prepends the Hermes-managed Node to PATH, so
+    # floor (Node >=26) and prepends the Fulilian-managed Node to PATH, so
     # the build never runs on a too-old system Node — the cause of the opaque
     # "Build desktop app … exit code 1" failure (Vite crashes on old Node).
     check_node
@@ -3290,7 +3290,7 @@ install_desktop() {
     #    Electron download self-heals instead of failing the whole install:
     #      a) plain `npm run pack` (downloads Electron from GitHub),
     #      b) on failure, purge a corrupt cached zip + stale unpacked dir and
-    #         retry (matches install.ps1 / `hermes desktop`),
+    #         retry (matches install.ps1 / `fulilian desktop`),
     #      c) on still-failing, fall back to a public Electron mirror — this is
     #         the GitHub-blocked/throttled case (the repeating "retrying" log).
     log_info "Building desktop app (this takes 1-3 minutes)..."
@@ -3338,16 +3338,16 @@ install_desktop() {
 
     local app=""
     if [ "$OS" = "linux" ]; then
-        if [ -x "$desktop_dir/release/linux-unpacked/Hermes" ]; then
-            app="$desktop_dir/release/linux-unpacked/Hermes"
-        elif [ -x "$desktop_dir/release/linux-unpacked/hermes" ]; then
-            app="$desktop_dir/release/linux-unpacked/hermes"
+        if [ -x "$desktop_dir/release/linux-unpacked/Fulilian" ]; then
+            app="$desktop_dir/release/linux-unpacked/Fulilian"
+        elif [ -x "$desktop_dir/release/linux-unpacked/fulilian" ]; then
+            app="$desktop_dir/release/linux-unpacked/fulilian"
         fi
     else
         local cand
         for cand in \
-            "$desktop_dir/release/mac-arm64/Hermes.app" \
-            "$desktop_dir/release/mac/Hermes.app"; do
+            "$desktop_dir/release/mac-arm64/Fulilian.app" \
+            "$desktop_dir/release/mac/Fulilian.app"; do
             if [ -d "$cand" ]; then
                 app="$cand"
                 break
@@ -3385,14 +3385,14 @@ install_desktop() {
     fi
 
     # macOS: route through the same config-aware signing fixup as
-    # `hermes desktop`, so install/repair and self-update agree about the app's
+    # `fulilian desktop`, so install/repair and self-update agree about the app's
     # identity. The fixup preserves the Electron entitlement plists and signs
     # with a stable Designated Requirement (configured keychain identity, else
     # identifier-pinned ad-hoc), so macOS TCC grants — Full Disk Access,
     # Desktop/Downloads/Documents, Accessibility, microphone — survive the
     # rebuild instead of resetting on every update. The shell's
     # publisher-signing decision governed the build and is passed explicitly so
-    # importing Python cannot reverse it by loading HERMES_HOME/.env. If the
+    # importing Python cannot reverse it by loading FULILIAN_HOME/.env. If the
     # helper is unavailable or fails, branch into the historical quarantine
     # strip + deep ad-hoc repair so a broken venv never leaves the bundle
     # unsigned/unlaunchable.
@@ -3400,10 +3400,10 @@ install_desktop() {
         local config_python="$INSTALL_DIR/venv/bin/python"
         local fixup_ok=""
         if [ -x "$config_python" ]; then
-            if HERMES_HOME="$HERMES_HOME" "$config_python" - "$desktop_dir" <<'PYEOF'
+            if FULILIAN_HOME="$FULILIAN_HOME" "$config_python" - "$desktop_dir" <<'PYEOF'
 import sys
 from pathlib import Path
-from hermes_cli.main import _desktop_macos_relaunchable_fixup
+from fulilian_cli.main import _desktop_macos_relaunchable_fixup
 ok = _desktop_macos_relaunchable_fixup(
     Path(sys.argv[1]), publisher_signing_configured=False
 )
@@ -3422,7 +3422,7 @@ PYEOF
     fi
 
     # `npm install` + `npm run pack` rewrite lockfiles; restore them so the
-    # checkout stays clean for the next `hermes update`.
+    # checkout stays clean for the next `fulilian update`.
     restore_dirty_lockfiles "$INSTALL_DIR"
 }
 
@@ -3517,8 +3517,8 @@ run_stage_body() {
             detect_os
             resolve_install_layout
             require_install_dir
-            # Each stage runs in its own process, so the Hermes-managed Node
-            # provisioned during prerequisites/node-deps (at $HERMES_HOME/node/bin)
+            # Each stage runs in its own process, so the Fulilian-managed Node
+            # provisioned during prerequisites/node-deps (at $FULILIAN_HOME/node/bin)
             # isn't on PATH here. check_node re-adds it (or installs if missing)
             # so install_desktop can find npm instead of silently skipping.
             check_node
@@ -3531,10 +3531,10 @@ run_stage_body() {
             print_success
             write_bootstrap_marker
             # Code-scoped stamp: write next to the install tree, not into
-            # $HERMES_HOME. $HERMES_HOME is a shared data dir (it can be
+            # $FULILIAN_HOME. $FULILIAN_HOME is a shared data dir (it can be
             # bind-mounted into a Docker gateway too), so a stamp there gets
             # clobbered by the container's 'docker' stamp and wrongly blocks
-            # 'hermes update' on this host install. See detect_install_method().
+            # 'fulilian update' on this host install. See detect_install_method().
             echo "git" > "$INSTALL_DIR/.install_method"
             ;;
         *)
@@ -3620,10 +3620,10 @@ main() {
 
     write_bootstrap_marker
 
-    # Code-scoped stamp: write next to the install tree, not into $HERMES_HOME.
-    # $HERMES_HOME is a shared data dir (it can be bind-mounted into a Docker
+    # Code-scoped stamp: write next to the install tree, not into $FULILIAN_HOME.
+    # $FULILIAN_HOME is a shared data dir (it can be bind-mounted into a Docker
     # gateway too), so a stamp there gets clobbered by the container's 'docker'
-    # stamp and wrongly blocks 'hermes update' on this host install.
+    # stamp and wrongly blocks 'fulilian update' on this host install.
     # See detect_install_method().
     echo "git" > "$INSTALL_DIR/.install_method"
 }

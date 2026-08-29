@@ -1,4 +1,4 @@
-"""ACP permission bridging for Hermes dangerous-command approvals."""
+"""ACP permission bridging for Fulilian dangerous-command approvals."""
 
 from __future__ import annotations
 
@@ -15,10 +15,10 @@ from acp.schema import (
 
 logger = logging.getLogger(__name__)
 
-# Maps ACP permission option ids to Hermes approval result strings.
+# Maps ACP permission option ids to Fulilian approval result strings.
 # Option ids are stable across both the ``allow_permanent=True`` and
 # ``allow_permanent=False`` paths even though the option list differs.
-_OPTION_ID_TO_HERMES = {
+_OPTION_ID_TO_FULILIAN = {
     "allow_once": "once",
     "allow_session": "session",
     "allow_always": "always",
@@ -42,10 +42,10 @@ def _build_permission_options(
     *, allow_permanent: bool, allow_session: bool = True,
     smart_denied: bool = False,
 ) -> list[PermissionOption]:
-    """Return ACP options that match Hermes approval semantics."""
+    """Return ACP options that match Fulilian approval semantics."""
     # A gate that re-asks every time (allow_session=False, e.g. protected
     # agent-instruction writes) collapses to the same two options as a
-    # Smart DENY override — the editor must not offer a scope Hermes
+    # Smart DENY override — the editor must not offer a scope Fulilian
     # discards, or every subsequent write re-prompts (#81887).
     once_only = smart_denied or not allow_session
     options = [PermissionOption(
@@ -55,7 +55,7 @@ def _build_permission_options(
         options.append(PermissionOption(
             option_id="allow_session",
             # ACP has no session-scoped kind, so use the closest persistent
-            # hint while keeping Hermes semantics in the option id.
+            # hint while keeping Fulilian semantics in the option id.
             kind="allow_always",
             name="Allow for session",
         ))
@@ -101,8 +101,8 @@ def _build_permission_tool_call(command: str, description: str):
     )
 
 
-def _map_outcome_to_hermes(outcome: object, *, allowed_option_ids: set[str]) -> str:
-    """Map an ACP permission outcome into Hermes approval strings."""
+def _map_outcome_to_fulilian(outcome: object, *, allowed_option_ids: set[str]) -> str:
+    """Map an ACP permission outcome into Fulilian approval strings."""
     if not isinstance(outcome, AllowedOutcome):
         return "deny"
 
@@ -110,7 +110,7 @@ def _map_outcome_to_hermes(outcome: object, *, allowed_option_ids: set[str]) -> 
     if option_id not in allowed_option_ids:
         logger.warning("Permission request returned unknown option_id: %s", option_id)
         return "deny"
-    return _OPTION_ID_TO_HERMES.get(option_id, "deny")
+    return _OPTION_ID_TO_FULILIAN.get(option_id, "deny")
 
 
 def make_approval_callback(
@@ -120,7 +120,7 @@ def make_approval_callback(
     timeout: float = 60.0,
 ) -> Callable[..., str]:
     """
-    Return a Hermes-compatible approval callback that bridges to ACP.
+    Return a Fulilian-compatible approval callback that bridges to ACP.
 
     The callback accepts ``command`` and ``description`` plus optional
     keyword arguments such as ``allow_permanent`` used by
@@ -182,7 +182,7 @@ def make_approval_callback(
             return "deny"
 
         allowed_option_ids = {option.option_id for option in options}
-        return _map_outcome_to_hermes(
+        return _map_outcome_to_fulilian(
             response.outcome,
             allowed_option_ids=allowed_option_ids,
         )

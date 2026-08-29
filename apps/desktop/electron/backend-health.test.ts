@@ -12,7 +12,7 @@ import {
   isServerSideHttpError,
   makeNousCloudBackendDownError,
   makeUnsignedOauthError,
-  waitForHermesReady
+  waitForFulilianReady
 } from './backend-health'
 
 const GATE_401 = '401: {"error":"unauthenticated","detail":"Unauthorized","reason":"no_cookie","login_url":"/login"}'
@@ -20,7 +20,7 @@ const GATE_401 = '401: {"error":"unauthenticated","detail":"Unauthorized","reaso
 test('uses lightweight /api/health for current backends', async () => {
   const calls: string[][] = []
 
-  await waitForHermesReady('http://127.0.0.1:9000/', {
+  await waitForFulilianReady('http://127.0.0.1:9000/', {
     token: 'secret-token',
     fetchPublicJson: async url => {
       calls.push(['public', url])
@@ -42,7 +42,7 @@ test('uses lightweight /api/health for current backends', async () => {
 test('falls back to /api/status only for old backends without /api/health', async () => {
   const calls: string[][] = []
 
-  await waitForHermesReady('http://127.0.0.1:9000', {
+  await waitForFulilianReady('http://127.0.0.1:9000', {
     token: 'secret-token',
     fetchPublicJson: async url => {
       calls.push(['public', url])
@@ -70,10 +70,10 @@ test('does not fall back to heavyweight /api/status for transient health failure
   let currentTime = 0
 
   await assert.rejects(
-    waitForHermesReady('http://127.0.0.1:9000', {
+    waitForFulilianReady('http://127.0.0.1:9000', {
       fetchPublicJson: async url => {
         calls.push(['public', url])
-        throw new Error('Timed out connecting to Hermes backend after 15000ms')
+        throw new Error('Timed out connecting to Fulilian backend after 15000ms')
       },
       fetchJson: async url => {
         calls.push(['token', url])
@@ -97,7 +97,7 @@ test('does not fall back to heavyweight /api/status for transient health failure
 test('probes health on a short timeout but leaves the legacy fallback its own', async () => {
   const timeouts: (number | undefined)[] = []
 
-  await waitForHermesReady('http://127.0.0.1:9000', {
+  await waitForFulilianReady('http://127.0.0.1:9000', {
     fetchPublicJson: async (_url, options) => {
       timeouts.push(options?.timeoutMs)
 
@@ -121,7 +121,7 @@ test('aborts as superseded when the bootstrap signal fires', async () => {
   controller.abort()
 
   await assert.rejects(
-    waitForHermesReady('http://127.0.0.1:9000', {
+    waitForFulilianReady('http://127.0.0.1:9000', {
       signal: controller.signal,
       fetchPublicJson: async () => {
         throw new Error('should not probe after abort')
@@ -140,11 +140,11 @@ test('recognizes missing-route shapes only', () => {
   assert.equal(isMissingHealthEndpointError(new Error('404: {"detail":"Not Found"}')), true)
   assert.equal(
     isMissingHealthEndpointError(
-      new Error('Expected JSON from /api/health but got HTML. The endpoint is likely missing on the Hermes backend.')
+      new Error('Expected JSON from /api/health but got HTML. The endpoint is likely missing on the Fulilian backend.')
     ),
     true
   )
-  assert.equal(isMissingHealthEndpointError(new Error('Timed out connecting to Hermes backend after 15000ms')), false)
+  assert.equal(isMissingHealthEndpointError(new Error('Timed out connecting to Fulilian backend after 15000ms')), false)
   assert.equal(isMissingHealthEndpointError(new Error('500: boom')), false)
 })
 
@@ -159,7 +159,7 @@ test('recognizes missing-route shapes only', () => {
 test('anonymous gate-shaped 401 falls back to /api/status (backend predates /api/health)', async () => {
   const calls: string[][] = []
 
-  await waitForHermesReady('http://192.168.1.132:9119', {
+  await waitForFulilianReady('http://192.168.1.132:9119', {
     token: null,
     fetchPublicJson: async url => {
       calls.push(['public', url])
@@ -188,7 +188,7 @@ test('a credentialed 401 fails fast for reauth instead of reporting a dead sessi
   const calls: string[][] = []
 
   await assert.rejects(
-    waitForHermesReady('https://gateway.example', {
+    waitForFulilianReady('https://gateway.example', {
       token: 'session-token',
       fetchPublicJson: async () => {
         throw new Error('public probe must not be used when credentialed')
@@ -221,7 +221,7 @@ test('a credentialed 401 fails fast for reauth instead of reporting a dead sessi
 })
 
 test('unsigned OAuth is a terminal reauth failure; needsOauthLogin alone is not', () => {
-  // The unsigned-in throw must set isReauthRequired so startHermes latches.
+  // The unsigned-in throw must set isReauthRequired so startFulilian latches.
   // needsOauthLogin alone (ticket 401/403) stays a Sign-in hint, not a latch —
   // a lapsed AT cookie can still rotate from a live RT on the next mint.
   const unsigned = makeUnsignedOauthError() as any
@@ -231,12 +231,12 @@ test('unsigned OAuth is a terminal reauth failure; needsOauthLogin alone is not'
   assert.equal(isReauthRequiredError(unsigned), true)
   assert.match(unsigned.message, /not signed in/i)
   assert.equal(isReauthRequiredError({ needsOauthLogin: true }), false)
-  assert.equal(isReauthRequiredError(new Error('Could not reach the remote Hermes gateway')), false)
+  assert.equal(isReauthRequiredError(new Error('Could not reach the remote Fulilian gateway')), false)
 })
 
 test('a credentialed 403 is also a terminal reauth failure', async () => {
   await assert.rejects(
-    waitForHermesReady('https://gateway.example', {
+    waitForFulilianReady('https://gateway.example', {
       fetchPublicJson: async () => ({}),
       fetchJson: async () => ({}),
       probeHealth: async () => {
@@ -257,7 +257,7 @@ test('a credentialed probe still uses the 404 fallback for a genuinely missing r
   // mistaken for a rejected session.
   const calls: string[][] = []
 
-  await waitForHermesReady('https://gateway.example', {
+  await waitForFulilianReady('https://gateway.example', {
     token: 'session-token',
     fetchPublicJson: async () => {
       throw new Error('public probe must not be used when credentialed')
@@ -288,7 +288,7 @@ test('a non-gate 401 keeps polling rather than skipping a misconfigured health r
   let currentTime = 0
 
   await assert.rejects(
-    waitForHermesReady('http://127.0.0.1:9000', {
+    waitForFulilianReady('http://127.0.0.1:9000', {
       fetchPublicJson: async url => {
         calls.push(['public', url])
         throw new Error('401: {"detail":"Unauthorized"}')
@@ -318,7 +318,7 @@ test('credentialed 5xx and 429 keep polling — only 401/403 are terminal', asyn
     let currentTime = 0
 
     await assert.rejects(
-      waitForHermesReady('https://gateway.example', {
+      waitForFulilianReady('https://gateway.example', {
         fetchPublicJson: async () => ({}),
         fetchJson: async () => ({}),
         probeHealth: async () => {
@@ -403,12 +403,12 @@ test('isNousCloudAgentUrl detects cloud agent hosts', () => {
   assert.equal(isNousCloudAgentUrl('not-a-url'), false)
 })
 
-test('waitForHermesReady surfaces actionable error for cloud agent 503', async () => {
+test('waitForFulilianReady surfaces actionable error for cloud agent 503', async () => {
   let attempts = 0
   const currentTime = { value: 0 }
 
   try {
-    await waitForHermesReady('https://ares-3009.agents.nousresearch.com', {
+    await waitForFulilianReady('https://ares-3009.agents.nousresearch.com', {
       fetchPublicJson: async () => {
         attempts++
         // Always return 503
@@ -441,11 +441,11 @@ test('waitForHermesReady surfaces actionable error for cloud agent 503', async (
   }
 })
 
-test('waitForHermesReady does not cloud-wrap non-cloud 503 errors', async () => {
+test('waitForFulilianReady does not cloud-wrap non-cloud 503 errors', async () => {
   const currentTime = { value: 0 }
 
   try {
-    await waitForHermesReady('http://127.0.0.1:9000', {
+    await waitForFulilianReady('http://127.0.0.1:9000', {
       fetchPublicJson: async () => {
         throw new Error('503: Service Unavailable')
       },

@@ -4,7 +4,7 @@ sidebar_position: 3
 
 # Configuring Models
 
-Hermes uses two kinds of model slots:
+Fulilian uses two kinds of model slots:
 
 - **Main model** — what the agent thinks with. Every user message, every tool-call loop, every streamed response goes through this model.
 - **Auxiliary models** — smaller side-jobs the agent offloads. Context compression, vision (image analysis), web-page summarization, approval scoring, MCP tool routing, session-title generation, and skill search. Each has its own slot and can be overridden independently.
@@ -12,13 +12,13 @@ Hermes uses two kinds of model slots:
 This page covers configuring both from the dashboard. If you prefer config files or the CLI, jump to [Alternative methods](#alternative-methods) at the bottom.
 
 :::tip Fastest path: Nous Portal
-[Nous Portal](/user-guide/features/tool-gateway) provides 300+ models under one subscription. On a fresh install, run `hermes setup --portal` to log in and set Nous as your provider in one command. Inspect what's wired up with `hermes portal info`.
+[Nous Portal](/user-guide/features/tool-gateway) provides 300+ models under one subscription. On a fresh install, run `fulilian setup --portal` to log in and set Nous as your provider in one command. Inspect what's wired up with `fulilian portal info`.
 
 - Portal subscribers also get **10% off token-billed providers**.
 :::
 
 :::note `model:` schema — empty string vs. mapping
-On a brand-new install the bundled default config has `model: ""` (an empty string sentinel meaning "not configured yet"). The first time you run `hermes setup` or `hermes model`, that key is upgraded in-place to a mapping with `provider`, `default`, `base_url`, and `api_mode` sub-keys — the shape shown throughout this page and in [`profiles.md`](./profiles.md) / [`configuration.md`](./configuration.md). If you ever see an empty string in `config.yaml`, run `hermes model` (or click **Change** in the dashboard) and Hermes will write the dict form for you.
+On a brand-new install the bundled default config has `model: ""` (an empty string sentinel meaning "not configured yet"). The first time you run `fulilian setup` or `fulilian model`, that key is upgraded in-place to a mapping with `provider`, `default`, `base_url`, and `api_mode` sub-keys — the shape shown throughout this page and in [`profiles.md`](./profiles.md) / [`configuration.md`](./configuration.md). If you ever see an empty string in `config.yaml`, run `fulilian model` (or click **Change** in the dashboard) and Fulilian will write the dict form for you.
 :::
 
 ## The Models page
@@ -41,15 +41,15 @@ Click **Change** on the Main model row:
 The picker has two columns:
 
 - **Left** — authenticated providers. Only providers you've set up (API key set, OAuth'd, or defined as a custom endpoint) show up here. If a provider is missing, head to **Keys** and add its credential.
-- **Right** — the curated model list for the selected provider. These are the agentic models Hermes recommends for that provider, not the raw `/models` dump (which on OpenRouter includes 400+ models including TTS, image generators, and rerankers).
+- **Right** — the curated model list for the selected provider. These are the agentic models Fulilian recommends for that provider, not the raw `/models` dump (which on OpenRouter includes 400+ models including TTS, image generators, and rerankers).
 
 Type in the filter box to narrow by provider name, slug, or model ID.
 
-Pick a model, hit **Switch**, and Hermes writes it to `~/.hermes/config.yaml` under the `model` section. **This applies to new sessions only** — any chat tab you already have open keeps running whatever model it started with. To hot-swap the current chat, use the `/model` slash command inside it.
+Pick a model, hit **Switch**, and Fulilian writes it to `~/.fulilian/config.yaml` under the `model` section. **This applies to new sessions only** — any chat tab you already have open keeps running whatever model it started with. To hot-swap the current chat, use the `/model` slash command inside it.
 
 ### Mid-session switches and context warnings
 
-When you switch models **inside an active session** (Herm TUI model picker, `hermes` CLI, or `/model` on Telegram/Discord), Hermes estimates whether your **next message** will run **preflight context compression** against the new model's window. If the session is already near or above that model's compression threshold (see [Context Compression](./configuration.md#context-compression)), the switch reply includes a warning — the same `warning_message` path used for expensive-model notices. The switch still applies immediately; compression runs on the **first user message after the switch**, before the model answers.
+When you switch models **inside an active session** (Herm TUI model picker, `fulilian` CLI, or `/model` on Telegram/Discord), Fulilian estimates whether your **next message** will run **preflight context compression** against the new model's window. If the session is already near or above that model's compression threshold (see [Context Compression](./configuration.md#context-compression)), the switch reply includes a warning — the same `warning_message` path used for expensive-model notices. The switch still applies immediately; compression runs on the **first user message after the switch**, before the model answers.
 
 :::warning Mid-session switches reset the prompt cache
 Prompt caches are keyed to the model serving the request, so any mid-conversation model change — an explicit `/model` switch, an [automatic fallback](./features/fallback-providers.md), or a [credential-pool](./features/credential-pools.md) rotation onto a different account — means the next message re-reads the entire conversation at full input-token price instead of the cached (~75–90% discounted) rate. On a long session this one-time re-read can dwarf the per-token difference between the two models. Switch when you need to, but prefer doing it early in a conversation or right after starting a fresh session.
@@ -62,10 +62,10 @@ Models such as `muse-spark-1.2-contributor` are discounted because the vendor ma
 If training on the unattended workload's data is acceptable, record a persistent acknowledgement:
 
 ```bash
-hermes config set security.allow_data_training_tiers_noninteractive true
+fulilian config set security.allow_data_training_tiers_noninteractive true
 ```
 
-Hermes still prints the full data-policy warning and the acknowledgement key on every unattended startup, so worker logs retain an audit trail. This setting does not approve expensive-model or provider-routing warnings, and it does not replace the interactive confirmation prompt. Revoke it with `hermes config unset security.allow_data_training_tiers_noninteractive`.
+Fulilian still prints the full data-policy warning and the acknowledgement key on every unattended startup, so worker logs retain an audit trail. This setting does not approve expensive-model or provider-routing warnings, and it does not replace the interactive confirmation prompt. Revoke it with `fulilian config unset security.allow_data_training_tiers_noninteractive`.
 
 ## Setting auxiliary models
 
@@ -73,22 +73,22 @@ Click **Show auxiliary** to reveal the 11 task slots:
 
 ![Auxiliary panel expanded](/img/docs/dashboard-models/auxiliary-expanded.png)
 
-Every auxiliary task defaults to `auto` — meaning Hermes tries your main model for that job too. If that route is unavailable or hits a capacity-style failure, `auto` follows any task-specific `auxiliary.<task>.fallback_chain`, then the main `fallback_providers` / `fallback_model` chain, then Hermes' built-in auxiliary discovery chain. Override a specific task when you want a cheaper or faster model for a side-job.
+Every auxiliary task defaults to `auto` — meaning Fulilian tries your main model for that job too. If that route is unavailable or hits a capacity-style failure, `auto` follows any task-specific `auxiliary.<task>.fallback_chain`, then the main `fallback_providers` / `fallback_model` chain, then Fulilian' built-in auxiliary discovery chain. Override a specific task when you want a cheaper or faster model for a side-job.
 
 ### Common override patterns
 
 | Task | When to override |
 |---|---|
-| **Title Gen** | When title latency or cost matters more than matching the main model. Pin a known-good flash model, or set `auxiliary.title_generation.prefer_fast_model: true` to let Hermes choose the provider's fast tier. |
+| **Title Gen** | When title latency or cost matters more than matching the main model. Pin a known-good flash model, or set `auxiliary.title_generation.prefer_fast_model: true` to let Fulilian choose the provider's fast tier. |
 | **Vision** | When your main model lacks vision support. Point it at `google/gemini-2.5-flash` or `gpt-4o-mini`. |
 | **Compression** | When you're burning reasoning tokens on Opus/M2.7 just to summarize context. A fast chat model does the job at 1/50th the cost. |
 | **Approval** | For `approval_mode: smart` — a fast/cheap model (haiku, flash, gpt-5-mini) decides whether to auto-approve low-risk commands. Expensive models here are waste. |
 | **Web Extract** | When you use `web_extract` heavily. Same logic as compression — summarization doesn't need reasoning. |
-| **Skills Hub** | `hermes skills search` uses this. Usually fine at `auto`. |
+| **Skills Hub** | `fulilian skills search` uses this. Usually fine at `auto`. |
 | **MCP** | MCP tool routing. Usually fine at `auto`. |
-| **Triage Specifier** | Routes the Kanban triage specifier (`hermes kanban specify`) that expands a rough one-liner into a concrete spec. A cheap, capable model works well. |
+| **Triage Specifier** | Routes the Kanban triage specifier (`fulilian kanban specify`) that expands a rough one-liner into a concrete spec. A cheap, capable model works well. |
 | **Kanban Decomposer** | Routes Kanban task decomposition — splits a triage task into a graph of child tasks for specialist profiles. |
-| **Profile Describer** | Routes profile-description generation (`hermes profile describe --auto` / the dashboard auto-generate button). Short, cheap call. |
+| **Profile Describer** | Routes profile-description generation (`fulilian profile describe --auto` / the dashboard auto-generate button). Short, cheap call. |
 | **Curator** | Routes the curator skill-usage review pass. Can run for minutes on reasoning models, so a cheaper aux model is often worthwhile. |
 
 ### Per-task override
@@ -115,7 +115,7 @@ Cards are badged with `main` or `aux · <task>` when they're currently assigned 
 
 ## What gets written to `config.yaml`
 
-When you save via the dashboard, Hermes writes to `~/.hermes/config.yaml`:
+When you save via the dashboard, Fulilian writes to `~/.fulilian/config.yaml`:
 
 **Main model:**
 ```yaml
@@ -149,7 +149,7 @@ auxiliary:
     # ... other fields unchanged
 ```
 
-`provider: auto` with `model: ''` tells Hermes to use the main model for that task, while still honoring fallback policy if the main route cannot serve the auxiliary call.
+`provider: auto` with `model: ''` tells Fulilian to use the main model for that task, while still honoring fallback policy if the main route cannot serve the auxiliary call.
 
 Optional task-specific fallback chains live under the same auxiliary task:
 
@@ -167,7 +167,7 @@ When `fallback_chain` is absent, `auto` uses the top-level `fallback_providers` 
 
 ## Per-provider request options
 
-Provider entries (`providers.<name>` in the `providers:` dict, or items in the legacy `custom_providers` list) accept two knobs that shape how Hermes talks to the endpoint:
+Provider entries (`providers.<name>` in the `providers:` dict, or items in the legacy `custom_providers` list) accept two knobs that shape how Fulilian talks to the endpoint:
 
 **`extra_headers`** — a mapping of extra HTTP headers attached to every LLM request routed to that provider's base URL. They are applied last, after URL/profile defaults and user header overrides, so they survive credential swaps and client rebuilds. Useful for Cloudflare Access service tokens, proxy auth, or custom bearer schemes:
 
@@ -181,7 +181,7 @@ providers:
       CF-Access-Client-Secret: "yyyy"
 ```
 
-Header values routinely carry credentials — Hermes never logs them. `extra_headers` applies to OpenAI-compatible routes; the `anthropic_messages` and `bedrock_converse` API modes do not use it.
+Header values routinely carry credentials — Fulilian never logs them. `extra_headers` applies to OpenAI-compatible routes; the `anthropic_messages` and `bedrock_converse` API modes do not use it.
 
 **`discover_models`** — set to `false` (default `true`) to skip querying the endpoint's `/models` listing and use only the `models` you configured on the entry. Handy for gateways whose model listing is slow, unreliable, or noisy:
 
@@ -195,7 +195,7 @@ providers:
       - my-finetune-v1
 ```
 
-With discovery off, the model picker (`hermes model`, `/model`) shows the configured list instead of a live probe.
+With discovery off, the model picker (`fulilian model`, `/model`) shows the configured list instead of a live probe.
 
 For a gateway that resolves a bare model alias only after receiving the
 request, opt the alias into prompt-cache markers with the per-model
@@ -212,22 +212,22 @@ providers:
         prompt_caching: true
 ```
 
-Hermes matches this declaration to the exact provider route and runtime model
+Fulilian matches this declaration to the exact provider route and runtime model
 id, without rewriting the alias or inferring support from its provider name,
 host, or model family. The marker layout follows the configured transport:
 `openai_chat` uses the OpenAI-compatible envelope layout and
 `anthropic_messages` uses the native inner-block layout. Set
 `prompt_caching: false` to explicitly disable cache markers for a model; when
-omitted, Hermes keeps its normal provider and model capability detection.
+omitted, Fulilian keeps its normal provider and model capability detection.
 
 :::note Legacy format
-Older configs used a top-level `custom_providers:` list (with `base_url` instead of `api`). It still works and is auto-migrated to the `providers:` dict on `hermes update` (config v12).
+Older configs used a top-level `custom_providers:` list (with `base_url` instead of `api`). It still works and is auto-migrated to the `providers:` dict on `fulilian update` (config v12).
 :::
 
 ## When does it take effect?
 
-- **CLI** (`hermes chat`): next `hermes chat` invocation.
-- **Gateway** (Telegram, Discord, Slack, etc.): next *new* session. Existing sessions keep their model. Restart the gateway (`hermes gateway restart`) if you want to force all sessions to pick up the change.
+- **CLI** (`fulilian chat`): next `fulilian chat` invocation.
+- **Gateway** (Telegram, Discord, Slack, etc.): next *new* session. Existing sessions keep their model. Restart the gateway (`fulilian gateway restart`) if you want to force all sessions to pick up the change.
 - **Dashboard chat tab** (`/chat`): next new PTY. The currently-open chat keeps its model — use `/model` inside it to hot-swap.
 
 Changes never invalidate prompt caches on running sessions. That's deliberate: swapping the main model inside a session requires a cache reset (the system prompt contains model-specific content), and we reserve that for the explicit `/model` slash command inside chat.
@@ -236,7 +236,7 @@ Changes never invalidate prompt caches on running sessions. That's deliberate: s
 
 ### "No authenticated providers" in the picker
 
-Hermes lists a provider only if it has a working credential. Check **Keys** in the sidebar — you should see one of: an API key, a successful OAuth, or a custom endpoint URL. If the provider you want isn't there, run `hermes setup` to wire it up, or go to **Keys** and add the env var.
+Fulilian lists a provider only if it has a working credential. Check **Keys** in the sidebar — you should see one of: an API key, a successful OAuth, or a custom endpoint URL. If the provider you want isn't there, run `fulilian setup` to wire it up, or go to **Keys** and add the env var.
 
 ### Main model didn't change in my running chat
 
@@ -250,7 +250,7 @@ Three things to check:
 2. **Is `provider` set to something other than `auto`?** If the field shows `auto`, the task is still using your main model. Click **Change** and pick a real provider.
 3. **Is the provider authenticated?** If you assigned `minimax` to a task but don't have a MiniMax API key, that task falls back to the openrouter default and logs a warning in `agent.log`.
 
-### I picked a model but Hermes switched providers on me
+### I picked a model but Fulilian switched providers on me
 
 On OpenRouter (or any aggregator), bare model names resolve *within* the aggregator first. So `claude-sonnet-4` on OpenRouter becomes `anthropic/claude-sonnet-4.6`, staying on your OpenRouter auth. But if you typed `claude-sonnet-4` on a native Anthropic auth, it would stay as `claude-sonnet-4-6`. If you see an unexpected provider switch, check that your current provider is what you expect — the picker always shows the current main at the top of the dialog.
 
@@ -258,7 +258,7 @@ On OpenRouter (or any aggregator), bare model names resolve *within* the aggrega
 
 ### CLI slash command
 
-Inside any `hermes chat` session:
+Inside any `fulilian chat` session:
 
 ```
 /model gpt-5.4 --provider openrouter             # session-only
@@ -281,7 +281,7 @@ Define your own short names for models you reach for often, then use `/model <al
 **Canonical (top-level `model_aliases:`)** — full control over provider + base_url:
 
 ```yaml
-# ~/.hermes/config.yaml
+# ~/.fulilian/config.yaml
 model_aliases:
   fav:
     model: claude-sonnet-4.6
@@ -291,37 +291,37 @@ model_aliases:
     provider: x-ai
 ```
 
-**Short string form (`model.aliases.<name>: provider/model`)** — convenient from the shell because `hermes config set` writes scalars and now also parses inline list/mapping literals, though this short alias form still can't carry a custom `base_url`:
+**Short string form (`model.aliases.<name>: provider/model`)** — convenient from the shell because `fulilian config set` writes scalars and now also parses inline list/mapping literals, though this short alias form still can't carry a custom `base_url`:
 
 ```bash
-hermes config set model.aliases.fav anthropic/claude-opus-4.6
-hermes config set model.aliases.grok x-ai/grok-4
+fulilian config set model.aliases.fav anthropic/claude-opus-4.6
+fulilian config set model.aliases.grok x-ai/grok-4
 ```
 
-> `hermes config set` also accepts inline **list/mapping literals** (JSON/YAML flow style). Quote them so your shell passes them through intact:
+> `fulilian config set` also accepts inline **list/mapping literals** (JSON/YAML flow style). Quote them so your shell passes them through intact:
 >
 > ```bash
-> hermes config set platform_toolsets.line '["clarify", "file", "web"]'
-> hermes config set display.tool_progress_overrides '{"terminal": "off"}'
+> fulilian config set platform_toolsets.line '["clarify", "file", "web"]'
+> fulilian config set display.tool_progress_overrides '{"terminal": "off"}'
 > ```
 
-Both paths feed the same loader (`hermes_cli/model_switch.py`). Entries declared in `model_aliases:` take precedence over `model.aliases:` entries with the same name.
+Both paths feed the same loader (`fulilian_cli/model_switch.py`). Entries declared in `model_aliases:` take precedence over `model.aliases:` entries with the same name.
 
 Then `/model fav` or `/model grok` in chat. User aliases shadow built-in short names (`sonnet`, `kimi`, `opus`, etc.). See [Custom model aliases](/reference/slash-commands#custom-model-aliases) for the full reference.
 
-### `hermes model` subcommand
+### `fulilian model` subcommand
 
 ```bash
-hermes model            # Interactive provider + model picker (the canonical way to switch defaults)
+fulilian model            # Interactive provider + model picker (the canonical way to switch defaults)
 ```
 
-`hermes model` walks you through picking a provider, authenticating (OAuth flows open a browser; API-key providers prompt for the key), and then choosing a specific model from that provider's curated catalog. The choice is written to `model.provider` and `model.default` in `~/.hermes/config.yaml`.
+`fulilian model` walks you through picking a provider, authenticating (OAuth flows open a browser; API-key providers prompt for the key), and then choosing a specific model from that provider's curated catalog. The choice is written to `model.provider` and `model.default` in `~/.fulilian/config.yaml`.
 
-To list providers/models without launching the picker, use the dashboard or the REST endpoints below. To inspect what the CLI will actually use right now: `hermes config get model --json` and `hermes status`.
+To list providers/models without launching the picker, use the dashboard or the REST endpoints below. To inspect what the CLI will actually use right now: `fulilian config get model --json` and `fulilian status`.
 
 ### Direct config edit
 
-Edit `~/.hermes/config.yaml` and restart whatever reads it. See the [Configuration reference](./configuration.md) for the full schema.
+Edit `~/.fulilian/config.yaml` and restart whatever reads it. See the [Configuration reference](./configuration.md) for the full schema.
 
 ### REST API
 
@@ -329,30 +329,30 @@ The dashboard uses three endpoints. Useful for scripting:
 
 ```bash
 # List authenticated providers + curated model lists
-curl -H "X-Hermes-Session-Token: $TOKEN" http://localhost:PORT/api/model/options
+curl -H "X-Fulilian-Session-Token: $TOKEN" http://localhost:PORT/api/model/options
 
 # Read current main + auxiliary assignments
-curl -H "X-Hermes-Session-Token: $TOKEN" http://localhost:PORT/api/model/auxiliary
+curl -H "X-Fulilian-Session-Token: $TOKEN" http://localhost:PORT/api/model/auxiliary
 
 # Set the main model
-curl -X POST -H "Content-Type: application/json" -H "X-Hermes-Session-Token: $TOKEN" \
+curl -X POST -H "Content-Type: application/json" -H "X-Fulilian-Session-Token: $TOKEN" \
   -d '{"scope":"main","provider":"openrouter","model":"anthropic/claude-opus-4.7"}' \
   http://localhost:PORT/api/model/set
 
 # Override a single auxiliary task
-curl -X POST -H "Content-Type: application/json" -H "X-Hermes-Session-Token: $TOKEN" \
+curl -X POST -H "Content-Type: application/json" -H "X-Fulilian-Session-Token: $TOKEN" \
   -d '{"scope":"auxiliary","task":"vision","provider":"openrouter","model":"google/gemini-2.5-flash"}' \
   http://localhost:PORT/api/model/set
 
 # Assign one model to every auxiliary task
-curl -X POST -H "Content-Type: application/json" -H "X-Hermes-Session-Token: $TOKEN" \
+curl -X POST -H "Content-Type: application/json" -H "X-Fulilian-Session-Token: $TOKEN" \
   -d '{"scope":"auxiliary","task":"","provider":"openrouter","model":"google/gemini-2.5-flash"}' \
   http://localhost:PORT/api/model/set
 
 # Reset all auxiliary tasks to auto
-curl -X POST -H "Content-Type: application/json" -H "X-Hermes-Session-Token: $TOKEN" \
+curl -X POST -H "Content-Type: application/json" -H "X-Fulilian-Session-Token: $TOKEN" \
   -d '{"scope":"auxiliary","task":"__reset__","provider":"","model":""}' \
   http://localhost:PORT/api/model/set
 ```
 
-The session token is injected into the dashboard HTML at startup and rotates on every server restart. Grab it from the browser devtools (`window.__HERMES_SESSION_TOKEN__`) if you're scripting against a running dashboard.
+The session token is injected into the dashboard HTML at startup and rotates on every server restart. Grab it from the browser devtools (`window.__FULILIAN_SESSION_TOKEN__`) if you're scripting against a running dashboard.

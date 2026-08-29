@@ -30,8 +30,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional
 
-from fulilian_constants import get_hermes_home
-from hermes_time import now as _hermes_now
+from fulilian_constants import get_fulilian_home
+from fulilian_time import now as _fulilian_now
 
 # Optional test override (mirrors ``cron.executions.EXECUTIONS_FILE``).
 EXECUTIONS_FILE: Optional[Path] = None
@@ -75,11 +75,11 @@ def _db_path() -> Path:
         pass
     if EXECUTIONS_FILE is not None:
         return Path(EXECUTIONS_FILE)
-    return get_hermes_home().resolve() / "cron" / "executions.db"
+    return get_fulilian_home().resolve() / "cron" / "executions.db"
 
 
 def _initialize_schema(conn: sqlite3.Connection) -> None:
-    from hermes_state import apply_wal_with_fallback
+    from fulilian_state import apply_wal_with_fallback
 
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA busy_timeout=5000")
@@ -191,7 +191,7 @@ def upsert_incident(
     sig = _error_signature(job_id, error)
     stored_error = _redact_error(error)
     incident_id = _incident_id(job_id, sig)
-    now = _hermes_now().isoformat()
+    now = _fulilian_now().isoformat()
     failure_type = failure_type or _classify_failure_type(error)
     output_file = str(output_file) if output_file is not None else None
 
@@ -227,7 +227,7 @@ def set_incident_state(incident_id: str, state: str) -> bool:
     """
     if state not in INCIDENT_STATES:
         return False
-    now = _hermes_now().isoformat()
+    now = _fulilian_now().isoformat()
     with _transaction() as conn:
         row = conn.execute(
             "SELECT state FROM cron_incidents WHERE id=?", (incident_id,)

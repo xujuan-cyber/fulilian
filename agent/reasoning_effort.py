@@ -1,6 +1,6 @@
 """Canonical reasoning-effort vocabulary and wire clamping.
 
-Hermes' internal effort ladder (``hermes_constants.VALID_REASONING_EFFORTS``
+Fulilian' internal effort ladder (``fulilian_constants.VALID_REASONING_EFFORTS``
 plus the ``none`` disable level) is wider than what any single provider wire
 accepts. Historically every transport and provider profile hand-rolled its own
 translation map, and the class of bugs that produced was constant: a new
@@ -45,13 +45,13 @@ from typing import Optional, Sequence
 _KIMI_K3_SLUG_RE = re.compile(r"(?:^|[^a-z0-9])k3(?:[^a-z0-9]|$)")
 
 # Canonical low→high ordering used for nearest-level clamping. Superset of
-# hermes_constants.VALID_REASONING_EFFORTS ("none" included so an explicit
+# fulilian_constants.VALID_REASONING_EFFORTS ("none" included so an explicit
 # disable can be clamped too when a provider publishes it as a level).
 EFFORT_LADDER: tuple[str, ...] = (
     "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra",
 )
 
-# ``ultra`` is Hermes-internal ladder vocabulary (the Codex product tier); no
+# ``ultra`` is Fulilian-internal ladder vocabulary (the Codex product tier); no
 # provider wire accepts it verbatim anywhere. Every declared wire set below
 # therefore stops at ``max`` — ``ultra`` always clamps down.
 

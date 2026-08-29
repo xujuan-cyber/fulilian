@@ -1,7 +1,7 @@
 """Tests for /compress --preview/--dry-run/--aggressive flags and the
 /compact alias (PR #3243 salvage).
 
-Covers the pure helpers in ``hermes_cli.partial_compress`` plus alias
+Covers the pure helpers in ``fulilian_cli.partial_compress`` plus alias
 resolution in the command registry. The CLI and gateway surfaces both
 route through these helpers, so the flag semantics are pinned here once.
 """

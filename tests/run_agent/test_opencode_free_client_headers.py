@@ -63,8 +63,8 @@ def test_opencode_free_blanks_authorization_header(mock_openai):
 
 
 @patch("run_agent.OpenAI")
-def test_opencode_free_sends_hermes_attribution(mock_openai):
-    """Keyless requests still identify as Hermes (attribution headers match
+def test_opencode_free_sends_fulilian_attribution(mock_openai):
+    """Keyless requests still identify as Fulilian (attribution headers match
     the opencode zen/go profiles)."""
     mock_openai.return_value = MagicMock()
     create_openai_client(
@@ -74,8 +74,8 @@ def test_opencode_free_sends_hermes_attribution(mock_openai):
         shared=False,
     )
     headers = _zen_call_headers(mock_openai)
-    assert headers.get("X-Title") == "Hermes Agent"
-    assert str(headers.get("User-Agent", "")).startswith("HermesAgent/")
+    assert headers.get("X-Title") == "FuLiLian"
+    assert str(headers.get("User-Agent", "")).startswith("FulilianAgent/")
 
 
 @patch("run_agent.OpenAI")

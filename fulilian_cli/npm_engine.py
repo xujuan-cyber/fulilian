@@ -13,12 +13,12 @@ an ``npm --version`` probe before work that usually succeeds), we react to it:
 npm states the required range in the error, so the recovery reads the
 constraint straight out of the output it just produced.
 
-Scope of the repair is deliberately narrow. Hermes only upgrades an npm that
-lives inside its **own** managed Node tree (``$HERMES_HOME/node``), installing
+Scope of the repair is deliberately narrow. Fulilian only upgrades an npm that
+lives inside its **own** managed Node tree (``$FULILIAN_HOME/node``), installing
 in place with ``--prefix`` so ``bin/npm`` keeps resolving to the upgraded
 ``lib/node_modules/npm``. A system / nvm / brew / Nix npm belongs to the user
-and their other projects; Hermes never modifies those. When the failing npm is
-one of those foreign installs, Hermes instead provisions its own managed Node
+and their other projects; Fulilian never modifies those. When the failing npm is
+one of those foreign installs, Fulilian instead provisions its own managed Node
 tree (the same tree a fresh install creates), upgrades *that* npm into range,
 and hands the caller the managed npm to retry with — leaving the user's
 toolchain untouched.
@@ -35,10 +35,10 @@ import tempfile
 from pathlib import Path
 
 from fulilian_constants import (
-    bootstrap_hermes_managed_node,
-    get_hermes_home,
+    bootstrap_fulilian_managed_node,
+    get_fulilian_home,
     managed_node_tree_in_use,
-    with_hermes_node_path,
+    with_fulilian_node_path,
 )
 
 __all__ = [
@@ -134,17 +134,17 @@ def _repo_npm_range() -> str | None:
 
 
 def managed_npm_prefix(npm: str | os.PathLike[str] | None) -> Path | None:
-    """Return the Hermes-managed Node root *npm* lives in, else ``None``.
+    """Return the Fulilian-managed Node root *npm* lives in, else ``None``.
 
     Symlinks are resolved first: an install links ``~/.local/bin/npm`` at
-    ``$HERMES_HOME/node/bin/npm``, which itself links into
+    ``$FULILIAN_HOME/node/bin/npm``, which itself links into
     ``lib/node_modules/npm/bin/npm-cli.js``. Every one of those spellings is
     the managed npm and must be recognised as such, or the repair silently
     declines to fix the very install it owns.
     """
     if not npm:
         return None
-    prefix = get_hermes_home() / "node"
+    prefix = get_fulilian_home() / "node"
     try:
         resolved = Path(npm).resolve()
         prefix_resolved = prefix.resolve()
@@ -156,7 +156,7 @@ def managed_npm_prefix(npm: str | os.PathLike[str] | None) -> Path | None:
 
 
 def _upgrade_env() -> dict[str, str]:
-    env = with_hermes_node_path()
+    env = with_fulilian_node_path()
     # The checkout's .npmrc sets `min-release-age`, which would gate the npm
     # release we are trying to install. The upgrade runs from a temp cwd so
     # that file is out of scope; this neutralises a user-level ~/.npmrc too.
@@ -176,13 +176,13 @@ def upgrade_managed_npm(
     """Upgrade the managed npm at *npm* in place to satisfy *npm_range*.
 
     ``--prefix`` targets the managed tree explicitly: a managed install writes
-    ``prefix=~/.local`` into ``$HERMES_HOME/node/etc/npmrc`` so that global
+    ``prefix=~/.local`` into ``$FULILIAN_HOME/node/etc/npmrc`` so that global
     installs land on PATH, and without the override the "upgrade" would install
     a second npm somewhere else while the managed one stayed stale.
     """
     if not quiet:
         print(
-            f"→ Upgrading Hermes-managed npm to satisfy {npm_range}…",
+            f"→ Upgrading Fulilian-managed npm to satisfy {npm_range}…",
             flush=True,
         )
     # The managed npm lives inside the very tree the desktop app's Node
@@ -193,7 +193,7 @@ def upgrade_managed_npm(
     if managed_node_tree_in_use():
         if not quiet:
             print(
-                "  ⚠ deferred: the Hermes-managed Node.js tree is in use by a "
+                "  ⚠ deferred: the Fulilian-managed Node.js tree is in use by a "
                 "running app; the npm upgrade will apply on a later update "
                 "once the app is closed.",
                 file=sys.stderr,
@@ -202,7 +202,7 @@ def upgrade_managed_npm(
     try:
         # A temp cwd keeps the checkout's .npmrc (engine-strict, min-release-age)
         # from applying to the upgrade itself.
-        with tempfile.TemporaryDirectory(prefix="hermes-npm-upgrade-") as tmp:
+        with tempfile.TemporaryDirectory(prefix="fulilian-npm-upgrade-") as tmp:
             result = subprocess.run(
                 [
                     npm,
@@ -251,7 +251,7 @@ def _probe_version(npm: str) -> str | None:
             encoding="utf-8",
             errors="replace",
             timeout=30,
-            env=with_hermes_node_path(),
+            env=with_fulilian_node_path(),
             check=False,
         )
     except (OSError, subprocess.SubprocessError):
@@ -264,7 +264,7 @@ def _print_manual_fix(npm: str, npm_range: str, actual: str | None) -> None:
     print(
         f"\n✗ {have}does not satisfy the range this project requires: {npm_range}\n"
         f"  Resolved npm: {npm}\n"
-        "  Hermes could not provision its own Node.js runtime and never\n"
+        "  Fulilian could not provision its own Node.js runtime and never\n"
         "  modifies a system/nvm/brew/Nix npm. Upgrade yours yourself with:\n"
         f'      npm install -g npm@"{npm_range}"',
         file=sys.stderr,
@@ -272,9 +272,9 @@ def _print_manual_fix(npm: str, npm_range: str, actual: str | None) -> None:
 
 
 def _provision_managed_npm(npm_range: str | None, *, quiet: bool = False) -> str | None:
-    """Provision a Hermes-managed Node tree and return a satisfying npm.
+    """Provision a Fulilian-managed Node tree and return a satisfying npm.
 
-    Installs the managed tree under ``$HERMES_HOME/node`` (reusing a healthy
+    Installs the managed tree under ``$FULILIAN_HOME/node`` (reusing a healthy
     one when present), then upgrades its bundled npm to *npm_range* — a fresh
     Node LTS bundles an npm that may itself be outside the repo's range, so
     without the upgrade the caller's single retry would fail the same way.
@@ -284,11 +284,11 @@ def _provision_managed_npm(npm_range: str | None, *, quiet: bool = False) -> str
     """
     if not quiet:
         print(
-            "→ Provisioning a Hermes-managed Node.js runtime "
+            "→ Provisioning a Fulilian-managed Node.js runtime "
             "(the resolved npm belongs to your system and is left alone)…",
             flush=True,
         )
-    managed_npm = bootstrap_hermes_managed_node()
+    managed_npm = bootstrap_fulilian_managed_node()
     if not managed_npm:
         if not quiet:
             print("  ✗ Managed Node.js provisioning failed", file=sys.stderr)
@@ -316,7 +316,7 @@ def maybe_repair_npm_engine(
 
     *output* is the combined stdout/stderr of the npm command that just failed.
     Returns the npm executable the caller should retry its command with —
-    the same *npm* after an in-place upgrade of a Hermes-managed install, or
+    the same *npm* after an in-place upgrade of a Fulilian-managed install, or
     a freshly provisioned managed npm when the failing npm belongs to the
     user (system / nvm / brew / Nix installs are never modified). Returns
     ``None`` when no repair happened — not an engine failure, a Node mismatch
@@ -334,7 +334,7 @@ def maybe_repair_npm_engine(
     prefix = managed_npm_prefix(npm)
 
     if prefix is not None:
-        # Hermes owns this npm — upgrade it in place. Only an npm-range
+        # Fulilian owns this npm — upgrade it in place. Only an npm-range
         # failure is fixable this way; a Node mismatch needs a Node upgrade.
         if not npm_range:
             return None

@@ -60,12 +60,12 @@ def test_prefetch_does_not_spawn_when_previous_batch_is_alive(monkeypatch):
     assert not created
 
 
-def test_upload_file_rejects_hermes_credential_store(tmp_path, monkeypatch):
-    hermes_home = tmp_path / "hermes_home"
-    hermes_home.mkdir()
-    auth_json = hermes_home / "auth.json"
+def test_upload_file_rejects_fulilian_credential_store(tmp_path, monkeypatch):
+    fulilian_home = tmp_path / "fulilian_home"
+    fulilian_home.mkdir()
+    auth_json = fulilian_home / "auth.json"
     auth_json.write_text('{"OPENAI_API_KEY":"sk-test-secret"}', encoding="utf-8")
-    monkeypatch.setattr(fs, "_hermes_home_path", lambda: hermes_home)
+    monkeypatch.setattr(fs, "_fulilian_home_path", lambda: fulilian_home)
 
     provider = RetainDBMemoryProvider()
     provider._client = MagicMock()
@@ -94,7 +94,7 @@ def test_upload_file_allows_regular_file(tmp_path):
 
 
 def _capture_initialized_client(monkeypatch, tmp_path):
-    """Patch _Client/_WriteQueue/get_hermes_home; return a dict capturing args."""
+    """Patch _Client/_WriteQueue/get_fulilian_home; return a dict capturing args."""
     import fulilian_constants
 
     import plugins.memory.retaindb as retaindb_module
@@ -110,7 +110,7 @@ def _capture_initialized_client(monkeypatch, tmp_path):
 
     monkeypatch.setattr(retaindb_module, "_Client", _FakeClient)
     monkeypatch.setattr(retaindb_module, "_WriteQueue", lambda *a, **k: MagicMock())
-    monkeypatch.setattr(hermes_constants, "get_hermes_home", lambda: tmp_path)
+    monkeypatch.setattr(fulilian_constants, "get_fulilian_home", lambda: tmp_path)
     return retaindb_module, captured
 
 
@@ -152,7 +152,7 @@ memory:
 """,
         encoding="utf-8",
     )
-    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+    monkeypatch.setenv("FULILIAN_HOME", str(tmp_path))
     _retaindb_module, captured = _capture_initialized_client(monkeypatch, tmp_path)
 
     RetainDBMemoryProvider().initialize("sess-1")

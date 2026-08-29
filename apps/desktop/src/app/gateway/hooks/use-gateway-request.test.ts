@@ -1,4 +1,4 @@
-import type { GatewayWsUrlResult } from '@hermes/shared'
+import type { GatewayWsUrlResult } from '@fulilian/shared'
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -11,10 +11,10 @@ const gatewayMocks = vi.hoisted(() => ({
   }>
 }))
 
-vi.mock('@/hermes', async importOriginal => {
-  const actual = await importOriginal<typeof HermesModule>()
+vi.mock('@/fulilian', async importOriginal => {
+  const actual = await importOriginal<typeof FulilianModule>()
 
-  class FakeHermesGateway {
+  class FakeFulilianGateway {
     connectionState = 'closed'
     wsUrl = ''
     request = vi.fn()
@@ -47,11 +47,11 @@ vi.mock('@/hermes', async importOriginal => {
     }
   }
 
-  return { ...actual, HermesGateway: FakeHermesGateway }
+  return { ...actual, FulilianGateway: FakeFulilianGateway }
 })
 
-import type * as HermesModule from '@/hermes'
-import type { HermesGateway } from '@/hermes'
+import type * as FulilianModule from '@/fulilian'
+import type { FulilianGateway } from '@/fulilian'
 import {
   $gateway,
   closeSecondaryGateways,
@@ -71,7 +71,7 @@ interface TestGateway {
   wsUrl?: string
 }
 
-const fakeGateway = { connectionState: 'open' } as unknown as HermesGateway
+const fakeGateway = { connectionState: 'open' } as unknown as FulilianGateway
 
 const remoteConnection = {
   authMode: 'oauth' as const,
@@ -119,7 +119,7 @@ function installRemoteDesktop() {
     }
   )
 
-  Object.defineProperty(window, 'hermesDesktop', {
+  Object.defineProperty(window, 'fulilianDesktop', {
     configurable: true,
     value: { getConnection, getConnectionFor, getGatewayWsUrl, getGatewayWsUrlFor }
   })
@@ -148,7 +148,7 @@ function installPrimaryDesktop(authMode: 'oauth' | 'token') {
   const getConnectionFor = vi.fn()
   const getGatewayWsUrlFor = vi.fn()
 
-  Object.defineProperty(window, 'hermesDesktop', {
+  Object.defineProperty(window, 'fulilianDesktop', {
     configurable: true,
     value: { getConnection, getConnectionFor, getGatewayWsUrl, getGatewayWsUrlFor }
   })
@@ -168,8 +168,8 @@ async function activateRemoteGateway() {
   const desktop = installRemoteDesktop()
   const primary = makePrimaryGateway()
 
-  setPrimaryGateway(primary as unknown as HermesGateway, 'default')
-  $gateway.set(primary as unknown as HermesGateway)
+  setPrimaryGateway(primary as unknown as FulilianGateway, 'default')
+  $gateway.set(primary as unknown as FulilianGateway)
   await ensureGatewayForAgent('ssh-source', 'research')
 
   const gateway = $gateway.get() as unknown as TestGateway
@@ -228,7 +228,7 @@ afterEach(() => {
   $connection.set(null)
   $gatewayState.set('idle')
   $activeGatewayProfile.set('default')
-  Reflect.deleteProperty(window, 'hermesDesktop')
+  Reflect.deleteProperty(window, 'fulilianDesktop')
 })
 
 describe('useGatewayRequest', () => {
@@ -324,7 +324,7 @@ describe('useGatewayRequest', () => {
 
   it('surfaces a missing optional scoped mint bridge without falling back to a stale ticket or local lookup', async () => {
     const { desktop, gateway } = await activateRemoteGateway()
-    Reflect.deleteProperty(window.hermesDesktop, 'getGatewayWsUrlFor')
+    Reflect.deleteProperty(window.fulilianDesktop, 'getGatewayWsUrlFor')
 
     const { result } = renderHook(() => useGatewayRequest())
 
@@ -343,8 +343,8 @@ describe('useGatewayRequest', () => {
     const primary = makePrimaryGateway()
     primary.request.mockRejectedValueOnce(new Error('connection closed')).mockResolvedValueOnce({ recovered: true })
 
-    setPrimaryGateway(primary as unknown as HermesGateway, 'default')
-    $gateway.set(primary as unknown as HermesGateway)
+    setPrimaryGateway(primary as unknown as FulilianGateway, 'default')
+    $gateway.set(primary as unknown as FulilianGateway)
     $gatewayState.set('closed')
 
     const { result } = renderHook(() => useGatewayRequest())
@@ -371,11 +371,11 @@ describe('useGatewayRequest', () => {
     const dropped = {
       connectionState: 'closed',
       request: vi.fn().mockRejectedValue(new Error('connection closed'))
-    } as unknown as HermesGateway
+    } as unknown as FulilianGateway
 
     const getConnection = vi.fn(() => new Promise(() => undefined))
 
-    ;(window as unknown as { hermesDesktop: unknown }).hermesDesktop = { getConnection }
+    ;(window as unknown as { fulilianDesktop: unknown }).fulilianDesktop = { getConnection }
     $gateway.set(dropped)
 
     const { result } = renderHook(() => useGatewayRequest())

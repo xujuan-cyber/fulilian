@@ -2,13 +2,13 @@ import { atom, computed, type ReadableAtom } from 'nanostores'
 
 import { persistBoolean, persistString, storedBoolean, storedString } from '@/lib/storage'
 
-const POPOUT_STORAGE_KEY = 'hermes.desktop.composerPopout.zones.v1'
-const POPOUT_GESTURES_ENABLED_STORAGE_KEY = 'hermes.desktop.composerPopout.gesturesEnabled'
+const POPOUT_STORAGE_KEY = 'fulilian.desktop.composerPopout.zones.v1'
+const POPOUT_GESTURES_ENABLED_STORAGE_KEY = 'fulilian.desktop.composerPopout.gesturesEnabled'
 
 // Pre-zone keys: one flag + one position for the whole window. Read at load to
 // seed the first zone the user touches (see `legacySeed`), never written again.
-const LEGACY_ENABLED_KEY = 'hermes.desktop.composerPopout.enabled'
-const LEGACY_POSITION_KEY = 'hermes.desktop.composerPopout.position'
+const LEGACY_ENABLED_KEY = 'fulilian.desktop.composerPopout.enabled'
+const LEGACY_POSITION_KEY = 'fulilian.desktop.composerPopout.position'
 
 const gesturesEnabledAtLoad = storedBoolean(POPOUT_GESTURES_ENABLED_STORAGE_KEY, true)
 

@@ -22,7 +22,7 @@ from agent.context_compressor import (
 )
 import agent.skill_commands as skill_commands
 import tools.skills_tool as skills_tool
-from hermes_state import SessionDB
+from fulilian_state import SessionDB
 
 SKILL_BODY = (
     "Kick off a task in a fresh isolated git worktree instead of the current checkout. "
@@ -187,7 +187,7 @@ class TestCompactionPreview:
 
 
 class TestSkillScaffoldedSessionLookup:
-    """Backing queries for `hermes sessions retitle-skills`."""
+    """Backing queries for `fulilian sessions retitle-skills`."""
 
     def test_finds_only_titled_skill_sessions(self, db, tmp_path, monkeypatch):
         _install_skill(tmp_path, monkeypatch)

@@ -1,4 +1,4 @@
-import type { HermesSkin } from '@hermes/shared/skin'
+import type { FulilianSkin } from '@fulilian/shared/skin'
 
 import {
   notifyCronChanged,
@@ -23,7 +23,7 @@ export function handleLifecycleEvent(ctx: GatewayEventContext): boolean {
   if (event.type === 'gateway.ready') {
     // Seed the active skin into the desktop theme registry without applying,
     // so a fresh connect never overrides the user's persisted desktop theme.
-    ingestBackendSkin((payload as { skin?: HermesSkin } | undefined)?.skin, { apply: false })
+    ingestBackendSkin((payload as { skin?: FulilianSkin } | undefined)?.skin, { apply: false })
     // Backends with the change watcher broadcast pet/cron/sessions change
     // events; consumers demote their legacy polls to slow backstops.
     setChangeEventsAvailable(Boolean((payload as { change_events?: boolean } | undefined)?.change_events))
@@ -32,10 +32,10 @@ export function handleLifecycleEvent(ctx: GatewayEventContext): boolean {
   }
 
   if (event.type === 'skin.changed') {
-    // A runtime skin switch (Hermes activating an authored skin, or `/skin`
+    // A runtime skin switch (Fulilian activating an authored skin, or `/skin`
     // on another surface). Only the active source+profile's change repaints.
     if (fromActiveSource()) {
-      ingestBackendSkin(payload as HermesSkin | undefined, { apply: true })
+      ingestBackendSkin(payload as FulilianSkin | undefined, { apply: true })
     }
 
     return true

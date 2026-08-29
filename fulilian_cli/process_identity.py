@@ -1,16 +1,16 @@
 """Process identity: spawn tags, the machine-wide spawn ledger, and the
 Windows job-object self-attach.
 
-Three layers that make every long-lived Hermes process positively
-identifiable, so reapers (``hermes update``, Desktop startup sweeps) never
+Three layers that make every long-lived Fulilian process positively
+identifiable, so reapers (``fulilian update``, Desktop startup sweeps) never
 have to guess lineage from PPID archaeology or cmdline pattern-matching:
 
-1. **Spawn tag** (``HERMES_SPAWN`` env var): every spawner stamps its children
+1. **Spawn tag** (``FULILIAN_SPAWN`` env var): every spawner stamps its children
    with ``v1:<install_id>:<purpose>:<spawner_pid>:<spawner_create>``. A scanner
    that can read the child's environment classifies it instantly: which
    install, what it is, who spawned it, and when.
 
-2. **Spawn ledger** (``spawn-ledger.json`` at the machine Hermes root): every
+2. **Spawn ledger** (``spawn-ledger.json`` at the machine Fulilian root): every
    long-lived process (serve/dashboard backend, gateway) self-registers
    ``pid + create_time + purpose + spawner`` at startup. ``pid`` alone is
    forgeable by reuse; the ``(pid, create_time)`` pair is not. Reapers
@@ -47,7 +47,7 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-SPAWN_ENV_VAR = "HERMES_SPAWN"
+SPAWN_ENV_VAR = "FULILIAN_SPAWN"
 _TAG_VERSION = "v1"
 LEDGER_FILENAME = "spawn-ledger.json"
 
@@ -70,7 +70,7 @@ _LEDGER_LOCK = threading.Lock()
 def install_id(project_root: Optional[Path] = None) -> str:
     """Stable 12-hex identifier for THIS install (derived from its path).
 
-    Lets a reaper reject processes from a different Hermes install on the
+    Lets a reaper reject processes from a different Fulilian install on the
     same machine without path comparisons at scan time.
     """
     if project_root is None:
@@ -109,7 +109,7 @@ class SpawnTag:
 
 
 def build_spawn_tag(purpose: str, *, project_root: Optional[Path] = None) -> str:
-    """Value for the child's ``HERMES_SPAWN`` env var, stamped by the spawner."""
+    """Value for the child's ``FULILIAN_SPAWN`` env var, stamped by the spawner."""
     create = _own_create_time()
     create_part = f"{create:.3f}" if create is not None else "-"
     return ":".join(
@@ -123,7 +123,7 @@ def spawn_env(purpose: str, *, project_root: Optional[Path] = None) -> dict[str,
 
 
 def parse_spawn_tag(raw: object) -> Optional[SpawnTag]:
-    """Parse a ``HERMES_SPAWN`` value; ``None`` for anything malformed."""
+    """Parse a ``FULILIAN_SPAWN`` value; ``None`` for anything malformed."""
     if not isinstance(raw, str):
         return None
     parts = raw.split(":")
@@ -173,13 +173,13 @@ class LedgerEntry:
 def _ledger_path() -> Path:
     """Machine-root ledger path (shared by every profile of this install)."""
     try:
-        from fulilian_constants import get_default_hermes_root
+        from fulilian_constants import get_default_fulilian_root
 
-        return Path(get_default_hermes_root()) / LEDGER_FILENAME
+        return Path(get_default_fulilian_root()) / LEDGER_FILENAME
     except Exception:
-        from fulilian_cli.config import get_hermes_home
+        from fulilian_cli.config import get_fulilian_home
 
-        return Path(get_hermes_home()) / LEDGER_FILENAME
+        return Path(get_fulilian_home()) / LEDGER_FILENAME
 
 
 def _read_ledger(path: Path) -> Optional[list[dict]]:
@@ -254,16 +254,16 @@ def register_self(
     spawner_create: Optional[float] = tag.spawner_create if tag else None
     if spawner_pid is None:
         # Desktop compatibility: the Electron app already stamps children with
-        # HERMES_PARENT_PID (+ optional `winms:<ms>` start marker) for its
+        # FULILIAN_PARENT_PID (+ optional `winms:<ms>` start marker) for its
         # parent-death watchdog. Reuse it as spawner identity so ledger
         # lineage works with every Desktop version, no TS change needed.
         try:
-            raw = int(os.environ.get("HERMES_PARENT_PID", ""))
+            raw = int(os.environ.get("FULILIAN_PARENT_PID", ""))
             if raw > 0:
                 spawner_pid = raw
         except (TypeError, ValueError):
             pass
-        marker = os.environ.get("HERMES_PARENT_START_MARKER", "")
+        marker = os.environ.get("FULILIAN_PARENT_START_MARKER", "")
         if spawner_pid is not None and marker.startswith("winms:"):
             try:
                 spawner_create = float(marker.split(":", 1)[1]) / 1000.0
@@ -290,7 +290,7 @@ def register_self(
     try:
         import sys as _sys
 
-        # 10 tokens (was 6): enough for `hermes serve --host X --port N
+        # 10 tokens (was 6): enough for `fulilian serve --host X --port N
         # --profile P` — the relaunch shapes #63206 needs — while still
         # bounding pathological argv. Structured detail above is the
         # canonical identity; argv is the human-readable fallback.
@@ -346,7 +346,7 @@ def register_child(
 
     Mirror of :func:`register_self` for children that cannot register
     themselves (stdio MCP helper subprocesses, #61514: arbitrary
-    ``npx``/binary servers never import Hermes code). The entry records the
+    ``npx``/binary servers never import Fulilian code). The entry records the
     child's ``(pid, create_time)`` with THIS process as the spawner, so
     reapers get the same positive-identity contract:
 

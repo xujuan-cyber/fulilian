@@ -10,7 +10,7 @@ import logging
 import threading
 from typing import List, Optional
 
-from fulilian_constants import hermes_home_key
+from fulilian_constants import fulilian_home_key
 from fulilian_cli.dashboard_auth.base import (
     DashboardAuthProvider,
     assert_protocol_compliance,
@@ -24,7 +24,7 @@ _scoped_providers: dict[str, dict[str, DashboardAuthProvider]] = {}
 
 def _merged(scope: Optional[str] = None) -> dict[str, DashboardAuthProvider]:
     providers = dict(_providers)
-    providers.update(_scoped_providers.get(scope or hermes_home_key(), {}))
+    providers.update(_scoped_providers.get(scope or fulilian_home_key(), {}))
     return providers
 
 

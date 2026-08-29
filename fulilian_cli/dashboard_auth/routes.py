@@ -58,7 +58,7 @@ def _redirect_uri(request: Request) -> str:
 
     Three resolution tiers:
 
-      1. ``HERMES_DASHBOARD_PUBLIC_URL`` env var or
+      1. ``FULILIAN_DASHBOARD_PUBLIC_URL`` env var or
          ``dashboard.public_url`` in config.yaml — when set, this is
          the complete authority (scheme + host + optional path prefix)
          and we append ``/auth/callback`` verbatim. ``X-Forwarded-Prefix``
@@ -69,7 +69,7 @@ def _redirect_uri(request: Request) -> str:
          Relief valve for deploys behind reverse proxies whose forwarded
          headers aren't reliable.
 
-      2. ``X-Forwarded-Prefix: /hermes`` (Mission Control deploys) — we
+      2. ``X-Forwarded-Prefix: /fulilian`` (Mission Control deploys) — we
          prepend the prefix to the path FastAPI's ``url_for`` produces
          (it doesn't natively honour this header — it isn't part of the
          Starlette/uvicorn proxy_headers set).
@@ -118,7 +118,7 @@ def _prefix(request: Request) -> str:
     Local indirection so the routes pass a consistent value to the
     cookie helpers (cookie name + Path attribute) and the gate's
     redirect builders (login_url construction). See
-    ``hermes_cli.dashboard_auth.prefix`` for the normalisation rules.
+    ``fulilian_cli.dashboard_auth.prefix`` for the normalisation rules.
     """
     from fulilian_cli.dashboard_auth.prefix import prefix_from_request
     return prefix_from_request(request)
@@ -225,7 +225,7 @@ async def auth_login(request: Request, provider: str, next: str = ""):
     # Pack the provider name into the PKCE cookie so the callback can
     # find it without a separate cookie. Provider may or may not have
     # already included a ``provider=`` segment.
-    pkce = ls.cookie_payload.get("hermes_session_pkce", "")
+    pkce = ls.cookie_payload.get("fulilian_session_pkce", "")
     if "provider=" not in pkce:
         pkce = f"provider={provider};{pkce}" if pkce else f"provider={provider}"
     # Carry ``next=`` through the round trip in the PKCE cookie. Real
@@ -412,7 +412,7 @@ async def auth_native_authorize(
     # cookie so the callback can (a) dispatch to the right provider and (b)
     # find the pending native authorization. The desktop's challenge/state
     # never touch this cookie — only our opaque broker_state does.
-    pkce = ls.cookie_payload.get("hermes_session_pkce", "")
+    pkce = ls.cookie_payload.get("fulilian_session_pkce", "")
     if "provider=" not in pkce:
         pkce = f"provider={p.name};{pkce}" if pkce else f"provider={p.name}"
     pkce = f"{pkce};broker={broker_state}"

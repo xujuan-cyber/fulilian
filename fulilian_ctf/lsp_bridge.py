@@ -5,7 +5,7 @@ Pwn/Reverse 题常要编译 exploit 或写解析脚本。此桥接提供两个�
 1. 轻量编译诊断（本模块自身，零依赖）：gcc -fsyntax-only / cargo check，
    把报错文本喂回 agent 修正——通过 ``compile_check`` CTF 工具
    （tools/ctf_solve.py 注册，ctf_solve 工具集）暴露给 agent。
-2. Hermes LSP 基础设施（agent/lsp/，按需）：:func:`lsp_diagnostics`
+2. Fulilian LSP 基础设施（agent/lsp/，按需）：:func:`lsp_diagnostics`
    在 agent/lsp 服务可用时取 LSP 诊断快照；不可用时安静返回 None，
    不影响轻量路径。
 
@@ -87,7 +87,7 @@ def diagnostics_summary(source_file: str, language: str, max_lines: int = 40) ->
 
 
 def lsp_diagnostics(file_path: str, timeout: Optional[float] = None) -> Optional[list]:
-    """从 Hermes agent/lsp 服务取 LSP 诊断（服务未启用时返回 None）。"""
+    """从 Fulilian agent/lsp 服务取 LSP 诊断（服务未启用时返回 None）。"""
     try:
         from agent.lsp import get_service
 

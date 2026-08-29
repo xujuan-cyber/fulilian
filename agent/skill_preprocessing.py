@@ -9,10 +9,10 @@ from fulilian_cli._subprocess_compat import IS_WINDOWS, windows_hide_flags
 
 logger = logging.getLogger(__name__)
 
-# Matches ${HERMES_SKILL_DIR} / ${HERMES_SESSION_ID} tokens in SKILL.md.
-# Tokens that don't resolve (e.g. ${HERMES_SESSION_ID} with no session) are
+# Matches ${FULILIAN_SKILL_DIR} / ${FULILIAN_SESSION_ID} tokens in SKILL.md.
+# Tokens that don't resolve (e.g. ${FULILIAN_SESSION_ID} with no session) are
 # left as-is so the user can debug them.
-_SKILL_TEMPLATE_RE = re.compile(r"\$\{(HERMES_SKILL_DIR|HERMES_SESSION_ID)\}")
+_SKILL_TEMPLATE_RE = re.compile(r"\$\{(FULILIAN_SKILL_DIR|FULILIAN_SESSION_ID)\}")
 
 # Matches inline shell snippets like:  !`date +%Y-%m-%d`
 # Non-greedy, single-line only -- no newlines inside the backticks.
@@ -41,7 +41,7 @@ def substitute_template_vars(
     skill_dir: Path | None,
     session_id: str | None,
 ) -> str:
-    """Replace ${HERMES_SKILL_DIR} / ${HERMES_SESSION_ID} in skill content.
+    """Replace ${FULILIAN_SKILL_DIR} / ${FULILIAN_SESSION_ID} in skill content.
 
     Only substitutes tokens for which a concrete value is available --
     unresolved tokens are left in place so the author can spot them.
@@ -53,9 +53,9 @@ def substitute_template_vars(
 
     def _replace(match: re.Match) -> str:
         token = match.group(1)
-        if token == "HERMES_SKILL_DIR" and skill_dir_str:
+        if token == "FULILIAN_SKILL_DIR" and skill_dir_str:
             return skill_dir_str
-        if token == "HERMES_SESSION_ID" and session_id:
+        if token == "FULILIAN_SESSION_ID" and session_id:
             return str(session_id)
         return match.group(0)
 

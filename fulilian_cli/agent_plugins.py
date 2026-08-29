@@ -1,7 +1,7 @@
 """Compatibility helpers for Agent Plugins v1 portable directory packages.
 
 This module validates the versioned portable format locally and translates its
-supported components into records consumed by Hermes' existing skill and MCP
+supported components into records consumed by Fulilian' existing skill and MCP
 runtimes. It deliberately performs no schema fetching and imports no plugin
 Python code.
 """
@@ -353,7 +353,7 @@ def _validate_remote_url(url: object) -> str:
 def _translate_remote(config: Mapping[str, Any]) -> Dict[str, Any]:
     """Translate a portable ``streamable-http`` entry into native MCP config.
 
-    The returned record targets Hermes' existing URL-based MCP runtime.
+    The returned record targets Fulilian' existing URL-based MCP runtime.
     ``strict_redirect_headers`` instructs the runtime to drop the configured
     headers on any cross-origin redirect, which the v1 spec requires for
     portable packages (configured headers must not be forwarded to a
@@ -561,7 +561,7 @@ def read_agent_plugin_manifest(plugin_root: Path) -> tuple[dict, tuple[AgentPlug
 def has_enabled_agent_plugin_mcp(raw_config: Mapping[str, Any]) -> bool:
     """Compatibility wrapper for the shared PluginManager MCP probe.
 
-    Directory scanning belongs to :mod:`hermes_cli.plugins` so startup gating
+    Directory scanning belongs to :mod:`fulilian_cli.plugins` so startup gating
     and full plugin discovery cannot drift apart. Keep this import-compatible
     entry point for callers that used the original helper.
     """

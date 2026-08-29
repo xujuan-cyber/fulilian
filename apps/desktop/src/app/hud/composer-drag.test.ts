@@ -7,8 +7,8 @@ import { useHudComposerDrag } from './composer-drag'
 /** Matches LONG_PRESS_MS in composer-drag.ts. */
 const LONG_PRESS_MS = 140
 
-const desktopWindow = window as unknown as { hermesDesktop?: Window['hermesDesktop'] }
-const initialHermesDesktop = desktopWindow.hermesDesktop
+const desktopWindow = window as unknown as { fulilianDesktop?: Window['fulilianDesktop'] }
+const initialFulilianDesktop = desktopWindow.fulilianDesktop
 
 const moveBy = vi.fn()
 const setWorkspaceTransfer = vi.fn()
@@ -34,17 +34,17 @@ beforeEach(() => {
   moveBy.mockClear()
   setWorkspaceTransfer.mockClear()
   setWindowSize(620, 320)
-  desktopWindow.hermesDesktop = { hud: { moveBy, setWorkspaceTransfer } } as unknown as Window['hermesDesktop']
+  desktopWindow.fulilianDesktop = { hud: { moveBy, setWorkspaceTransfer } } as unknown as Window['fulilianDesktop']
 })
 
 afterEach(() => {
   vi.useRealTimers()
   document.body.innerHTML = ''
 
-  if (initialHermesDesktop) {
-    desktopWindow.hermesDesktop = initialHermesDesktop
+  if (initialFulilianDesktop) {
+    desktopWindow.fulilianDesktop = initialFulilianDesktop
   } else {
-    delete desktopWindow.hermesDesktop
+    delete desktopWindow.fulilianDesktop
   }
 })
 

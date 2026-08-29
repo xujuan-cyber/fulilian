@@ -55,7 +55,7 @@ beforeEach(() => {
   setLaunchMode.mockResolvedValue({ ok: true, registry: { ...registry, launchMode: 'last-used' } })
   setPrimary.mockResolvedValue({ ok: true, registry: { ...registry, primary: 'homelab' } })
   test.mockResolvedValue({ ok: true, reachable: true })
-  Object.defineProperty(window, 'hermesDesktop', {
+  Object.defineProperty(window, 'fulilianDesktop', {
     configurable: true,
     value: { connections: { list, remove, save, setLaunchMode, setPrimary, test } }
   })
@@ -112,7 +112,7 @@ describe('ConnectionsRegistrySection', () => {
 
     const localKind = screen.getByRole('button', { name: 'Local' }) as HTMLButtonElement
     expect(localKind.disabled).toBe(true)
-    expect(screen.getByRole('button', { name: 'Hermes Cloud' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Fulilian Cloud' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Remote gateway' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'SSH' })).toBeTruthy()
   })

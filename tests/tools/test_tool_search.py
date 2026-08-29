@@ -71,7 +71,7 @@ class TestClassification:
     def test_core_tools_never_defer(self):
         """The critical invariant from the OpenClaw report."""
         from tools.tool_search import is_deferrable_tool_name
-        # Sample of core tools from _HERMES_CORE_TOOLS.
+        # Sample of core tools from _FULILIAN_CORE_TOOLS.
         for core_name in ["terminal", "read_file", "write_file", "patch",
                           "search_files", "todo", "memory", "browser_navigate",
                           "web_search", "session_search", "clarify",
@@ -89,12 +89,12 @@ class TestClassification:
         """Session-gated GUI tools stay direct and stay off the global core list."""
         from tools.registry import discover_builtin_tools
         from tools.tool_search import is_deferrable_tool_name
-        from toolsets import _HERMES_CORE_TOOLS
+        from toolsets import _FULILIAN_CORE_TOOLS
 
         discover_builtin_tools()
         for name in ("read_window_below", "apply_layout", "project_list"):
             assert not is_deferrable_tool_name(name), name
-            assert name not in _HERMES_CORE_TOOLS
+            assert name not in _FULILIAN_CORE_TOOLS
 
     def test_gui_surface_alone_does_not_activate_the_bridge(self):
         from tools.registry import discover_builtin_tools

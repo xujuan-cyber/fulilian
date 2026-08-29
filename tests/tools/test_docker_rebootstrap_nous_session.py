@@ -24,7 +24,7 @@ def _terminal_nous_state():
     """On-disk shape after a terminal quarantine: tokens cleared, marker set."""
     return {
         "portal_base_url": "https://portal.example.com",
-        "client_id": "hermes-cli-vps",
+        "client_id": "fulilian-cli-vps",
         "last_auth_error": {
             "provider": "nous",
             "code": "invalid_grant",
@@ -36,7 +36,7 @@ def _terminal_nous_state():
 def _healthy_nous_state():
     return {
         "portal_base_url": "https://portal.example.com",
-        "client_id": "hermes-cli-vps",
+        "client_id": "fulilian-cli-vps",
         "access_token": "live-at",
         "refresh_token": "live-rt",
     }
@@ -53,7 +53,7 @@ _FRESH_SEED = json.dumps({
     "providers": {
         "nous": {
             "portal_base_url": "https://portal.example.com",
-            "client_id": "hermes-cli-vps",
+            "client_id": "fulilian-cli-vps",
             "access_token": "FRESH-at",
             "refresh_token": "FRESH-rt",
         }
@@ -97,7 +97,7 @@ def test_timezone_less_local_timestamp_is_incomparable(tmp_path):
     seed = json.dumps({
         "providers": {
             "nous": {
-                "client_id": "hermes-cli-vps",
+                "client_id": "fulilian-cli-vps",
                 "access_token": "FRESH-at",
                 "refresh_token": "FRESH-rt",
                 "obtained_at": "2026-07-14T19:05:00Z",
@@ -111,5 +111,5 @@ def test_timezone_less_local_timestamp_is_incomparable(tmp_path):
 def test_terminal_entry_missing_marker_is_not_terminal(tmp_path):
     """No last_auth_error at all (e.g. a merely-expired but not-quarantined
     entry) → not terminal, no re-seed."""
-    auth = _write_auth(tmp_path, {"nous": {"client_id": "hermes-cli-vps"}})
+    auth = _write_auth(tmp_path, {"nous": {"client_id": "fulilian-cli-vps"}})
     assert mod.reseed_if_terminal(auth, _FRESH_SEED) == "not_terminal"

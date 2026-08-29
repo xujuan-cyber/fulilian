@@ -1,4 +1,4 @@
-"""Helpers for loading Hermes .env files consistently across entrypoints."""
+"""Helpers for loading Fulilian .env files consistently across entrypoints."""
 
 from __future__ import annotations
 
@@ -20,19 +20,19 @@ from utils import atomic_replace, fast_safe_load
 _CREDENTIAL_SUFFIXES = ("_API_KEY", "_TOKEN", "_SECRET", "_KEY")
 
 # Names we've already warned about during this process, so repeated
-# load_hermes_dotenv() calls (user env + project env, gateway hot-reload,
+# load_fulilian_dotenv() calls (user env + project env, gateway hot-reload,
 # tests) don't spam the same warning multiple times.
 _WARNED_KEYS: set[str] = set()
 
 # Paths we've already emitted a UTF-32 refuse-to-mangle warning for.
-# load_hermes_dotenv can call _sanitize_env_file_if_needed multiple times
+# load_fulilian_dotenv can call _sanitize_env_file_if_needed multiple times
 # for the same file (user env + project env + hot-reload); once per path
 # is enough.
 _WARNED_UTF32_PATHS: set[str] = set()
 
 # Map of env-var name → source label ("bitwarden", etc.) for credentials
-# that were injected by an external secret source during load_hermes_dotenv().
-# Used by setup / `hermes model` flows to label detected credentials so
+# that were injected by an external secret source during load_fulilian_dotenv().
+# Used by setup / `fulilian model` flows to label detected credentials so
 # users understand WHERE a key came from when their .env doesn't contain it
 # directly (otherwise the "credentials detected ✓" line looks identical to
 # the .env case and they don't know Bitwarden is wired up).
@@ -41,9 +41,9 @@ _SECRET_SOURCES: dict[str, str] = {}
 # across profiles and may be overwritten by a later home's source apply.
 _SECRET_SOURCE_VALUES_BY_HOME: dict[str, dict[str, str]] = {}
 
-# HERMES_HOME paths we've already pulled external secrets for during this
-# process.  ``load_hermes_dotenv()`` is called at module-import time from
-# several hot modules (cli.py, hermes_cli/main.py, run_agent.py,
+# FULILIAN_HOME paths we've already pulled external secrets for during this
+# process.  ``load_fulilian_dotenv()`` is called at module-import time from
+# several hot modules (cli.py, fulilian_cli/main.py, run_agent.py,
 # trajectory_compressor.py, gateway/run.py, ...), so without this guard the
 # Bitwarden status line gets printed 3-5x per startup.  Bitwarden's own
 # in-process cache prevents redundant network calls, but the print, the
@@ -52,13 +52,13 @@ _APPLIED_HOMES: set[str] = set()
 _SECRET_SOURCE_CACHE_LOCK = threading.RLock()
 
 
-def _known_hermes_env_keys() -> set[str]:
-    """Return the combined set of known Hermes env-var keys.
+def _known_fulilian_env_keys() -> set[str]:
+    """Return the combined set of known Fulilian env-var keys.
 
     Includes both ``OPTIONAL_ENV_VARS`` (setup-flow vars with metadata) and
     ``_EXTRA_ENV_KEYS`` (provider/platform keys managed outside the setup
     wizard).  Lazy-imported to avoid circular-dependency during early-bootstrap
-    ``load_hermes_dotenv()`` calls.
+    ``load_fulilian_dotenv()`` calls.
     """
     from fulilian_cli.config import _EXTRA_ENV_KEYS
     from fulilian_cli.config_defaults import OPTIONAL_ENV_VARS
@@ -66,7 +66,7 @@ def _known_hermes_env_keys() -> set[str]:
     return set(OPTIONAL_ENV_VARS.keys()) | set(_EXTRA_ENV_KEYS)
 
 
-# Behavioral routing keys a parent Hermes process injects into child env and
+# Behavioral routing keys a parent Fulilian process injects into child env and
 # that silently redirect a profile onto the wrong provider path (ACP auth
 # method, copilot-ACP endpoints). These — and ONLY these — are scrubbed from
 # os.environ at startup when absent from the profile's .env. Credential keys
@@ -74,10 +74,10 @@ def _known_hermes_env_keys() -> set[str]:
 # documented way to supply them, and read-time secret-scope checks
 # (agent/secret_scope.py) own cross-profile credential isolation.
 _PROFILE_MANAGED_ENV_KEYS: frozenset[str] = frozenset({
-    "HERMES_ACP_AUTH_METHOD",
-    "HERMES_ACP_AUTO_APPROVE",
-    "HERMES_COPILOT_ACP_COMMAND",
-    "HERMES_COPILOT_ACP_ARGS",
+    "FULILIAN_ACP_AUTH_METHOD",
+    "FULILIAN_ACP_AUTO_APPROVE",
+    "FULILIAN_COPILOT_ACP_COMMAND",
+    "FULILIAN_COPILOT_ACP_ARGS",
     "COPILOT_CLI_PATH",
     "COPILOT_ACP_BASE_URL",
 })
@@ -112,7 +112,7 @@ def _env_keys_defined_in_dotenv(path: Path) -> set[str]:
 
 
 def _clear_known_keys_missing_from_dotenv(path: Path) -> None:
-    """Remove inherited profile-managed Hermes keys absent from ``.env``.
+    """Remove inherited profile-managed Fulilian keys absent from ``.env``.
 
     After the profile's ``.env`` has been loaded with ``override=True``,
     scan the file for which profile-managed keys it explicitly defines and
@@ -121,14 +121,14 @@ def _clear_known_keys_missing_from_dotenv(path: Path) -> None:
 
     Scope is deliberately NARROW: only ``_PROFILE_MANAGED_ENV_KEYS`` —
     behavioral routing keys (ACP auth method, copilot-ACP endpoints) that a
-    parent Hermes process injects and that silently change *which provider
+    parent Fulilian process injects and that silently change *which provider
     path* a profile uses. Provider API keys (OPENAI_API_KEY, …) are
     intentionally excluded: users legitimately export those in their shell
     (``export OPENAI_API_KEY=…`` is a documented flow — see
-    ``tests/hermes_cli/test_dump_env_visibility.py``), and a startup scrub
+    ``tests/fulilian_cli/test_dump_env_visibility.py``), and a startup scrub
     cannot distinguish a shell export from parent-process leakage. Clearing
     the full known-key set would delete user-exported credentials on every
-    ``hermes`` invocation.
+    ``fulilian`` invocation.
 
     Cross-profile *credential* isolation is handled at read time by
     ``agent.secret_scope.get_secret`` (scope authoritative under
@@ -149,7 +149,7 @@ def get_secret_source(env_var: str) -> str | None:
     """Return the label of the secret source that supplied ``env_var``, if any.
 
     Returns ``"bitwarden"`` for keys pulled from Bitwarden Secrets Manager
-    during the current process's ``load_hermes_dotenv()`` call.  Returns
+    during the current process's ``load_fulilian_dotenv()`` call.  Returns
     ``None`` for keys that came from ``.env``, the shell environment, or
     aren't tracked.  The returned label is metadata only: credential-pool
     persistence may store it to explain the origin of a borrowed secret, but
@@ -159,15 +159,15 @@ def get_secret_source(env_var: str) -> str | None:
 
 
 def get_secret_source_values(
-    hermes_home: str | os.PathLike,
+    fulilian_home: str | os.PathLike,
 ) -> dict[str, str]:
-    """Return the external-secret value snapshot for ``hermes_home``."""
-    home_key = str(Path(hermes_home).resolve())
+    """Return the external-secret value snapshot for ``fulilian_home``."""
+    home_key = str(Path(fulilian_home).resolve())
     return dict(_SECRET_SOURCE_VALUES_BY_HOME.get(home_key, {}))
 
 
 def hydrate_profile_secret_sources(
-    hermes_home: str | os.PathLike,
+    fulilian_home: str | os.PathLike,
 ) -> dict[str, str]:
     """Resolve one profile's configured sources without mutating ``os.environ``.
 
@@ -182,7 +182,7 @@ def hydrate_profile_secret_sources(
     plaintext ``.env`` entries.
     """
     with _SECRET_SOURCE_CACHE_LOCK:
-        return _hydrate_profile_secret_sources(Path(hermes_home))
+        return _hydrate_profile_secret_sources(Path(fulilian_home))
 
 
 def _hydrate_profile_secret_sources(home: Path) -> dict[str, str]:
@@ -208,7 +208,7 @@ def _hydrate_profile_secret_sources(home: Path) -> dict[str, str]:
             if _is_global_env(name)
         }
         local_env.update(load_env_file(home / ".env"))
-        # Mirror load_hermes_dotenv()'s .op.env bootstrap: the 1Password
+        # Mirror load_fulilian_dotenv()'s .op.env bootstrap: the 1Password
         # service-account token lives in <home>/.op.env (gitignored), not
         # .env. Without seeding it here a cold profile configured for the
         # supported .op.env flow fails 1Password hydration (sweeper review
@@ -217,7 +217,7 @@ def _hydrate_profile_secret_sources(home: Path) -> dict[str, str]:
         if op_env.exists():
             for _name, _value in load_env_file(op_env).items():
                 local_env.setdefault(_name, _value)
-        local_env["HERMES_HOME"] = str(home)
+        local_env["FULILIAN_HOME"] = str(home)
         report = apply_all(cfg, home, environ=local_env)
     except Exception:  # noqa: BLE001 — preserve fail-open startup behavior
         return {}
@@ -239,7 +239,7 @@ def _hydrate_profile_secret_sources(home: Path) -> dict[str, str]:
 
 
 def reset_secret_source_cache() -> None:
-    """Forget which HERMES_HOME paths have already had external secrets applied.
+    """Forget which FULILIAN_HOME paths have already had external secrets applied.
 
     The first call to ``_apply_external_secret_sources(home_path)`` in a
     process pulls from Bitwarden (or other configured backend), records the
@@ -333,7 +333,7 @@ def _sanitize_loaded_credentials() -> None:
             "rich-text editor, or web page that substituted lookalike\n"
             "  Unicode glyphs for ASCII letters. If authentication fails "
             "(e.g. \"API key not valid\"), re-copy the key from the\n"
-            "  provider's dashboard and run `hermes setup` (or edit the "
+            "  provider's dashboard and run `fulilian setup` (or edit the "
             ".env file in a plain-text editor).",
             file=sys.stderr,
         )
@@ -373,7 +373,7 @@ def _sanitize_env_file_if_needed(path: Path) -> None:
     to the errors=replace corruption path. Order of BOM checks matters:
     UTF-32-LE's BOM starts with UTF-16-LE's FF FE.
 
-    ``hermes_cli.config._sanitize_env_lines`` normalizes line endings while
+    ``fulilian_cli.config._sanitize_env_lines`` normalizes line endings while
     treating content after the first ``=`` as opaque for boundary discovery.
     """
     if not path.exists():
@@ -467,16 +467,16 @@ def _sanitize_env_file_if_needed(path: Path) -> None:
         pass  # best-effort — don't block gateway startup
 
 
-def load_hermes_dotenv(
+def load_fulilian_dotenv(
     *,
-    hermes_home: str | os.PathLike | None = None,
+    fulilian_home: str | os.PathLike | None = None,
     project_env: str | os.PathLike | None = None,
     load_external_secrets: bool = True,
 ) -> list[Path]:
-    """Load Hermes environment files with user config taking precedence.
+    """Load Fulilian environment files with user config taking precedence.
 
     Behavior:
-    - `~/.hermes/.env` overrides stale shell-exported values when present.
+    - `~/.fulilian/.env` overrides stale shell-exported values when present.
     - project `.env` acts as a dev fallback and only fills missing values when
       the user env exists.
     - if no user env exists, the project `.env` also overrides stale shell vars.
@@ -486,7 +486,7 @@ def load_hermes_dotenv(
     """
     loaded: list[Path] = []
 
-    home_path = Path(hermes_home or os.getenv("HERMES_HOME", Path.home() / ".hermes"))
+    home_path = Path(fulilian_home or os.getenv("FULILIAN_HOME", Path.home() / ".fulilian"))
     user_env = home_path / ".env"
     project_env_path = Path(project_env) if project_env else None
 
@@ -499,7 +499,7 @@ def load_hermes_dotenv(
     if user_env.exists():
         _load_dotenv_with_fallback(user_env, override=True)
         loaded.append(user_env)
-        # Mirror reload_env() known-key cleanup so inherited Hermes keys
+        # Mirror reload_env() known-key cleanup so inherited Fulilian keys
         # absent from this profile's .env do not leak into the runtime.
         _clear_known_keys_missing_from_dotenv(user_env)
 
@@ -510,7 +510,7 @@ def load_hermes_dotenv(
     # .op.env is gitignored — the service-account token never enters the
     # committed .env file.
     # Users on systemd can alternatively use:
-    #   EnvironmentFile=-/path/to/.hermes/.op.env
+    #   EnvironmentFile=-/path/to/.fulilian/.op.env
     # in their gateway unit, which takes precedence (override=False below
     # ensures .op.env never clobbers a token already in the environment).
     op_env = home_path / ".op.env"
@@ -526,7 +526,7 @@ def load_hermes_dotenv(
     #    invocation that must not import optional secret-manager libraries
     #    (Bitwarden → cryptography → ``_rust.pyd``) into the process that
     #    replaces that same environment on Windows (#73381, #86735).
-    # 2. A fresh ``hermes update`` retry just completed a deferred dependency
+    # 2. A fresh ``fulilian update`` retry just completed a deferred dependency
     #    install before importing this module.  Do not remap native
     #    secret-source dependencies in that same updater process or the
     #    self-lock preflight will recreate the marker and exit 2 again.
@@ -540,11 +540,11 @@ def load_hermes_dotenv(
 
     # config.yaml is the documented source of truth for terminal.* settings,
     # but the dotenv loads above run with override=True — so a stale
-    # TERMINAL_ENV=docker left in ~/.hermes/.env (e.g. written by an older
-    # `hermes setup` before the user switched terminal.backend in config.yaml)
+    # TERMINAL_ENV=docker left in ~/.fulilian/.env (e.g. written by an older
+    # `fulilian setup` before the user switched terminal.backend in config.yaml)
     # silently wins again on every reload. Startup launchers bridge
     # config→env once, but long-lived processes (gateway per-turn reload,
-    # cron standalone runs) call load_hermes_dotenv() repeatedly and used to
+    # cron standalone runs) call load_fulilian_dotenv() repeatedly and used to
     # flip the effective backend back to the stale .env value mid-session
     # (#29186, #67323). Re-apply config.yaml's explicit terminal keys last so
     # the documented config path always wins. Runs after _apply_managed_env()
@@ -558,7 +558,7 @@ def load_hermes_dotenv(
 def _reapply_terminal_config_bridge(home_path: Path) -> None:
     """Re-assert config.yaml's explicit ``terminal.*`` keys over reloaded .env.
 
-    Delegates to ``hermes_cli.config.apply_terminal_config_to_env`` — the
+    Delegates to ``fulilian_cli.config.apply_terminal_config_to_env`` — the
     single shared bridge (same one terminal_tool's fallback and the TUI/
     dashboard launchers use) — so key coverage, explicit-keys-only override
     semantics, cwd placeholder handling, and the managed-scope overlay can't
@@ -566,14 +566,14 @@ def _reapply_terminal_config_bridge(home_path: Path) -> None:
     config.yaml's ``terminal`` section override env values; a config.yaml
     without a terminal section leaves .env/shell selections untouched.
 
-    Scoped to the process HERMES_HOME: the shared bridge reads the
+    Scoped to the process FULILIAN_HOME: the shared bridge reads the
     process-global config, so re-applying it for a *different* profile's
-    ``load_hermes_dotenv(hermes_home=...)`` call would bridge the wrong
+    ``load_fulilian_dotenv(fulilian_home=...)`` call would bridge the wrong
     profile's config. Fail-open — a config problem must never break dotenv
     loading (the historical env-driven behavior still applies).
     """
     try:
-        if Path(home_path).resolve() != _process_hermes_home().resolve():
+        if Path(home_path).resolve() != _process_fulilian_home().resolve():
             return
         from fulilian_cli.config import apply_terminal_config_to_env
 
@@ -585,7 +585,7 @@ def _reapply_terminal_config_bridge(home_path: Path) -> None:
 def _apply_managed_env() -> None:
     """Apply the managed-scope .env last, with override, so it beats user/shell.
 
-    Managed scope is machine-global (independent of HERMES_HOME / profile). v1
+    Managed scope is machine-global (independent of FULILIAN_HOME / profile). v1
     enforcement is "applied last with override=True" — at the end of startup load
     ``os.environ`` holds the managed value for every managed key, beating both the
     user ``.env`` and any pre-existing shell export. This deliberately inverts the
@@ -618,20 +618,20 @@ def _apply_external_secret_sources(home_path: Path) -> None:
     """Pull secrets from every enabled external source into env.
 
     Runs AFTER dotenv loads so .env values are visible (sources use them
-    to locate bootstrap tokens) but BEFORE the rest of Hermes reads
+    to locate bootstrap tokens) but BEFORE the rest of Fulilian reads
     ``os.environ`` for credentials.  Any failure here is logged and
     swallowed — external secret sources must never block startup.
 
     The heavy lifting (source ordering, mapped-beats-bulk precedence,
     first-claim-wins conflict handling, override semantics, provenance)
     lives in ``agent.secret_sources.registry.apply_all``; this wrapper
-    owns the once-per-HERMES_HOME guard, the post-apply ASCII
+    owns the once-per-FULILIAN_HOME guard, the post-apply ASCII
     sanitization sweep, the ``_SECRET_SOURCES`` provenance map that
     UI surfaces read, and the startup status lines.
 
     Idempotent within a process: subsequent calls for the same
-    ``home_path`` are no-ops.  ``load_hermes_dotenv()`` runs at import
-    time from several hot modules (cli.py, hermes_cli/main.py,
+    ``home_path`` are no-ops.  ``load_fulilian_dotenv()`` runs at import
+    time from several hot modules (cli.py, fulilian_cli/main.py,
     run_agent.py, trajectory_compressor.py, ...), so without this guard
     the status lines would print 3-5x per CLI startup.  Use
     ``reset_secret_source_cache()`` if you need to force a re-pull
@@ -652,7 +652,7 @@ def _apply_external_secret_sources(home_path: Path) -> None:
         # No secrets section (or everything disabled at parse level).  Not
         # marked applied either — the re-parse is a cheap fast_safe_load and
         # leaving the home unmarked lets a process pick up a config change
-        # on its next load_hermes_dotenv() call instead of never.
+        # on its next load_fulilian_dotenv() call instead of never.
         return
 
     # Defer the registry import until we know a secrets source is enabled —
@@ -662,7 +662,7 @@ def _apply_external_secret_sources(home_path: Path) -> None:
     # A config with no enabled sources costs one dict scan; a config with
     # enabled sources pays the crypto load exactly once, on demand.
     # NOTE: only keys that smell like a real secret source trigger the import —
-    # a generic dict entry must not force crypto load on every hermes launch.
+    # a generic dict entry must not force crypto load on every fulilian launch.
     # We whitelist by *shape* (source dict with enabled flag) rather than
     # hardcoding names, so plugin/test sources pass through unknown keys.
     any_enabled = any(
@@ -689,7 +689,7 @@ def _apply_external_secret_sources(home_path: Path) -> None:
         return
 
     # A real fetch attempt happened (success OR error).  Mark the home now
-    # so the 3-5 import-time load_hermes_dotenv() calls per startup don't
+    # so the 3-5 import-time load_fulilian_dotenv() calls per startup don't
     # re-fetch / re-print — error retries within one process are opt-in via
     # reset_secret_source_cache().  Marking AFTER the attempt (not before,
     # see #40597) is what lets the earlier failure paths stay retryable.
@@ -700,7 +700,7 @@ def _apply_external_secret_sources(home_path: Path) -> None:
         # user-supplied and might have the same copy-paste corruption as
         # a manually edited .env (see #6843).
         _sanitize_loaded_credentials()
-        # Remember where each var came from so setup / `hermes model`
+        # Remember where each var came from so setup / `fulilian model`
         # flows can label detected credentials with "(from Bitwarden)" /
         # "(from 1Password)" — otherwise users see "credentials ✓" with
         # no hint the value came from a vault rather than .env.
@@ -767,13 +767,13 @@ def _load_secrets_config(home_path: Path) -> dict:
     if not config_path.exists():
         return {}
     # Prefer the shared (mtime, size)-keyed raw-config cache — this is the
-    # first config.yaml read in a normal `hermes` startup, so populating the
-    # shared cache here lets main.py's early bridge and hermes_logging reuse
+    # first config.yaml read in a normal `fulilian` startup, so populating the
+    # shared cache here lets main.py's early bridge and fulilian_logging reuse
     # the same parse (one parse per process instead of 3-4). Falls back to a
     # direct isolated parse if the shared reader is unavailable, preserving
     # the "malformed config can't take down dotenv loading" property (the
     # shared reader also swallows parse errors and returns {}).
-    if home_path == _process_hermes_home():
+    if home_path == _process_fulilian_home():
         try:
             from fulilian_cli.config import read_raw_config
 
@@ -793,11 +793,11 @@ def _load_secrets_config(home_path: Path) -> dict:
     return data.get("secrets") or {}
 
 
-def _process_hermes_home() -> Path:
-    """The HERMES_HOME the shared config cache is keyed to."""
+def _process_fulilian_home() -> Path:
+    """The FULILIAN_HOME the shared config cache is keyed to."""
     try:
-        from fulilian_constants import get_hermes_home
+        from fulilian_constants import get_fulilian_home
 
-        return get_hermes_home()
+        return get_fulilian_home()
     except Exception:
-        return Path.home() / ".hermes"
+        return Path.home() / ".fulilian"

@@ -24,7 +24,7 @@ from pathlib import Path
 
 import pytest
 
-from hermes_state import (
+from fulilian_state import (
     SessionDB,
     repair_state_db_schema,
 )
@@ -62,7 +62,7 @@ def test_repair_refuses_while_another_connection_holds_the_db(tmp_path):
     out-of-process holder via ``PRAGMA locking_mode=EXCLUSIVE`` + a
     ``BEGIN IMMEDIATE`` that a concurrent connection makes fail with
     SQLITE_BUSY through the WAL index. On SQLite builds carrying the
-    WAL-reset bug (and on NFS/SMB) Hermes deliberately runs ``state.db`` in
+    WAL-reset bug (and on NFS/SMB) Fulilian deliberately runs ``state.db`` in
     ``journal_mode=DELETE``, where a held reader takes only a SHARED lock and
     ``BEGIN IMMEDIATE`` can still acquire RESERVED — so the probe cannot see
     the holder and the guard fails open. In DELETE mode repair is instead

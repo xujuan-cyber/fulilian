@@ -2,7 +2,7 @@
 
 The desktop bug is routing: messaging rows owned by ``winefox`` were DELETE'd
 against the primary ``default`` backend. This uses real SessionDB files under a
-temp HERMES_HOME — two profile databases, no mocks — and shows:
+temp FULILIAN_HOME — two profile databases, no mocks — and shows:
 
 - default DELETE does not remove the winefox row (already_absent)
 - winefox DELETE removes it
@@ -11,7 +11,7 @@ temp HERMES_HOME — two profile databases, no mocks — and shows:
 
 from __future__ import annotations
 
-from hermes_state import SessionDB
+from fulilian_state import SessionDB
 
 
 def _profile_db(home, name: str) -> SessionDB:
@@ -21,7 +21,7 @@ def _profile_db(home, name: str) -> SessionDB:
 
 
 def test_delete_against_default_does_not_remove_winefox_messaging_session(tmp_path):
-    home = tmp_path / ".hermes"
+    home = tmp_path / ".fulilian"
     default_db = _profile_db(home, "default")
     winefox_db = _profile_db(home, "winefox")
     sid = "tg-winefox-realpath"

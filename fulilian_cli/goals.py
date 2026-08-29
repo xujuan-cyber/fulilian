@@ -1,8 +1,8 @@
-"""Persistent session goals — the Ralph loop for Hermes.
+"""Persistent session goals — the Ralph loop for Fulilian.
 
 A goal is a free-form user objective that stays active across turns. After
 each turn completes, a small judge call asks an auxiliary model "is this
-goal satisfied by the assistant's last response?". If not, Hermes feeds a
+goal satisfied by the assistant's last response?". If not, Fulilian feeds a
 continuation prompt back into the same session and keeps working until the
 goal is done, turn budget is exhausted, the user pauses/clears it, or the
 user sends a new message (which takes priority and pauses the goal loop).
@@ -21,7 +21,7 @@ Design notes / invariants:
   prompt and also pauses the goal loop for that turn (we still re-judge
   after, so if the user's message happens to complete the goal the judge
   will say ``done``).
-- This module has zero hard dependency on ``cli.HermesCLI`` or the gateway
+- This module has zero hard dependency on ``cli.FulilianCLI`` or the gateway
   runner — both wire the same ``GoalManager`` in.
 
 Nothing in this module touches the agent's system prompt or toolset.
@@ -677,7 +677,7 @@ _DB_BOOTSTRAP_LOOP_WAIT_S = 0.25
 # The call that STARTS the bootstrap (cold cache, nothing in flight)
 # waits this long instead of the short window above. A fresh state.db
 # init measures ~300ms warm on a fast machine: schema DDL, FTS table
-# creation, and the first hermes_cli.config import (journal-mode
+# creation, and the first fulilian_cli.config import (journal-mode
 # resolution). It is longer on a slow CI box, and it is well past 0.25s.
 # The old window dropped the first /goal write. The response said
 # "Goal set" but nothing persisted. The longer window is a bounded
@@ -691,22 +691,22 @@ def _bootstrap_session_db(home: str, done: threading.Event) -> None:
     """Construct SessionDB off-loop and populate the cache (worker thread)."""
     try:
         from fulilian_constants import (
-            reset_hermes_home_override,
-            set_hermes_home_override,
+            reset_fulilian_home_override,
+            set_fulilian_home_override,
         )
-        from hermes_state import SessionDB
+        from fulilian_state import SessionDB
 
         # Bind the caller's home for this thread. The cache key is the
         # caller's scoped home, so the constructed SessionDB must point at
         # that home's state.db too. Without the override, a multiplexed
         # worker thread resolves the process env (the default profile's
-        # HERMES_HOME). It then caches the wrong profile's DB under this
+        # FULILIAN_HOME). It then caches the wrong profile's DB under this
         # profile's key.
-        token = set_hermes_home_override(home)
+        token = set_fulilian_home_override(home)
         try:
             db = SessionDB()
         finally:
-            reset_hermes_home_override(token)
+            reset_fulilian_home_override(token)
     except Exception as exc:  # pragma: no cover
         logger.debug("GoalManager: background SessionDB() raised (%s)", exc)
         db = None
@@ -718,11 +718,11 @@ def _bootstrap_session_db(home: str, done: threading.Event) -> None:
 
 
 def _get_session_db() -> Optional[Any]:
-    """Return a SessionDB instance for the current HERMES_HOME.
+    """Return a SessionDB instance for the current FULILIAN_HOME.
 
     SessionDB has no built-in singleton, but opening a new connection per
     /goal call would thrash the file. We cache one instance per
-    ``hermes_home`` path so profile switches still pick up the right DB.
+    ``fulilian_home`` path so profile switches still pick up the right DB.
     Defensive against import/instantiation failures so tests and
     non-standard launchers can still use the GoalManager.
 
@@ -740,10 +740,10 @@ def _get_session_db() -> Optional[Any]:
     cached instance.
     """
     try:
-        from fulilian_constants import get_hermes_home
-        from hermes_state import SessionDB
+        from fulilian_constants import get_fulilian_home
+        from fulilian_state import SessionDB
 
-        home = str(get_hermes_home())
+        home = str(get_fulilian_home())
     except Exception as exc:  # pragma: no cover
         logger.debug("GoalManager: SessionDB bootstrap failed (%s)", exc)
         return None
@@ -2032,7 +2032,7 @@ class GoalManager:
                 "message": (
                     f"⏸ Goal paused — judge API returned errors "
                     f"({state.consecutive_transport_failures} turns). "
-                    "Check the goal_judge provider/key in ~/.hermes/config.yaml:\n"
+                    "Check the goal_judge provider/key in ~/.fulilian/config.yaml:\n"
                     "  auxiliary:\n"
                     "    goal_judge:\n"
                     "      provider: deepseek\n"
@@ -2062,7 +2062,7 @@ class GoalManager:
                 "message": (
                     f"⏸ Goal paused — the judge model ({state.consecutive_parse_failures} turns) "
                     "isn't returning the required JSON verdict. Route the judge to a stricter "
-                    "model in ~/.hermes/config.yaml:\n"
+                    "model in ~/.fulilian/config.yaml:\n"
                     "  auxiliary:\n"
                     "    goal_judge:\n"
                     "      provider: openrouter\n"
@@ -2179,7 +2179,7 @@ def run_kanban_goal_loop(
     """Drive a kanban worker through a Ralph-style goal loop.
 
     The dispatcher spawns a goal-mode worker exactly like a normal worker
-    (``hermes -p <profile> chat -q "work kanban task <id>"``). The worker's
+    (``fulilian -p <profile> chat -q "work kanban task <id>"``). The worker's
     first turn has already run by the time this is called; ``first_response``
     is that turn's reply. From here we:
 

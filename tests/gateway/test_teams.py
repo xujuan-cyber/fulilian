@@ -334,11 +334,11 @@ class TestTeamsPluginRegistration:
 class TestTeamsInteractiveSetup:
     def test_interactive_setup_persists_credentials(self, tmp_path, monkeypatch):
         """Regression for #19173: interactive_setup must import prompt helpers
-        from fulilian_cli.cli_output (not hermes_cli.config) and persist
+        from fulilian_cli.cli_output (not fulilian_cli.config) and persist
         credentials to .env without crashing.
         """
-        hermes_home = tmp_path / "hermes"
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        fulilian_home = tmp_path / "fulilian"
+        monkeypatch.setenv("FULILIAN_HOME", str(fulilian_home))
 
         import fulilian_cli.cli_output as cli_output_mod
 
@@ -351,7 +351,7 @@ class TestTeamsInteractiveSetup:
 
         _teams_mod.interactive_setup()
 
-        env_text = (hermes_home / ".env").read_text(encoding="utf-8")
+        env_text = (fulilian_home / ".env").read_text(encoding="utf-8")
         assert "TEAMS_CLIENT_ID=client-id" in env_text
         assert "TEAMS_TENANT_ID=tenant-id" in env_text
 

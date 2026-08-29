@@ -15,8 +15,8 @@ import sys
 
 import pytest
 
-import hermes_state
-from hermes_state import (
+import fulilian_state
+from fulilian_state import (
     apply_database_pragmas,
     resolve_synchronous_level,
 )
@@ -35,7 +35,7 @@ def _level(conn):
 def _config(monkeypatch, database_section):
     """Point apply_database_pragmas at an in-memory config.
 
-    It imports `hermes_cli.config` lazily inside the function body, so the
+    It imports `fulilian_cli.config` lazily inside the function body, so the
     patch has to land on that module rather than on a name in this one.
     """
     import fulilian_cli.config as config_mod
@@ -186,7 +186,7 @@ class TestMacOSFloor:
         conn = _wal_conn(tmp_path)
         try:
             monkeypatch.setattr(sys, "platform", "darwin")
-            hermes_state._enforce_macos_synchronous_full(conn)
+            fulilian_state._enforce_macos_synchronous_full(conn)
             assert _level(conn) == 2
             with caplog.at_level("WARNING"):
                 apply_database_pragmas(conn, db_label="state.db")

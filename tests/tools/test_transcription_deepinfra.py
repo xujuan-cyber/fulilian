@@ -4,7 +4,7 @@
 then delegates to ``_transcribe_openai``. These two tests pin the
 STT-specific gating (so an unset DEEPINFRA_API_KEY refuses dispatch) and
 the delegation happy path; shared catalog/tag-filter behavior is covered
-in ``tests/hermes_cli/test_api_key_providers.py``.
+in ``tests/fulilian_cli/test_api_key_providers.py``.
 """
 
 from __future__ import annotations

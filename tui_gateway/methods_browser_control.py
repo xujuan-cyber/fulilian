@@ -3,8 +3,8 @@
 The dashboard's browser controller (the extension that physically drives a
 browser) registers itself over the authenticated ``/api/ws`` JSON-RPC
 gateway. Everything here is bound to the **server-minted identity** that the
-dashboard auth layer stamped onto the WS connection: ``hermes_cli.web_server``
-consumes the single-use ticket and records ``ws._hermes_auth_identity``, the
+dashboard auth layer stamped onto the WS connection: ``fulilian_cli.web_server``
+consumes the single-use ticket and records ``ws._fulilian_auth_identity``, the
 WS transport carries it as ``WSTransport.auth_identity``, and the client can
 never name its own principal (a spoofed ``principal_id`` param is ignored and
 replaced by a server-derived digest of the authenticated identity).

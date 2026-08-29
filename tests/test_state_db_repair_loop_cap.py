@@ -24,8 +24,8 @@ import sqlite3
 from pathlib import Path
 from unittest.mock import patch
 
-import hermes_state
-from hermes_state import (
+import fulilian_state
+from fulilian_state import (
     _MAX_MALFORMED_BACKUPS,
     _MAX_PERSISTENT_REPAIR_ATTEMPTS,
     _backup_db_file,
@@ -76,7 +76,7 @@ class TestPersistentAttemptCap:
         # Budget burned: the next call must refuse WITHOUT running surgery
         # (and without taking another backup).
         backups_before = len(_existing_malformed_backups(db))
-        with patch.object(hermes_state, "_repair_state_db_schema_locked") as surgery:
+        with patch.object(fulilian_state, "_repair_state_db_schema_locked") as surgery:
             report = repair_state_db_schema(db)
         surgery.assert_not_called()
         assert report["repaired"] is False

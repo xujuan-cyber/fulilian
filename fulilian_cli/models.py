@@ -1,8 +1,8 @@
 """
 Canonical model catalogs and lightweight validation helpers.
 
-Add, remove, or reorder entries here — both `hermes setup` and
-`hermes` provider-selection will pick up the change automatically.
+Add, remove, or reorder entries here — both `fulilian setup` and
+`fulilian` provider-selection will pick up the change automatically.
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from typing import Any, NamedTuple, Optional, TYPE_CHECKING
 if TYPE_CHECKING:
     from typing import TypeGuard
 
-from fulilian_cli import __version__ as _HERMES_VERSION
+from fulilian_cli import __version__ as _FULILIAN_VERSION
 from fulilian_cli.urllib_security import open_credentialed_url, url_origin
 from utils import atomic_json_write, base_url_host_matches
 
@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 # Identify ourselves so endpoints fronted by Cloudflare's Browser Integrity
 # Check (error 1010) don't reject the default ``Python-urllib/*`` signature.
-_HERMES_USER_AGENT = f"hermes-cli/{_HERMES_VERSION}"
+_FULILIAN_USER_AGENT = f"fulilian-cli/{_FULILIAN_VERSION}"
 
 COPILOT_BASE_URL = "https://api.githubcopilot.com"
 COPILOT_MODELS_URL = f"{COPILOT_BASE_URL}/models"
@@ -177,7 +177,7 @@ def _codex_curated_models() -> list[str]:
     """Derive the openai-codex curated list from codex_models.py.
 
     Single source of truth: DEFAULT_CODEX_MODELS + forward-compat synthesis.
-    This keeps the gateway /model picker in sync with the CLI `hermes model`
+    This keeps the gateway /model picker in sync with the CLI `fulilian model`
     flow without maintaining a separate static list.
     """
     from fulilian_cli.codex_models import DEFAULT_CODEX_MODELS, _finalize_codex_models
@@ -186,7 +186,7 @@ def _codex_curated_models() -> list[str]:
 
 # Static fallback for xAI when the models.dev disk cache is empty (fresh
 # install, offline first run, etc.). Mirrors the xAI-direct model IDs from
-# $HERMES_HOME/models_dev_cache.json as of 2026-04-28. Whenever xAI renames
+# $FULILIAN_HOME/models_dev_cache.json as of 2026-04-28. Whenever xAI renames
 # or retires a model, the disk cache picks it up on the next refresh and the
 # fallback here only matters until that refresh lands.
 #
@@ -223,7 +223,7 @@ def _xai_promote_top(ids: list[str]) -> list[str]:
 
 
 def _xai_merge_curated_extras(ids: list[str]) -> list[str]:
-    """Append Hermes-curated xAI models that are missing from models.dev."""
+    """Append Fulilian-curated xAI models that are missing from models.dev."""
     out = list(ids)
     for extra in _XAI_CURATED_EXTRAS:
         if extra in out:
@@ -241,7 +241,7 @@ def _xai_finalize_catalog(ids: list[str]) -> list[str]:
 def _xai_curated_models() -> list[str]:
     """Offline curated floor for xAI / xAI OAuth pickers.
 
-    Reads $HERMES_HOME/models_dev_cache.json directly (no network). Falls
+    Reads $FULILIAN_HOME/models_dev_cache.json directly (no network). Falls
     back to ``_XAI_STATIC_FALLBACK`` when the cache is empty or unreadable.
     """
     try:
@@ -567,7 +567,7 @@ _PROVIDER_MODELS: dict[str, list[str]] = {
     # deepseek-v4-flash-free delisted (promo ended, now 401s).
     # big-pickle + mimo-v2.5-free delisted (UA-gated: the relay 429s
     # FreeUsageLimitError for every client except User-Agent
-    # "opencode/latest"; we send honest Hermes attribution and don't
+    # "opencode/latest"; we send honest Fulilian attribution and don't
     # impersonate other clients — verified 2026-08-21).
     "opencode-free": [
         "x-preview-f-free",  # "Ox Alpha" stealth model — free, 1M ctx, ZDR
@@ -691,7 +691,7 @@ _PROVIDER_MODELS: dict[str, list[str]] = {
     # endpoint has no /models listing route, so without this entry the
     # /model picker only ever shows the currently-configured model.
     # Model IDs use the "google/" publisher prefix Vertex's openapi
-    # endpoint expects (see hermes_cli/model_setup_flows.py).
+    # endpoint expects (see fulilian_cli/model_setup_flows.py).
     # Entries validated live against a GCP project (global region,
     # HTTP 200) as of 2026-07-21 (PR #68767).
     "vertex": [
@@ -814,7 +814,7 @@ def union_with_portal_free_recommendations(
 
     For free-tier users this is the source of truth: any model the Portal
     flags as free should be selectable, even if the user is running an
-    older Hermes that doesn't ship that model in its hardcoded curated
+    older Fulilian that doesn't ship that model in its hardcoded curated
     list.  This function returns an augmented ``(model_ids, pricing)``
     pair where:
 
@@ -880,7 +880,7 @@ def union_with_portal_paid_recommendations(
     the docs-hosted catalog manifest has been rebuilt since the last release.
 
     For paid-tier users this lets newly-launched paid models surface in the
-    picker even if the user is running an older Hermes that doesn't ship
+    picker even if the user is running an older Fulilian that doesn't ship
     them in its hardcoded curated list. This function returns an augmented
     ``(model_ids, pricing)`` pair where:
 
@@ -995,8 +995,8 @@ _nous_recommended_cache: dict[str, tuple[dict[str, Any], float]] = {}
 
 def _nous_recommended_disk_path() -> "Path":
     """Disk path for the persisted recommended-models cache."""
-    from fulilian_constants import get_hermes_home
-    return get_hermes_home() / "cache" / "nous_recommended_cache.json"
+    from fulilian_constants import get_fulilian_home
+    return get_fulilian_home() / "cache" / "nous_recommended_cache.json"
 
 
 def _read_nous_recommended_disk(base: str) -> dict[str, Any] | None:
@@ -1065,7 +1065,7 @@ def fetch_nous_recommended_models(
     ``force_refresh=True`` to bypass the in-process cache.
 
     A successful live fetch is also persisted to a per-base disk cache
-    (``$HERMES_HOME/cache/nous_recommended_cache.json``) as last-known-good.
+    (``$FULILIAN_HOME/cache/nous_recommended_cache.json``) as last-known-good.
     When the live fetch fails (network, parse, non-2xx) and the in-process
     cache is empty, the disk copy is returned instead of ``{}`` — so a
     transient Portal hiccup no longer silently drops the free/paid model
@@ -1199,18 +1199,18 @@ def get_nous_recommended_aux_model(
 # ---------------------------------------------------------------------------
 # Canonical provider list — single source of truth for provider identity.
 # Every code path that lists, displays, or iterates providers derives from
-# this list:  hermes model, /model, list_authenticated_providers.
+# this list:  fulilian model, /model, list_authenticated_providers.
 #
 # Fields:
 #   slug        — internal provider ID (used in config.yaml, --provider flag)
 #   label       — short display name
-#   tui_desc    — longer description for the `hermes model` interactive picker
+#   tui_desc    — longer description for the `fulilian model` interactive picker
 # ---------------------------------------------------------------------------
 
 class ProviderEntry(NamedTuple):
     slug: str
     label: str
-    tui_desc: str   # detailed description for `hermes model` TUI
+    tui_desc: str   # detailed description for `fulilian model` TUI
 
 CANONICAL_PROVIDERS: list[ProviderEntry] = [
     ProviderEntry("nous",           "Nous Portal",              "Nous Portal (Everything your agent needs, 300+ models with bundled tool use)"),
@@ -1280,9 +1280,9 @@ _PROVIDER_LABELS["custom"] = "Custom endpoint"  # special case: not a named prov
 # ---------------------------------------------------------------------------
 # Provider groups — DISPLAY ONLY
 #
-# Some vendors expose several Hermes provider slugs (one per endpoint /
+# Some vendors expose several Fulilian provider slugs (one per endpoint /
 # auth method: global API, China API, OAuth coding plan, ...). Listing every
-# slug as a top-level row in the interactive `hermes model` / setup wizard /
+# slug as a top-level row in the interactive `fulilian model` / setup wizard /
 # Telegram `/model` pickers makes that list long and noisy.
 #
 # These groups fold related slugs under one top-level row in INTERACTIVE
@@ -1324,7 +1324,7 @@ def provider_group_for_slug(slug: str) -> str:
 def group_providers(slugs):
     """Fold a flat ordered slug iterable into picker rows by provider group.
 
-    DISPLAY ONLY. Used by every interactive picker (``hermes model``, the
+    DISPLAY ONLY. Used by every interactive picker (``fulilian model``, the
     setup wizard, the Telegram ``/model`` keyboard) so grouping is identical
     across surfaces.
 
@@ -1473,7 +1473,7 @@ _PROVIDER_ALIASES = {
 }
 
 
-# In-repo fallback for the model Hermes silently lands on when the user never
+# In-repo fallback for the model Fulilian silently lands on when the user never
 # picked one (GUI onboarding confirm card, empty ``model.default``,
 # provider-set-but-model-missing resolution). The AUTHORITATIVE source is the
 # remote model catalog: the manifest labels exactly one entry per provider
@@ -1535,8 +1535,8 @@ def pick_silent_default_model(model_ids: list[str], provider: str = "openrouter"
 #
 # This is deliberately a network-free lookup for the hot resolution path
 # (cache-only catalog read). The *interactive* default (GUI onboarding /
-# ``hermes model``) uses the richer free/paid-tier-aware resolver — see
-# ``get_recommended_default_model`` in hermes_cli/web_server.py and
+# ``fulilian model``) uses the richer free/paid-tier-aware resolver — see
+# ``get_recommended_default_model`` in fulilian_cli/web_server.py and
 # ``partition_nous_models_by_tier`` — which can hit the Portal.
 _SILENT_DEFAULT_PROVIDERS: frozenset[str] = frozenset({"nous", "openrouter"})
 
@@ -1545,11 +1545,11 @@ def get_default_model_for_provider(provider: str) -> str:
     """Return a cost-safe default model for a provider, or "" if unknown.
 
     Used as a NON-INTERACTIVE fallback when a provider is configured but no
-    model was ever selected (e.g. ``hermes auth add openai-codex`` without
-    ``hermes model``, or a profile that sets ``provider`` with no ``model``).
+    model was ever selected (e.g. ``fulilian auth add openai-codex`` without
+    ``fulilian model``, or a profile that sets ``provider`` with no ``model``).
 
     For most providers this is the first entry in ``_PROVIDER_MODELS`` — the
-    same model the ``hermes model`` picker offers first. For metered aggregators
+    same model the ``fulilian model`` picker offers first. For metered aggregators
     whose curated list is ordered most-capable-first, that entry is also the
     most EXPENSIVE one, so silently defaulting to it is a billing footgun.
     Those providers (``_SILENT_DEFAULT_PROVIDERS``) resolve through the
@@ -1580,7 +1580,7 @@ def _openrouter_model_is_free(pricing: Any) -> bool:
 def _openrouter_model_supports_tools(item: Any) -> bool:
     """Return True when the model's ``supported_parameters`` advertise tool calling.
 
-    hermes-agent is tool-calling-first — every provider path assumes the model
+    fulilian-agent is tool-calling-first — every provider path assumes the model
     can invoke tools. Models that don't advertise ``tools`` in their
     ``supported_parameters`` (e.g. image-only or completion-only models) cannot
     be driven by the agent loop and would fail at the first tool call.
@@ -1665,7 +1665,7 @@ _openrouter_reasoning_caps_failed_at: float | None = None
 #
 # The in-process caches are always cold in a short-lived process, and every
 # consumer is on a hot path that must never block on HTTP — so without a disk
-# copy, `hermes -p`, a cron job, or a freshly booted gateway answers
+# copy, `fulilian -p`, a cron job, or a freshly booted gateway answers
 # "capability unknown" for its whole first turn and falls back to the
 # conservative wire shape. Persisting the parsed catalog makes every run after
 # the first correct from its first turn.
@@ -1677,8 +1677,8 @@ _REASONING_CAPS_DISK_TTL_SECONDS = 24 * 3600
 
 
 def _reasoning_caps_disk_path() -> Path:
-    from fulilian_constants import get_hermes_home
-    return get_hermes_home() / "cache" / "reasoning_caps.json"
+    from fulilian_constants import get_fulilian_home
+    return get_fulilian_home() / "cache" / "reasoning_caps.json"
 
 
 def _read_reasoning_caps_disk() -> dict[str, Any]:
@@ -1791,7 +1791,7 @@ def _fetch_reasoning_caps_catalog(
 
     Sends a User-Agent because the Portal 403s anonymous catalog reads.
     """
-    headers = {"Accept": "application/json", "User-Agent": _HERMES_USER_AGENT}
+    headers = {"Accept": "application/json", "User-Agent": _FULILIAN_USER_AGENT}
     try:
         req = urllib.request.Request(url, headers=headers)
         with _urlopen_model_catalog_request(req, timeout=timeout) as resp:
@@ -2075,14 +2075,14 @@ def fetch_openrouter_models(
         live_item = live_by_id.get(preferred_id)
         if live_item is None:
             continue
-        # Hide models that don't advertise tool-calling support — hermes-agent
+        # Hide models that don't advertise tool-calling support — fulilian-agent
         # requires it and surfacing them leads to immediate runtime failures
         # when the user selects them. Ported from Kilo-Org/kilocode#9068.
         if not _openrouter_model_supports_tools(live_item):
             continue
         if preferred_id == silent_default:
             # Keep the silent-default badge through the live refresh so the
-            # picker shows which model Hermes lands on when none is selected.
+            # picker shows which model Fulilian lands on when none is selected.
             desc = "default"
         else:
             desc = "free" if _openrouter_model_is_free(live_item.get("pricing")) else ""
@@ -2411,7 +2411,7 @@ def fetch_models_with_pricing(
     url = cache_key + "/v1/models"
     headers: dict[str, str] = {
         "Accept": "application/json",
-        "User-Agent": _HERMES_USER_AGENT,
+        "User-Agent": _FULILIAN_USER_AGENT,
     }
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
@@ -2467,9 +2467,9 @@ def fetch_ai_gateway_pricing(
     *,
     force_refresh: bool = False,
 ) -> dict[str, dict[str, str]]:
-    """Fetch Vercel AI Gateway /v1/models and return hermes-shaped pricing.
+    """Fetch Vercel AI Gateway /v1/models and return fulilian-shaped pricing.
 
-    Vercel uses ``input`` / ``output`` field names; hermes's picker expects
+    Vercel uses ``input`` / ``output`` field names; fulilian's picker expects
     ``prompt`` / ``completion``. This translates. Cache read/write field names
     already match.
     """
@@ -2679,7 +2679,7 @@ def _fetch_novita_pricing(
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Accept": "application/json",
-        "User-Agent": _HERMES_USER_AGENT,
+        "User-Agent": _FULILIAN_USER_AGENT,
     }
 
     try:
@@ -2745,7 +2745,7 @@ def list_available_providers() -> list[dict[str, str]]:
     Checks which providers have valid credentials configured.
 
     Derives the provider list from :data:`CANONICAL_PROVIDERS` (single
-    source of truth shared with ``hermes model``, ``/model``, etc.).
+    source of truth shared with ``fulilian model``, ``/model``, etc.).
     """
     # Derive display order from canonical list + custom
     provider_order = [p.slug for p in CANONICAL_PROVIDERS] + ["custom"]
@@ -3067,7 +3067,7 @@ def probe_ollama_local_models(
 
     try:
         url = root.rstrip("/") + "/api/tags"
-        request_headers = {"User-Agent": _HERMES_USER_AGENT}
+        request_headers = {"User-Agent": _FULILIAN_USER_AGENT}
         request_headers.update(headers or {})
         req = urllib.request.Request(url, headers=request_headers)
         with _urlopen_model_catalog_request(req, timeout=timeout) as resp:
@@ -3578,10 +3578,10 @@ def _find_openrouter_slug(model_name: str) -> Optional[str]:
 
 
 def normalize_provider(provider: Optional[str]) -> str:
-    """Normalize provider aliases to Hermes' canonical provider ids.
+    """Normalize provider aliases to Fulilian' canonical provider ids.
 
     Note: ``"auto"`` passes through unchanged — use
-    ``hermes_cli.auth.resolve_provider()`` to resolve it to a concrete
+    ``fulilian_cli.auth.resolve_provider()`` to resolve it to a concrete
     provider based on credentials and environment.
     """
     normalized = (provider or "openrouter").strip().lower()
@@ -3646,7 +3646,7 @@ def _strip_vendor_prefix(model_id: str) -> str:
 
 
 def model_supports_fast_mode(model_id: Optional[str]) -> bool:
-    """Return whether Hermes should expose the /fast toggle for this model."""
+    """Return whether Fulilian should expose the /fast toggle for this model."""
     from agent.model_metadata import is_grok_46_family
 
     return (
@@ -3704,8 +3704,8 @@ def _resolve_copilot_catalog_api_key() -> str:
       2. ``read_credential_pool("copilot")`` — a token (typically a
          ``gho_*`` from device-code login, or a fine-grained PAT) stored in
          ``auth.json`` under ``credential_pool.copilot[]``. The pool is
-         populated by ``hermes auth add copilot`` and by ``_seed_from_env``
-         when the env var is set in ``~/.hermes/.env``.
+         populated by ``fulilian auth add copilot`` and by ``_seed_from_env``
+         when the env var is set in ``~/.fulilian/.env``.
 
     Without (2), users whose only Copilot credential is in the pool see
     the ``/model`` picker fall back to a stale hardcoded list because the
@@ -3874,7 +3874,7 @@ def provider_model_ids(provider: Optional[str], *, force_refresh: bool = False) 
     falling back to static lists. For providers in ``_MODELS_DEV_PREFERRED``
     (opencode-go/zen, xiaomi, deepseek, smaller inference providers, etc.),
     models.dev entries are merged on top of curated so new models released
-    on the platform appear in ``/model`` without a Hermes release.
+    on the platform appear in ``/model`` without a Fulilian release.
     """
     requested = str(provider or "").strip().lower()
     if requested == "ollama":
@@ -3928,7 +3928,7 @@ def provider_model_ids(provider: Optional[str], *, force_refresh: bool = False) 
 
         # Pass the live OAuth access token so the picker matches whatever
         # ChatGPT lists for this account right now (new models appear without
-        # a Hermes release). Falls back to the hardcoded catalog if no token
+        # a Fulilian release). Falls back to the hardcoded catalog if no token
         # or the endpoint is unreachable.
         access_token = None
         try:
@@ -3961,7 +3961,7 @@ def provider_model_ids(provider: Optional[str], *, force_refresh: bool = False) 
             pass
         # Live failed (or no creds). Fall back to the docs-hosted manifest
         # — NOT the in-repo _PROVIDER_MODELS["nous"] snapshot — so newly
-        # added Portal models still surface without a Hermes release.
+        # added Portal models still surface without a Fulilian release.
         manifest_ids = get_curated_nous_model_ids()
         if manifest_ids:
             return manifest_ids
@@ -4033,7 +4033,7 @@ def provider_model_ids(provider: Optional[str], *, force_refresh: bool = False) 
             # moderation and legacy chat models — none of which belong in the
             # agent model picker. For official hosts, intersect the live list
             # with our curated agentic catalog so ``/model`` matches what
-            # ``hermes model`` shows.
+            # ``fulilian model`` shows.
             from fulilian_cli.providers import is_official_openai_host
 
             is_default_openai = is_official_openai_host(base)
@@ -4180,7 +4180,7 @@ def provider_model_ids(provider: Optional[str], *, force_refresh: bool = False) 
 # HTTP roundtrips just to render the provider list.
 #
 # Cache strategy:
-#   - One JSON file at $HERMES_HOME/provider_models_cache.json
+#   - One JSON file at $FULILIAN_HOME/provider_models_cache.json
 #   - Per-provider entries keyed by (provider, credential fingerprint)
 #   - Credential fingerprint = sha256 of env-var values that the provider
 #     normally reads. Swap your OPENAI_API_KEY and the entry invalidates.
@@ -4270,8 +4270,8 @@ def _spawn_swr_refresh(cache_key: str, refresh_fn=None) -> None:
 
 
 def _provider_models_cache_path() -> Path:
-    from fulilian_constants import get_hermes_home
-    return get_hermes_home() / "provider_models_cache.json"
+    from fulilian_constants import get_fulilian_home
+    return get_fulilian_home() / "provider_models_cache.json"
 
 
 def _credential_fingerprint(provider: str) -> str:
@@ -4282,7 +4282,7 @@ def _credential_fingerprint(provider: str) -> str:
     for that provider. We hash AT LEAST the api-key + base-url env vars
     declared in ``PROVIDER_REGISTRY``. For OAuth-backed providers
     (codex, copilot, anthropic-via-claude-code, nous portal), the
-    relevant tokens live in ``$HERMES_HOME/auth.json`` and external
+    relevant tokens live in ``$FULILIAN_HOME/auth.json`` and external
     credential files. Rather than parse every shape, we additionally
     fold the mtime of those files into the fingerprint so refreshes
     after re-auth bust the cache.
@@ -4307,7 +4307,7 @@ def _credential_fingerprint(provider: str) -> str:
 
     # Effective configured endpoint: config.yaml's model.base_url changes the
     # endpoint discovery probes (data-residency hosts) without touching any
-    # env var, so it must change the fingerprint too or `hermes config set
+    # env var, so it must change the fingerprint too or `fulilian config set
     # model.base_url ...` keeps serving the previous endpoint's cached
     # catalog until TTL expiry.
     if provider in ("openai", "openai-api"):
@@ -4340,9 +4340,9 @@ def _credential_fingerprint(provider: str) -> str:
 
     # OAuth / external-file mtimes that change on re-auth
     try:
-        from fulilian_constants import get_hermes_home
+        from fulilian_constants import get_fulilian_home
         for rel in ("auth.json", "credentials.json"):
-            p = get_hermes_home() / rel
+            p = get_fulilian_home() / rel
             try:
                 parts.append(f"{rel}@{p.stat().st_mtime_ns}")
             except FileNotFoundError:
@@ -4516,7 +4516,7 @@ def clear_provider_models_cache(provider: Optional[str] = None) -> None:
 
     ``provider=None`` wipes everything; otherwise only that provider's
     entry is removed. Used by ``/model --refresh`` and
-    ``hermes model --refresh``.
+    ``fulilian model --refresh``.
     """
     try:
         # Native Ollama tags are keyed by root URL rather than provider slug.
@@ -4680,7 +4680,7 @@ def copilot_default_headers(*, is_agent_turn: bool = True) -> dict[str, str]:
     except ImportError:
         return {
             "Editor-Version": COPILOT_EDITOR_VERSION,
-            "User-Agent": "HermesAgent/1.0",
+            "User-Agent": "FulilianAgent/1.0",
             "Openai-Intent": "conversation-edits",
             "x-initiator": "agent" if is_agent_turn else "user",
         }
@@ -4853,7 +4853,7 @@ def _lmstudio_server_root(base_url: Optional[str]) -> Optional[str]:
 
 def _lmstudio_request_headers(api_key: Optional[str] = None) -> dict:
     """Build HTTP headers for LM Studio native API requests."""
-    headers = {"User-Agent": _HERMES_USER_AGENT}
+    headers = {"User-Agent": _FULILIAN_USER_AGENT}
     token = str(api_key or "").strip()
     if token:
         headers["Authorization"] = f"Bearer {token}"
@@ -5201,7 +5201,7 @@ _COPILOT_MODEL_ALIASES = {
     "anthropic/claude-sonnet-4": "claude-sonnet-4",
     "anthropic/claude-sonnet-4.5": "claude-sonnet-4.5",
     "anthropic/claude-haiku-4.5": "claude-haiku-4.5",
-    # Dash-notation fallbacks: Hermes' default Claude IDs elsewhere use
+    # Dash-notation fallbacks: Fulilian' default Claude IDs elsewhere use
     # hyphens (anthropic native format), but Copilot's API only accepts
     # dot-notation.  Accept both so users who configure copilot + a
     # default hyphenated Claude model don't hit HTTP 400
@@ -5330,7 +5330,7 @@ def copilot_model_api_mode(
         return "codex_responses"
 
     # Copilot's Claude models are exposed through its OpenAI-compatible chat
-    # endpoint, not through Hermes' native Anthropic adapter. The live catalog may
+    # endpoint, not through Fulilian' native Anthropic adapter. The live catalog may
     # advertise /v1/messages, but the Copilot token/header scheme is handled by
     # the OpenAI client path; selecting anthropic_messages would send the wrong
     # auth/wire shape. Keep non-GPT Copilot slots on chat_completions.
@@ -5474,8 +5474,8 @@ def opencode_zen_free_headers() -> dict:
     return {
         "Authorization": "",
         "HTTP-Referer": "https://hermes-agent.nousresearch.com",
-        "X-Title": "Hermes Agent",
-        "User-Agent": f"HermesAgent/{_v}",
+        "X-Title": "FuLiLian",
+        "User-Agent": f"FulilianAgent/{_v}",
     }
 
 
@@ -5719,9 +5719,9 @@ def probe_api_models(
         candidates.append((alternate_base, True))
 
     tried: list[str] = []
-    headers: dict[str, str] = {"User-Agent": _HERMES_USER_AGENT}
+    headers: dict[str, str] = {"User-Agent": _FULILIAN_USER_AGENT}
     if urllib.parse.urlparse(normalized).hostname == "generativelanguage.googleapis.com":
-        headers["X-Goog-Api-Client"] = f"hermes-agent/{_HERMES_VERSION}"
+        headers["X-Goog-Api-Client"] = f"fulilian-agent/{_FULILIAN_VERSION}"
     if api_key and api_mode == "anthropic_messages":
         headers["x-api-key"] = api_key
         headers["anthropic-version"] = "2023-06-01"
@@ -5787,7 +5787,7 @@ _DEEPINFRA_SURFACE_TAGS: frozenset[str] = frozenset({
 })
 
 _DEEPINFRA_DEFAULT_BASE_URL = "https://api.deepinfra.com/v1/openai"
-_DEEPINFRA_MODELS_QUERY = "filter=true&sort_by=hermes"
+_DEEPINFRA_MODELS_QUERY = "filter=true&sort_by=fulilian"
 
 # Module-level cache for the full tagged catalog response, keyed by base URL.
 # Each value is the parsed ``data`` list. Surface-specific filters read from
@@ -5831,7 +5831,7 @@ def _fetch_deepinfra_catalog(
         if last_fail is not None and (time.monotonic() - last_fail) < _DEEPINFRA_CATALOG_NEG_TTL:
             return None
 
-    headers: dict[str, str] = {"User-Agent": _HERMES_USER_AGENT}
+    headers: dict[str, str] = {"User-Agent": _FULILIAN_USER_AGENT}
     api_key = os.getenv("DEEPINFRA_API_KEY", "").strip()
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
@@ -6003,7 +6003,7 @@ def _fetch_ai_gateway_models(timeout: float = 5.0) -> Optional[list[str]]:
     url = base_url.rstrip("/") + "/models"
     headers: dict[str, str] = {
         "Authorization": f"Bearer {api_key}",
-        "User-Agent": _HERMES_USER_AGENT,
+        "User-Agent": _FULILIAN_USER_AGENT,
     }
     req = urllib.request.Request(url, headers=headers)
     try:
@@ -6206,8 +6206,8 @@ def _strip_ollama_cloud_suffix(model_id: str) -> str:
 
 def _ollama_cloud_cache_path() -> Path:
     """Return the path for the Ollama Cloud model cache."""
-    from fulilian_constants import get_hermes_home
-    return get_hermes_home() / "ollama_cloud_models_cache.json"
+    from fulilian_constants import get_fulilian_home
+    return get_fulilian_home() / "ollama_cloud_models_cache.json"
 
 
 def _load_ollama_cloud_cache(*, ignore_ttl: bool = False) -> Optional[dict]:
@@ -6365,7 +6365,7 @@ def validate_requested_model(
                 return {"accepted": True, "persist": True, "recognized": True, "message": None}
             return {
                 "accepted": False, "persist": False, "recognized": False,
-                "message": f"MoA preset `{requested}` was not found. Run `hermes moa list`.",
+                "message": f"MoA preset `{requested}` was not found. Run `fulilian moa list`.",
             }
         except Exception as exc:
             return {
@@ -6473,7 +6473,7 @@ def validate_requested_model(
                 "recognized": False,
                 "message": (
                     f"Note: could not reach this Ollama endpoint's `/api/tags` model listing to validate `{requested}`. "
-                    "Hermes will save the model name, but local Ollama model discovery could not verify it."
+                    "Fulilian will save the model name, but local Ollama model discovery could not verify it."
                 ),
             }
         if requested_for_lookup in set(ollama_models):
@@ -6560,7 +6560,7 @@ def validate_requested_model(
 
         message = (
             f"Note: could not reach this custom endpoint's model listing at `{probe.get('probed_url')}`. "
-            f"Hermes will still save `{requested}`, but the endpoint should expose `/models` for verification."
+            f"Fulilian will still save `{requested}`, but the endpoint should expose `/models` for verification."
         )
         if api_mode == "anthropic_messages":
             message += (
@@ -6584,7 +6584,7 @@ def validate_requested_model(
         except Exception:
             catalog_models = []
         # Ineligible ``-900k`` aliases (e.g. `gpt-5.5-900k`) must be rejected
-        # BEFORE the hidden-slug soft-accept below: the suffix is a Hermes
+        # BEFORE the hidden-slug soft-accept below: the suffix is a Fulilian
         # picker convention, so an unknown `*-900k` name can never be a real
         # hidden provider slug — soft-accepting one silently runs at 272K on
         # a different model than the user thinks (#92797 review).
@@ -6727,7 +6727,7 @@ def validate_requested_model(
                 "message": (
                     f"Note: `{requested}` was not found in the MiniMax catalog."
                     f"{suggestion_text}"
-                    "\n  MiniMax does not expose a /models endpoint, so Hermes cannot verify the model name."
+                    "\n  MiniMax does not expose a /models endpoint, so Fulilian cannot verify the model name."
                     "\n  The model may still work if it exists on the server."
                 ),
             }
@@ -6881,7 +6881,7 @@ def validate_requested_model(
             # before rejecting.  Providers may omit models from their live
             # listing that are still valid (stale cache, partial rollout,
             # gated previews).  Use the pure-catalog helper (no extra live
-            # fetch) so we only accept models Hermes actually ships.  (#46850)
+            # fetch) so we only accept models Fulilian actually ships.  (#46850)
             #
             # EXCEPTION: official OpenAI hosts (canonical api.openai.com and
             # the data-residency regional hosts).  Their /v1/models listing is

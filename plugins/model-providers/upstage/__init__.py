@@ -13,10 +13,10 @@ from providers.base import ProviderProfile
 # ``solar-mini-250127`` are covered too.
 _NON_REASONING_MODEL_MARKERS = ("solar-mini", "syn-pro")
 
-# When the user hasn't picked a reasoning effort, Hermes passes
+# When the user hasn't picked a reasoning effort, Fulilian passes
 # reasoning_config=None. Solar's own server default is "minimal" (reasoning
 # off), which is the wrong default for an agentic workload. We default reasoning
-# ON at this effort — matching the "medium (default)" that Hermes' /reasoning
+# ON at this effort — matching the "medium (default)" that Fulilian' /reasoning
 # panel shows for an unset config, so the displayed default and the real wire
 # value agree. An explicit saved setting or a `/reasoning <level>` change is
 # always honored over this default; `/reasoning none` disables it.
@@ -75,7 +75,7 @@ class UpstageProfile(ProviderProfile):
         if reasoning_config.get("enabled") is False:
             return {}, top_level
 
-        # Map Hermes' effort vocabulary onto Solar's accepted set via the
+        # Map Fulilian' effort vocabulary onto Solar's accepted set via the
         # shared clamp (agent.reasoning_effort). minimal → omit (Solar's
         # minimal means off); unknown-but-enabled bespoke levels collapse to
         # high rather than silently downgrading (#62650 precedent).

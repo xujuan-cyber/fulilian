@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 import pytest
 
-from acp_adapter.server import HermesACPAgent, _named_custom_provider_catalogs
+from acp_adapter.server import FulilianACPAgent, _named_custom_provider_catalogs
 from acp_adapter.session import SessionManager
 from acp.schema import SessionModelState
 
@@ -43,8 +43,8 @@ class TestNamedCustomProviderCatalogs:
                 }
             }
         )
-        with patch("hermes_cli.config.load_config", return_value=cfg), patch(
-            "hermes_cli.model_switch._fetch_picker_live_models",
+        with patch("fulilian_cli.config.load_config", return_value=cfg), patch(
+            "fulilian_cli.model_switch._fetch_picker_live_models",
             return_value=["model-a", "model-b"],
         ):
             catalogs = _named_custom_provider_catalogs()
@@ -68,8 +68,8 @@ class TestNamedCustomProviderCatalogs:
                 }
             }
         )
-        with patch("hermes_cli.config.load_config", return_value=cfg), patch(
-            "hermes_cli.model_switch._fetch_picker_live_models", return_value=None
+        with patch("fulilian_cli.config.load_config", return_value=cfg), patch(
+            "fulilian_cli.model_switch._fetch_picker_live_models", return_value=None
         ):
             assert _named_custom_provider_catalogs() == []
 
@@ -84,8 +84,8 @@ class TestNamedCustomProviderCatalogs:
                 }
             }
         )
-        with patch("hermes_cli.config.load_config", return_value=cfg), patch(
-            "hermes_cli.model_switch._fetch_picker_live_models", return_value=None
+        with patch("fulilian_cli.config.load_config", return_value=cfg), patch(
+            "fulilian_cli.model_switch._fetch_picker_live_models", return_value=None
         ):
             assert _named_custom_provider_catalogs() == []
 
@@ -101,8 +101,8 @@ class TestNamedCustomProviderCatalogs:
                 }
             ]
         )
-        with patch("hermes_cli.config.load_config", return_value=cfg), patch(
-            "hermes_cli.model_switch._fetch_picker_live_models", return_value=None
+        with patch("fulilian_cli.config.load_config", return_value=cfg), patch(
+            "fulilian_cli.model_switch._fetch_picker_live_models", return_value=None
         ):
             catalogs = _named_custom_provider_catalogs()
 
@@ -118,11 +118,11 @@ class TestNamedCustomProviderCatalogs:
                 }
             }
         )
-        with patch("hermes_cli.config.load_config", return_value=cfg), patch(
-            "hermes_cli.models.should_use_ollama_native_catalog",
+        with patch("fulilian_cli.config.load_config", return_value=cfg), patch(
+            "fulilian_cli.models.should_use_ollama_native_catalog",
             return_value=True,
         ), patch(
-            "hermes_cli.model_switch._fetch_picker_live_models",
+            "fulilian_cli.model_switch._fetch_picker_live_models",
             return_value=["qwen3:1.7b"],
         ) as fetch:
             catalogs = _named_custom_provider_catalogs()
@@ -146,11 +146,11 @@ class TestNamedCustomProviderCatalogs:
                 }
             ]
         )
-        with patch("hermes_cli.config.load_config", return_value=cfg), patch(
-            "hermes_cli.models.should_use_ollama_native_catalog",
+        with patch("fulilian_cli.config.load_config", return_value=cfg), patch(
+            "fulilian_cli.models.should_use_ollama_native_catalog",
             return_value=True,
         ), patch(
-            "hermes_cli.model_switch._fetch_picker_live_models",
+            "fulilian_cli.model_switch._fetch_picker_live_models",
             return_value=["qwen3:1.7b"],
         ) as fetch:
             catalogs = _named_custom_provider_catalogs()
@@ -170,11 +170,11 @@ class TestNamedCustomProviderCatalogs:
         )
         from fulilian_cli.model_switch import _NativePickerModelList
 
-        with patch("hermes_cli.config.load_config", return_value=cfg), patch(
-            "hermes_cli.models.should_use_ollama_native_catalog",
+        with patch("fulilian_cli.config.load_config", return_value=cfg), patch(
+            "fulilian_cli.models.should_use_ollama_native_catalog",
             return_value=True,
         ), patch(
-            "hermes_cli.model_switch._fetch_picker_live_models",
+            "fulilian_cli.model_switch._fetch_picker_live_models",
             return_value=_NativePickerModelList(),
         ):
             assert _named_custom_provider_catalogs() == [
@@ -190,9 +190,9 @@ class TestModelStateIncludesNamedProviders:
                 model="saved:model", provider="ollama"
             )
         )
-        acp_agent = HermesACPAgent(session_manager=manager)
+        acp_agent = FulilianACPAgent(session_manager=manager)
 
-        with patch("hermes_cli.models.curated_models_for_provider", return_value=[]), patch(
+        with patch("fulilian_cli.models.curated_models_for_provider", return_value=[]), patch(
             "acp_adapter.server._named_custom_provider_catalogs",
             return_value=[("custom:ollama", "Ollama", [])],
         ):
@@ -212,10 +212,10 @@ class TestModelStateIncludesNamedProviders:
                 model="gpt-5.4", provider="openai-codex"
             )
         )
-        acp_agent = HermesACPAgent(session_manager=manager)
+        acp_agent = FulilianACPAgent(session_manager=manager)
 
         with patch(
-            "hermes_cli.models.curated_models_for_provider",
+            "fulilian_cli.models.curated_models_for_provider",
             return_value=[("gpt-5.4", "recommended")],
         ), patch(
             "acp_adapter.server._named_custom_provider_catalogs",
@@ -254,7 +254,7 @@ class TestModelStateIncludesNamedProviders:
                 }
             }
         }
-        with patch("hermes_cli.config.load_config", return_value=cfg):
+        with patch("fulilian_cli.config.load_config", return_value=cfg):
             provider, model = parse_model_input(choice_id, "bedrock")
         assert provider == "custom:bedrock-mantle"
         assert model == "openai.gpt-5.5"
@@ -271,7 +271,7 @@ class TestModelStateIncludesNamedProviders:
                 }
             }
         }
-        with patch("hermes_cli.config.load_config", return_value=cfg):
+        with patch("fulilian_cli.config.load_config", return_value=cfg):
             provider, model = parse_model_input(
                 "custom:local-127.0.0.1:11434:qwen3:1.7b", "custom"
             )

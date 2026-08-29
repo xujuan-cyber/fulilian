@@ -1,15 +1,15 @@
-"""Hermes update pipeline — extracted from ``hermes_cli/main.py``.
+"""Fulilian update pipeline — extracted from ``fulilian_cli/main.py``.
 
 Mechanical move (main.py decomposition): ``_cmd_update_impl``, ``_cmd_update_check``
 and every module-level helper used only by the update path, plus the update-only
 constants they read. Function bodies are lifted verbatim; the only mechanical
-change is that references to helpers/constants that STAY in ``hermes_cli.main``
+change is that references to helpers/constants that STAY in ``fulilian_cli.main``
 (and to moved-but-test-patched siblings) are routed through ``_m()`` — a lazy
-``hermes_cli.main`` reference — so existing call sites and test monkeypatches
-that target ``hermes_cli.main.<name>`` (``PROJECT_ROOT``, ``_is_windows``,
+``fulilian_cli.main`` reference — so existing call sites and test monkeypatches
+that target ``fulilian_cli.main.<name>`` (``PROJECT_ROOT``, ``_is_windows``,
 ``_run_pre_update_backup``, ...) keep working unchanged. ``main.py`` re-imports
 every public-ish name from here (``# noqa: F401``) so the argparse wiring and
-the test-patch surface still resolve on ``hermes_cli.main``.
+the test-patch surface still resolve on ``fulilian_cli.main``.
 
 Three self-contained closures nested inside ``_cmd_update_impl``
 (``_print_items``, ``_wait_for_service_active``, ``_service_restart_sec``) were
@@ -18,7 +18,7 @@ hoisted to module level; they capture no enclosing state (verified via
 and ``_on_unit_timeout`` DO capture enclosing locals and stay nested,
 byte-identical.
 
-Imports are one-way: ``hermes_cli.main`` imports this module, never the reverse
+Imports are one-way: ``fulilian_cli.main`` imports this module, never the reverse
 at import time (``_m()`` resolves lazily at call time, when main.py is fully
 loaded, so there is no import cycle).
 """
@@ -36,18 +36,18 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from fulilian_cli.config import get_hermes_home
+from fulilian_cli.config import get_fulilian_home
 from fulilian_constants import venv_python_path
 
 logger = logging.getLogger(__name__)
 
 
 def _m():
-    """Lazy ``hermes_cli.main`` reference.
+    """Lazy ``fulilian_cli.main`` reference.
 
-    Lets callers keep patching ``hermes_cli.main.<helper>`` (the historical
+    Lets callers keep patching ``fulilian_cli.main.<helper>`` (the historical
     test surface) and have those patches reach this code path, and defers the
-    import so ``hermes_cli.main`` -> ``hermes_cli.update_cmd`` stays one-way
+    import so ``fulilian_cli.main`` -> ``fulilian_cli.update_cmd`` stays one-way
     at import time.
     """
     from fulilian_cli import main
@@ -56,17 +56,17 @@ def _m():
 
 
 _UPDATE_RUNTIME_RELOAD_MODULES = (
-    "hermes_constants",
+    "fulilian_constants",
     "tools.environments.local",
     "tools.lazy_deps",
 )
 
 #: Package prefixes whose cached modules become stale the moment the checkout
 #: changes under this process. Purged (not reloaded) by
-#: ``_purge_stale_hermes_modules`` so any LATER import chain resolves against
+#: ``_purge_stale_fulilian_modules`` so any LATER import chain resolves against
 #: fresh on-disk source only.
 _STALE_PURGE_PREFIXES = (
-    "hermes_cli",
+    "fulilian_cli",
     "gateway",
     "tools",
     "tui_gateway",
@@ -79,30 +79,30 @@ _STALE_PURGE_PREFIXES = (
 #: them mid-flight is the one genuinely unsafe move.
 _STALE_PURGE_PROTECTED = frozenset(
     {
-        "hermes_cli",
-        "hermes_cli.main",
-        "hermes_cli.update_cmd",
-        "hermes_cli.hermes_logging",
+        "fulilian_cli",
+        "fulilian_cli.main",
+        "fulilian_cli.update_cmd",
+        "fulilian_cli.fulilian_logging",
     }
 )
 
 
-def _purge_stale_hermes_modules() -> None:
-    """Evict every cached Hermes module after the checkout changed in-place.
+def _purge_stale_fulilian_modules() -> None:
+    """Evict every cached Fulilian module after the checkout changed in-place.
 
-    ``hermes update`` keeps running in the pre-pull Python process. The
+    ``fulilian update`` keeps running in the pre-pull Python process. The
     gateway auto-restart phase that follows does function-level
     ``from fulilian_cli.gateway import ...`` — executing NEW source inside an
     OLD ``sys.modules`` world. The moment new source references a symbol
     that was added to an already-cached module, the import dies (2026-08-20
-    field failure: freshly-pulled ``hermes_cli.gateway`` does
+    field failure: freshly-pulled ``fulilian_cli.gateway`` does
     ``from fulilian_cli.cli_output import line_input``, but ``cli_output`` was
     cached from before d0132b582 which introduced ``line_input`` → the whole
     restart phase aborted and the gateway kept serving pre-update code).
 
     ``_UPDATE_RUNTIME_RELOAD_MODULES`` handled this per-symptom — three
     hardcoded module names, re-fixed every time a new module grew a new
-    export. This is the class fix: drop EVERY cached module under the Hermes
+    export. This is the class fix: drop EVERY cached module under the Fulilian
     package prefixes so subsequent lazy imports rebuild a self-consistent,
     all-new module graph from the updated checkout. Old module objects
     referenced by the running updater frames stay alive and functional (a
@@ -131,16 +131,16 @@ def _purge_stale_hermes_modules() -> None:
                 purged.append(name)
         if purged:
             logger.debug(
-                "Purged %d stale Hermes module(s) after checkout update", len(purged)
+                "Purged %d stale Fulilian module(s) after checkout update", len(purged)
             )
     except Exception as exc:
-        logger.debug("Could not purge stale Hermes modules: %s", exc)
+        logger.debug("Could not purge stale Fulilian modules: %s", exc)
 
 
 def _reload_updated_runtime_modules() -> None:
     """Reload update-sensitive modules after the checkout changes in-place.
 
-    ``hermes update`` keeps running in the pre-pull Python process. After a
+    ``fulilian update`` keeps running in the pre-pull Python process. After a
     large update, modules already present in ``sys.modules`` can still expose
     old symbols even though their source files on disk are new. Refresh the
     small module set used by lazy-backend refresh before that step imports
@@ -165,19 +165,19 @@ def _reload_updated_runtime_modules() -> None:
 def _reload_config_modules() -> None:
     """Force-reload modules from disk after git pull.
 
-    ``hermes update`` runs in the PRE-pull Python process. After ``git pull``
+    ``fulilian update`` runs in the PRE-pull Python process. After ``git pull``
     updates the source files on disk, modules already in ``sys.modules``
     still hold the OLD code. Function-level imports return the cached module,
     so ``DEFAULT_CONFIG["_config_version"]`` is the OLD value and
     ``check_config_version()`` reports ``(33, 33)`` — "up to date" — even
     though the freshly-pulled code has v34 with a migration to run.
 
-    This function force-reloads ``hermes_cli.config_defaults``,
-    ``hermes_cli.config``, and ``hermes_cli.config_migrations`` from disk
+    This function force-reloads ``fulilian_cli.config_defaults``,
+    ``fulilian_cli.config``, and ``fulilian_cli.config_migrations`` from disk
     so subsequent imports read the UPDATED code.
 
-    It also reloads ``hermes_cli._subprocess_compat`` and
-    ``hermes_cli.dashboard_procs`` so that post-update dashboard cleanup
+    It also reloads ``fulilian_cli._subprocess_compat`` and
+    ``fulilian_cli.dashboard_procs`` so that post-update dashboard cleanup
     (``_finish_dashboard_update_cleanup`` → ``_scan_dashboard_processes``)
     uses the freshly-pulled code. Without this, a new symbol added to
     ``_subprocess_compat`` (e.g. ``bounded_probe_run``) is invisible to the
@@ -188,11 +188,11 @@ def _reload_config_modules() -> None:
 
     importlib.invalidate_caches()
     for mod_name in (
-        "hermes_cli.config_defaults",
-        "hermes_cli.config",
-        "hermes_cli.config_migrations",
-        "hermes_cli._subprocess_compat",
-        "hermes_cli.dashboard_procs",
+        "fulilian_cli.config_defaults",
+        "fulilian_cli.config",
+        "fulilian_cli.config_migrations",
+        "fulilian_cli._subprocess_compat",
+        "fulilian_cli.dashboard_procs",
     ):
         mod = sys.modules.get(mod_name)
         if mod is not None:
@@ -230,12 +230,12 @@ def _migrate_sibling_profile_configs() -> list[tuple[str, int, int]]:
     """Migrate every SIBLING profile's config.yaml to the current version.
 
     #91277 Phase 2 (fleet-wide config migration; #20438/#54926/#79048): the
-    shared checkout serves every profile, but ``hermes update`` historically
+    shared checkout serves every profile, but ``fulilian update`` historically
     migrated only the active profile's config — siblings drifted versions
     until their gateway hit a config the new code couldn't read.
 
     Per profile home (skipping the active one, already migrated by the
-    caller): scope config reads/writes via the context-local HERMES_HOME
+    caller): scope config reads/writes via the context-local FULILIAN_HOME
     override (thread-safe — never ``os.environ``), check the version, and
     run the NON-INTERACTIVE, quiet migration. Prompt-requiring settings are
     left for the profile's own next interactive session, identical to the
@@ -248,13 +248,13 @@ def _migrate_sibling_profile_configs() -> list[tuple[str, int, int]]:
     migrated: list[tuple[str, int, int]] = []
     try:
         from fulilian_constants import (
-            get_process_hermes_home,
-            reset_hermes_home_override,
-            set_hermes_home_override,
+            get_process_fulilian_home,
+            reset_fulilian_home_override,
+            set_fulilian_home_override,
         )
         from fulilian_cli.profiles import _get_profiles_root, _PROFILE_ID_RE
 
-        active_home = get_process_hermes_home()
+        active_home = get_process_fulilian_home()
         root = _get_profiles_root()
         if not root.is_dir():
             return migrated
@@ -268,7 +268,7 @@ def _migrate_sibling_profile_configs() -> list[tuple[str, int, int]]:
                 continue
             if not (entry / "config.yaml").is_file():
                 continue  # profile never configured — nothing to migrate
-            token = set_hermes_home_override(entry)
+            token = set_fulilian_home_override(entry)
             try:
                 current_ver, latest_ver = _run_config_check_fresh()
                 if current_ver >= latest_ver:
@@ -282,7 +282,7 @@ def _migrate_sibling_profile_configs() -> list[tuple[str, int, int]]:
                     "Config migration for profile %s failed: %s", entry.name, exc
                 )
             finally:
-                reset_hermes_home_override(token)
+                reset_fulilian_home_override(token)
     except Exception as exc:
         logger.debug("Sibling profile enumeration failed: %s", exc)
     return migrated
@@ -325,7 +325,7 @@ def _check_and_apply_config_migration(
     except Exception as exc:
         logger.debug("Config check during update failed: %s", exc)
         print("  ⚠️  Could not check config version.")
-        print("     Run 'hermes config migrate' to check manually.")
+        print("     Run 'fulilian config migrate' to check manually.")
         return
 
     has_new_options = bool(missing_env or missing_config)
@@ -362,7 +362,7 @@ def _check_and_apply_config_migration(
                 print(f"  ⚠️  {_warn}")
         except Exception as _mig_err:
             print(f"  ⚠️  Config format update failed: {_mig_err}")
-            print("     Run 'hermes config migrate' to retry.")
+            print("     Run 'fulilian config migrate' to retry.")
     elif needs_migration:
         print()
         # Show WHAT changed, not just a count, so the user can make an
@@ -430,7 +430,7 @@ def _check_and_apply_config_migration(
                 # here and crashes the update at this prompt.
                 print(
                     "  ⚠ Could not read input (encoding issue). Skipping. "
-                    "Run 'hermes config migrate' manually to configure."
+                    "Run 'fulilian config migrate' manually to configure."
                 )
                 response = "n"
 
@@ -450,10 +450,10 @@ def _check_and_apply_config_migration(
                 print()
                 print("✓ Configuration updated!")
             if (gateway_mode or assume_yes or response == "auto") and missing_env:
-                print("  ℹ API keys require manual entry: hermes config migrate")
+                print("  ℹ API keys require manual entry: fulilian config migrate")
         else:
             print()
-            print("Skipped. Run 'hermes config migrate' later to configure.")
+            print("Skipped. Run 'fulilian config migrate' later to configure.")
     else:
         print("  ✓ Configuration is up to date")
 
@@ -464,7 +464,7 @@ def _check_and_apply_config_migration(
     # drifted (field repro: sibling gateway restarted onto new code but
     # stayed at config v33 vs v37). Run the same NON-INTERACTIVE safe
     # migration for every sibling profile home, scoped via the
-    # context-local HERMES_HOME override (never os.environ — other
+    # context-local FULILIAN_HOME override (never os.environ — other
     # threads must not see it).
     try:
         _migrated_siblings = _migrate_sibling_profile_configs()
@@ -517,22 +517,22 @@ def _check_and_apply_config_migration(
         logger.debug("Sibling cron auto-restore check failed: %s", exc)
 
 
-# Critical files that Hermes must be able to import immediately after an
+# Critical files that Fulilian must be able to import immediately after an
 # update/install. Most are imported on every CLI startup; ``web_server.py``
 # is the desktop/dashboard backend path that a fresh Windows install launches
 # right away. If any of these fail to parse after a pull, the user can be
 # left with a bricked CLI or desktop backend. The post-pull syntax guard
 # validates these and auto-rolls-back on failure.
 _UPDATE_CRITICAL_FILES = (
-    "hermes_cli/main.py",
-    "hermes_cli/config.py",
-    "hermes_cli/__init__.py",
-    "hermes_cli/web_server.py",
+    "fulilian_cli/main.py",
+    "fulilian_cli/config.py",
+    "fulilian_cli/__init__.py",
+    "fulilian_cli/web_server.py",
     "cli.py",
     "run_agent.py",
     "model_tools.py",
     "toolsets.py",
-    "hermes_constants.py",
+    "fulilian_constants.py",
 )
 
 def _capture_head_sha(git_cmd, cwd) -> str | None:
@@ -564,13 +564,13 @@ def _editable_install_is_current(git_cmd, cwd, pre_pull_sha: str | None) -> bool
 
     ``uv pip install -e .`` never audits an editable target — it reinstalls on
     every invocation, and every reinstall rewrites the console-script shims.
-    On Windows that rewrite is the only reason the running ``hermes.exe`` has
+    On Windows that rewrite is the only reason the running ``fulilian.exe`` has
     to be quarantined, and a quarantine that loses its race is the whole
     ``os error 32`` family. Not reinstalling when the reinstall provably
     cannot change anything removes that risk outright for the common update,
     rather than trying to make the rename win more often.
 
-    Skipping is safe because Hermes pins its editable finder to a *static*
+    Skipping is safe because Fulilian pins its editable finder to a *static*
     module list (``[tool.setuptools] py-modules`` plus
     ``packages.find.include``). The one source-only change that would stale
     that finder is a new top-level module or package, and it cannot land
@@ -601,7 +601,7 @@ def _editable_install_is_current(git_cmd, cwd, pre_pull_sha: str | None) -> bool
 def _validate_critical_files_syntax(root) -> tuple[bool, str | None, str | None]:
     """Compile each file in ``_UPDATE_CRITICAL_FILES`` to catch SyntaxErrors.
 
-    These are the files imported on every ``hermes`` startup; if any of them
+    These are the files imported on every ``fulilian`` startup; if any of them
     has a syntax error (orphan merge-conflict markers, bad ref to a name
     that no longer exists, etc.) the CLI can't bootstrap at all. We validate
     them after a successful ``git pull`` so we can auto-roll-back instead of
@@ -621,7 +621,7 @@ def _validate_critical_files_syntax(root) -> tuple[bool, str | None, str | None]
     import tempfile
 
     root = Path(root)
-    with tempfile.TemporaryDirectory(prefix="hermes-syntax-check-") as tmpdir:
+    with tempfile.TemporaryDirectory(prefix="fulilian-syntax-check-") as tmpdir:
         for relpath in _UPDATE_CRITICAL_FILES:
             path = root / relpath
             if not path.exists():
@@ -645,7 +645,7 @@ def _validate_critical_files_syntax(root) -> tuple[bool, str | None, str | None]
 # is caught — a file can be syntactically perfect and still fail to import
 # because a name it pulls from a sibling module no longer exists.
 _UPDATE_CRITICAL_MODULES = (
-    "hermes_cli.main",
+    "fulilian_cli.main",
     "run_agent",
     "model_tools",
     "toolsets",
@@ -671,7 +671,7 @@ def _validate_critical_modules_import(root) -> tuple[bool, str | None, str | Non
     against the half-updated tree. Costs ~0.4s.
 
     Uses the project venv's interpreter when there is one (matching
-    ``_venv_core_imports_healthy``): ``hermes update`` can be driven by a
+    ``_venv_core_imports_healthy``): ``fulilian update`` can be driven by a
     different Python than the install's own, and probing the wrong
     interpreter would test a tree the user never runs.
 
@@ -690,7 +690,7 @@ def _validate_critical_modules_import(root) -> tuple[bool, str | None, str | Non
         # The root set is injected from fulilian_constants so this can't drift
         # from the hint the user is shown (they disagreed once already).
         "        missing = (getattr(exc, 'name', '') or '').split('.')[0]\n"
-        "        if missing in %r or missing.startswith('hermes_'):\n"
+        "        if missing in %r or missing.startswith('fulilian_'):\n"
         "            sys.stdout.write(name + '\\n' + str(exc))\n"
         "            raise SystemExit(3)\n"
         "    except ImportError as exc:\n"
@@ -736,15 +736,15 @@ def _gateway_prompt(prompt_text: str, default: str = "", timeout: float = 300.0)
     Writes a prompt marker file so the gateway can forward the question to the
     user, then polls for a response file.  Falls back to *default* on timeout.
 
-    Used by ``hermes update --gateway`` so interactive prompts (stash restore,
+    Used by ``fulilian update --gateway`` so interactive prompts (stash restore,
     config migration) are forwarded to the messenger instead of being silently
     skipped.
     """
     import json as _json
     import uuid as _uuid
-    from fulilian_constants import get_hermes_home
+    from fulilian_constants import get_fulilian_home
 
-    home = get_hermes_home()
+    home = get_fulilian_home()
     prompt_path = home / ".update_prompt.json"
     response_path = home / ".update_response"
 
@@ -812,7 +812,7 @@ def _web_toolchain_roots(web_dir: Path) -> tuple[Path, ...]:
     return (web_dir, web_dir.parent)
 
 def _print_curator_first_run_notice() -> None:
-    """Print a short heads-up about the skill curator after `hermes update`.
+    """Print a short heads-up about the skill curator after `fulilian update`.
 
     Only fires when the curator is enabled AND has no recorded run yet, which
     is exactly the window where the gateway ticker used to fire Curator
@@ -845,14 +845,14 @@ def _print_curator_first_run_notice() -> None:
         f"~{days}d after installation; only agent-created skills are in "
         f"scope and nothing is ever auto-deleted (archive is recoverable)."
     )
-    print("  Preview now:  hermes curator run --dry-run")
-    print("  Pause it:     hermes curator pause")
+    print("  Preview now:  fulilian curator run --dry-run")
+    print("  Pause it:     fulilian curator pause")
     print(
         "  Docs:         https://hermes-agent.nousresearch.com/docs/user-guide/features/curator"
     )
 
 def _print_fts_optimize_available_notice() -> None:
-    """Advertise the opt-in v23 search-index optimization after `hermes update`.
+    """Advertise the opt-in v23 search-index optimization after `fulilian update`.
 
     Only fires when the current profile's state.db is still on the legacy
     (pre-v23) inline FTS layout. Leads with the reclaimable-space figure and
@@ -876,11 +876,11 @@ def _print_fts_optimize_available_notice() -> None:
         return
 
     try:
-        from fulilian_constants import get_hermes_home
-        from hermes_state import SessionDB
+        from fulilian_constants import get_fulilian_home
+        from fulilian_state import SessionDB
     except Exception:
         return
-    db_path = get_hermes_home() / "state.db"
+    db_path = get_fulilian_home() / "state.db"
     if not db_path.exists():
         return
     try:
@@ -933,11 +933,11 @@ def _print_fts_optimize_available_notice() -> None:
         print()
         print("◆ Session database optimization incomplete")
         print(
-            "  A previous `hermes sessions optimize-storage` run was "
+            "  A previous `fulilian sessions optimize-storage` run was "
             "interrupted. Search still works; re-run the command to resume "
             "and finish reclaiming disk:"
         )
-        print("    hermes sessions optimize-storage")
+        print("    fulilian sessions optimize-storage")
         return
 
     # Concrete size framing — lead with the savings the user cares about.
@@ -958,7 +958,7 @@ def _print_fts_optimize_available_notice() -> None:
             f"typically frees ~60% of state.db — about {est_reclaim:.1f} GB "
             f"of your current {size_gb:.1f} GB."
         )
-    print("  Run when convenient:  hermes sessions optimize-storage")
+    print("  Run when convenient:  fulilian sessions optimize-storage")
     print(
         "  It runs in the foreground with a progress bar, is safe to "
         "interrupt/re-run, and never changes your conversations."
@@ -969,11 +969,11 @@ def _print_curator_recent_run_notice() -> None:
 
     The curator runs in the background (gateway tick + CLI session start),
     so users learn about skill consolidations only by stumbling into a
-    rename. ``hermes update`` is a high-attention surface — surface the
+    rename. ``fulilian update`` is a high-attention surface — surface the
     most recent run's rename map here, once.
 
     Show-once: state stamps ``last_run_summary_shown_at`` after printing.
-    Subsequent ``hermes update`` invocations skip the block until a newer
+    Subsequent ``fulilian update`` invocations skip the block until a newer
     curator run lands. Silent when the curator has never run, when the
     most recent summary has already been shown, or when the summary has
     no rename information to display (no archives).
@@ -1019,7 +1019,7 @@ def _print_curator_recent_run_notice() -> None:
         print(f"  {line}")
     print(
         "  (This message shows once per curator run. "
-        "View anytime: hermes curator status)"
+        "View anytime: fulilian curator status)"
     )
 
     # Stamp shown so we don't repeat on the next update.
@@ -1068,8 +1068,8 @@ def _reload_process_scan_modules() -> None:
 
     importlib.invalidate_caches()
     for mod_name in (
-        "hermes_cli._subprocess_compat",
-        "hermes_cli.dashboard_procs",
+        "fulilian_cli._subprocess_compat",
+        "fulilian_cli.dashboard_procs",
     ):
         mod = sys.modules.get(mod_name)
         if mod is not None:
@@ -1117,7 +1117,7 @@ def _finish_dashboard_update_cleanup(
         "not be auto-restarted."
     )
     print("  Re-launch it when you want the web UI back:")
-    print("    hermes dashboard --port <port>")
+    print("    fulilian dashboard --port <port>")
 
 def _atomic_replace_dir(src: str, dst: str) -> None:
     """Replace directory *dst* with *src* without leaving *dst* half-deleted.
@@ -1131,7 +1131,7 @@ def _atomic_replace_dir(src: str, dst: str) -> None:
     Now a thin single-entry alias over the two-phase helpers below, which
     generalise the same stage-then-swap discipline across every entry the ZIP
     update touches (#76104). Retained because it is part of the mechanical
-    ``hermes_cli.main`` re-export surface and guards the #49145 regression.
+    ``fulilian_cli.main`` re-export surface and guards the #49145 regression.
     """
     _commit_staged_replacements([(_stage_replacement(src, dst), dst)])
 
@@ -1143,8 +1143,8 @@ def _stage_replacement(src: str, dst: str) -> str:
     files. Touches nothing live, so a failure here leaves the whole install
     untouched.
     """
-    staging = f"{dst}.hermes-update-staging"
-    backup = f"{dst}.hermes-update-old"
+    staging = f"{dst}.fulilian-update-staging"
+    backup = f"{dst}.fulilian-update-old"
     # A previous run may have died between "move dst aside" and "move staging
     # in" — leaving dst missing and the backup as the ONLY copy of that entry.
     # Restore it before clearing leftovers: deleting the backup first and then
@@ -1170,7 +1170,7 @@ def _discard_staged(staged) -> None:
 
     Without this a phase-1 failure (typically disk exhaustion) orphans one
     staging copy per entry already processed — up to a full second copy of
-    the tree. The user then follows the "re-run `hermes update`" advice with
+    the tree. The user then follows the "re-run `fulilian update`" advice with
     *less* free space than before and the retry fails harder than the
     original attempt.
     """
@@ -1195,7 +1195,7 @@ def _commit_staged_replacements(staged) -> None:
     the field report in #63717 are both this).
 
     This covers plain files as well as directories: the repo root holds 20
-    first-party modules (``run_agent.py``, ``cli.py``, ``hermes_constants.py``
+    first-party modules (``run_agent.py``, ``cli.py``, ``fulilian_constants.py``
     …), so a files-only failure reproduces exactly the bug class we are
     closing. Every swap is an ``os.rename`` onto a path that was just moved
     aside — a same-filesystem rename is atomic on POSIX and NTFS alike, so a
@@ -1210,7 +1210,7 @@ def _commit_staged_replacements(staged) -> None:
     swapped: list[tuple[str, str]] = []  # (dst, backup) in swap order; "" = absent
     try:
         for staging, dst in staged:
-            backup = f"{dst}.hermes-update-old"
+            backup = f"{dst}.fulilian-update-old"
             if os.path.exists(dst):
                 os.rename(dst, backup)
                 swapped.append((dst, backup))
@@ -1291,7 +1291,7 @@ def _assess_parked_branch_switch(
     to the update target.
 
     Live incident (2026-08-17, Teknium's box): the source checkout sat on a
-    stale feature branch left behind by earlier tooling; ``hermes update``
+    stale feature branch left behind by earlier tooling; ``fulilian update``
     autostashed, ran its post-update steps and printed "✓ Code updated!"
     while the running code stayed days behind main. The guard's contract:
 
@@ -1398,7 +1398,7 @@ def _print_parked_branch_skip_warning(
     print()
     print("  To resolve, inspect the branch and switch back yourself:")
     print(f"    git -C {cwd} status")
-    print(f"    git -C {cwd} checkout {target_branch} && hermes update")
+    print(f"    git -C {cwd} checkout {target_branch} && fulilian update")
     print(
         "  (commit or stash your work on the branch first if you want to "
         "keep it)"
@@ -1444,9 +1444,9 @@ def _print_update_completion(message: str) -> None:
     so branch drift is visible at a glance (2026-08-17 parked-branch
     incident)."""
     print(f"{message}{_branch_head_suffix()}")
-    action_id = os.environ.get("HERMES_ACTION_ID", "")
+    action_id = os.environ.get("FULILIAN_ACTION_ID", "")
     if len(action_id) == 32 and all(char in "0123456789abcdef" for char in action_id):
-        print(f"=== hermes-update completed {action_id} ===")
+        print(f"=== fulilian-update completed {action_id} ===")
 
 
 def _called_process_error_cmd_parts(exc: subprocess.CalledProcessError) -> list[str]:
@@ -1534,15 +1534,15 @@ def _refuse_update_for_contended_shims(exc: BaseException) -> None:
     launch after the holder exits. Exits 2 (refused) so the command-boundary
     receipt net records it as a refusal, not a failure.
     """
-    print("✗ Cannot continue the update: live Hermes launcher(s) could not be")
+    print("✗ Cannot continue the update: live Fulilian launcher(s) could not be")
     print("  moved aside:")
-    for name in getattr(exc, "failed_shims", []) or ["hermes.exe"]:
+    for name in getattr(exc, "failed_shims", []) or ["fulilian.exe"]:
         print(f"    {name}")
-    print("  Another process is holding this install's venv — typically Hermes")
-    print("  Desktop, a gateway, or another hermes REPL — and mutating the venv")
+    print("  Another process is holding this install's venv — typically Fulilian")
+    print("  Desktop, a gateway, or another fulilian REPL — and mutating the venv")
     print("  now would strand it half-updated.")
     print("  The dependency install has been deferred: close the process(es)")
-    print("  above, then run any `hermes` command to finish it automatically.")
+    print("  above, then run any `fulilian` command to finish it automatically.")
     # Idempotent: the git path already dropped the marker before the sync;
     # this covers the ZIP/repair paths so the deferral is never silent.
     _write_update_incomplete_marker()
@@ -1552,7 +1552,7 @@ def _refuse_update_for_contended_shims(exc: BaseException) -> None:
 def _should_zip_fallback_on_update_error(exc: BaseException) -> bool:
     """ZIP fallback is for Windows git file-I/O breakage, not later stages.
 
-    A dependency-install failure (locked ``hermes.exe`` / ``uv pip install``
+    A dependency-install failure (locked ``fulilian.exe`` / ``uv pip install``
     exit 2) is not a git failure. The pull has already succeeded by then, so
     re-downloading the source ZIP cannot fix the install and would replace
     every top-level entry except ``venv`` / ``node_modules`` / ``.git`` /
@@ -1591,7 +1591,7 @@ def _zip_overlay_block_reason(
     unknown dirtiness is not a license to clobber the tree (#87304).
 
     ``ignore_staging_artifacts`` is for the pre-swap re-check: phase 1 of the
-    two-phase replace creates ``*.hermes-update-staging`` siblings inside the
+    two-phase replace creates ``*.fulilian-update-staging`` siblings inside the
     checkout, which git reports as untracked. Those are our own artifacts,
     not user work — without the filter the re-check would always refuse.
     """
@@ -1636,7 +1636,7 @@ def _zip_overlay_block_reason(
     return None
 
 
-_ZIP_STAGING_ARTIFACT_SUFFIXES = (".hermes-update-staging", ".hermes-update-old")
+_ZIP_STAGING_ARTIFACT_SUFFIXES = (".fulilian-update-staging", ".fulilian-update-old")
 # Single source of truth for the top-level entries the ZIP swap preserves —
 # consumed by both the dirty-tree filter below and _update_via_zip's swap loop.
 _ZIP_PRESERVED_TOP_LEVEL = {"venv", "node_modules", ".git", ".env"}
@@ -1685,7 +1685,7 @@ def _abort_zip_update_if_dirty_tree() -> None:
         "  Overlaying the ZIP would overwrite uncommitted edits and permanently "
         "delete untracked files."
     )
-    print("  Stash or commit your changes, then rerun `hermes update`.")
+    print("  Stash or commit your changes, then rerun `fulilian update`.")
     print("  To inspect: git status --porcelain")
     _m().sys.exit(1)
 
@@ -1735,7 +1735,7 @@ def _clear_stale_sqlite_sidecars(db_path: Path) -> None:
     which is exactly why ``backup._EXCLUDED_SUFFIXES`` refuses to ship sidecars
     inside a snapshot. Copying the image over the destination replaces only the
     main database file, so any ``-wal`` / ``-shm`` left behind by the *old*
-    database (a crashed writer, or a second Hermes process the updater's drain
+    database (a crashed writer, or a second Fulilian process the updater's drain
     did not stop) survives and is replayed over the fresh image on the next
     open. The result passes ``PRAGMA integrity_check`` while serving the old
     database's contents, and the first checkpoint folds it in permanently.
@@ -1771,13 +1771,13 @@ def _print_update_summary(
             print("  Code and Python deps are updated, but the dashboard/TUI may")
             print("  be in a mixed state until the Node deps are rebuilt.")
         if not desktop_build_ok:
-            print("  Run `hermes desktop` to retry the desktop rebuild.")
+            print("  Run `fulilian desktop` to retry the desktop rebuild.")
     else:
         _print_update_completion(_update_complete_message(pre_update_version))
 
 
 def _write_gateway_update_exit_code(ok: bool) -> None:
-    path = get_hermes_home() / ".update_exit_code"
+    path = get_fulilian_home() / ".update_exit_code"
     try:
         path.write_text("0" if ok else "1", encoding="utf-8")
     except OSError:
@@ -1809,7 +1809,7 @@ def _restore_state_db_from_snapshot(state_path: Path, snap_state: Path) -> bool:
     if holders:
         print(
             f"  ✗ Auto-restore refused: process(es) {holders} still hold "
-            "state.db or its WAL open. Stop them (hermes gateway stop), "
+            "state.db or its WAL open. Stop them (fulilian gateway stop), "
             "then restore manually with /snapshot restore."
         )
         return False
@@ -1822,7 +1822,7 @@ def _restore_state_db_from_snapshot(state_path: Path, snap_state: Path) -> bool:
 
 
 def _update_via_zip(args, *, had_desktop_app_before_update: bool = False) -> bool:
-    """Update Hermes Agent by downloading a ZIP archive.
+    """Update FuLiLian by downloading a ZIP archive.
 
     Used on Windows when git file I/O is broken (antivirus, NTFS filter
     drivers causing 'Invalid argument' errors on file creation).
@@ -1854,8 +1854,8 @@ def _update_via_zip(args, *, had_desktop_app_before_update: bool = False) -> boo
         print(
             "  This path runs when git file I/O is broken on the system. "
             "Either resolve the git-side breakage (typically an antivirus "
-            "or NTFS filter holding files open) and rerun `hermes update "
-            f"--branch {branch}`, or update against main with `hermes update`."
+            "or NTFS filter holding files open) and rerun `fulilian update "
+            f"--branch {branch}`, or update against main with `fulilian update`."
         )
         _m().sys.exit(1)
     _abort_zip_update_if_dirty_tree()
@@ -1864,16 +1864,16 @@ def _update_via_zip(args, *, had_desktop_app_before_update: bool = False) -> boo
     )
 
     print("→ Downloading latest version...")
-    tmp_dir = tempfile.mkdtemp(prefix="hermes-update-")
+    tmp_dir = tempfile.mkdtemp(prefix="fulilian-update-")
     try:
-        zip_path = os.path.join(tmp_dir, f"hermes-agent-{branch}.zip")
+        zip_path = os.path.join(tmp_dir, f"fulilian-agent-{branch}.zip")
         urlretrieve(zip_url, zip_path)
 
         print("→ Extracting...")
         import stat as _stat
         with zipfile.ZipFile(zip_path, "r") as zf:
             # Validate paths to prevent zip-slip (path traversal) AND reject
-            # symlink members. A GitHub source ZIP for hermes-agent itself
+            # symlink members. A GitHub source ZIP for fulilian-agent itself
             # should never contain symlinks — they'd point outside the
             # extracted tree and let an attacker who can compromise the
             # update mirror plant arbitrary files via the update path.
@@ -1896,8 +1896,8 @@ def _update_via_zip(args, *, had_desktop_app_before_update: bool = False) -> boo
                     )
             zf.extractall(tmp_dir)
 
-        # GitHub ZIPs extract to hermes-agent-<branch>/
-        extracted = os.path.join(tmp_dir, f"hermes-agent-{branch}")
+        # GitHub ZIPs extract to fulilian-agent-<branch>/
+        extracted = os.path.join(tmp_dir, f"fulilian-agent-{branch}")
         if not os.path.isdir(extracted):
             # Try to find it
             for d in os.listdir(tmp_dir):
@@ -1918,7 +1918,7 @@ def _update_via_zip(args, *, had_desktop_app_before_update: bool = False) -> boo
         # partway left `agent/` new and `tools/` stale — all files valid, the
         # tree unbootable. Files matter as much as directories here: the repo
         # root holds 20 first-party modules (run_agent.py, cli.py,
-        # hermes_constants.py, ...).
+        # fulilian_constants.py, ...).
         #
         # Staging costs one extra copy of the tree on disk. Check up front so
         # we fail with a clear message instead of running out mid-copy.
@@ -1954,7 +1954,7 @@ def _update_via_zip(args, *, had_desktop_app_before_update: bool = False) -> boo
                 staged.append((_stage_replacement(src, dst), dst))
                 # #70337/#87331: the GitHub source ZIP contains only source —
                 # apps/desktop/release/ (the BUILT desktop app, win-unpacked/
-                # Hermes.exe) exists only in the LIVE tree. Swapping `apps`
+                # Fulilian.exe) exists only in the LIVE tree. Swapping `apps`
                 # without it deletes the desktop build and breaks the
                 # shortcut. Graft the live release dir into the staged copy
                 # BEFORE the swap so the commit preserves it atomically.
@@ -1990,7 +1990,7 @@ def _update_via_zip(args, *, had_desktop_app_before_update: bool = False) -> boo
                     "  Files appeared in the checkout while the update was "
                     "downloading; committing the swap would delete them."
                 )
-                print("  Stash or commit your changes, then rerun `hermes update`.")
+                print("  Stash or commit your changes, then rerun `fulilian update`.")
                 _m().sys.exit(1)
             _commit_staged_replacements(staged)
         except Exception:
@@ -2016,7 +2016,7 @@ def _update_via_zip(args, *, had_desktop_app_before_update: bool = False) -> boo
         # scare the user toward a reinstall they don't need.
         print("  Your existing install was left in place.")
         print(
-            "  Re-run `hermes update` to retry; if the agent won't start, "
+            "  Re-run `fulilian update` to retry; if the agent won't start, "
             "reinstall from https://hermes-agent.nousresearch.com"
         )
         _m().sys.exit(1)
@@ -2121,7 +2121,7 @@ def _update_via_zip(args, *, had_desktop_app_before_update: bool = False) -> boo
         print(f"  {failing_module}: {import_error}")
         print()
         print("  This usually means the copy was interrupted partway through.")
-        print("  Re-run `hermes update` to complete it.")
+        print("  Re-run `fulilian update` to complete it.")
         _m().sys.exit(1)
 
     node_failures = _update_node_dependencies()
@@ -2146,7 +2146,7 @@ def _update_via_zip(args, *, had_desktop_app_before_update: bool = False) -> boo
         if result.get("user_modified"):
             print(f"  ~ {len(result['user_modified'])} user-modified (kept)")
             print(
-                "    → see them: hermes skills list-modified  "
+                "    → see them: fulilian skills list-modified  "
                 "(diff/reset to resume updates)"
             )
         if result.get("cleaned"):
@@ -2177,7 +2177,7 @@ def _update_via_zip(args, *, had_desktop_app_before_update: bool = False) -> boo
     try:
         from fulilian_cli.backup import _quick_snapshot_root, verify_sqlite_integrity
 
-        _state_path = get_hermes_home() / "state.db"
+        _state_path = get_fulilian_home() / "state.db"
         if _state_path.exists():
             _state_ok = verify_sqlite_integrity(
                 _state_path, check_header=True, run_pragma=True
@@ -2188,7 +2188,7 @@ def _update_via_zip(args, *, had_desktop_app_before_update: bool = False) -> boo
                     "⚠ state.db is corrupted after update: "
                     + _state_ok.get("message", "unknown error")
                 )
-                _snap_root = _quick_snapshot_root(get_hermes_home())
+                _snap_root = _quick_snapshot_root(get_fulilian_home())
                 if _snap_root.exists():
                     _snap_dirs = sorted(
                         (d for d in _snap_root.iterdir() if d.is_dir()),
@@ -2279,7 +2279,7 @@ def _stash_local_changes_if_needed(git_cmd: list[str], cwd: Path) -> Optional[st
     from datetime import datetime, timezone
 
     stash_name = datetime.now(timezone.utc).strftime(
-        "hermes-update-autostash-%Y%m%d-%H%M%S"
+        "fulilian-update-autostash-%Y%m%d-%H%M%S"
     )
     print("→ Local changes detected — stashing before update...")
     prev_stash = subprocess.run(
@@ -2342,7 +2342,7 @@ def _stash_local_changes_if_needed(git_cmd: list[str], cwd: Path) -> Optional[st
                 print(f"  {push.stderr.strip().splitlines()[0]}")
             print(
                 "  Commit, stash, or clean up your local changes manually, "
-                "then re-run `hermes update`."
+                "then re-run `fulilian update`."
             )
             raise subprocess.CalledProcessError(
                 push.returncode, push.args, output=push.stdout, stderr=push.stderr
@@ -2412,7 +2412,7 @@ def _stash_apply_failed_only_on_existing_untracked(stderr: str) -> bool:
 def _park_stashed_changes(stash_ref: str) -> None:
     """Leave a pre-update autostash parked instead of re-applying it.
 
-    Used by ``hermes update --keep-stash`` (the desktop updater's mode): the
+    Used by ``fulilian update --keep-stash`` (the desktop updater's mode): the
     stash made the update possible on a dirty tree, but local source edits
     must never be silently re-applied onto the updated code. Nothing is
     lost — the entry stays in ``git stash`` with printed recovery guidance.
@@ -2436,7 +2436,7 @@ def _restore_stashed_changes(
         print(
             "  Restoring them may reapply local customizations onto the updated codebase."
         )
-        print("  Review the result afterward if Hermes behaves unexpectedly.")
+        print("  Review the result afterward if Fulilian behaves unexpectedly.")
         print("Restore local changes now? [Y/n]")
         if input_fn is not None:
             response = input_fn("Restore local changes now? [Y/n]", "y")
@@ -2503,7 +2503,7 @@ def _restore_stashed_changes(
         print(f"  Stash ref: {stash_ref}")
 
         # Always reset to clean state — leaving conflict markers in source
-        # files makes hermes completely unrunnable (SyntaxError on import).
+        # files makes fulilian completely unrunnable (SyntaxError on import).
         # The user's changes are safe in the stash for manual recovery.
         subprocess.run(
             git_cmd + ["reset", "--hard", "HEAD"],
@@ -2520,7 +2520,7 @@ def _restore_stashed_changes(
     stash_selector = _resolve_stash_selector(git_cmd, cwd, stash_ref)
     if stash_selector is None:
         print(
-            "⚠ Local changes were restored, but Hermes couldn't find the stash entry to drop."
+            "⚠ Local changes were restored, but Fulilian couldn't find the stash entry to drop."
         )
         print(
             "  The stash was left in place. You can remove it manually after checking the result."
@@ -2535,7 +2535,7 @@ def _restore_stashed_changes(
         )
         if drop.returncode != 0:
             print(
-                "⚠ Local changes were restored, but Hermes couldn't drop the saved stash entry."
+                "⚠ Local changes were restored, but Fulilian couldn't drop the saved stash entry."
             )
             if drop.stdout.strip():
                 print(drop.stdout.strip())
@@ -2547,7 +2547,7 @@ def _restore_stashed_changes(
             _print_stash_cleanup_guidance(stash_ref, stash_selector)
 
     print("⚠ Local changes were restored on top of the updated codebase.")
-    print("  Review `git diff` / `git status` if Hermes behaves unexpectedly.")
+    print("  Review `git diff` / `git status` if Fulilian behaves unexpectedly.")
     return True
 
 def _discard_stashed_changes(
@@ -2573,7 +2573,7 @@ def _discard_stashed_changes(
     if stash_selector is None:
         print(
             "⚠ Configured to discard local changes on non-interactive update, "
-            "but Hermes couldn't find the stash entry to drop."
+            "but Fulilian couldn't find the stash entry to drop."
         )
         _print_stash_cleanup_guidance(stash_ref)
         return False
@@ -2586,7 +2586,7 @@ def _discard_stashed_changes(
     )
     if drop.returncode != 0:
         print(
-            "⚠ Configured to discard local changes, but Hermes couldn't drop "
+            "⚠ Configured to discard local changes, but Fulilian couldn't drop "
             "the saved stash entry."
         )
         if drop.stderr.strip():
@@ -2682,16 +2682,16 @@ def _count_commits_between(git_cmd: list[str], cwd: Path, base: str, head: str) 
 
 def _should_skip_upstream_prompt() -> bool:
     """Check if user previously declined to add upstream."""
-    from fulilian_constants import get_hermes_home
+    from fulilian_constants import get_fulilian_home
 
-    return (get_hermes_home() / SKIP_UPSTREAM_PROMPT_FILE).exists()
+    return (get_fulilian_home() / SKIP_UPSTREAM_PROMPT_FILE).exists()
 
 def _mark_skip_upstream_prompt():
     """Create marker file to skip future upstream prompts."""
     try:
-        from fulilian_constants import get_hermes_home
+        from fulilian_constants import get_fulilian_home
 
-        (get_hermes_home() / SKIP_UPSTREAM_PROMPT_FILE).touch()
+        (get_fulilian_home() / SKIP_UPSTREAM_PROMPT_FILE).touch()
     except Exception:
         pass
 
@@ -2729,7 +2729,7 @@ def _sync_with_upstream_if_needed(git_cmd: list[str], cwd: Path) -> None:
 
         # Ask user if they want to add upstream
         print()
-        print("ℹ Your fork is not tracking the official Hermes repository.")
+        print("ℹ Your fork is not tracking the official Fulilian repository.")
         print("  This means you may miss updates from NousResearch/hermes-agent.")
         print()
         try:
@@ -2831,13 +2831,13 @@ def _invalidate_update_cache():
     reports a stale "commits behind" count after a successful update.
 
     The git repo is shared across profiles — when one profile runs
-    ``hermes update``, every profile is now current.
+    ``fulilian update``, every profile is now current.
     """
     homes = []
     # Default profile home (Docker-aware — uses /opt/data in Docker)
-    from fulilian_constants import get_default_hermes_root
+    from fulilian_constants import get_default_fulilian_root
 
-    default_home = get_default_hermes_root()
+    default_home = get_default_fulilian_root()
     homes.append(default_home)
     # Named profiles under <root>/profiles/
     profiles_root = default_home / "profiles"
@@ -2874,7 +2874,7 @@ def _write_lazy_refresh_incomplete_marker() -> None:
     _write_marker_file(_m()._lazy_refresh_marker_path(), label="lazy-refresh-incomplete")
 
 
-# ``fleet_restart_pending`` lives under HERMES_HOME (not next to the venv).
+# ``fleet_restart_pending`` lives under FULILIAN_HOME (not next to the venv).
 # The existing ``.update-incomplete`` / ``.lazy-refresh-incomplete`` markers
 # gate dependency/venv repair; this one is the fleet-restart obligation after
 # a git pull that advanced HEAD (#95294). Cleared only when the restart phase
@@ -2883,8 +2883,8 @@ _FLEET_RESTART_PENDING_NAME = "fleet_restart_pending"
 
 
 def _fleet_restart_pending_marker_path() -> Path:
-    """HERMES_HOME breadcrumb for a pull that has not yet restarted the fleet."""
-    return get_hermes_home() / _FLEET_RESTART_PENDING_NAME
+    """FULILIAN_HOME breadcrumb for a pull that has not yet restarted the fleet."""
+    return get_fulilian_home() / _FLEET_RESTART_PENDING_NAME
 
 
 def _write_fleet_restart_pending_marker(*, expected_sha: str = "") -> None:
@@ -2998,7 +2998,7 @@ def _warn_pending_fleet_restart(*, startup: bool = False) -> None:
     """Print the specific interrupted-update fleet-restart warning."""
     stream = sys.stderr if startup else sys.stdout
     print(
-        "⚠ A previous `hermes update` pulled new code but did not "
+        "⚠ A previous `fulilian update` pulled new code but did not "
         "restart running gateways.",
         file=stream,
     )
@@ -3008,7 +3008,7 @@ def _warn_pending_fleet_restart(*, startup: bool = False) -> None:
     )
     if startup:
         print(
-            "  Run `hermes update` or `hermes gateway restart`.",
+            "  Run `fulilian update` or `fulilian gateway restart`.",
             file=stream,
         )
 
@@ -3024,7 +3024,7 @@ def _warn_pending_fleet_restart_on_startup() -> None:
 
 
 def _restart_systemd_gateway_units_best_effort(failed: list) -> None:
-    """Best-effort ``systemctl restart`` of every hermes-gateway/serve unit."""
+    """Best-effort ``systemctl restart`` of every fulilian-gateway/serve unit."""
     for scope, scope_cmd in (
         ("user", ["systemctl", "--user"]),
         ("system", ["systemctl"]),
@@ -3034,8 +3034,8 @@ def _restart_systemd_gateway_units_best_effort(failed: list) -> None:
                 scope_cmd
                 + [
                     "list-units",
-                    "hermes-gateway*",
-                    "hermes-serve*",
+                    "fulilian-gateway*",
+                    "fulilian-serve*",
                     "--plain",
                     "--no-legend",
                     "--no-pager",
@@ -3086,7 +3086,7 @@ def _run_pending_fleet_restart() -> bool:
     """
     print("→ Restarting gateways left on pre-update code...")
     try:
-        _m()._purge_stale_hermes_modules()
+        _m()._purge_stale_fulilian_modules()
     except Exception:
         pass
     try:
@@ -3159,7 +3159,7 @@ def _run_pending_fleet_restart() -> bool:
 
 
 def _apply_pending_fleet_restart_catchup() -> None:
-    """On an already-up-to-date ``hermes update``, finish a skipped restart.
+    """On an already-up-to-date ``fulilian update``, finish a skipped restart.
 
     No-op when nothing is pending. Exits 1 when the catch-up restart is
     incomplete so automation does not treat the fleet as healthy.
@@ -3172,7 +3172,7 @@ def _apply_pending_fleet_restart_catchup() -> None:
     if _run_pending_fleet_restart():
         _clear_fleet_restart_pending_marker()
         return
-    print("  ⚠ Fleet restart incomplete. Recover with: hermes gateway restart")
+    print("  ⚠ Fleet restart incomplete. Recover with: fulilian gateway restart")
     sys.exit(1)
 
 
@@ -3180,16 +3180,16 @@ def _format_concurrent_instances_message(
     matches: list[tuple[int, str]], scripts_dir: Path
 ) -> str:
     """Build a human-readable explanation + remediation hint for the user."""
-    shim = scripts_dir / "hermes.exe"
-    lines = ["✗ Another hermes.exe is running:"]
+    shim = scripts_dir / "fulilian.exe"
+    lines = ["✗ Another fulilian.exe is running:"]
     for pid, name in matches:
         lines.append(f"    PID {pid}  {name}")
     lines.append("")
     lines.append(f"  Updating now would fail to overwrite {shim} because")
     lines.append("  Windows blocks REPLACE on a running executable.")
     lines.append("")
-    lines.append("  Close Hermes Desktop, exit any open `hermes` REPLs, and")
-    lines.append("  stop the gateway (`hermes gateway stop`) before retrying.")
+    lines.append("  Close Fulilian Desktop, exit any open `fulilian` REPLs, and")
+    lines.append("  stop the gateway (`fulilian gateway stop`) before retrying.")
     lines.append("")
     if matches:
         pid_args = " ".join(f"/PID {pid}" for pid, _ in matches)
@@ -3197,7 +3197,7 @@ def _format_concurrent_instances_message(
         lines.append("  stale, terminate them directly, then retry the update:")
         lines.append(f"      taskkill {pid_args} /F")
         lines.append("")
-    lines.append("  Override with `hermes update --force` if you've already")
+    lines.append("  Override with `fulilian update --force` if you've already")
     lines.append("  confirmed those processes will not write to the venv.")
     return "\n".join(lines)
 
@@ -3247,10 +3247,10 @@ def _filter_non_gateway_concurrent_instances(
     """Return only the concurrent-instance matches that are NOT the gateway.
 
     Used by the pre-update concurrent gate to decide whether to abort
-    ``hermes update``. If every concurrent instance is a gateway, the pause
+    ``fulilian update``. If every concurrent instance is a gateway, the pause
     machinery (``_pause_windows_gateways_for_update``) and the post-update
     kill+restart block handle it — the update proceeds. If anything else (a
-    TUI shell, a Hermes Desktop backend child, an unrelated ``hermes`` REPL)
+    TUI shell, a Fulilian Desktop backend child, an unrelated ``fulilian`` REPL)
     is in the list, the gate still aborts with the existing message, since
     those have no pause machinery downstream.
     """
@@ -3292,13 +3292,13 @@ def _capture_active_lazy_features() -> list[str]:
 
 
 def _capture_active_tool_dependencies() -> list[str]:
-    """Snapshot Python dependencies installed explicitly through ``hermes tools``."""
+    """Snapshot Python dependencies installed explicitly through ``fulilian tools``."""
     try:
         from fulilian_cli import tools_config
 
         return tools_config.active_restorable_python_tool_dependencies()
     except Exception as exc:
-        logger.debug("Could not snapshot active Hermes Tools dependencies: %s", exc)
+        logger.debug("Could not snapshot active Fulilian Tools dependencies: %s", exc)
         return []
 
 
@@ -3308,7 +3308,7 @@ def _restore_active_tool_dependencies(
     *,
     env: dict[str, str] | None = None,
 ) -> None:
-    """Restore allowlisted ``hermes tools`` dependencies into a rebuilt venv.
+    """Restore allowlisted ``fulilian tools`` dependencies into a rebuilt venv.
 
     The dependency names came from a pre-rebuild import probe and are resolved
     through a static package allowlist. Never raises: a failed optional tool
@@ -3321,7 +3321,7 @@ def _restore_active_tool_dependencies(
     try:
         from fulilian_cli import tools_config
     except Exception as exc:
-        logger.debug("Hermes Tools dependency restore skipped (import failed): %s", exc)
+        logger.debug("Fulilian Tools dependency restore skipped (import failed): %s", exc)
         return
 
     target_python = _m()._resolve_install_target_python(install_cmd_prefix, env)
@@ -3357,7 +3357,7 @@ def _restore_active_tool_dependencies(
         return
 
     print()
-    print(f"→ Restoring {len(missing)} Hermes Tools dependency set(s)...")
+    print(f"→ Restoring {len(missing)} Fulilian Tools dependency set(s)...")
     restored: list[str] = []
     failed: list[tuple[str, str]] = []
     for name, install_args in missing:
@@ -3391,7 +3391,7 @@ def _refresh_active_lazy_features(
 
     When pyproject.toml's ``[all]`` extra was slimmed down (May 2026), most
     optional backends moved to ``tools/lazy_deps.py`` and only install on
-    first use. ``hermes update`` runs ``uv pip install -e .[all]`` which
+    first use. ``fulilian update`` runs ``uv pip install -e .[all]`` which
     leaves those packages untouched — so if we bump a pin in
     :data:`LAZY_DEPS` (CVE response, transitive bug fix), users who already
     activated the backend keep the stale version forever.
@@ -3468,7 +3468,7 @@ def _refresh_active_lazy_features(
         print(f"  ⚠ {feature} failed to refresh: {reason}")
 
     if install_cmd_prefix is None:
-        print("  ⚠ Lazy refresh failed; rerun `hermes update` once resolved.")
+        print("  ⚠ Lazy refresh failed; rerun `fulilian update` once resolved.")
         return False
 
     # Immediate import-based recovery — metadata-only verifiers miss the case
@@ -3484,7 +3484,7 @@ def _refresh_active_lazy_features(
         print(
             "  Lazy backend(s) keep their previous version; probed packages look intact."
         )
-        print("  Rerun `hermes update` once the upstream issue is resolved.")
+        print("  Rerun `fulilian update` once the upstream issue is resolved.")
         return True
     if status == "indeterminate":
         print(
@@ -3497,7 +3497,7 @@ def _refresh_active_memory_provider_dependencies() -> None:
 
     Memory-provider bridge packages are declared in each provider's
     ``plugin.yaml`` (plus mode-dependent extras like Hindsight's
-    ``hindsight-all``), NOT in Hermes' editable-install extras or
+    ``hindsight-all``), NOT in Fulilian' editable-install extras or
     ``LAZY_DEPS`` alone — so the core dependency reinstall above can strip
     or downgrade them (#53272 mem0ai, #70636 hindsight-embed). Re-run the
     provider's declared install for the ACTIVE provider only, after the
@@ -3582,7 +3582,7 @@ def _ensure_uv_for_termux(pip_cmd: list[str]) -> str | None:
     """Best-effort uv bootstrap on Termux for faster update installs.
 
     The normal path (``ensure_uv()`` in managed_uv) installs the managed
-    standalone uv into ``$HERMES_HOME/bin/uv``, but on Termux the official
+    standalone uv into ``$FULILIAN_HOME/bin/uv``, but on Termux the official
     installer may not work (glibc vs bionic).  Prefer a uv already on PATH
     (e.g. ``pkg install uv``); only if there is none do we fall back to a
     wheel-only ``pip install uv`` so we never source-build the Rust crate.
@@ -3619,7 +3619,7 @@ def _npm_manifest_paths() -> tuple[Path, ...]:
 
     The lockfile alone is NOT a sufficient key: on a local checkout a dev
     can edit package.json (root or a workspace) without running npm — the
-    lockfile is then unchanged but `hermes update` is exactly the step
+    lockfile is then unchanged but `fulilian update` is exactly the step
     expected to sync node_modules (via the `npm install` fallback in
     _run_npm_install_deterministic).
 
@@ -3666,7 +3666,7 @@ def _npm_manifests_digest() -> str | None:
             h.update(b"<missing>")
     return h.hexdigest()
 
-def _npm_lockfile_changed(hermes_root: Path) -> bool:
+def _npm_lockfile_changed(fulilian_root: Path) -> bool:
     current = _npm_manifests_digest()
     if current is None:
         return True
@@ -3675,7 +3675,7 @@ def _npm_lockfile_changed(hermes_root: Path) -> bool:
     if not (_m().PROJECT_ROOT / "node_modules").is_dir():
         return True
     # A matching lockfile hash over a tree whose web build toolchain never
-    # landed must NOT skip the reinstall — otherwise every later `hermes
+    # landed must NOT skip the reinstall — otherwise every later `fulilian
     # update` keeps rebuilding against a half-installed tree and serving a
     # stale dist.
     web_dir = _m().PROJECT_ROOT / "web"
@@ -3686,20 +3686,20 @@ def _npm_lockfile_changed(hermes_root: Path) -> bool:
     try:
         # Key the cache by PROJECT_ROOT so parallel worktrees don't collide.
         cache_key = hashlib.sha256(str(_m().PROJECT_ROOT).encode()).hexdigest()[:12]
-        cache_file = hermes_root / f".npm_lock_hash_{cache_key}"
+        cache_file = fulilian_root / f".npm_lock_hash_{cache_key}"
         if not cache_file.exists():
             return True
         return cache_file.read_text(encoding="utf-8").strip() != current
     except OSError:
         return True
 
-def _record_npm_lockfile_hash(hermes_root: Path) -> None:
+def _record_npm_lockfile_hash(fulilian_root: Path) -> None:
     digest = _npm_manifests_digest()
     if digest is None:
         return
     try:
         cache_key = hashlib.sha256(str(_m().PROJECT_ROOT).encode()).hexdigest()[:12]
-        cache_file = hermes_root / f".npm_lock_hash_{cache_key}"
+        cache_file = fulilian_root / f".npm_lock_hash_{cache_key}"
         cache_file.write_text(digest, encoding="utf-8")
     except OSError:
         logger.debug("Could not write npm lockfile hash cache")
@@ -3716,7 +3716,7 @@ def _repair_node_deps_on_current_checkout(
     A current checkout does not imply healthy Node deps: a previous npm
     install may have failed (EBADENGINE from a node/npm mismatch, network
     timeout, interrupted install) and its error message says to "re-run
-    hermes update" — but the early return never reached the Node refresh,
+    fulilian update" — but the early return never reached the Node refresh,
     so that repair advice could never work. ``_update_node_dependencies``
     self-gates on the lockfile hash, which is only recorded after a
     SUCCESSFUL npm install (and re-trips when node_modules is missing or
@@ -3726,7 +3726,7 @@ def _repair_node_deps_on_current_checkout(
     node_failures = _update_node_dependencies()
     if node_failures:
         print(f"  ⚠ Node.js refresh failed for: {', '.join(node_failures)}")
-        print("    Fix npm and re-run `hermes update`.")
+        print("    Fix npm and re-run `fulilian update`.")
         print_completion(
             "⚠ Checkout is current, but Node.js dependencies could not be repaired."
         )
@@ -3765,7 +3765,7 @@ def _update_node_dependencies() -> list[str]:
             print("→ Updating Node.js dependencies...")
             print("  ⚠ Skipped: only a Windows npm is reachable from this WSL shell.")
             print("    Install Node.js inside the WSL distro (nvm, or your distro's")
-            print("    package manager), then re-run `hermes update`.")
+            print("    package manager), then re-run `fulilian update`.")
             failed = []
             if any(
                 (_m().PROJECT_ROOT / workspace / "package.json").exists()
@@ -3775,16 +3775,16 @@ def _update_node_dependencies() -> list[str]:
             return failed
         return []
 
-    from fulilian_constants import get_default_hermes_root
+    from fulilian_constants import get_default_fulilian_root
 
     # This cache describes PROJECT_ROOT/node_modules, which is shared by every
-    # Hermes profile using this checkout. Keep one per-checkout cache under the
-    # shared Hermes root rather than rerunning npm once per named profile.
-    shared_hermes_root = get_default_hermes_root()
+    # Fulilian profile using this checkout. Keep one per-checkout cache under the
+    # shared Fulilian root rather than rerunning npm once per named profile.
+    shared_fulilian_root = get_default_fulilian_root()
 
     # Best-effort: warm npx's cache for agent-browser (#43564). Runs before
     # the lockfile-unchanged early return below since that's the common
-    # `hermes update` case. Synchronous and can block ~11s on a true cold
+    # `fulilian update` case. Synchronous and can block ~11s on a true cold
     # cache (~0.4s once warm) — print first so that doesn't look like a hang.
     print("→ Warming npx cache for agent-browser...")
     try:
@@ -3793,7 +3793,7 @@ def _update_node_dependencies() -> list[str]:
     except Exception:
         pass
 
-    if not _m()._npm_lockfile_changed(shared_hermes_root):
+    if not _m()._npm_lockfile_changed(shared_fulilian_root):
         logger.info("npm lockfile unchanged, skipping npm install")
         return []
 
@@ -3813,7 +3813,7 @@ def _update_node_dependencies() -> list[str]:
         print()
         print("  ⚠ Node.js dependency refresh did not complete cleanly; the")
         print("    installation may be in a mixed state (updated code, stale Node")
-        print("    deps). Fix npm and re-run `hermes update`.")
+        print("    deps). Fix npm and re-run `fulilian update`.")
         return list(labels)
 
     install_args = [
@@ -3828,14 +3828,14 @@ def _update_node_dependencies() -> list[str]:
         "--include-workspace-root",
     ]
 
-    from fulilian_constants import with_hermes_node_path
+    from fulilian_constants import with_fulilian_node_path
 
-    nixos_env = with_hermes_node_path(_m()._nixos_build_env())
+    nixos_env = with_fulilian_node_path(_m()._nixos_build_env())
 
     # NOTE: capture_output=False here is deliberate (#18840) — optional
     # postinstall scripts print download progress, and capturing it makes a
     # long download look hung. The chatty npm-deprecation noise during
-    # `hermes update` comes from the *desktop* build, not this step; that
+    # `fulilian update` comes from the *desktop* build, not this step; that
     # one is captured to update.log.
     result = _m()._run_npm_install_deterministic(
         npm,
@@ -3845,7 +3845,7 @@ def _update_node_dependencies() -> list[str]:
         env=nixos_env,
     )
     if result.returncode == 0:
-        _record_npm_lockfile_hash(shared_hermes_root)
+        _record_npm_lockfile_hash(shared_fulilian_root)
         print("  ✓ ui-tui, web workspaces installed (desktop skipped)")
         failures: list[str] = []
     else:
@@ -3858,9 +3858,9 @@ def _update_node_dependencies() -> list[str]:
     return failures
 
 def _log_only_write(text: str) -> None:
-    """Write ``text`` to ``~/.hermes/logs/update.log`` only, never the terminal.
+    """Write ``text`` to ``~/.fulilian/logs/update.log`` only, never the terminal.
 
-    During ``hermes update`` ``sys.stdout`` is an ``_UpdateOutputStream`` that
+    During ``fulilian update`` ``sys.stdout`` is an ``_UpdateOutputStream`` that
     mirrors to both the terminal and ``update.log``. Loud, low-signal
     subprocess output (npm installs, the Electron/vite build, the cua-driver
     installer's "Next steps" wall) should be captured and tucked into the log
@@ -3943,7 +3943,7 @@ def _print_fetch_failure(stderr: str) -> None:
 
 
 def _cmd_update_check(branch: str = "main", *, branch_explicit: bool = False):
-    """Implement ``hermes update --check``: fetch and report without installing.
+    """Implement ``fulilian update --check``: fetch and report without installing.
 
     ``branch`` selects which branch the check compares against. Default is
     "main"; callers can pass another branch to ask "are there new commits
@@ -4136,16 +4136,16 @@ def _ensure_fhs_path_guard() -> None:
 
     Mirrors the post-symlink probe added to ``scripts/install.sh`` so that
     existing FHS-layout root installs on RHEL/CentOS/Rocky/Alma 8+ get
-    repaired on ``hermes update`` without requiring a reinstall.  The
+    repaired on ``fulilian update`` without requiring a reinstall.  The
     installer's assumption that ``/usr/local/bin`` is on PATH for every
     standard shell breaks on those distros in non-login interactive shells
     (su, sudo -s, tmux panes, some web terminals): /etc/bashrc doesn't
     add /usr/local/bin and /root/.bash_profile doesn't either.  Symptom:
-    ``hermes`` prints ``command not found`` even though the symlink lives
-    at /usr/local/bin/hermes.
+    ``fulilian`` prints ``command not found`` even though the symlink lives
+    at /usr/local/bin/fulilian.
 
     Silent no-op on: non-Linux, non-root, non-FHS installs, and any system
-    where ``bash -i -c 'command -v hermes'`` already resolves.  Idempotent.
+    where ``bash -i -c 'command -v fulilian'`` already resolves.  Idempotent.
     """
     if _m().sys.platform != "linux":
         return
@@ -4155,8 +4155,8 @@ def _ensure_fhs_path_guard() -> None:
     except AttributeError:
         return
     # Only act when this is actually an FHS-layout install (command link at
-    # /usr/local/bin/hermes, code at /usr/local/lib/hermes-agent).
-    fhs_link = Path("/usr/local/bin/hermes")
+    # /usr/local/bin/fulilian, code at /usr/local/lib/fulilian-agent).
+    fhs_link = Path("/usr/local/bin/fulilian")
     if not fhs_link.is_symlink() and not fhs_link.exists():
         return
 
@@ -4174,7 +4174,7 @@ def _ensure_fhs_path_guard() -> None:
                 "bash",
                 "-i",
                 "-c",
-                "command -v hermes",
+                "command -v fulilian",
             ],
             capture_output=True,
             text=True, encoding="utf-8", errors="replace",
@@ -4187,7 +4187,7 @@ def _ensure_fhs_path_guard() -> None:
 
     path_line = 'export PATH="/usr/local/bin:$PATH"'
     path_comment = (
-        "# Hermes Agent — ensure /usr/local/bin is on PATH " "(RHEL non-login shells)"
+        "# FuLiLian — ensure /usr/local/bin is on PATH " "(RHEL non-login shells)"
     )
     wrote_any = False
     for candidate in (".bashrc", ".bash_profile"):
@@ -4220,27 +4220,27 @@ def _ensure_fhs_path_guard() -> None:
         print("    (reload your shell or run 'source ~/.bashrc' to pick it up)")
 
 def _ensure_acp_launcher() -> None:
-    r"""Self-heal: install a ``hermes-acp`` launcher next to the ``hermes`` one.
+    r"""Self-heal: install a ``fulilian-acp`` launcher next to the ``fulilian`` one.
 
     Mirrors the launcher block in ``scripts/install.sh`` so existing installs
-    gain the ACP command on ``hermes update`` without a reinstall.  ACP hosts
+    gain the ACP command on ``fulilian update`` without a reinstall.  ACP hosts
     (Zed, JetBrains, Buzz Desktop) spawn the agent by resolving the
-    ``hermes-acp`` command name against the login-shell PATH; the console
+    ``fulilian-acp`` command name against the login-shell PATH; the console
     script of that name lives inside the install's venv, which is not on that
-    PATH, so those hosts report Hermes as not installed even when it is.
+    PATH, so those hosts report Fulilian as not installed even when it is.
 
-    The shim simply delegates to the sibling ``hermes`` launcher with the
+    The shim simply delegates to the sibling ``fulilian`` launcher with the
     ``acp`` subcommand, which makes it correct for every install layout
     (venv wrapper, FHS symlink, pipx/pip console script) without having to
     reconstruct interpreter/entrypoint paths.
 
-    No-op on Windows (install.ps1 stages the ``hermes`` / ``hermes-acp``
-    launchers into the managed binary dir ``$HermesHome\bin`` and puts THAT
+    No-op on Windows (install.ps1 stages the ``fulilian`` / ``fulilian-acp``
+    launchers into the managed binary dir ``$FulilianHome\bin`` and puts THAT
     on the user PATH — never the whole ``venv\Scripts`` dir, which would
     shadow the user's ``python`` (#83797); when those launchers go missing,
-    ``hermes_cli._install_repair.ensure_windows_bin_launchers`` re-stages
-    them) and wherever a ``hermes-acp`` is already present next to the
-    ``hermes`` command.  Unwritable directories (e.g. ``/usr/local/bin`` as
+    ``fulilian_cli._install_repair.ensure_windows_bin_launchers`` re-stages
+    them) and wherever a ``fulilian-acp`` is already present next to the
+    ``fulilian`` command.  Unwritable directories (e.g. ``/usr/local/bin`` as
     non-root) are skipped silently.  Idempotent.
     """
     if _m().sys.platform == "win32":
@@ -4249,10 +4249,10 @@ def _ensure_acp_launcher() -> None:
         # migrate_windows_bin_path in this command's tail) — not here.
         return
     for bin_dir in (Path.home() / ".local" / "bin", Path("/usr/local/bin")):
-        hermes_cmd = bin_dir / "hermes"
-        acp_cmd = bin_dir / "hermes-acp"
+        fulilian_cmd = bin_dir / "fulilian"
+        acp_cmd = bin_dir / "fulilian-acp"
         try:
-            if not (hermes_cmd.is_file() or hermes_cmd.is_symlink()):
+            if not (fulilian_cmd.is_file() or fulilian_cmd.is_symlink()):
                 continue
             # Already present — a console script (pip/pipx install), an
             # earlier shim, or a symlink. is_symlink() catches broken
@@ -4262,16 +4262,16 @@ def _ensure_acp_launcher() -> None:
                 continue
             shim = (
                 "#!/usr/bin/env bash\n"
-                "# Hermes Agent — ACP launcher (written by `hermes update`).\n"
+                "# FuLiLian — ACP launcher (written by `fulilian update`).\n"
                 "# ACP hosts (Zed, JetBrains, Buzz) resolve the agent by this\n"
                 "# command name on the login-shell PATH.\n"
-                f'exec "{hermes_cmd}" acp "$@"\n'
+                f'exec "{fulilian_cmd}" acp "$@"\n'
             )
             acp_cmd.write_text(shim, encoding="utf-8")
             acp_cmd.chmod(acp_cmd.stat().st_mode | 0o755)
         except OSError:
             continue
-        print(f"  ✓ Installed hermes-acp launcher → {acp_cmd}")
+        print(f"  ✓ Installed fulilian-acp launcher → {acp_cmd}")
 
 _PRE_UPDATE_SNAPSHOT_KEEP = 1
 # Sibling-profile snapshot ids from the current run's pre-update backup
@@ -4342,8 +4342,8 @@ def _run_pre_update_backup(args) -> Optional[str]:
       under ``state-snapshots/``. Files over 1 GiB are skipped with a
       warning so a bloated state.db can never stall the update
       (issues #15733, #34600 are the reason this safety net exists).
-    - ``full``  — the quick snapshot PLUS a full zip of HERMES_HOME under
-      ``backups/`` (restorable via ``hermes import``; the #48200 wrong-path
+    - ``full``  — the quick snapshot PLUS a full zip of FULILIAN_HOME under
+      ``backups/`` (restorable via ``fulilian import``; the #48200 wrong-path
       wipe is the reason this level exists).
 
     ``--backup`` forces ``full`` for one run; ``--no-backup`` forces ``off``.
@@ -4372,9 +4372,9 @@ def _run_pre_update_backup(args) -> Optional[str]:
         )
 
         # NOTE: this function later does `from fulilian_constants import
-        # get_hermes_home`, which makes the name function-local — the
+        # get_fulilian_home`, which makes the name function-local — the
         # module-level import is shadowed and unbound here. Alias explicitly.
-        from fulilian_cli.config import get_hermes_home as _get_home
+        from fulilian_cli.config import get_fulilian_home as _get_home
 
         snapshot_id = create_quick_snapshot(
             label="pre-update",
@@ -4514,20 +4514,20 @@ def _run_pre_update_backup(args) -> Optional[str]:
 
     size_str = format_bytes(size_bytes)
 
-    # Render path using display_hermes_home so the user sees ~/.hermes/...
+    # Render path using display_fulilian_home so the user sees ~/.fulilian/...
     try:
-        from fulilian_constants import get_hermes_home, display_hermes_home
+        from fulilian_constants import get_fulilian_home, display_fulilian_home
 
-        home = get_hermes_home()
+        home = get_fulilian_home()
         try:
-            display_path = f"{display_hermes_home()}/{out_path.relative_to(home)}"
+            display_path = f"{display_fulilian_home()}/{out_path.relative_to(home)}"
         except ValueError:
             display_path = str(out_path)
     except Exception:
         display_path = str(out_path)
 
     print(f"  Saved:    {display_path} ({size_str}, {elapsed:.1f}s)")
-    print(f"  Restore:  hermes import {out_path}")
+    print(f"  Restore:  fulilian import {out_path}")
     print("  Disable:  set updates.pre_update_backup: quick (or off) in config.yaml")
     print()
     return snapshot_id
@@ -4590,11 +4590,11 @@ def _venv_core_imports_healthy() -> tuple[bool, str]:
     """Probe the project venv for the core imports the backend needs to boot.
 
     Runs a tiny import check inside the venv interpreter (NOT this process —
-    ``hermes update`` may be driven by a different Python). Catches the
+    ``fulilian update`` may be driven by a different Python). Catches the
     half-updated-venv state: git checkout current but a dependency sync that
     failed or was killed partway (e.g. Windows access-denied on a loaded
     .pyd), leaving imports like ``fastapi``'s new transitive deps missing.
-    Without this probe, ``hermes update`` on a current checkout prints
+    Without this probe, ``fulilian update`` on a current checkout prints
     "Already up to date!" and returns without ever re-syncing dependencies —
     the user's install stays broken no matter how many times they update
     (ryanc's incident, July 2026).
@@ -4606,15 +4606,15 @@ def _venv_core_imports_healthy() -> tuple[bool, str]:
     venv_python = venv_python_path(venv_dir, windows=_m()._is_windows())
     if not venv_python.exists():
         # No venv interpreter at all. In a dev checkout that's normal (the
-        # dev may run hermes from any interpreter), so report healthy to
+        # dev may run fulilian from any interpreter), so report healthy to
         # avoid forcing reinstalls. But on a MANAGED install (the Windows
-        # installer / desktop bootstrap stamps `.hermes-bootstrap-complete`,
+        # installer / desktop bootstrap stamps `.fulilian-bootstrap-complete`,
         # and an interrupted update leaves `.update-incomplete`), the venv
         # IS the install — its absence means a repair got interrupted after
         # the old venv was moved aside, and "Already up to date!" would
         # gaslight the user while nothing can run.
         managed_markers = (
-            _m().PROJECT_ROOT / ".hermes-bootstrap-complete",
+            _m().PROJECT_ROOT / ".fulilian-bootstrap-complete",
             _m()._update_marker_path(),
         )
         if any(m.exists() for m in managed_markers):
@@ -4659,8 +4659,8 @@ def _detect_venv_python_processes(
 ) -> list[tuple[int, str, str]]:
     """Find live processes running from the project venv's interpreter.
 
-    The hermes.exe shim guard misses the biggest lock-holder class on
-    Windows: the Desktop app's backend (``python.exe -m hermes_cli.main
+    The fulilian.exe shim guard misses the biggest lock-holder class on
+    Windows: the Desktop app's backend (``python.exe -m fulilian_cli.main
     serve``) and anything else running straight off ``venv\\Scripts\\python
     (w).exe``. Those processes keep native ``.pyd`` extensions mapped, so a
     dependency sync mid-update dies with access-denied and strands the venv
@@ -4670,7 +4670,7 @@ def _detect_venv_python_processes(
     backend and respawns it within seconds — so the caller should refuse and
     tell the user to close the app instead. Returns ``(pid, name, cmdline)``
     tuples; empty off-Windows / without psutil / when nothing matches. The
-    calling process and its ancestors are always excluded (a CLI ``hermes
+    calling process and its ancestors are always excluded (a CLI ``fulilian
     update`` itself runs from the venv python). Never raises.
     """
     if not _m()._is_windows():
@@ -4746,11 +4746,11 @@ def _detect_venv_python_processes(
         # Fallback: uv/base-interpreter trampolines run a python whose exe is
         # OUTSIDE the venv but which still imports from it and holds its .pyd
         # files. Catch those by what they're running: a cmdline that references
-        # this venv's path, or a `-m hermes_cli.main ...` invocation tied to
+        # this venv's path, or a `-m fulilian_cli.main ...` invocation tied to
         # this install (install root in the cmdline or as the working dir).
         if not is_holder and venv_prefix in cmdline_low:
             is_holder = True
-        if not is_holder and "hermes_cli.main" in cmdline_low:
+        if not is_holder and "fulilian_cli.main" in cmdline_low:
             if root_prefix in cmdline_low or cwd_low.startswith(root_prefix):
                 is_holder = True
         if not is_holder:
@@ -4759,7 +4759,7 @@ def _detect_venv_python_processes(
         # Return the FULL cmdline: callers match against it (the Desktop
         # preflight's pausable-gateway exemption parses for `gateway run`).
         # Truncating here cut long managed-runtime interpreter paths before
-        # the `-m hermes_cli.main gateway run` argv, so autostarted gateways
+        # the `-m fulilian_cli.main gateway run` argv, so autostarted gateways
         # were misreported as blockers and the update dead-ended. Truncate
         # only at display time.
         matches.append((int(pid), str(name), cmdline_raw))
@@ -4770,7 +4770,7 @@ def _detect_venv_python_processes(
 # below cannot rewrite the backing ``.pyd``/``.dll`` — Windows blocks REPLACE
 # on a mapped image — and the update dies with ``os error 5`` between
 # uninstall and reinstall, stranding the venv half-updated (#83569).
-# ``cryptography`` is the canonical case: ``hermes_cli.main`` used to import
+# ``cryptography`` is the canonical case: ``fulilian_cli.main`` used to import
 # it at startup while resolving external secret sources; ``PyYAML``'s
 # ``_yaml`` C extension is loaded by every CLI process (config parsing).
 # Keep this guard as defence-in-depth against future eager imports (new
@@ -4905,8 +4905,8 @@ def _abort_dependency_sync_if_self_locked(gateway_resume=None) -> None:
       marker recovery finish the install: that launch runs the install before
       importing anything heavy, so it maps nothing and the swap succeeds.
 
-    - The ``hermes.exe`` console shim we were launched from (#88838, #89599).
-      The marker cannot help here — every future ``hermes`` launch is also the
+    - The ``fulilian.exe`` console shim we were launched from (#88838, #89599).
+      The marker cannot help here — every future ``fulilian`` launch is also the
       shim, so deferring to the next launch defers forever.  Hand the install
       to a child under the venv interpreter and exit, releasing the shim.
     """
@@ -4939,7 +4939,7 @@ def _defer_update_for_self_lock(loaded: list[str]) -> None:
     print()
     print("  On Windows a mapped extension cannot be replaced by the process")
     print("  holding it. The code update has been applied; only the dependency")
-    print("  sync has been deferred: the next `hermes` launch will complete it")
+    print("  sync has been deferred: the next `fulilian` launch will complete it")
     print("  in a fresh process before anything imports these modules.")
     _m()._write_update_incomplete_marker()
 
@@ -4987,12 +4987,12 @@ def _holder_value_flags() -> frozenset:
     return _holder_value_flags_cache
 
 
-def _hermes_holder_subcommand(cmdline: str) -> str | None:
-    """The actual Hermes SUBCOMMAND a venv-holder argv runs, or None.
+def _fulilian_holder_subcommand(cmdline: str) -> str | None:
+    """The actual Fulilian SUBCOMMAND a venv-holder argv runs, or None.
 
     Token-based, never substring (#90778: ``kanban --preserve-cache``
     contained \"serve\" and got labeled as the Desktop backend). Finds the
-    ``hermes_cli.main`` / ``hermes(.exe)`` entry token, then returns the
+    ``fulilian_cli.main`` / ``fulilian(.exe)`` entry token, then returns the
     first following token that is not a flag or a flag's value. Profile
     selectors (``--profile X``, ``-p X``) are skipped like the canonical
     gateway matcher does. Returns None when no subcommand can be
@@ -5008,11 +5008,11 @@ def _hermes_holder_subcommand(cmdline: str) -> str | None:
     entry_idx: int | None = None
     for i, token in enumerate(tokens):
         low = token.lower().strip('"')
-        if low.endswith("hermes_cli.main") and i > 0 and tokens[i - 1] == "-m":
+        if low.endswith("fulilian_cli.main") and i > 0 and tokens[i - 1] == "-m":
             entry_idx = i
             break
         base = low.rsplit("\\", 1)[-1].rsplit("/", 1)[-1]
-        if base in ("hermes", "hermes.exe"):
+        if base in ("fulilian", "fulilian.exe"):
             entry_idx = i
             break
     if entry_idx is None:
@@ -5037,21 +5037,21 @@ def _format_venv_python_holders_message(matches: list[tuple[int, str, str]]) -> 
     """Explain which venv processes block the update and how to clear them.
 
     Holder labels come from the parsed SUBCOMMAND, never substring matching
-    (#90778): a standalone ``hermes dashboard`` must not be labeled as the
+    (#90778): a standalone ``fulilian dashboard`` must not be labeled as the
     Desktop backend (advice to close an app that isn't running), and flags
     like ``--preserve-cache`` must not match \"serve\". Unknown argv gets no
     hint rather than a wrong one.
     """
     lines = [
-        "✗ Other Hermes processes are running from this install's venv:",
+        "✗ Other Fulilian processes are running from this install's venv:",
     ]
     hint_by_subcommand = {
-        "serve": "  ← Hermes backend (if the Desktop app is open, close it)",
-        "dashboard": "  ← hermes dashboard (stop it: hermes dashboard stop, or close that terminal)",
+        "serve": "  ← Fulilian backend (if the Desktop app is open, close it)",
+        "dashboard": "  ← fulilian dashboard (stop it: fulilian dashboard stop, or close that terminal)",
         "gateway": "  ← gateway",
     }
     for pid, name, cmdline in matches[:6]:
-        sub = _hermes_holder_subcommand(cmdline)
+        sub = _fulilian_holder_subcommand(cmdline)
         hint = hint_by_subcommand.get(sub or "", "")
         lines.append(f"  PID {pid}  {name}  {cmdline[:120]}{hint}")
     if len(matches) > 6:
@@ -5064,10 +5064,10 @@ def _format_venv_python_holders_message(matches: list[tuple[int, str, str]]) -> 
         "  dependency update would fail partway and leave a broken install."
     )
     lines.append(
-        "  Close the Hermes desktop app / other Hermes terminals, then re-run:"
+        "  Close the Fulilian desktop app / other Fulilian terminals, then re-run:"
     )
-    lines.append("    hermes update")
-    lines.append("  (or use `hermes update --force-venv` to proceed anyway at your own risk)")
+    lines.append("    fulilian update")
+    lines.append("  (or use `fulilian update --force-venv` to proceed anyway at your own risk)")
     return "\n".join(lines)
 
 def _venv_launcher_ancestors(pids: list[int]) -> list[int]:
@@ -5107,7 +5107,7 @@ def _venv_launcher_ancestors(pids: list[int]) -> list[int]:
     except OSError:
         venv_prefix = str(venv_dir).lower().rstrip(os.sep) + os.sep
 
-    # Never return ourselves or our own ancestry: a CLI ``hermes update``
+    # Never return ourselves or our own ancestry: a CLI ``fulilian update``
     # runs from the venv python and would otherwise nominate itself.
     # Same #87594 carve-out as _detect_venv_python_processes: a GATEWAY
     # ancestor is not "our own ancestry" in the interactive sense — it is
@@ -5206,7 +5206,7 @@ def _ledger_manual_serve_holders(
     a live process, and its recorded spawner is NOT alive (a Desktop-owned
     backend keeps its live Electron spawner and must keep the refusal — the
     app would respawn what we kill; a PowerShell-launched serve has no live
-    Hermes spawner). Returns the full ledger entries so the relauncher can
+    Fulilian spawner). Returns the full ledger entries so the relauncher can
     rebuild the launch command from structured host/port/profile instead of
     parsing argv.
     """
@@ -5237,24 +5237,24 @@ def _serve_relaunch_commands(entries: list[dict]) -> list[list[str]]:
     for those.
     """
     commands: list[list[str]] = []
-    hermes = None
+    fulilian = None
     try:
         scripts_dir = _m()._venv_scripts_dir()
         if scripts_dir is not None:
-            for name in ("hermes.exe", "hermes"):
+            for name in ("fulilian.exe", "fulilian"):
                 candidate = scripts_dir / name
                 if candidate.is_file():
-                    hermes = str(candidate)
+                    fulilian = str(candidate)
                     break
     except Exception:
-        hermes = None
-    if hermes is None:
-        hermes = "hermes"
+        fulilian = None
+    if fulilian is None:
+        fulilian = "fulilian"
     for entry in entries:
         port = entry.get("port")
         if not isinstance(port, int) or port <= 0:
             continue
-        cmd = [hermes]
+        cmd = [fulilian]
         profile = str(entry.get("profile") or "")
         if profile and profile != "default":
             cmd += ["--profile", profile]
@@ -5289,7 +5289,7 @@ def _relaunch_stopped_serves(token: dict) -> None:
     if skipped or failed:
         print(
             "  ⚠ Some stopped backends could not be relaunched automatically; "
-            "restart them manually (hermes serve --host <ip> --port <port>)."
+            "restart them manually (fulilian serve --host <ip> --port <port>)."
         )
     try:
         from fulilian_cli.update_receipt import record_step
@@ -5313,23 +5313,23 @@ def _orphaned_desktop_backend_pids(
     supervises and respawns it within seconds), so the user must close the
     app. But in the GUI-updater handoff path the Desktop has *already
     exited* — by contract it tree-kills its backends and waits for the venv
-    shim before spawning hermes-setup, and the update-in-progress marker
+    shim before spawning fulilian-setup, and the update-in-progress marker
     parks any relaunched Desktop from spawning a fresh backend (#50238). A
     ``serve`` backend still holding the venv at that point is a straggler
     whose supervisor is gone: SIGTERM raced its spawn, or it belongs to a
     crashed window. Nothing will respawn it, and refusing on it dead-ends
-    the update with "Hermes is still running" while the user stares at zero
+    the update with "Fulilian is still running" while the user stares at zero
     open windows (ryanc's 2026-08-09 01:59/02:17 failures).
 
     A holder qualifies only when BOTH hold:
 
-    - its cmdline is a Hermes backend (``hermes_cli.main`` + ``serve`` /
+    - its cmdline is a Fulilian backend (``fulilian_cli.main`` + ``serve`` /
       ``dashboard``), and
     - its supervising parent is demonstrably gone: the parent PID no longer
       exists, or the PID was reused (parent created *after* the child).
 
     Tree-aware: the scanner can return an orphaned backend AND one of its
-    managed-runtime descendants (the ``.hermes-runtime`` interpreter child)
+    managed-runtime descendants (the ``.fulilian-runtime`` interpreter child)
     in the same holder set. That descendant has a live parent — the orphaned
     backend itself — and isn't a ``serve`` cmdline, so per-process rules
     would refuse a set that is entirely safe to reap. Holders that sit
@@ -5348,7 +5348,7 @@ def _orphaned_desktop_backend_pids(
         return None
 
     def _is_backend(argv_low: str) -> bool:
-        return "hermes_cli.main" in argv_low and (
+        return "fulilian_cli.main" in argv_low and (
             " serve" in argv_low or " dashboard" in argv_low
         )
 
@@ -5416,7 +5416,7 @@ def _ledger_reapable_backend_pids(
 
     The strongest rung: instead of inferring lineage from PPIDs or cmdline
     shape, look each venv holder up in the machine spawn ledger
-    (``hermes_cli.process_identity``). A holder qualifies when ALL of:
+    (``fulilian_cli.process_identity``). A holder qualifies when ALL of:
 
     - its ``(pid, create_time)`` matches a live ledger entry (PID reuse
       cannot forge this pair);
@@ -5456,7 +5456,7 @@ def _ledger_reapable_backend_pids(
 def _handoff_reapable_backend_pids(
     matches: list[tuple[int, str, str]],
 ) -> list[int] | None:
-    """PIDs of Hermes ``serve``/``dashboard`` backends safe to reap during a
+    """PIDs of Fulilian ``serve``/``dashboard`` backends safe to reap during a
     GUI-updater hand-off, INCLUDING ones with a still-live parent.
 
     Complements ``_orphaned_desktop_backend_pids``, which only reaps backends
@@ -5473,7 +5473,7 @@ def _handoff_reapable_backend_pids(
 
     The hand-off is the safe signal: when the update-incomplete marker is
     present (the GUI updater claimed it) AND this is a ``--gateway`` hand-off
-    run AND no live Desktop shim (``hermes.exe``) is open, NOTHING legitimate
+    run AND no live Desktop shim (``fulilian.exe``) is open, NOTHING legitimate
     is supervising or respawning a ``serve`` backend from this venv — by the
     hand-off contract the Desktop tree-kills its backends and parks any
     relaunch behind the marker (#50238). Any ``serve`` backend still holding
@@ -5482,13 +5482,13 @@ def _handoff_reapable_backend_pids(
 
     Guarded conservatively:
 
-    - Only Hermes backends (``hermes_cli.main`` + ``serve``/``dashboard``)
+    - Only Fulilian backends (``fulilian_cli.main`` + ``serve``/``dashboard``)
       from THIS install's venv qualify; a non-backend holder (operator REPL,
       stray script) disqualifies the whole set → ``None`` (keep refusing), so
       we never widen the blast radius during a hand-off.
     - Only runs when the CALLER has confirmed the hand-off context
       (``args.gateway`` AND a claimed update-incomplete marker AND no live
-      ``hermes.exe`` shim) — outside that gate this function is never called
+      ``fulilian.exe`` shim) — outside that gate this function is never called
       and the stricter orphan-only path stands.
     - psutil unavailable → ``None`` (can't re-read argv to classify → refuse).
 
@@ -5501,7 +5501,7 @@ def _handoff_reapable_backend_pids(
         return None
 
     def _is_backend(argv_low: str) -> bool:
-        return "hermes_cli.main" in argv_low and (
+        return "fulilian_cli.main" in argv_low and (
             " serve" in argv_low or " dashboard" in argv_low
         )
 
@@ -5529,7 +5529,7 @@ def _stop_process_trees(pids: list[int]) -> None:
 
     ``taskkill /T /F`` mirrors the Desktop's ``forceKillProcessTree`` and
     install.ps1's venv sweep: stopping only the parent can leave a managed
-    ``.hermes-runtime`` interpreter child alive and holding the install open
+    ``.fulilian-runtime`` interpreter child alive and holding the install open
     (#70026). Best effort; never raises.
     """
     for pid in pids:
@@ -5544,7 +5544,7 @@ def _stop_process_trees(pids: list[int]) -> None:
 
 
 def _looks_like_desktop_control_plane(cmdline: str) -> bool:
-    """True for this-install ``hermes serve`` / ``hermes dashboard`` argv.
+    """True for this-install ``fulilian serve`` / ``fulilian dashboard`` argv.
 
     That is the Desktop control plane, not the messaging gateway. Serve and
     dashboard do not host platform adapters (#92091); do not feed this into
@@ -5556,9 +5556,9 @@ def _looks_like_desktop_control_plane(cmdline: str) -> bool:
     planes). A cmdline whose subcommand cannot be determined is NOT a
     control plane — callers must not guess ownership.
     """
-    if "hermes_cli.main" not in (cmdline or "").lower():
+    if "fulilian_cli.main" not in (cmdline or "").lower():
         return False
-    return _hermes_holder_subcommand(cmdline) in ("serve", "dashboard")
+    return _fulilian_holder_subcommand(cmdline) in ("serve", "dashboard")
 
 
 def _desktop_owns_gateway_lifecycle() -> bool:
@@ -5786,7 +5786,7 @@ def _pause_windows_gateways_for_update() -> dict | None:
     """Stop running Windows gateways before mutating the checkout or venv.
 
     Windows scheduled/startup gateways run through pythonw.exe, so the generic
-    hermes.exe concurrent-instance guard does not see them. They still import
+    fulilian.exe concurrent-instance guard does not see them. They still import
     from the checkout and can keep files locked while ``git`` or ``uv`` updates
     the install. Stop only PIDs that the gateway discovery code identifies.
     """
@@ -5929,7 +5929,7 @@ def _pause_windows_gateways_for_update() -> dict | None:
     # update even though the gateway itself is stopped.
     launcher_pids = _m()._venv_launcher_ancestors(mapped_pids)
 
-    print("→ Stopping Windows gateway process(es) before updating Hermes...")
+    print("→ Stopping Windows gateway process(es) before updating Fulilian...")
     try:
         drain_timeout = max(float(_get_restart_drain_timeout()), 1.0)
     except Exception:
@@ -5964,7 +5964,7 @@ def _pause_windows_gateways_for_update() -> dict | None:
     # Snapshot each unmapped gateway's command line *before* we force-kill it,
     # so ``_resume_windows_gateways_after_update`` can respawn it by replaying
     # its own argv. Unmapped gateways are ones with no profile→PID-file mapping
-    # — e.g. a Windows Scheduled Task running ``pythonw.exe -m hermes_cli.main
+    # — e.g. a Windows Scheduled Task running ``pythonw.exe -m fulilian_cli.main
     # gateway run``. Without this snapshot they were force-killed and never
     # restarted (the "Restart manually after update" dead-end from #50090).
     unmapped: list[dict] = []
@@ -6002,7 +6002,7 @@ def _pause_windows_gateways_for_update() -> dict | None:
         if respawnable < len(unmapped_pids):
             # Some had no recoverable command line (psutil missing, access
             # denied, already gone): those still need a manual restart.
-            print("    Restart manually after update: hermes gateway run")
+            print("    Restart manually after update: fulilian gateway run")
 
     token = {
         "resume_needed": True,
@@ -6082,7 +6082,7 @@ def _cold_start_windows_gateway_after_update() -> bool:
     is installed, signalling the user wants a gateway. Unlike the relaunch
     paths — which watch an old PID and respawn once it exits — this is a direct
     fresh spawn via the same hidden-console + breakaway path that
-    ``hermes gateway start`` uses (``gateway_windows._spawn_detached``).
+    ``fulilian gateway start`` uses (``gateway_windows._spawn_detached``).
 
     Best-effort and idempotent: re-checks that nothing is running first so a
     concurrent start (e.g. the autostart entry firing) can't produce a
@@ -6154,7 +6154,7 @@ def _for_each_systemd_gateway_unit(
     process_unit,
     on_unit_timeout,
 ) -> None:
-    """Process each ``hermes-gateway*.service``/``hermes-serve*.service`` unit
+    """Process each ``fulilian-gateway*.service``/``fulilian-serve*.service`` unit
     from ``systemctl list-units``.
 
     ``subprocess.TimeoutExpired`` raised by ``process_unit`` is isolated to
@@ -6170,14 +6170,14 @@ def _for_each_systemd_gateway_unit(
             continue
         # list-units is already pattern-filtered, but keep the name gate so a
         # stray non-gateway/serve line cannot enter the restart path.
-        # ``unit.startswith("hermes-serve")`` alone would also accept the
-        # unrelated ``hermes-server.service`` — require the exact base unit
+        # ``unit.startswith("fulilian-serve")`` alone would also accept the
+        # unrelated ``fulilian-server.service`` — require the exact base unit
         # or the hyphenated profile family instead (review on #83595).
         if not (
-            unit == "hermes-gateway.service"
-            or unit.startswith("hermes-gateway-")
-            or unit == "hermes-serve.service"
-            or unit.startswith("hermes-serve-")
+            unit == "fulilian-gateway.service"
+            or unit.startswith("fulilian-gateway-")
+            or unit == "fulilian-serve.service"
+            or unit.startswith("fulilian-serve-")
         ):
             continue
         svc_name = unit.removesuffix(".service")
@@ -6189,19 +6189,19 @@ def _for_each_systemd_gateway_unit(
 def _service_unit_supports_graceful_sigusr1_restart(svc_name: str) -> bool:
     """Whether *svc_name* wires SIGUSR1 to a graceful drain-then-restart.
 
-    Only ``hermes-gateway*`` units run ``gateway/run.py``, which installs the
-    SIGUSR1 handler. ``hermes-serve*`` units (#83438) don't, so sending them
+    Only ``fulilian-gateway*`` units run ``gateway/run.py``, which installs the
+    SIGUSR1 handler. ``fulilian-serve*`` units (#83438) don't, so sending them
     SIGUSR1 would just invoke the default terminate action and burn the full
     drain budget waiting for an exit that was never graceful — go straight to
     the blunt ``systemctl restart`` path for those instead.
 
     Uses the same strict exact/hyphenated shape as the unit-name gate in
     ``_for_each_systemd_gateway_unit`` so a hypothetical near-prefix unit
-    (``hermes-gateway-helper`` is fine — profile units are
-    ``hermes-gateway-<profile>`` — but ``hermes-gatewayd``-style names are
+    (``fulilian-gateway-helper`` is fine — profile units are
+    ``fulilian-gateway-<profile>`` — but ``fulilian-gatewayd``-style names are
     not) can't be sent a SIGUSR1 it doesn't handle.
     """
-    return svc_name == "hermes-gateway" or svc_name.startswith("hermes-gateway-")
+    return svc_name == "fulilian-gateway" or svc_name.startswith("fulilian-gateway-")
 
 
 def _warn_incomplete_gateway_fleet_restart(failed_units: list) -> None:
@@ -6229,18 +6229,18 @@ def _warn_incomplete_gateway_fleet_restart(failed_units: list) -> None:
         # cannot revive a job launchd no longer knows about.
         print("  Listed services may be deregistered from launchd, or still")
         print("  running pre-update code (mixed sys.modules). Recover with:")
-        print("    hermes gateway status")
+        print("    fulilian gateway status")
         print("    launchctl list | grep <label>")
         print("    launchctl bootstrap gui/$(id -u) "
               "~/Library/LaunchAgents/<label>.plist")
         return
     print("  Skipped units may still be running pre-update code (mixed")
     print("  sys.modules). Restart them manually, then verify:")
-    print("    hermes gateway status")
-    if any(not name.startswith("ai.hermes.") for name in ordered):
+    print("    fulilian gateway status")
+    if any(not name.startswith("ai.fulilian.") for name in ordered):
         print("    systemctl --user restart <unit>   # user-scope")
         print("    sudo systemctl restart <unit>     # system-scope")
-    if any(name.startswith("ai.hermes.") for name in ordered):
+    if any(name.startswith("ai.fulilian.") for name in ordered):
         print("    launchctl kickstart -k gui/$UID/<label>   # macOS (or user/$UID)")
 
 
@@ -6288,7 +6288,7 @@ def _restart_launchd_gateway_after_update(
             print(
                 f"  ⚠ Gateway restart failed: {stderr}\n"
                 "    The gateway may be DOWN on pre-update code. "
-                "Recover manually: hermes gateway restart"
+                "Recover manually: fulilian gateway restart"
             )
             return [], [current_label]
     except (FileNotFoundError, subprocess.TimeoutExpired) as e:
@@ -6299,7 +6299,7 @@ def _restart_launchd_gateway_after_update(
         print(
             "  ⚠ Could not restart the gateway "
             f"({e.__class__.__name__}: {e}).\n"
-            "    Recover manually: hermes gateway restart"
+            "    Recover manually: fulilian gateway restart"
         )
         return [], [current_label]
 
@@ -6318,7 +6318,7 @@ def _restart_launchd_gateway_after_update(
         return [current_label], []
     print(
         f"  ✗ {current_label} restarted but launchd is not supervising it.\n"
-        "    Check logs, then: hermes gateway restart"
+        "    Check logs, then: fulilian gateway restart"
     )
     return [], [current_label]
 
@@ -6331,7 +6331,7 @@ def _restart_macos_launchd_gateways(
     """Restart every launchd-managed gateway after an update (macOS).
 
     The code update (git pull) is shared across all profiles, so every
-    ``ai.hermes.gateway*`` LaunchAgent must reload it — restarting only the
+    ``ai.fulilian.gateway*`` LaunchAgent must reload it — restarting only the
     invoking profile's service leaves siblings on pre-update ``sys.modules``
     until their next agent turn imports a symbol the old module generation
     doesn't have (#41403).  Parity with the systemd fleet path.
@@ -6424,7 +6424,7 @@ def _surviving_gateway_pids_after_failed_restart():
     """Best-effort PIDs of gateways still running after the restart phase died.
 
     Returns ``None`` when the answer cannot be determined — most importantly
-    when ``hermes_cli.gateway`` itself no longer imports, which is one of the
+    when ``fulilian_cli.gateway`` itself no longer imports, which is one of the
     ways the restart phase aborts in the first place (the update replaced the
     checkout under a process that already loaded the old modules). ``None`` and
     a non-empty list are both treated as "assume stale" by the caller; only a
@@ -6446,21 +6446,21 @@ def _gateway_service_matches_profile(profile: str, service: object) -> bool:
     """Match an exact gateway service/label to a profile.
 
     Profile names must not be matched as substrings: ``foo`` must not claim
-    that ``hermes-gateway-foobar.service`` was already restarted.  These are
+    that ``fulilian-gateway-foobar.service`` was already restarted.  These are
     the service/label shapes produced by the existing systemd, launchd, and
     s6 lifecycle implementations.
     """
     name = str(service).removesuffix(".service")
     if profile == "default":
         return name in {
-            "hermes-gateway",
-            "ai.hermes.gateway",
+            "fulilian-gateway",
+            "ai.fulilian.gateway",
             "gateway",
             "gateway-default",
         }
     return name in {
-        f"hermes-gateway-{profile}",
-        f"ai.hermes.gateway-{profile}",
+        f"fulilian-gateway-{profile}",
+        f"ai.fulilian.gateway-{profile}",
         f"gateway-{profile}",
     }
 
@@ -6471,7 +6471,7 @@ def _gateway_recovery_partition(
     """Partition pre-update runtimes into fresh-restart candidates and skips.
 
     The update inventory is captured before the checkout changes.  It is the
-    only safe source here: re-importing ``hermes_cli.gateway`` in the failing
+    only safe source here: re-importing ``fulilian_cli.gateway`` in the failing
     interpreter is exactly what can raise the original ``ImportError``.
 
     Returns ``(candidates, skipped)`` where ``candidates`` maps profile →
@@ -6550,7 +6550,7 @@ def _recover_gateway_restart_after_abort(
 ) -> dict[str, list]:
     """Retry supervised gateway restarts from a clean Python process.
 
-    ``hermes update`` normally performs the fleet restart in the interpreter
+    ``fulilian update`` normally performs the fleet restart in the interpreter
     that started before ``git pull``.  If that phase raises while importing the
     new tree, a warning alone leaves the old gateway alive against new files on
     disk.  The recovery boundary launches the existing per-profile
@@ -6597,12 +6597,12 @@ def _recover_gateway_restart_after_abort(
     command = [
         sys.executable,
         "-m",
-        "hermes_cli.update_restart_recovery",
+        "fulilian_cli.update_restart_recovery",
         "--stdin",
     ]
     env = os.environ.copy()
-    env["HERMES_UPDATE_RESTART_RECOVERY"] = "1"
-    for marker in ("_HERMES_GATEWAY", "HERMES_GATEWAY", "HERMES_GATEWAY_MODE"):
+    env["FULILIAN_UPDATE_RESTART_RECOVERY"] = "1"
+    for marker in ("_FULILIAN_GATEWAY", "FULILIAN_GATEWAY", "FULILIAN_GATEWAY_MODE"):
         env.pop(marker, None)
 
     # A gateway-triggered update may run inside the gateway's systemd cgroup.
@@ -6700,7 +6700,7 @@ def _warn_gateway_restart_phase_aborted(exc: BaseException, pids) -> None:
 
     Issue #78574: the gateway auto-restart phase was wrapped in a blanket
     ``except Exception`` that only logged at debug level, so an early failure
-    (e.g. importing ``hermes_cli.gateway`` from the freshly pulled checkout)
+    (e.g. importing ``fulilian_cli.gateway`` from the freshly pulled checkout)
     erased every drain/restart line from the update output. The update still
     printed "Update complete!" and exited 0 while the running gateway kept
     serving pre-update modules against replaced source files — the next turn
@@ -6715,15 +6715,15 @@ def _warn_gateway_restart_phase_aborted(exc: BaseException, pids) -> None:
         print("  Any gateway still running is serving pre-update code")
         print("  (mixed sys.modules) against the updated checkout.")
     print("  Restart it manually, then verify:")
-    print("    hermes gateway restart")
-    print("    hermes gateway status")
+    print("    fulilian gateway restart")
+    print("    fulilian gateway status")
 
 def _refresh_windows_gateway_launchers() -> None:
     """Regenerate installed Windows gateway launcher scripts after update.
 
     The Scheduled Task / Startup-folder launchers (``gateway.cmd`` +
     ``gateway.vbs``) are persistence artifacts written once at install time —
-    ``hermes update`` never touched them, so installs created before the
+    ``fulilian update`` never touched them, so installs created before the
     hidden-console rework (aa2ae36c3f) kept launching the gateway through
     ``pythonw.exe`` forever: every descendant spawn flashed a conhost
     (#54220/#56747) and, since #70344, the console-less gateway died at
@@ -6750,8 +6750,8 @@ def _refresh_windows_gateway_launchers() -> None:
 def _refresh_bootstrap_cache_scripts(branch: str = "main") -> None:
     """Sync the installer's bootstrap-cache scripts from the fresh checkout.
 
-    The Desktop GUI updater (``hermes-setup.exe``) executes
-    ``$HERMES_HOME/bootstrap-cache/install-<ref>.ps1`` (or ``.sh``) for its
+    The Desktop GUI updater (``fulilian-setup.exe``) executes
+    ``$FULILIAN_HOME/bootstrap-cache/install-<ref>.ps1`` (or ``.sh``) for its
     repair/bootstrap stages. Installer binaries built before the #67193
     cache-refresh fix (June 2026 and earlier) NEVER re-download a cached
     branch-ref script — ``install-main.ps1`` cached at install time is
@@ -6759,7 +6759,7 @@ def _refresh_bootstrap_cache_scripts(branch: str = "main") -> None:
     2026-08-09 incident: a June 4 cached script's venv stage lacked the
     #81327 process-tree sweep and died on ``Access denied``). The binary
     has no self-update path, so the poisoned cache outlives every
-    ``hermes update``.
+    ``fulilian update``.
 
     Overwriting the cached script for *branch* with the freshly pulled
     ``scripts/install.ps1`` / ``scripts/install.sh`` on every update turns
@@ -6789,7 +6789,7 @@ def _refresh_bootstrap_cache_scripts(branch: str = "main") -> None:
     try:
         import re as _re
 
-        cache_dir = Path(_m().get_hermes_home()) / "bootstrap-cache"
+        cache_dir = Path(_m().get_fulilian_home()) / "bootstrap-cache"
         if not cache_dir.is_dir():
             return
         # Mirror install_script.rs::sanitize_ref().
@@ -6969,7 +6969,7 @@ def _discard_lockfile_churn(git_cmd, repo_root):
 
     npm rewrites lockfiles non-deterministically at install/build time. On a
     managed install those diffs are never intentional, so we discard them so
-    ``hermes update`` sees a clean tree instead of autostashing every run.
+    ``fulilian update`` sees a clean tree instead of autostashing every run.
     Best-effort; only ever touches files named ``package-lock.json``.
     """
     try:
@@ -7015,7 +7015,7 @@ def _normalize_managed_eol(git_cmd, repo_root):
     overwritten", so ``install.ps1`` pins ``core.autocrlf=false`` on the managed
     clone (#67730). Checkouts created before that landed never got the pin and
     cannot receive it — the bootstrap installer reuses its build-pinned
-    ``install.ps1`` forever — so ``hermes update``, which ships with the checkout
+    ``install.ps1`` forever — so ``fulilian update``, which ships with the checkout
     itself, is the only path left that can fix them.
 
     The pin and the cleanup are one operation. Under ``autocrlf=true`` git
@@ -7150,7 +7150,7 @@ def _rebuild_desktop_after_update(
 
     print("→ Checking if desktop app needs rebuilding...")
     # Consult the content-hash stamp IN-PROCESS first. The spawned
-    # `hermes desktop --build-only` subprocess re-imports the whole CLI stack
+    # `fulilian desktop --build-only` subprocess re-imports the whole CLI stack
     # (~1-3 s) just to reach the same _m()._desktop_build_needed check; when
     # the stamp already says "up to date" we can skip the spawn entirely. The
     # update path never passes --source, so the subprocess would run with
@@ -7167,21 +7167,21 @@ def _rebuild_desktop_after_update(
         print("  ✓ Desktop app up to date")
         return True
 
-    desktop_build_cmd = [sys.executable, "-m", "hermes_cli.main", "desktop", "--build-only"]
+    desktop_build_cmd = [sys.executable, "-m", "fulilian_cli.main", "desktop", "--build-only"]
     # Capture the (very loud) Electron/vite build output into update.log
     # instead of streaming it to the terminal. On the rare nonzero exit,
     # retry once after waiting again for the venv — this covers a
     # still-settling rebuild window the first wait didn't fully catch — then
     # surface the captured tail so the failure is debuggable.
     #
-    # Start the build subprocess with the Hermes-managed Node on PATH: when
-    # `hermes update` runs inside the desktop updater chain (Desktop →
-    # hermes-setup → hermes update), the shell PATH customizations are lost,
+    # Start the build subprocess with the Fulilian-managed Node on PATH: when
+    # `fulilian update` runs inside the desktop updater chain (Desktop →
+    # fulilian-setup → fulilian update), the shell PATH customizations are lost,
     # so a bare-PATH child would fail with `node: not found` before cmd_gui can
     # self-heal.
-    from fulilian_constants import with_hermes_node_path
+    from fulilian_constants import with_fulilian_node_path
 
-    build_env = with_hermes_node_path()
+    build_env = with_fulilian_node_path()
     build_result = _m()._run_logged_subprocess(
         desktop_build_cmd, cwd=_m().PROJECT_ROOT, env=build_env
     )
@@ -7190,11 +7190,11 @@ def _rebuild_desktop_after_update(
             desktop_build_cmd, cwd=_m().PROJECT_ROOT, env=build_env
         )
     if build_result.returncode != 0:
-        print("  ⚠ Desktop build failed (run `hermes desktop` to retry)")
+        print("  ⚠ Desktop build failed (run `fulilian desktop` to retry)")
         tail = "\n".join((build_result.stdout or "").strip().splitlines()[-15:])
         if tail:
             print(tail)
-        from fulilian_constants import display_hermes_home as _dhh
+        from fulilian_constants import display_fulilian_home as _dhh
 
         print(f"  Full build log: {_dhh()}/logs/update.log")
         return False
@@ -7256,7 +7256,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
             logger.debug("Could not read updates.non_interactive_local_changes: %s", exc)
             discard_local_changes = False
 
-    print("⚕ Updating Hermes Agent...")
+    print("⚕ Updating FuLiLian...")
     print()
 
     # Phase 1 (#91277): structured update receipt — record what this run
@@ -7270,7 +7270,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
         logger.debug("Update receipt unavailable: %s", _receipt_exc)
 
     # Plan phase (#91277 Phase 2): snapshot the pre-update fleet — every
-    # running Hermes runtime, its supervisor, and its running code version —
+    # running Fulilian runtime, its supervisor, and its running code version —
     # into the receipt, so a post-mortem can compare what the update SAW
     # against what it did. Read-only; a probe failure records nothing.
     # ``_pre_update_plan`` is read again AFTER the restart phase to reconcile
@@ -7294,7 +7294,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
     except Exception as _plan_exc:
         logger.debug("Update plan phase failed: %s", _plan_exc)
 
-    # On Windows, abort early if another hermes.exe is holding the venv shim
+    # On Windows, abort early if another fulilian.exe is holding the venv shim
     # open. Continuing would result in a string of WinError 32 warnings and
     # then either a deferred-rename leftover or a failed git-pull fast path
     # that silently falls back to the slower ZIP route. See issue #26670.
@@ -7310,7 +7310,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
     if _m()._is_windows() and not getattr(args, "force", False):
         scripts_dir = _m()._venv_scripts_dir()
         if scripts_dir is not None:
-            concurrent = _m()._detect_concurrent_hermes_instances(scripts_dir)
+            concurrent = _m()._detect_concurrent_fulilian_instances(scripts_dir)
             if concurrent:
                 non_gateway = _m()._filter_non_gateway_concurrent_instances(
                     concurrent
@@ -7349,12 +7349,12 @@ def _cmd_update_impl(args, gateway_mode: bool):
         )
 
     # With gateways paused, anything still running from the venv interpreter
-    # (most commonly the Desktop app's `hermes serve` backend) will keep .pyd
+    # (most commonly the Desktop app's `fulilian serve` backend) will keep .pyd
     # files locked and corrupt the dependency sync below. Refuse rather than
     # race: killing the desktop backend is futile (the app supervises and
     # respawns it), so the user must close the app. Deliberately NOT bypassed
     # by plain --force: the desktop bootstrap updater passes --force to skip
-    # the hermes.exe shim guard above, but its lock probe only checks the shim
+    # the fulilian.exe shim guard above, but its lock probe only checks the shim
     # and app.asar — a non-desktop venv python holding a .pyd would sail
     # through and corrupt the sync (the exact failure this guard exists for).
     # --force-venv is the explicit escape hatch.
@@ -7386,7 +7386,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
                 _venv_holders = _m()._detect_venv_python_processes()
         if _venv_holders:
             # Positive-identity rung (runs FIRST, any update context): holders
-            # the spawn ledger proves are orphaned Hermes backends — the
+            # the spawn ledger proves are orphaned Fulilian backends — the
             # process self-registered (pid, create_time, purpose, spawner) at
             # startup and its recorded spawner is provably dead. No PPID
             # archaeology, no hand-off contract required.
@@ -7394,7 +7394,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
             if _ledger_backends:
                 print(
                     f"  ⚠ {len(_ledger_backends)} ledger-identified orphaned "
-                    "Hermes backend process(es) hold the venv; stopping their trees"
+                    "Fulilian backend process(es) hold the venv; stopping their trees"
                 )
                 _m()._stop_process_trees(_ledger_backends)
                 _time.sleep(1.0)
@@ -7405,9 +7405,9 @@ def _cmd_update_impl(args, gateway_mode: bool):
                 # Every remaining holder is a Desktop `serve` backend whose
                 # supervising app is GONE — the GUI-updater handoff race:
                 # Electron's teardown lost the SIGTERM race, exited, and left
-                # its backend (and any .hermes-runtime child) holding the
+                # its backend (and any .fulilian-runtime child) holding the
                 # venv. Nothing will respawn an orphan, so reap the tree and
-                # re-check instead of dead-ending with "Hermes is still
+                # re-check instead of dead-ending with "Fulilian is still
                 # running" while no window is open. Backends whose Desktop
                 # is still alive never reach here (_orphaned_desktop_
                 # backend_pids returns None for them) — that path keeps the
@@ -7421,7 +7421,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
                 _venv_holders = _m()._detect_venv_python_processes()
         if _venv_holders:
             # Manual serve/dashboard rung (#63206): a network-bound
-            # `hermes serve --host <ip>` powering a REMOTE Desktop holds the
+            # `fulilian serve --host <ip>` powering a REMOTE Desktop holds the
             # venv and used to dead-end the update with exit 2 — the user's
             # only option was killing the backend by hand, and nothing ever
             # brought it back (the remote client's endpoint stayed dead).
@@ -7471,7 +7471,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
             # live parent — which stranded a whole swarm of per-profile
             # backends (the tearing-down Electron parent / the venv
             # launcher→worker chain still mid-exit) and hung the update. In
-            # the hand-off context those surviving Hermes backends are leaks,
+            # the hand-off context those surviving Fulilian backends are leaks,
             # live parent or not — reap them by cmdline instead of dead-ending.
             _handoff = False
             try:
@@ -7485,14 +7485,14 @@ def _cmd_update_impl(args, gateway_mode: bool):
             try:
                 _scripts_dir = _m()._venv_scripts_dir()
                 if _scripts_dir is not None:
-                    _no_live_shim = not _m()._detect_concurrent_hermes_instances(_scripts_dir)
+                    _no_live_shim = not _m()._detect_concurrent_fulilian_instances(_scripts_dir)
             except Exception:
                 _no_live_shim = False
             if _handoff and _no_live_shim:
                 _handoff_backends = _m()._handoff_reapable_backend_pids(_venv_holders)
                 if _handoff_backends:
                     print(
-                        f"  ⚠ {len(_handoff_backends)} Hermes backend process(es) "
+                        f"  ⚠ {len(_handoff_backends)} Fulilian backend process(es) "
                         "still hold the venv after the Desktop hand-off; "
                         "stopping their trees"
                     )
@@ -7505,7 +7505,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
             sys.exit(2)
 
     # Self-lock deferral moved: the venv-holder sweep above excludes this
-    # process by design (a CLI `hermes update` IS the venv python), and an
+    # process by design (a CLI `fulilian update` IS the venv python), and an
     # updater that has imported a native venv extension cannot rewrite its
     # own mapped .pyd (#83569). That check used to run HERE — before the
     # fetch — but firing pre-fetch meant a deferral stranded the user on the
@@ -7915,7 +7915,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
             # was spawned for.
             handed_off_sync = os.environ.get(_m()._UPDATE_REEXEC_ENV) == "1"
             if handed_off_sync:
-                print("→ Finishing the dependency install handed off by hermes.exe...")
+                print("→ Finishing the dependency install handed off by fulilian.exe...")
             elif not healthy:
                 print("⚠ Checkout is current, but the venv is unhealthy:")
                 print(f"  {detail}")
@@ -7987,7 +7987,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
                     _print_update_completion("✓ Update complete!")
                 else:
                     print(f"⚠ Venv still unhealthy after repair: {detail_after}")
-                    print("  Close all Hermes windows/gateways and re-run: hermes update")
+                    print("  Close all Fulilian windows/gateways and re-run: fulilian update")
             else:
                 _repair_node_deps_on_current_checkout(
                     _print_update_completion,
@@ -8001,7 +8001,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
                     "⚠ Restart required to finish the managed Python runtime repair."
                 )
                 print(
-                    "  Any running Hermes gateways, Desktop backends, or other "
+                    "  Any running Fulilian gateways, Desktop backends, or other "
                     "long-lived processes still use the previous runtime."
                 )
                 print("  Restart each of them to pick up the repaired runtime.")
@@ -8024,8 +8024,8 @@ def _cmd_update_impl(args, gateway_mode: bool):
         update_succeeded = False
         # Capture the pre-pull SHA so we can auto-roll-back if the new code
         # has a syntax error in a critical-path file (PR #28452 incident:
-        # orphan merge-conflict markers in hermes_cli/config.py bricked
-        # every user who ran ``hermes update`` for the 7 minutes between
+        # orphan merge-conflict markers in fulilian_cli/config.py bricked
+        # every user who ran ``fulilian update`` for the 7 minutes between
         # the bad commit and the fix landing).
         pre_pull_sha = _capture_head_sha(git_cmd, _m().PROJECT_ROOT)
         try:
@@ -8121,7 +8121,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
             # parse before declaring the update successful. If a bad commit
             # made it through CI (e.g. admin-merge bypass of a failing
             # ruff check), this catches it on the user side and rolls back
-            # so the CLI stays bootable. The user can then retry ``hermes
+            # so the CLI stays bootable. The user can then retry ``fulilian
             # update`` later once a fix lands upstream.
             syntax_ok, failing_path, syntax_error = _validate_critical_files_syntax(
                 _m().PROJECT_ROOT
@@ -8146,7 +8146,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
                     )
                     if rollback_result.returncode == 0:
                         print("  ✓ Rollback complete — your install is unchanged.")
-                        print("  Try ``hermes update`` again later once a fix lands.")
+                        print("  Try ``fulilian update`` again later once a fix lands.")
                     else:
                         print("  ✗ Rollback failed. Recover manually with:")
                         print(f"    cd {_m().PROJECT_ROOT} && git reset --hard {pre_pull_sha}")
@@ -8198,9 +8198,9 @@ def _cmd_update_impl(args, gateway_mode: bool):
         # applied: a checkout that is pinned to a raw SHA (detached HEAD) can
         # report "N new commit(s)" against origin yet still sit on the old
         # commit afterward (the branch-switch step re-detaches to the SHA).
-        # Before this guard, ``hermes update`` printed "✓ Code updated!" and
+        # Before this guard, ``fulilian update`` printed "✓ Code updated!" and
         # reinstalled deps + rebuilt the desktop app against the stale tree —
-        # no error, no warning, ``hermes doctor`` healthy. Compare pre-pull
+        # no error, no warning, ``fulilian doctor`` healthy. Compare pre-pull
         # and post-pull HEAD; if they match, surface the no-op instead of
         # claiming success.
         post_pull_sha = _capture_head_sha(git_cmd, _m().PROJECT_ROOT)
@@ -8213,7 +8213,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
             )
             print(
                 "  Reattach to the branch and retry: "
-                f"git -C {_m().PROJECT_ROOT} checkout {branch} && hermes update"
+                f"git -C {_m().PROJECT_ROOT} checkout {branch} && fulilian update"
             )
             _m()._resume_windows_gateways_after_update(_windows_gateway_resume)
             sys.exit(1)
@@ -8246,7 +8246,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
             )
             print(
                 "  Switch to the target branch and retry: "
-                f"git -C {_m().PROJECT_ROOT} checkout {branch} && hermes update"
+                f"git -C {_m().PROJECT_ROOT} checkout {branch} && fulilian update"
             )
             _m()._resume_windows_gateways_after_update(_windows_gateway_resume)
             sys.exit(1)
@@ -8254,13 +8254,13 @@ def _cmd_update_impl(args, gateway_mode: bool):
         # #95294: HEAD advanced; running gateways still serve pre-pull
         # modules until the restart phase below. Any interrupt between here
         # and a completed (or no-op) restart leaves this marker so the next
-        # ``hermes update`` can catch up even when git is already up to date.
+        # ``fulilian update`` can catch up even when git is already up to date.
         # Distinct from ``.update-incomplete`` (venv/install repair).
         _write_fleet_restart_pending_marker(expected_sha=post_pull_sha or "")
 
         # Clear stale .pyc bytecode cache — prevents ImportError on gateway
         # restart when updated source references names that didn't exist in
-        # the old bytecode (e.g. get_hermes_home added to hermes_constants).
+        # the old bytecode (e.g. get_fulilian_home added to fulilian_constants).
         removed = _m()._clear_bytecode_cache(_m().PROJECT_ROOT)
         if removed:
             print(
@@ -8285,7 +8285,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
         #
         # Drop the core-install breadcrumb BEFORE touching the venv. If the
         # install is killed mid-flight (Ctrl-C, terminal close, WSL OOM), the
-        # marker survives and the next ``hermes`` launch finishes the install
+        # marker survives and the next ``fulilian`` launch finishes the install
         # via ``_recover_from_interrupted_install``. Cleared after the core
         # ``.[all]`` install completes — lazy refresh uses a separate marker.
         _write_update_incomplete_marker()
@@ -8378,7 +8378,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
         # The update process is still the old Python interpreter process. Run
         # one final cache/module refresh immediately before lazy backend
         # refresh, which imports newly-pulled modules that may depend on fresh
-        # symbols in hermes_constants or lazy_deps. The dependency install
+        # symbols in fulilian_constants or lazy_deps. The dependency install
         # above may also have regenerated bytecode from build-cache copies —
         # this second sweep catches those stragglers (#60242, #65240).
         removed = _m()._clear_bytecode_cache(_m().PROJECT_ROOT)
@@ -8406,7 +8406,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
             _m()._clear_lazy_refresh_incomplete_marker()
         else:
             print(
-                "  ⚠ Lazy-refresh recovery incomplete — run `hermes` again "
+                "  ⚠ Lazy-refresh recovery incomplete — run `fulilian` again "
                 "to finish import-based venv repair."
             )
 
@@ -8436,7 +8436,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
             print()
             print(f"  ⚠ {failing_module} still fails to import after updating:")
             print(f"      {import_error}")
-            print("    Run `hermes update` again — if it persists, reinstall:")
+            print("    Run `fulilian update` again — if it persists, reinstall:")
             print("    https://hermes-agent.nousresearch.com")
 
         node_failures = _update_node_dependencies()
@@ -8460,9 +8460,9 @@ def _cmd_update_impl(args, gateway_mode: bool):
         if sys.platform == "darwin" and had_desktop_app_before_update:
             print()
             print(
-                "  ℹ macOS: if Hermes re-prompts for permissions you already "
+                "  ℹ macOS: if Fulilian re-prompts for permissions you already "
                 "granted (toggle shows ON), the stored grant is stale — run "
-                "`tccutil reset ScreenCapture com.nousresearch.hermes` (repeat "
+                "`tccutil reset ScreenCapture com.nousresearch.fulilian` (repeat "
                 "per affected service), toggle it ON in System Settings, then "
                 "fully quit & relaunch once."
             )
@@ -8484,7 +8484,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
         try:
             from fulilian_cli.backup import _quick_snapshot_root, verify_sqlite_integrity
 
-            _state_path = get_hermes_home() / "state.db"
+            _state_path = get_fulilian_home() / "state.db"
             if _state_path.exists():
                 _state_ok = verify_sqlite_integrity(
                     _state_path,
@@ -8505,7 +8505,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
                     _pre_snap_id = pre_update_snapshot_id
                     if _pre_snap_id:
                         _snap_state = (
-                            _quick_snapshot_root(get_hermes_home())
+                            _quick_snapshot_root(get_fulilian_home())
                             / _pre_snap_id
                             / "state.db"
                         )
@@ -8548,7 +8548,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
         # Seed the model-catalog disk cache from the freshly-pulled checkout.
         # The repo ships the canonical catalog at
         # website/static/api/model-catalog.json, and `git pull` just made it
-        # current — so copy it straight over ~/.hermes/cache/model_catalog.json
+        # current — so copy it straight over ~/.fulilian/cache/model_catalog.json
         # instead of waiting on a network fetch (which can be bot-gated or hit a
         # Portal hiccup). Keeps the model picker's curated/free lists in sync
         # with the version the user just installed. Non-fatal on failure: the
@@ -8577,7 +8577,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
             if result.get("user_modified"):
                 print(f"  ~ {len(result['user_modified'])} user-modified (kept)")
                 print(
-                    "    → see them: hermes skills list-modified  "
+                    "    → see them: fulilian skills list-modified  "
                     "(diff/reset to resume updates)"
                 )
             if result.get("cleaned"):
@@ -8593,10 +8593,10 @@ def _cmd_update_impl(args, gateway_mode: bool):
             logger.debug("Skills sync during update failed: %s", e)
 
         # Sync bundled skills to all profiles (including the active one).
-        # seed_profile_skills() uses subprocess with an explicit HERMES_HOME so
-        # it is not affected by sync_skills()'s module-level HERMES_HOME cache,
+        # seed_profile_skills() uses subprocess with an explicit FULILIAN_HOME so
+        # it is not affected by sync_skills()'s module-level FULILIAN_HOME cache,
         # which means the active profile is reliably synced regardless of whether
-        # the caller's HERMES_HOME env var points at the default or a named profile.
+        # the caller's FULILIAN_HOME env var points at the default or a named profile.
         try:
             from fulilian_cli.profiles import (
                 list_profiles,
@@ -8694,7 +8694,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
         # Most-recent curator run notice — show-once per run. Surfaces the
         # rename map (`old-name → umbrella`) on the high-attention update
         # surface so users learn about consolidations without having to
-        # check `hermes curator status`. Self-stamps after printing so it
+        # check `fulilian curator status`. Self-stamps after printing so it
         # never repeats for the same run.
         try:
             _print_curator_recent_run_notice()
@@ -8708,26 +8708,26 @@ def _cmd_update_impl(args, gateway_mode: bool):
         except Exception as e:
             logger.debug("FHS PATH guard check failed: %s", e)
 
-        # Self-heal the hermes-acp launcher for installs that predate it, so
-        # ACP hosts (Zed, JetBrains, Buzz) can resolve Hermes on PATH without
+        # Self-heal the fulilian-acp launcher for installs that predate it, so
+        # ACP hosts (Zed, JetBrains, Buzz) can resolve Fulilian on PATH without
         # a reinstall.  No-op on Windows (the launcher migration below owns
         # that) and when already present.
         try:
             _ensure_acp_launcher()
         except Exception as e:
-            logger.debug("hermes-acp launcher self-heal failed: %s", e)
+            logger.debug("fulilian-acp launcher self-heal failed: %s", e)
 
-        # Migrate the Windows hermes launchers to the managed binary dir
-        # (the default Hermes root's bin, next to the managed uv) and repair
+        # Migrate the Windows fulilian launchers to the managed binary dir
+        # (the default Fulilian root's bin, next to the managed uv) and repair
         # them if they are missing. Earlier layouts put them inside the git
-        # checkout (hermes-agent\bin) or put venv\Scripts itself on PATH; the
+        # checkout (fulilian-agent\bin) or put venv\Scripts itself on PATH; the
         # in-checkout copies were swept by this command's own pre-update
         # autostash (git stash push --include-untracked) and, with
-        # --keep-stash (the desktop updater), never restored — `hermes`
+        # --keep-stash (the desktop updater), never restored — `fulilian`
         # stopped resolving in every new terminal. Updates never run
         # install.ps1, so this tail call is how existing installs reach the
         # new layout. No-op on POSIX and on source checkouts (root is not
-        # the managed clone under the default Hermes root).
+        # the managed clone under the default Fulilian root).
         try:
             from fulilian_cli._install_repair import migrate_windows_bin_path
 
@@ -8738,7 +8738,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
         # Refresh the cua-driver binary used by the Computer Use toolset.
         # The upstream installer is gated on supported platforms and on the
         # binary already being on PATH, so this is a no-op for users who
-        # don't have it. Tying the refresh to ``hermes update`` gives users a
+        # don't have it. Tying the refresh to ``fulilian update`` gives users a
         # predictable cadence (matches when they pull new agent code) without
         # adding startup latency or a per-launch GitHub API call.
         try:
@@ -8767,8 +8767,8 @@ def _cmd_update_impl(args, gateway_mode: bool):
                 # silent) upstream installer when the driver's native
                 # check-update verb positively reports a newer release.
                 # An indeterminate check (offline, rate-limited, old
-                # driver) keeps the installed version — `hermes update`
-                # must stay fast; `hermes computer-use install --upgrade`
+                # driver) keeps the installed version — `fulilian update`
+                # must stay fast; `fulilian computer-use install --upgrade`
                 # remains the force path. Windows also defers confirmed
                 # updates and contract repairs to that explicit command
                 # because the upstream installer may prompt for console/UAC
@@ -8782,7 +8782,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
             logger.debug("cua-driver refresh failed: %s", e)
 
         # Write exit code *before* the gateway restart attempt.
-        # When running as ``hermes update --gateway`` (spawned by the gateway's
+        # When running as ``fulilian update --gateway`` (spawned by the gateway's
         # /update command), this process lives inside the gateway's systemd
         # cgroup.  A graceful SIGUSR1 restart keeps the drain loop alive long
         # enough for the exit-code marker to be written below, but the
@@ -8834,13 +8834,13 @@ def _cmd_update_impl(args, gateway_mode: bool):
         # The code update (git pull) is shared across all profiles, so every
         # running gateway needs restarting to pick up the new code.
         #
-        # Purge stale cached Hermes modules FIRST: the import below pulls
+        # Purge stale cached Fulilian modules FIRST: the import below pulls
         # freshly-updated gateway source into this pre-update interpreter,
         # and any already-cached sibling module (cli_output, status, ...)
         # that the new source expects a new symbol from would otherwise
         # ImportError and abort this whole phase (2026-08-20 field failure:
         # new gateway.py ← stale cli_output missing line_input).
-        _m()._purge_stale_hermes_modules()
+        _m()._purge_stale_fulilian_modules()
         try:
             from fulilian_cli.gateway import (
                 is_macos,
@@ -8954,7 +8954,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
                 non-interactive sudo (``sudo -n``) — first a blanket probe,
                 then a targeted ``systemctl reset-failed`` probe so a
                 least-privilege sudoers entry scoped to
-                ``systemctl ... hermes-gateway*`` also qualifies
+                ``systemctl ... fulilian-gateway*`` also qualifies
                 (``reset-failed`` is an idempotent no-op we run before every
                 privileged restart anyway).  If neither works, return None —
                 the caller must SKIP the restart (without draining the
@@ -8981,7 +8981,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
                         sudo_ok = _probe.returncode == 0
                         if not sudo_ok:
                             # Blanket sudo refused — a targeted sudoers entry
-                            # (NOPASSWD for systemctl ... hermes-gateway*)
+                            # (NOPASSWD for systemctl ... fulilian-gateway*)
                             # may still allow the exact commands we need.
                             _probe = subprocess.run(
                                 sudo_cmd + ["reset-failed", svc_name_],
@@ -9027,8 +9027,8 @@ def _cmd_update_impl(args, gateway_mode: bool):
                 _pre_restart_gateway_pids = None
 
             # --- Systemd services (Linux) ---
-            # Discover all hermes-gateway* units (default + profiles) plus
-            # hermes-serve* units (the Desktop app's backend, #83438).
+            # Discover all fulilian-gateway* units (default + profiles) plus
+            # fulilian-serve* units (the Desktop app's backend, #83438).
             if supports_systemd_services():
                 try:
                     _ensure_user_systemd_env()
@@ -9044,8 +9044,8 @@ def _cmd_update_impl(args, gateway_mode: bool):
                             scope_cmd
                             + [
                                 "list-units",
-                                "hermes-gateway*",
-                                "hermes-serve*",
+                                "fulilian-gateway*",
+                                "fulilian-serve*",
                                 "--plain",
                                 "--no-legend",
                                 "--no-pager",
@@ -9061,7 +9061,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
                         print(
                             f"  ⚠ systemctl timed out listing {scope}-scope "
                             f"gateway units ({exc.cmd if exc.cmd else 'unknown command'}). "
-                            f"Check the gateway with: hermes gateway status"
+                            f"Check the gateway with: fulilian gateway status"
                         )
                         continue
 
@@ -9092,7 +9092,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
                         # The gateway's SIGUSR1 handler calls
                         # request_restart(via_service=True) → drain →
                         # exit; systemd's Restart=always respawns the unit.
-                        # hermes-serve has no such handler (it isn't
+                        # fulilian-serve has no such handler (it isn't
                         # gateway/run.py), so skip straight to the blunt
                         # restart below rather than sending it an unhandled
                         # signal and waiting out the drain budget for
@@ -9255,7 +9255,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
                                 f"  ⚠ {svc_name} is a system service and restarting it needs root.\n"
                                 f"    Restart it manually to load the new version:\n"
                                 f"      sudo systemctl restart {svc_name}\n"
-                                f"    To let `hermes update` restart it automatically, allow\n"
+                                f"    To let `fulilian update` restart it automatically, allow\n"
                                 f"    passwordless sudo for systemctl, or run updates with sudo."
                             )
                             return
@@ -9274,7 +9274,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
                         # the RestartSec backoff and leave the unit
                         # dead.  Clearing the failed state first makes
                         # the restart idempotent.  Mirrors the recovery
-                        # path in `hermes gateway restart`
+                        # path in `fulilian gateway restart`
                         # (`systemd_restart()`) as of PR #20949.
                         subprocess.run(
                             _manage_cmd + ["reset-failed", svc_name],
@@ -9362,7 +9362,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
                     )
 
             # --- Launchd services (macOS) ---
-            # Restart EVERY ai.hermes.gateway* LaunchAgent, not only the
+            # Restart EVERY ai.fulilian.gateway* LaunchAgent, not only the
             # invoking profile's — parity with the systemd branch above
             # (#41403). Per-label TimeoutExpired isolation happens inside.
             if is_macos():
@@ -9504,16 +9504,16 @@ def _cmd_update_impl(args, gateway_mode: bool):
                 )
                 if unmapped_count:
                     print(f"  → Stopped {unmapped_count} manual gateway process(es)")
-                    print("    Restart manually: hermes gateway run")
+                    print("    Restart manually: fulilian gateway run")
                     if unmapped_count > 1:
                         print(
-                            "    (or: hermes -p <profile> gateway run  for each profile)"
+                            "    (or: fulilian -p <profile> gateway run  for each profile)"
                         )
 
             if failed_or_stale_units:
                 gateway_fleet_restart_incomplete = True
                 if gateway_mode:
-                    _exit_code_path = get_hermes_home() / ".update_exit_code"
+                    _exit_code_path = get_fulilian_home() / ".update_exit_code"
                     try:
                         _exit_code_path.write_text("1", encoding="utf-8")
                     except OSError:
@@ -9650,7 +9650,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
                 gateway_fleet_restart_incomplete = True
                 _warn_gateway_restart_phase_aborted(e, _surviving)
                 if gateway_mode:
-                    _exit_code_path = get_hermes_home() / ".update_exit_code"
+                    _exit_code_path = get_fulilian_home() / ".update_exit_code"
                     try:
                         _exit_code_path.write_text("1", encoding="utf-8")
                     except OSError:
@@ -9681,7 +9681,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
                 f"{_windows_resume_exc}"
             )
             if gateway_mode:
-                _exit_code_path = get_hermes_home() / ".update_exit_code"
+                _exit_code_path = get_fulilian_home() / ".update_exit_code"
                 try:
                     _exit_code_path.write_text("1", encoding="utf-8")
                 except OSError:
@@ -9744,30 +9744,30 @@ def _cmd_update_impl(args, gateway_mode: bool):
             except Exception:
                 pass
 
-        # Warn if legacy Hermes gateway unit files are still installed.
-        # When both hermes.service (from a pre-rename install) and the
-        # current hermes-gateway.service are enabled, they SIGTERM-fight
+        # Warn if legacy Fulilian gateway unit files are still installed.
+        # When both fulilian.service (from a pre-rename install) and the
+        # current fulilian-gateway.service are enabled, they SIGTERM-fight
         # for the same bot token (see PR #11909). Flagging here means
-        # every `hermes update` surfaces the issue until the user migrates.
+        # every `fulilian update` surfaces the issue until the user migrates.
         try:
             from fulilian_cli.gateway import (
-                has_legacy_hermes_units,
-                _find_legacy_hermes_units,
+                has_legacy_fulilian_units,
+                _find_legacy_fulilian_units,
                 supports_systemd_services,
             )
 
-            if supports_systemd_services() and has_legacy_hermes_units():
+            if supports_systemd_services() and has_legacy_fulilian_units():
                 print()
-                print("⚠ Legacy Hermes gateway unit(s) detected:")
-                for name, path, is_sys in _find_legacy_hermes_units():
+                print("⚠ Legacy Fulilian gateway unit(s) detected:")
+                for name, path, is_sys in _find_legacy_fulilian_units():
                     scope = "system" if is_sys else "user"
                     print(f"    {path}  ({scope} scope)")
                 print()
-                print("  These pre-rename units (hermes.service) fight the current")
-                print("  hermes-gateway.service for the bot token and cause SIGTERM")
+                print("  These pre-rename units (fulilian.service) fight the current")
+                print("  fulilian-gateway.service for the bot token and cause SIGTERM")
                 print("  flap loops. Remove them with:")
                 print()
-                print("    hermes gateway migrate-legacy")
+                print("    fulilian gateway migrate-legacy")
                 print()
                 print("  (add `sudo` if any are in system scope)")
         except Exception as e:
@@ -9779,7 +9779,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
         # Preserve the safety rule above: a failed Node refresh leaves the
         # currently running dashboard untouched.
         #
-        # Forward the systemd units restarted above (includes hermes-serve*,
+        # Forward the systemd units restarted above (includes fulilian-serve*,
         # #83438) so a Serve-only install's freshly restarted process isn't
         # found and restarted again below (review on #83595).
         _finish_dashboard_update_cleanup(
@@ -9788,7 +9788,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
 
         print()
         print("Tip: You can now select a provider and model:")
-        print("  hermes model              # Select provider and model")
+        print("  fulilian model              # Select provider and model")
 
         # Phase 1 (#91277): post-update fleet version verification. Compare
         # every live gateway's stamped code_sha against the freshly-updated
@@ -9925,7 +9925,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
             # runs pre-update modules — surface that as a failed update so
             # automation / operators do not treat the fleet as healthy.
             # Leave ``fleet_restart_pending`` in place so the next
-            # ``hermes update`` still runs the catch-up restart.
+            # ``fulilian update`` still runs the catch-up restart.
             sys.exit(1)
         _clear_fleet_restart_pending_marker()
 
@@ -9976,7 +9976,7 @@ def _restart_phase_failure_is_incomplete(surviving, pre_restart_pids) -> bool:
     Fail closed unless we can positively prove the fleet is safe:
 
     * ``surviving is None`` — the survivor probe could not determine state
-      (typically the freshly-pulled ``hermes_cli.gateway`` no longer imports,
+      (typically the freshly-pulled ``fulilian_cli.gateway`` no longer imports,
       one of the ways the phase aborts). Assume stale.
     * ``surviving`` non-empty — a gateway is still running pre-update code.
     * ``surviving == []`` — nothing is running now. That is proof-of-safety

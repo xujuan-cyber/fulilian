@@ -157,11 +157,11 @@ export interface Translations {
     starting: string;
     startedInBackground: string;
     stopped: string;
-    updateHermes: string;
-    updateHermesConfirmMessage?: string;
-    updateHermesConfirmNow?: string;
-    updateHermesConfirmTitle?: string;
-    updatingHermes: string;
+    updateFulilian: string;
+    updateFulilianConfirmMessage?: string;
+    updateFulilianConfirmNow?: string;
+    updateFulilianConfirmTitle?: string;
+    updatingFulilian: string;
     waitingForOutput: string;
   };
 
@@ -591,7 +591,7 @@ export interface Translations {
     fontMono?: string;
   };
 
-  // ── Achievements plugin (plugins/hermes-achievements) ──
+  // ── Achievements plugin (plugins/fulilian-achievements) ──
   achievements: {
     hero: {
       kicker: string;

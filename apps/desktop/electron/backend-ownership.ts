@@ -227,7 +227,7 @@ export function createBackendOwnership(deps: BackendOwnershipDeps) {
         // A backend whose Electron parent is still running is NOT an orphan:
         // reaping it would kill a live instance's session. This is what stops
         // a second launch from SIGTERMing the running instance's backend even
-        // if it reaches reapOrphans (see main.ts startHermes + #87295).
+        // if it reaches reapOrphans (see main.ts startFulilian + #87295).
         let parentAlive: boolean | undefined
 
         try {
@@ -285,7 +285,7 @@ export function createBackendOwnership(deps: BackendOwnershipDeps) {
 }
 
 export function backendCommandMatches(command: unknown): boolean {
-  return /(?:^|[\s/\\"])(?:hermes(?:\.exe)?|hermes_cli\.main|hermes_cli[/\\]main\.py)"?(?:\s+(?:--profile|-p)\s+\S+)?\s+(?:serve|dashboard)(?:\s|$)/i.test(
+  return /(?:^|[\s/\\"])(?:fulilian(?:\.exe)?|fulilian_cli\.main|fulilian_cli[/\\]main\.py)"?(?:\s+(?:--profile|-p)\s+\S+)?\s+(?:serve|dashboard)(?:\s|$)/i.test(
     String(command ?? '')
   )
 }

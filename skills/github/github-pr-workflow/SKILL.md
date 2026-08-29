@@ -2,11 +2,11 @@
 name: github-pr-workflow
 description: "GitHub PR lifecycle: branch, commit, open, CI, merge."
 version: 1.1.0
-author: Hermes Agent
+author: FuLiLian
 license: MIT
 platforms: [linux, macos, windows]
 metadata:
-  hermes:
+  fulilian:
     tags: [GitHub, Pull-Requests, CI/CD, Git, Automation, Merge]
     related_skills: [github-auth, github-code-review]
 ---
@@ -30,10 +30,10 @@ else
   AUTH="git"
   # Ensure we have a token for API calls
   if [ -z "$GITHUB_TOKEN" ]; then
-    if _hermes_env="${HERMES_HOME:-$HOME/.hermes}/.env"; [ -f "$_hermes_env" ] && grep -q "^GITHUB_TOKEN=" "$_hermes_env"; then
-      GITHUB_TOKEN=$(grep "^GITHUB_TOKEN=" "$_hermes_env" | head -1 | cut -d= -f2 | tr -d '\n\r')
+    if _fulilian_env="${FULILIAN_HOME:-$HOME/.fulilian}/.env"; [ -f "$_fulilian_env" ] && grep -q "^GITHUB_TOKEN=" "$_fulilian_env"; then
+      GITHUB_TOKEN=$(grep "^GITHUB_TOKEN=" "$_fulilian_env" | head -1 | cut -d= -f2 | tr -d '\n\r')
     elif grep -q "github.com" ~/.git-credentials 2>/dev/null; then
-      GITHUB_TOKEN=$(uv run python "${HERMES_HOME:-$HOME/.hermes}/skills/github/github-auth/scripts/git-credential-token.py")
+      GITHUB_TOKEN=$(uv run python "${FULILIAN_HOME:-$HOME/.fulilian}/skills/github/github-auth/scripts/git-credential-token.py")
     fi
   fi
 fi

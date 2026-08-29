@@ -1,11 +1,11 @@
-"""Agent-construction and session-resume display methods for ``HermesCLI``.
+"""Agent-construction and session-resume display methods for ``FulilianCLI``.
 
 Extracted from ``cli.py`` as part of the god-file decomposition campaign
-(``~/.hermes/plans/god-file-decomposition.md``, Phase 4 step 2). This mixin holds
+(``~/.fulilian/plans/god-file-decomposition.md``, Phase 4 step 2). This mixin holds
 the agent lifecycle/setup cluster: runtime-credential resolution, per-turn agent
 config, first-use agent construction, and resumed-session preload + history recap.
 
-Behavior-neutral: every method is lifted verbatim from ``HermesCLI``. ``self.*``
+Behavior-neutral: every method is lifted verbatim from ``FulilianCLI``. ``self.*``
 calls resolve unchanged via the MRO. Neutral dependencies are imported at module
 top level; ``cli.py``-internal helpers/constants are imported lazily inside each
 method (``from cli import ...`` resolves at call time, when ``cli`` is fully
@@ -22,7 +22,7 @@ from utils import base_url_host_matches
 
 
 class CLIAgentSetupMixin:
-    """Agent construction + session-resume display methods for ``HermesCLI``."""
+    """Agent construction + session-resume display methods for ``FulilianCLI``."""
 
     def _ensure_runtime_credentials(self) -> bool:
         """
@@ -122,12 +122,12 @@ class CLIAgentSetupMixin:
                     print(f"\n⚠️  No API key found for provider '{_prov}'.")
                 else:
                     print("\n⚠️  No inference provider is configured.")
-                print("   Run 'hermes model' to choose a provider, or "
-                      "'hermes setup' for first-time setup.")
+                print("   Run 'fulilian model' to choose a provider, or "
+                      "'fulilian setup' for first-time setup.")
                 return False
         if not isinstance(base_url, str) or not base_url:
             print("\n⚠️  Provider resolver returned an empty base URL. "
-                  "Check your provider config or run: hermes setup")
+                  "Check your provider config or run: fulilian setup")
             return False
 
         credentials_changed = api_key != self.api_key or base_url != self.base_url
@@ -148,7 +148,7 @@ class CLIAgentSetupMixin:
 
         # When a custom_provider entry carries an explicit `model` field,
         # use it as the effective model name.  Without this, running
-        # `hermes chat --model <provider-name>` sends the provider name
+        # `fulilian chat --model <provider-name>` sends the provider name
         # (e.g. "my-provider") as the model string to the API instead of
         # the configured model (e.g. "qwen3.6-plus"), causing 400 errors.
         runtime_model = runtime.get("model")
@@ -162,8 +162,8 @@ class CLIAgentSetupMixin:
             if should_use_runtime_model:
                 self.model = runtime_model
 
-        # If model is still empty (e.g. user ran `hermes auth add openai-codex`
-        # without `hermes model`), fall back to the provider's first catalog
+        # If model is still empty (e.g. user ran `fulilian auth add openai-codex`
+        # without `fulilian model`), fall back to the provider's first catalog
         # model so the API call doesn't fail with "model must be non-empty".
         if not self.model and resolved_provider:
             try:
@@ -229,7 +229,7 @@ class CLIAgentSetupMixin:
 
         Called from the interactive startup path when
         ``_runtime_credentials_ready()`` is False and stdin is a TTY. Runs the
-        exact same flow as ``hermes model`` (which fronts Quick Setup / Nous
+        exact same flow as ``fulilian model`` (which fronts Quick Setup / Nous
         Portal OAuth as the first, recommended option) so there is a single
         source of truth for provider onboarding. Returns True when a provider
         was configured.
@@ -246,7 +246,7 @@ class CLIAgentSetupMixin:
             print()
             answer = "n"
         if answer in {"n", "no"}:
-            _cprint("  Skipped. Run 'hermes model' or 'hermes setup' any time.")
+            _cprint("  Skipped. Run 'fulilian model' or 'fulilian setup' any time.")
             return False
 
         try:
@@ -254,12 +254,12 @@ class CLIAgentSetupMixin:
             select_provider_and_model()
         except (KeyboardInterrupt, EOFError, SystemExit):
             print()
-            _cprint("  Setup cancelled. Run 'hermes model' any time.")
+            _cprint("  Setup cancelled. Run 'fulilian model' any time.")
             return False
         except Exception as exc:
             logger.debug("first-run provider setup failed: %s", exc)
             _cprint(f"  ⚠️  Provider setup failed: {exc}")
-            _cprint("  Run 'hermes model' to try again.")
+            _cprint("  Run 'fulilian model' to try again.")
             return False
 
         # Re-sync CLI state from what the picker persisted so the very next
@@ -285,7 +285,7 @@ class CLIAgentSetupMixin:
         if self._runtime_credentials_ready():
             _cprint("  ✓ Provider configured — you're ready to chat.")
             return True
-        _cprint("  Provider setup didn't complete. Run 'hermes model' to retry.")
+        _cprint("  Provider setup didn't complete. Run 'fulilian model' to retry.")
         return False
 
     def _resolve_turn_agent_config(self, user_message: str) -> dict:
@@ -370,7 +370,7 @@ class CLIAgentSetupMixin:
         # Initialize SQLite session store for CLI sessions (if not already done in __init__)
         if self._session_db is None:
             try:
-                from hermes_state import SessionDB
+                from fulilian_state import SessionDB
                 self._session_db = SessionDB()
             except Exception as e:
                 logger.warning("SQLite session store not available — session will NOT be indexed: %s", e)
@@ -381,22 +381,22 @@ class CLIAgentSetupMixin:
         # is non-empty and we skip the DB round-trip.
         if self._resumed and self._session_db and not self.conversation_history:
             session_meta = self._session_db.get_session(self.session_id)
-            # In quiet mode (`hermes chat -Q` / --quiet, surfaced via
+            # In quiet mode (`fulilian chat -Q` / --quiet, surfaced via
             # tool_progress_mode == "off"), resume status lines go to stderr
             # so stdout stays machine-readable for automation wrappers that
-            # do `$(hermes chat -Q --resume <id> -q "...")`. Without this,
+            # do `$(fulilian chat -Q --resume <id> -q "...")`. Without this,
             # the resume banner pollutes captured stdout. See #11793.
             _quiet_mode = getattr(self, "tool_progress_mode", "full") == "off"
             if not session_meta:
                 if _quiet_mode:
                     print(f"Session not found: {self.session_id}", file=sys.stderr)
                     print(
-                        "Use a session ID from a previous CLI run (hermes sessions list).",
+                        "Use a session ID from a previous CLI run (fulilian sessions list).",
                         file=sys.stderr,
                     )
                 else:
                     _cprint(f"\033[1;31mSession not found: {self.session_id}{_RST}")
-                    _cprint(f"{_DIM}Use a session ID from a previous CLI run (hermes sessions list).{_RST}")
+                    _cprint(f"{_DIM}Use a session ID from a previous CLI run (fulilian sessions list).{_RST}")
                 return False
             # If the requested session is the (empty) head of a compression
             # chain, walk to the descendant that actually holds the messages.
@@ -609,7 +609,7 @@ class CLIAgentSetupMixin:
         """
         if not self._session_db:
             return None
-        from hermes_state import (
+        from fulilian_state import (
             SessionExportTooLargeError,
             SessionResumeTooLargeError,
             resolved_max_resume_messages,
@@ -666,7 +666,7 @@ class CLIAgentSetupMixin:
             )
             self._console_print(
                 "[dim]Use a session ID from a previous CLI run "
-                "(hermes sessions list).[/]"
+                "(fulilian sessions list).[/]"
             )
             return False
 
@@ -907,13 +907,13 @@ class CLIAgentSetupMixin:
                     lines.append(f"         {ml}\n", style="dim")
             elif role == "assistant_last":
                 # Last assistant response shown in full, non-dim
-                lines.append("  ◆ Hermes: ", style=f"bold {_assistant_label_c}")
+                lines.append("  ◆ Fulilian: ", style=f"bold {_assistant_label_c}")
                 msg_lines = text.splitlines() or [""]
                 lines.append(msg_lines[0] + "\n", style="")
                 for ml in msg_lines[1:]:
                     lines.append(f"            {ml}\n", style="")
             else:
-                lines.append("  ◆ Hermes: ", style=f"dim bold {_assistant_label_c}")
+                lines.append("  ◆ Fulilian: ", style=f"dim bold {_assistant_label_c}")
                 msg_lines = text.splitlines() or [""]
                 lines.append(msg_lines[0] + "\n", style="dim")
                 for ml in msg_lines[1:]:

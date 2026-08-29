@@ -1,8 +1,8 @@
 """Gateway lifecycle guard for cron job creation (#30719).
 
 An agent running inside a gateway can schedule a cron job that calls
-``hermes gateway restart`` (or ``launchctl kickstart ai.hermes.gateway``
-or ``systemctl restart hermes-gateway``).  When the cron fires, the
+``fulilian gateway restart`` (or ``launchctl kickstart ai.fulilian.gateway``
+or ``systemctl restart fulilian-gateway``).  When the cron fires, the
 gateway dies, the supervisor (launchd KeepAlive / systemd Restart=)
 revives it, auto-resume picks up the offending session, and the resumed
 turn re-runs the same logic — a SIGTERM-respawn loop every ~10 seconds
@@ -11,12 +11,12 @@ until manually broken.
 This module rejects cron job specs whose prompt or script contains a
 direct shell-level gateway-lifecycle command.  It is enforced at
 ``cron.jobs.create_job`` so it fires on every job-creation path: the
-``hermes cron create`` CLI subcommand AND the agent's ``cronjob`` model
+``fulilian cron create`` CLI subcommand AND the agent's ``cronjob`` model
 tool (which calls ``create_job`` directly, bypassing the CLI layer).
 
 The pattern is intentionally command-shaped: it anchors on a concrete
-command identifier (``hermes gateway``, ``launchctl ... hermes-gateway``,
-``systemctl ... hermes-gateway``, ``pkill`` against the gateway) so it
+command identifier (``fulilian gateway``, ``launchctl ... fulilian-gateway``,
+``systemctl ... fulilian-gateway``, ``pkill`` against the gateway) so it
 cannot fire on prose.  A cron ``prompt`` is fed to a future LLM, not a
 shell, so an over-broad substring match on English ("Kong API gateway
 autoscaling and restart behavior") would produce a high false-positive
@@ -24,15 +24,15 @@ rate without preventing the actual foot-gun, which requires a real
 command shape.
 
 This is a defence-in-depth layer.  ``tools/terminal_tool.py`` blocks direct
-commands and shell scripts they reference when ``_HERMES_GATEWAY=1``. It also
+commands and shell scripts they reference when ``_FULILIAN_GATEWAY=1``. It also
 rejects ``launchctl submit`` in gateway sessions because launchd treats that
-primitive as a persistent KeepAlive job, not a one-shot task. ``hermes gateway
+primitive as a persistent KeepAlive job, not a one-shot task. ``fulilian gateway
 stop|restart|uninstall`` separately refuse to self-target from inside the gateway.
 Blocking cron specs at creation time as well means the agent gets an immediate,
 informative rejection instead of scheduling a job that will only fail
 (silently) when it fires.
 
-The profile-flag form (``hermes -p <profile> gateway restart|stop``, #78028)
+The profile-flag form (``fulilian -p <profile> gateway restart|stop``, #78028)
 is handled profile-aware: it is blocked only when the named profile is the
 profile running the guard. Sibling-profile restarts are legitimate fleet
 operations and stay allowed.
@@ -60,24 +60,24 @@ class GatewayLifecycleBlocked(ValueError):
 # actual shell-command-shaped strings, not on prose.
 _GATEWAY_LIFECYCLE_PATTERN = re.compile(
     r"(?i)"
-    # Branch A: destructive `hermes gateway` operations.
+    # Branch A: destructive `fulilian gateway` operations.
     # The destructive operations are restart, stop, and uninstall.
     # `start` is intentionally excluded: starting a gateway from inside a
     # gateway is benign (a no-op or "already running" error), and a
     # legitimate cron job might start a sibling profile's gateway.
-    # The lookbehind (#77173): `hermes` must not be a path component or a
+    # The lookbehind (#77173): `fulilian` must not be a path component or a
     # word tail. Excluding `/`, word chars, `.` and `-` keeps file paths
-    # with embedded spaces (`/docs/hermes gateway restart-notes.md`) from
-    # matching via the `/hermes` tail, while every real command position
+    # with embedded spaces (`/docs/fulilian gateway restart-notes.md`) from
+    # matching via the `/fulilian` tail, while every real command position
     # (start of text, whitespace, `;`/`&`/`|`, `$(`, backtick, even a
     # U+FFFD from binary-content decoding) still matches.
-    r"(?:(?<![/\w.\-])hermes\s+gateway\s+(?:restart|stop|uninstall)\b)"
-    # Branch B: launchctl ops on a hermes-gateway label. macOS launchd
-    # labels look like `ai.hermes.gateway` / `hermes-gateway`. Requiring the
-    # gateway identifier prevents blocking unrelated hermes services (e.g.
-    # `launchctl unload ai.hermes.update-checker.plist`).
+    r"(?:(?<![/\w.\-])fulilian\s+gateway\s+(?:restart|stop|uninstall)\b)"
+    # Branch B: launchctl ops on a fulilian-gateway label. macOS launchd
+    # labels look like `ai.fulilian.gateway` / `fulilian-gateway`. Requiring the
+    # gateway identifier prevents blocking unrelated fulilian services (e.g.
+    # `launchctl unload ai.fulilian.update-checker.plist`).
     # `submit` and `bootstrap` are included alongside the direct verbs
-    # (kickstart/etc.): `launchctl submit -l ai.hermes.gateway-<suffix> --
+    # (kickstart/etc.): `launchctl submit -l ai.fulilian.gateway-<suffix> --
     # <helper-script>` (or `launchctl bootstrap gui/<uid> <plist>`) creates
     # a NEW keepalive job wrapping an arbitrary helper, which is how a
     # blocked direct restart/kill gets laundered into a persistent restart
@@ -91,15 +91,15 @@ _GATEWAY_LIFECYCLE_PATTERN = re.compile(
     # left the bypassable approval layer (tools/approval.py, skipped on
     # force=True) as the only cover, while this hard block — documented as
     # "force=True cannot help here" — let them through (#80260).
-    r"|(?:launchctl\s+(?:kickstart|unload|load|stop|restart|submit|bootstrap|bootout|remove|disable)\b[^\n]*\bhermes[.\-]?gateway)"
-    # Branch C: systemctl ops on a hermes-gateway unit.
-    r"|(?:systemctl\s+(?:-\S+\s+)*(?:restart|stop|start)\b[^\n]*\bhermes[.\-]?gateway)"
-    # Branch D: pkill / kill targeting the hermes gateway process. Both
+    r"|(?:launchctl\s+(?:kickstart|unload|load|stop|restart|submit|bootstrap|bootout|remove|disable)\b[^\n]*\bfulilian[.\-]?gateway)"
+    # Branch C: systemctl ops on a fulilian-gateway unit.
+    r"|(?:systemctl\s+(?:-\S+\s+)*(?:restart|stop|start)\b[^\n]*\bfulilian[.\-]?gateway)"
+    # Branch D: pkill / kill targeting the fulilian gateway process. Both
     # token orders because real reproductions show both.
     # Leading \b ensures we match "pkill" or "kill" as whole words, not as
     # suffixes of other words (e.g. "skill" -> "kill").
-    r"|(?:\bp?kill\b[^\n]*\bhermes\b[^\n]*\bgateway)"
-    r"|(?:\bp?kill\b[^\n]*\bgateway\b[^\n]*\bhermes)"
+    r"|(?:\bp?kill\b[^\n]*\bfulilian\b[^\n]*\bgateway)"
+    r"|(?:\bp?kill\b[^\n]*\bgateway\b[^\n]*\bfulilian)"
 )
 
 
@@ -108,7 +108,7 @@ _GATEWAY_LIFECYCLE_PATTERN = re.compile(
 # above uses `[^\n]*` between its verb and the gateway identifier so the
 # match can't span unrelated lines of a longer cron prompt/script, but that
 # also means a real multi-line shell invocation split across continuation
-# lines (e.g. `launchctl submit \` / `  -l ai.hermes.gateway-... \` / `  -- ...`,
+# lines (e.g. `launchctl submit \` / `  -l ai.fulilian.gateway-... \` / `  -- ...`,
 # the exact reported shape in #62891) would otherwise slip past. Collapse
 # continuations to a single space before matching, mirroring what the shell
 # itself does, rather than loosening `[^\n]*` and risking false positives
@@ -123,18 +123,18 @@ _ARGV_LIST_PUNCTUATION = re.compile(r"[\[\],]+")
 
 
 # Branch A2 (#78028): the same foot-gun written with an explicit profile
-# selector — `hermes -p <profile> gateway restart|stop` / `--profile <name>`
-# / `--profile=<name>`. The selector token between `hermes` and `gateway`
+# selector — `fulilian -p <profile> gateway restart|stop` / `--profile <name>`
+# / `--profile=<name>`. The selector token between `fulilian` and `gateway`
 # breaks Branch A's literal adjacency. Unlike Branch A this form is NOT
 # unconditionally self-targeting: issued from inside gateway `zeus`,
-# `hermes -p venus gateway restart` operates on a sibling profile's gateway
+# `fulilian -p venus gateway restart` operates on a sibling profile's gateway
 # and is a legitimate fleet operation. The pattern captures the named
 # profile so `contains_gateway_lifecycle_command` can block only the
 # self-targeting shape (named profile == the profile running the guard).
 # `start` stays excluded for the same reason as Branch A.
 _PROFILE_FLAG_LIFECYCLE_PATTERN = re.compile(
     r"(?i)"
-    r"hermes\s+"
+    r"fulilian\s+"
     # Any global flags before the profile selector (each may carry a value).
     r"(?:-{1,2}\S+(?:\s+\S+)?\s+)*"
     # The selector itself: `--profile=<name>` or the space-separated
@@ -150,13 +150,13 @@ _PROFILE_FLAG_LIFECYCLE_PATTERN = re.compile(
 def _current_profile_name() -> Optional[str]:
     """Return the name of the profile running the guard, if determinable.
 
-    Prefers the explicit ``HERMES_PROFILE_NAME`` / ``HERMES_PROFILE`` env
+    Prefers the explicit ``FULILIAN_PROFILE_NAME`` / ``FULILIAN_PROFILE`` env
     (set by the profile launcher and kanban worker spawns), falling back to
-    ``hermes_cli.profiles.get_active_profile_name`` (derived from
-    ``HERMES_HOME``, which the gateway process inherits from its launch
+    ``fulilian_cli.profiles.get_active_profile_name`` (derived from
+    ``FULILIAN_HOME``, which the gateway process inherits from its launch
     profile). Returns ``None`` when neither source yields a name.
     """
-    for env_name in ("HERMES_PROFILE_NAME", "HERMES_PROFILE"):
+    for env_name in ("FULILIAN_PROFILE_NAME", "FULILIAN_PROFILE"):
         value = os.environ.get(env_name)
         if value and value.strip():
             return value.strip()
@@ -178,37 +178,37 @@ def _named_profile_is_current(named: str) -> bool:
     return named.strip().casefold() == current.strip().casefold()
 
 
-# Branch B only catches `launchctl <verb> ... hermes[.-]?gateway` when the
+# Branch B only catches `launchctl <verb> ... fulilian[.-]?gateway` when the
 # label literally appears AFTER the verb in the same `[^\n]*` span, and its
 # verb list is missing `bootout`/`kill`/`disable`/`remove` entirely (2026-08-02
 # incident). `bootout` is the one that actually unloads a job's registration
 # — worse than `stop`/`kickstart`, which just bounce a still-registered job.
 #
 # A shell loop that builds the label from a list defined EARLIER in the same
-# command — `for item in 'ai.hermes.gateway-apollo:...' 'ai.hermes.gateway:...';
+# command — `for item in 'ai.fulilian.gateway-apollo:...' 'ai.fulilian.gateway:...';
 # do label=${item%%:*}; launchctl bootout "gui/$uid/$label"; done` — puts the
 # literal label text in a different `;`-separated segment than the verb, so
 # no amount of same-segment tokenization sees it: the token next to `bootout`
-# is the unexpanded variable `$label`, not the string "hermes.gateway". This
+# is the unexpanded variable `$label`, not the string "fulilian.gateway". This
 # incident command evaded Branch B on both counts (missing verb AND order)
 # and unloaded all 4 profiles' launchd jobs with zero approval.
 #
 # Unlike `submit`/`bootstrap` (handled separately, fully label-independent,
 # because a NEW job's label is attacker-chosen), these verbs act on an
-# EXISTING job, so anchoring to the hermes-gateway label is still correct —
+# EXISTING job, so anchoring to the fulilian-gateway label is still correct —
 # `test_safe_commands` requires unrelated-label ops (e.g. `launchctl unload
-# ai.hermes.update-checker.plist`) to stay unblocked. The fix is checking
+# ai.fulilian.update-checker.plist`) to stay unblocked. The fix is checking
 # "verb anywhere AND label anywhere", not "label right after verb".
 _LAUNCHCTL_LIFECYCLE_VERBS_RE = re.compile(
     r"(?i)\blaunchctl\s+(?:kickstart|unload|load|stop|restart|bootout|kill|disable|remove)\b"
 )
-_HERMES_GATEWAY_LABEL_RE = re.compile(r"(?i)\bhermes[.\-]?gateway\b")
+_FULILIAN_GATEWAY_LABEL_RE = re.compile(r"(?i)\bfulilian[.\-]?gateway\b")
 
 
 def _contains_launchctl_gateway_lifecycle(normalized_text: str) -> bool:
     """Order-independent companion to Branch B — see comment above."""
     return bool(_LAUNCHCTL_LIFECYCLE_VERBS_RE.search(normalized_text)) and bool(
-        _HERMES_GATEWAY_LABEL_RE.search(normalized_text)
+        _FULILIAN_GATEWAY_LABEL_RE.search(normalized_text)
     )
 
 
@@ -230,7 +230,7 @@ def contains_gateway_lifecycle_command(text: str) -> bool:
     blocked lifecycle command (#80269, reported against #80260's bootout
     parity fix). Tokenizing closes that gap while keeping the same
     gateway-label anchoring (``_GATEWAY_LIFECYCLE_PATTERN`` still requires
-    a ``hermes``/``gateway`` token) — this function is the single choke
+    a ``fulilian``/``gateway`` token) — this function is the single choke
     point ``_contains_unsafe_gateway_action`` calls at every recursion
     level, so referenced-script and ``sh -c`` payload scanning inherit the
     fix automatically.
@@ -239,7 +239,7 @@ def contains_gateway_lifecycle_command(text: str) -> bool:
         return False
     # Heredoc bodies that are provably inert data (quoted delimiter, data-sink
     # consumer like `cat > file <<'EOF'`) are masked before scanning (#88336):
-    # a runbook line "a human can run: hermes gateway restart" inside such a
+    # a runbook line "a human can run: fulilian gateway restart" inside such a
     # body is documentation, not a command this shell will execute. The
     # stripper fails open on ANY ambiguity (unquoted delimiter, shell
     # consumer, unterminated body), so executable heredocs are still scanned.
@@ -249,8 +249,8 @@ def contains_gateway_lifecycle_command(text: str) -> bool:
     normalized = _SHELL_LINE_CONTINUATION.sub(" ", text)
     if _GATEWAY_LIFECYCLE_PATTERN.search(normalized):
         return True
-    # Profile-flag form (#78028): `hermes -p <profile> gateway restart|stop`
-    # bypasses Branch A because the selector sits between `hermes` and
+    # Profile-flag form (#78028): `fulilian -p <profile> gateway restart|stop`
+    # bypasses Branch A because the selector sits between `fulilian` and
     # `gateway`. It is only the same foot-gun when the named profile IS the
     # profile running the guard — sibling-profile restarts are legitimate
     # fleet operations and stay allowed.
@@ -258,7 +258,7 @@ def contains_gateway_lifecycle_command(text: str) -> bool:
     if profile_match:
         named = profile_match.group(1) or profile_match.group(2)
         if named:
-            # Profile ids cannot contain quotes (hermes_cli.profiles
+            # Profile ids cannot contain quotes (fulilian_cli.profiles
             # enforces `^[a-z0-9][a-z0-9_-]{0,63}$`), so a shell-quoted
             # `-p 'zeus'` compares equal to the bare name.
             named = named.strip().strip("\"'")
@@ -322,7 +322,7 @@ def _is_cloud_placeholder_path(path: Path) -> bool:
 # Executables whose arguments are DATA, not commands: search patterns, SQL
 # statements, log filters. None of these can execute their argument text, so
 # a lifecycle-shaped string inside their arguments (a grep pattern hunting
-# for `systemctl restart hermes-gateway` in syslog, a SQL LIKE literal over a
+# for `systemctl restart fulilian-gateway` in syslog, a SQL LIKE literal over a
 # restart-events table) is diagnostics, not a lifecycle command. Deliberately
 # conservative: no `awk` (system()), no `sed` (`s///e`), no `echo`/`printf`
 # (routinely piped into a shell), no `mysql` (`\\!` and `system` escapes).
@@ -339,11 +339,11 @@ _UNSAFE_DATA_ARG_MARKERS = ("`", "$(", "<(", ">(", "\\!")
 # are ordinary path operands, and `grep -r <pattern> .` is a far more common
 # shape than any dot-command — treating those as escapes disabled the
 # exemption for the single most ordinary way to run a recursive search,
-# blocking `grep -r 'systemctl restart hermes-gateway' .` outright. Require a
+# blocking `grep -r 'systemctl restart fulilian-gateway' .` outright. Require a
 # dot followed by a NAME character so a relative path stays a path.
 _DOT_COMMAND_ARGUMENT = re.compile(r"^\.[A-Za-z]")
 # A data sink piped into a shell/interpreter can feed matched lines straight
-# to execution (`grep 'systemctl restart hermes-gateway' f | sh`); never mask
+# to execution (`grep 'systemctl restart fulilian-gateway' f | sh`); never mask
 # such a line.
 _PIPE_TO_INTERPRETER = re.compile(
     r"\|\s*&?\s*(?:sudo\s+)?(?:sh|bash|dash|ksh|zsh|xargs|eval|source)\b"
@@ -598,7 +598,7 @@ def contains_launchctl_submit_command(command: str) -> bool:
     """Detect an executed ``launchctl submit``/``bootstrap``, not quoted text.
 
     Label-independent by design: the label of a submitted/bootstrapped job is
-    chosen by whoever writes it, so a neutral name (``ai.hermes.svc-reload-tmp``)
+    chosen by whoever writes it, so a neutral name (``ai.fulilian.svc-reload-tmp``)
     defeats any label-anchored regex (#62891, second reproduction). Both verbs
     register a NEW persistent launchd job (``submit`` jobs get KeepAlive
     semantics; ``bootstrap`` loads an arbitrary plist), which is never safe to
@@ -622,13 +622,13 @@ def _mask_data_sink_arguments(text: str) -> str:
     """Replace data-sink executables' arguments with a neutral placeholder.
 
     The lifecycle regex is command-shaped, but it cannot tell an EXECUTED
-    ``systemctl restart hermes-gateway`` from the same characters appearing
+    ``systemctl restart fulilian-gateway`` from the same characters appearing
     as *data* — a grep/rg pattern, a journalctl filter, a SQL string literal
     passed to sqlite3/psql. Those diagnostics commands were being rejected
     (false positives blocking legitimate cron prompts), e.g.::
 
-        grep -c 'systemctl restart hermes-gateway' /var/log/syslog
-        sqlite3 db "SELECT msg FROM log WHERE msg LIKE '%systemctl restart hermes-gateway%'"
+        grep -c 'systemctl restart fulilian-gateway' /var/log/syslog
+        sqlite3 db "SELECT msg FROM log WHERE msg LIKE '%systemctl restart fulilian-gateway%'"
 
     This masker shell-tokenizes each line and, for command segments whose
     executable is a known data sink (``_DATA_SINK_EXECUTABLES``), replaces
@@ -808,7 +808,7 @@ def _references_at(
         return
 
     # A bare "/" token is pathlib's division operator in Python sources
-    # (e.g. `Path.home() / ".hermes"`), not an executable reference.
+    # (e.g. `Path.home() / ".fulilian"`), not an executable reference.
     # Resolving it walks to the filesystem root and fails the
     # regular-file check below, hard-blocking innocent .py scripts
     # (#77131). Skip pure-separator tokens.
@@ -1152,10 +1152,10 @@ def _resolve_script_path(script_path: str) -> Optional[Path]:
     """Resolve a cron ``script`` value the same way the scheduler does.
 
     The scheduler (``cron.scheduler``) resolves a bare/relative script path
-    under ``<HERMES_HOME>/scripts/`` and only accepts absolute paths as-is.
+    under ``<FULILIAN_HOME>/scripts/`` and only accepts absolute paths as-is.
     We MUST mirror that here so the guard scans the file that will actually
     run — otherwise a job whose script lives at the scheduler's real location
-    (``~/.hermes/scripts/restart.sh``) but is passed as the bare name
+    (``~/.fulilian/scripts/restart.sh``) but is passed as the bare name
     ``restart.sh`` would read as a nonexistent relative path and silently
     scan prompt-only content, letting the command through.
 
@@ -1164,7 +1164,7 @@ def _resolve_script_path(script_path: str) -> Optional[Path]:
     ``_expand_candidate_path``; such a value can never name a file the
     scheduler would execute, so there is nothing to scan.
     """
-    from fulilian_constants import get_hermes_home
+    from fulilian_constants import get_fulilian_home
 
     raw = _expand_candidate_path(script_path)
     if raw is None:
@@ -1172,10 +1172,10 @@ def _resolve_script_path(script_path: str) -> Optional[Path]:
     if raw.is_absolute():
         return raw
     try:
-        return get_hermes_home() / "scripts" / raw
+        return get_fulilian_home() / "scripts" / raw
     except (RuntimeError, OSError):
-        # get_hermes_home() falls back to Path.home(), which raises when
-        # neither HERMES_HOME nor HOME is resolvable (launchd/systemd
+        # get_fulilian_home() falls back to Path.home(), which raises when
+        # neither FULILIAN_HOME nor HOME is resolvable (launchd/systemd
         # environments) — same ingestion contract: nothing to scan.
         return None
 
@@ -1192,7 +1192,7 @@ def _read_script_for_scanning(script_path: str) -> str:
         return ""
     script_text, unsafe = _read_referenced_script(resolved)
     if unsafe:
-        return "hermes gateway restart"
+        return "fulilian gateway restart"
     return script_text or ""
 
 
@@ -1237,7 +1237,7 @@ def check_gateway_lifecycle(
                     "evicted FileProvider placeholder can hang the guard's "
                     "preflight scan indefinitely, so it is refused without "
                     "being read. Move the script to a local, non-cloud path "
-                    "(e.g. ~/.hermes/scripts/) and recreate the job."
+                    "(e.g. ~/.fulilian/scripts/) and recreate the job."
                 )
         python_script = resolved_script is not None and resolved_script.suffix == ".py"
         script_text = _read_script_for_scanning(script)
@@ -1251,7 +1251,7 @@ def check_gateway_lifecycle(
         # the filesystem root and trips the regular-file check, blocking
         # every innocent .py cron script, #77131). The direct command
         # regex below still scans the full text, so a literal
-        # `hermes gateway restart` embedded in a .py script is still
+        # `fulilian gateway restart` embedded in a .py script is still
         # blocked. Non-regular/oversized script files still fail closed
         # via the lifecycle-shaped sentinel in _read_script_for_scanning.
         unsafe = _lifecycle_command_scan_with_data_exemption(combined)
@@ -1266,6 +1266,6 @@ def check_gateway_lifecycle(
             "Blocked: cron job contains a gateway lifecycle command or persistent "
             "launchctl submit operation. This is blocked to prevent agent-driven "
             "SIGTERM-respawn loops under launchd/systemd supervision "
-            "(#30719). Run `hermes gateway restart` from a shell outside "
+            "(#30719). Run `fulilian gateway restart` from a shell outside "
             "the running gateway instead."
         )

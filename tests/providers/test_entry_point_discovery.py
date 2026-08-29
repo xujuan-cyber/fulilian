@@ -1,7 +1,7 @@
-"""Tests for pip entry-point provider discovery (hermes_agent.plugins group).
+"""Tests for pip entry-point provider discovery (fulilian_agent.plugins group).
 
 Verifies that ``providers/__init__.py`` imports provider plugins exposed via a
-distribution's ``hermes_agent.plugins`` entry point, supporting both a
+distribution's ``fulilian_agent.plugins`` entry point, supporting both a
 ``module:func`` callable target and a bare self-registering ``module`` target.
 """
 
@@ -25,7 +25,7 @@ def _clear_provider_caches():
     providers._discovered = False
     for mod in list(sys.modules.keys()):
         if mod.startswith("plugins.model_providers") or mod.startswith(
-            "_hermes_user_provider"
+            "_fulilian_user_provider"
         ):
             del sys.modules[mod]
 
@@ -53,7 +53,7 @@ def _restore_real_discovery():
 class _FakeEP:
     def __init__(self, name, loader):
         self.name = name
-        self.group = "hermes_agent.plugins"
+        self.group = "fulilian_agent.plugins"
         self._loader = loader
 
     def load(self):

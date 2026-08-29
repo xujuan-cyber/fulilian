@@ -25,53 +25,53 @@ def cli_mod(monkeypatch):
 
 
 class TestLightModeDetection:
-    def test_hermes_light_env_true_forces_light(self, cli_mod, monkeypatch):
-        monkeypatch.setenv("HERMES_LIGHT", "1")
+    def test_fulilian_light_env_true_forces_light(self, cli_mod, monkeypatch):
+        monkeypatch.setenv("FULILIAN_LIGHT", "1")
         assert cli_mod._detect_light_mode() is True
 
-    def test_hermes_light_env_false_forces_dark(self, cli_mod, monkeypatch):
-        monkeypatch.setenv("HERMES_LIGHT", "0")
+    def test_fulilian_light_env_false_forces_dark(self, cli_mod, monkeypatch):
+        monkeypatch.setenv("FULILIAN_LIGHT", "0")
         # Also blank out other signals so nothing else flips it light.
-        monkeypatch.delenv("HERMES_TUI_LIGHT", raising=False)
-        monkeypatch.delenv("HERMES_TUI_THEME", raising=False)
-        monkeypatch.delenv("HERMES_TUI_BACKGROUND", raising=False)
+        monkeypatch.delenv("FULILIAN_TUI_LIGHT", raising=False)
+        monkeypatch.delenv("FULILIAN_TUI_THEME", raising=False)
+        monkeypatch.delenv("FULILIAN_TUI_BACKGROUND", raising=False)
         monkeypatch.delenv("COLORFGBG", raising=False)
         assert cli_mod._detect_light_mode() is False
 
     def test_theme_hint_light(self, cli_mod, monkeypatch):
-        monkeypatch.delenv("HERMES_LIGHT", raising=False)
-        monkeypatch.delenv("HERMES_TUI_LIGHT", raising=False)
-        monkeypatch.setenv("HERMES_TUI_THEME", "light")
+        monkeypatch.delenv("FULILIAN_LIGHT", raising=False)
+        monkeypatch.delenv("FULILIAN_TUI_LIGHT", raising=False)
+        monkeypatch.setenv("FULILIAN_TUI_THEME", "light")
         assert cli_mod._detect_light_mode() is True
 
     def test_background_hex_hint_light(self, cli_mod, monkeypatch):
-        monkeypatch.delenv("HERMES_LIGHT", raising=False)
-        monkeypatch.delenv("HERMES_TUI_LIGHT", raising=False)
-        monkeypatch.delenv("HERMES_TUI_THEME", raising=False)
-        monkeypatch.setenv("HERMES_TUI_BACKGROUND", "#FFFFFF")
+        monkeypatch.delenv("FULILIAN_LIGHT", raising=False)
+        monkeypatch.delenv("FULILIAN_TUI_LIGHT", raising=False)
+        monkeypatch.delenv("FULILIAN_TUI_THEME", raising=False)
+        monkeypatch.setenv("FULILIAN_TUI_BACKGROUND", "#FFFFFF")
         assert cli_mod._detect_light_mode() is True
 
     def test_background_hex_hint_dark(self, cli_mod, monkeypatch):
-        monkeypatch.delenv("HERMES_LIGHT", raising=False)
-        monkeypatch.delenv("HERMES_TUI_LIGHT", raising=False)
-        monkeypatch.delenv("HERMES_TUI_THEME", raising=False)
-        monkeypatch.setenv("HERMES_TUI_BACKGROUND", "#1a1a2e")
+        monkeypatch.delenv("FULILIAN_LIGHT", raising=False)
+        monkeypatch.delenv("FULILIAN_TUI_LIGHT", raising=False)
+        monkeypatch.delenv("FULILIAN_TUI_THEME", raising=False)
+        monkeypatch.setenv("FULILIAN_TUI_BACKGROUND", "#1a1a2e")
         monkeypatch.delenv("COLORFGBG", raising=False)
         assert cli_mod._detect_light_mode() is False
 
     def test_colorfgbg_light_bg_slot(self, cli_mod, monkeypatch):
-        monkeypatch.delenv("HERMES_LIGHT", raising=False)
-        monkeypatch.delenv("HERMES_TUI_LIGHT", raising=False)
-        monkeypatch.delenv("HERMES_TUI_THEME", raising=False)
-        monkeypatch.delenv("HERMES_TUI_BACKGROUND", raising=False)
+        monkeypatch.delenv("FULILIAN_LIGHT", raising=False)
+        monkeypatch.delenv("FULILIAN_TUI_LIGHT", raising=False)
+        monkeypatch.delenv("FULILIAN_TUI_THEME", raising=False)
+        monkeypatch.delenv("FULILIAN_TUI_BACKGROUND", raising=False)
         monkeypatch.setenv("COLORFGBG", "0;15")  # bg slot 15 = light
         assert cli_mod._detect_light_mode() is True
 
     def test_cache_is_sticky(self, cli_mod, monkeypatch):
-        monkeypatch.setenv("HERMES_LIGHT", "1")
+        monkeypatch.setenv("FULILIAN_LIGHT", "1")
         assert cli_mod._detect_light_mode() is True
         # Even if the env flips, the cached result wins until reset.
-        monkeypatch.setenv("HERMES_LIGHT", "0")
+        monkeypatch.setenv("FULILIAN_LIGHT", "0")
         assert cli_mod._detect_light_mode() is True
 
 
@@ -98,12 +98,12 @@ class TestOsc11Probe:
 
 class TestLightModeRemap:
     def test_remap_no_op_in_dark_mode(self, cli_mod, monkeypatch):
-        monkeypatch.setenv("HERMES_LIGHT", "0")
+        monkeypatch.setenv("FULILIAN_LIGHT", "0")
         # Cache is None from the fixture; first call sticks at False.
         assert cli_mod._maybe_remap_for_light_mode("#FFF8DC") == "#FFF8DC"
 
     def test_remap_known_dark_color(self, cli_mod, monkeypatch):
-        monkeypatch.setenv("HERMES_LIGHT", "1")
+        monkeypatch.setenv("FULILIAN_LIGHT", "1")
         # Force the detect cache to True for this test.
         cli_mod._LIGHT_MODE_CACHE = True
         assert cli_mod._maybe_remap_for_light_mode("#FFF8DC") == "#1A1A1A"
@@ -142,7 +142,7 @@ class TestSkinConfigHook:
     def test_hook_installed(self, cli_mod):
         from fulilian_cli.skin_engine import SkinConfig
 
-        assert getattr(SkinConfig, "_hermes_light_mode_hook_installed", False) is True
+        assert getattr(SkinConfig, "_fulilian_light_mode_hook_installed", False) is True
 
     def test_hook_is_idempotent(self, cli_mod):
         # Calling the installer twice must not double-wrap (the marker
@@ -293,7 +293,7 @@ import sys as _sys
 
 _CHILD_SRC = r"""
 import sys, os
-sys.path.insert(0, os.environ["HERMES_REPO"])
+sys.path.insert(0, os.environ["FULILIAN_REPO"])
 import cli
 bg = cli._query_osc11_background()
 print("RESULT:" + repr(bg), flush=True)
@@ -322,7 +322,7 @@ def _run_osc11_child(reply_fn, repo_root, timeout=8.0):
     import pty
     import time as _time
 
-    env = dict(_os.environ, HERMES_REPO=str(repo_root))
+    env = dict(_os.environ, FULILIAN_REPO=str(repo_root))
     for var in ("SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"):
         env.pop(var, None)
     pid, master = pty.fork()

@@ -51,7 +51,7 @@ import time
 from contextlib import contextmanager
 from typing import Any, Dict, Iterator, List, Optional
 
-from fulilian_constants import get_hermes_home
+from fulilian_constants import get_fulilian_home
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +88,7 @@ _RUNTIME_RETRYABLE_ERRORS = frozenset({"send_path_degraded"})
 
 
 def _db_path():
-    return get_hermes_home() / "state.db"
+    return get_fulilian_home() / "state.db"
 
 
 def _connect() -> sqlite3.Connection:
@@ -106,7 +106,7 @@ def _connect() -> sqlite3.Connection:
 
 
 def _initialize_schema(conn: sqlite3.Connection) -> None:
-    from hermes_state import apply_wal_with_fallback
+    from fulilian_state import apply_wal_with_fallback
 
     apply_wal_with_fallback(conn, db_label="state.db (delivery_ledger)")
     conn.execute(

@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 _CROSS_ORIGIN_SAFE_HEADERS = frozenset({"accept", "user-agent"})
 _DEFAULT_PORTS = {"http": 80, "https": 443}
 _CA_BUNDLE_ENV_VARS = (
-    "HERMES_CA_BUNDLE",
+    "FULILIAN_CA_BUNDLE",
     "SSL_CERT_FILE",
     "REQUESTS_CA_BUNDLE",
     "CURL_CA_BUNDLE",
@@ -97,7 +97,7 @@ class _CrossOriginRequestSanitizer(urllib.request.BaseHandler):
 
 
 def _resolved_https_context() -> ssl.SSLContext | None:
-    """Return the explicit CA context for Hermes-owned urllib openers."""
+    """Return the explicit CA context for Fulilian-owned urllib openers."""
     ca_bundle = next(
         (
             value
@@ -143,7 +143,7 @@ def _secure_opener_from_installed_policy(original_url: str, *, ssl_context=None)
 
     When ``ssl_context`` is provided, the cloned HTTPS handler is replaced with
     one bound to that context so per-provider TLS settings (``ssl_ca_cert`` /
-    ``ssl_verify``) apply to this request. When it is None, Hermes-owned
+    ``ssl_verify``) apply to this request. When it is None, Fulilian-owned
     openers get an explicit CA default via ``_resolved_https_context`` (env
     bundle first, certifi on macOS); an application-installed opener's TLS
     policy is preserved unchanged.
@@ -179,7 +179,7 @@ def _secure_opener_from_installed_policy(original_url: str, *, ssl_context=None)
     # instead, then leave the rebuilt opener's late-injection list empty.
     setattr(
         secured,
-        "_hermes_initial_addheaders",
+        "_fulilian_initial_addheaders",
         list(getattr(installed, "addheaders", ())),
     )
     secured.addheaders = []
@@ -209,7 +209,7 @@ def open_credentialed_url(
         opener = _secure_opener_from_installed_policy(
             request.full_url, ssl_context=ssl_context
         )
-        for name, value in getattr(opener, "_hermes_initial_addheaders", ()):
+        for name, value in getattr(opener, "_fulilian_initial_addheaders", ()):
             if not request.has_header(name):
                 request.add_header(name, value)
     else:

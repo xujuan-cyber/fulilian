@@ -2,19 +2,19 @@
 
 Both callers need to run the same core ``.[all]`` reinstall:
 
-- ``hermes_cli._early_recovery.recover_if_needed`` — stdlib-only, runs BEFORE
-  ``hermes_cli.main``'s third-party imports, so it can complete a pending
+- ``fulilian_cli._early_recovery.recover_if_needed`` — stdlib-only, runs BEFORE
+  ``fulilian_cli.main``'s third-party imports, so it can complete a pending
   update while no native extension is mapped yet (#83569).
-- ``hermes_cli.main._recover_core_update_marker_locked`` — the historical
+- ``fulilian_cli.main._recover_core_update_marker_locked`` — the historical
   post-import recovery path. Kept as a fallback for installs the early pass
   could not complete (marker left in place on failure).
 
 This module is deliberately **stdlib-only** so importing it can never fail in
-the corrupted-venv state it exists to repair. ``hermes_cli.main`` imports
-``managed_uv``, ``hermes_constants``, and friends only in its late path; the
+the corrupted-venv state it exists to repair. ``fulilian_cli.main`` imports
+``managed_uv``, ``fulilian_constants``, and friends only in its late path; the
 early path must not. Where the late path uses ``managed_uv.ensure_uv`` to
 bootstrap uv if missing, the early path uses the stdlib
-:func:`hermes_cli._early_recovery._find_uv_binary` lookup and falls back to
+:func:`fulilian_cli._early_recovery._find_uv_binary` lookup and falls back to
 plain pip when uv is absent — a degraded but working installer (the late
 recovery will bootstrap uv on the next launch if it ever matters).
 """
@@ -40,7 +40,7 @@ def _is_windows() -> bool:
 
 
 def _is_termux_env(env: dict | None = None) -> bool:
-    """Stdlib Termux probe (hermes_cli.main's version lives behind imports)."""
+    """Stdlib Termux probe (fulilian_cli.main's version lives behind imports)."""
     env = env if env is not None else os.environ
     try:
         if env.get("TERMUX_VERSION"):
@@ -55,7 +55,7 @@ def _is_termux_env(env: dict | None = None) -> bool:
 def _stdout_to_stderr():
     """Route fd 1 (and sys.stdout) to stderr for the duration of an install.
 
-    ``hermes acp`` speaks JSON-RPC on stdout; an inherited-fd install child
+    ``fulilian acp`` speaks JSON-RPC on stdout; an inherited-fd install child
     writing there would corrupt the protocol. Mirrors
     ``main.py::_recover_from_interrupted_install``.
     """
@@ -105,7 +105,7 @@ def _resolve_install_target(root: Path) -> tuple[list[str], dict | None]:
 
 def _venv_scripts_dir(root: Path) -> Path | None:
     """Project venv Scripts/bin dir, when present. stdlib-only."""
-    # hermes_constants is stdlib-only, so the canonical layout helpers are safe
+    # fulilian_constants is stdlib-only, so the canonical layout helpers are safe
     # to use from this corrupted-venv repair path (#76105: never open-code
     # the Scripts/bin split).
     from fulilian_constants import project_venv_dir, venv_bin_dir
@@ -119,16 +119,16 @@ def _venv_scripts_dir(root: Path) -> Path | None:
 
 
 #: Launcher command names install.ps1's Set-PathVariable exposes from the
-#: managed binary dir (the default Hermes root's ``bin``, next to uv.exe)
+#: managed binary dir (the default Fulilian root's ``bin``, next to uv.exe)
 #: on the user PATH. Keep in lockstep with the launcher list in
 #: scripts/install.ps1.
-_WINDOWS_BIN_LAUNCHERS = ("hermes", "hermes-acp")
+_WINDOWS_BIN_LAUNCHERS = ("fulilian", "fulilian-acp")
 
 
 def _venv_is_relocatable(venv_dir: Path) -> bool:
     """True when the venv's pyvenv.cfg declares ``relocatable = true``.
 
-    uv writes the flag; ``hermes_cli.managed_uv`` builds its replacement
+    uv writes the flag; ``fulilian_cli.managed_uv`` builds its replacement
     venvs with ``--relocatable`` (they are constructed aside and swapped
     into place). A relocatable venv's console-script trampolines embed a
     RELATIVE interpreter reference, so a COPY of one placed outside
@@ -185,23 +185,23 @@ def ensure_windows_bin_launchers(
     windows: bool | None = None,
     user_path_entries: list[str] | None = None,
 ) -> list[str]:
-    """Re-stage the Windows ``hermes`` launchers when they vanish.
+    """Re-stage the Windows ``fulilian`` launchers when they vanish.
 
-    On Windows, ``hermes`` resolves through launchers derived from the venv
+    On Windows, ``fulilian`` resolves through launchers derived from the venv
     console scripts — never ``venv\\Scripts`` itself on PATH, which would
     shadow the user's ``python`` (#83797). The canonical launcher home is
-    the managed binary dir — the default Hermes root's ``bin``
-    (``%LOCALAPPDATA%\\hermes\\bin``, next to the managed uv) — which lives
+    the managed binary dir — the default Fulilian root's ``bin``
+    (``%LOCALAPPDATA%\\fulilian\\bin``, next to the managed uv) — which lives
     OUTSIDE the git checkout so no git operation can ever touch it. It is
-    a per-machine dir shared by every profile: ``get_hermes_home()`` would
-    point inside ``profiles\\<name>`` under ``hermes -p``, so the anchor
-    here is :func:`hermes_constants.get_default_hermes_root`.
+    a per-machine dir shared by every profile: ``get_fulilian_home()`` would
+    point inside ``profiles\\<name>`` under ``fulilian -p``, so the anchor
+    here is :func:`fulilian_constants.get_default_fulilian_root`.
 
     Earlier installer versions staged them at ``<checkout>\\bin`` instead —
-    inside the git working tree — where ``hermes update``'s pre-update
+    inside the git working tree — where ``fulilian update``'s pre-update
     autostash (``git stash push --include-untracked``) swept them off disk;
     once the desktop updater stopped re-applying stashes (``--keep-stash``)
-    nothing restored them and ``hermes`` stopped resolving in every new
+    nothing restored them and ``fulilian`` stopped resolving in every new
     terminal. That legacy location is re-staged too, during the transition,
     for installs whose user PATH still resolves through it.
 
@@ -218,7 +218,7 @@ def ensure_windows_bin_launchers(
     Two targets, two gates, both failing toward inaction:
 
     - canonical managed binary dir: only when *root* is the managed clone
-      (``root.parent == get_default_hermes_root()``), so source checkouts
+      (``root.parent == get_default_fulilian_root()``), so source checkouts
       elsewhere never gain launchers;
     - legacy ``<root>\\bin``: only when that dir is on the user PATH
       (registry value, process PATH as fallback), i.e. the install opted
@@ -228,7 +228,7 @@ def ensure_windows_bin_launchers(
     starts cannot tear a launcher. Never raises; returns the restored paths.
 
     *windows* and *user_path_entries* are injectable for tests, same pattern
-    as ``hermes_constants.venv_bin_dir``.
+    as ``fulilian_constants.venv_bin_dir``.
     """
     if windows is None:
         windows = _is_windows()
@@ -237,14 +237,14 @@ def ensure_windows_bin_launchers(
 
     root = Path(root)
 
-    # Per-machine anchor: the DEFAULT Hermes root, not get_hermes_home() —
-    # under ``hermes -p <name>`` that returns ``profiles\\<name>``, which
+    # Per-machine anchor: the DEFAULT Fulilian root, not get_fulilian_home() —
+    # under ``fulilian -p <name>`` that returns ``profiles\\<name>``, which
     # would fail the managed-clone gate below and silently skip the heal
     # for profile users. The launcher dir serves the whole machine.
-    from fulilian_constants import get_default_hermes_root
+    from fulilian_constants import get_default_fulilian_root
 
     try:
-        home = Path(get_default_hermes_root())
+        home = Path(get_default_fulilian_root())
     except Exception:
         return []
 
@@ -254,7 +254,7 @@ def ensure_windows_bin_launchers(
     targets: list[Path] = []
 
     # Canonical target — gate on the managed-clone shape. This runs at
-    # every hermes_cli.main process start (right after the profile
+    # every fulilian_cli.main process start (right after the profile
     # override), so the healthy path must stay at a couple of stat calls.
     if _normalize_windows_path(root.parent) == _normalize_windows_path(home):
         canonical = home / "bin"
@@ -321,7 +321,7 @@ def ensure_windows_bin_launchers(
         # closed/broken stderr must not turn a successful heal into a crash.
         with contextlib.suppress(OSError, ValueError):
             print(
-                "  ✓ Restored hermes launcher(s): " + ", ".join(restored),
+                "  ✓ Restored fulilian launcher(s): " + ", ".join(restored),
                 file=sys.stderr,
             )
     return restored
@@ -331,7 +331,7 @@ def _read_user_path_raw() -> tuple[list[str], int]:
     """Raw (unexpanded) user PATH entries + registry value type.
 
     Raw so a rewrite preserves ``%VARS%`` exactly as the user stored them
-    (same discipline as ``hermes_cli.uninstall``). Only called on Windows.
+    (same discipline as ``fulilian_cli.uninstall``). Only called on Windows.
     """
     import winreg
 
@@ -360,9 +360,9 @@ def migrate_windows_bin_path(
     read_user_path=None,
     write_user_path=None,
 ) -> bool:
-    """One-time PATH migration to the ``HERMES_HOME\\bin`` launcher layout.
+    """One-time PATH migration to the ``FULILIAN_HOME\\bin`` launcher layout.
 
-    Runs from the ``hermes update`` tail (and mirrors what install.ps1's
+    Runs from the ``fulilian update`` tail (and mirrors what install.ps1's
     Set-PathVariable does on fresh installs/repairs, which never reach
     existing installs — updates don't run install.ps1):
 
@@ -395,10 +395,10 @@ def migrate_windows_bin_path(
     root = Path(root)
 
     # Same per-machine anchor as ensure_windows_bin_launchers (see there).
-    from fulilian_constants import get_default_hermes_root, venv_bin_dir
+    from fulilian_constants import get_default_fulilian_root, venv_bin_dir
 
     try:
-        home = Path(get_default_hermes_root())
+        home = Path(get_default_fulilian_root())
     except Exception:
         return False
     if _normalize_windows_path(root.parent) != _normalize_windows_path(home):
@@ -448,7 +448,7 @@ def migrate_windows_bin_path(
             return False
         with contextlib.suppress(OSError, ValueError):
             print(
-                f"  ✓ hermes launchers now resolve from {home_bin} "
+                f"  ✓ fulilian launchers now resolve from {home_bin} "
                 "(legacy PATH entries removed)",
                 file=sys.stderr,
             )
@@ -489,10 +489,10 @@ class ShimQuarantineError(RuntimeError):
         )
 
 
-def _quarantine_running_hermes_exe(
+def _quarantine_running_fulilian_exe(
     scripts_dir: Path, *, failed_out: list[str] | None = None
 ) -> list[tuple[Path, Path]]:
-    """Rename live hermes*.exe shims aside so the installer can rewrite them.
+    """Rename live fulilian*.exe shims aside so the installer can rewrite them.
 
     Windows blocks REPLACE on a running .exe but allows RENAME. Best-effort:
     silently skips anything that cannot be renamed. Returns (original,
@@ -506,11 +506,11 @@ def _quarantine_running_hermes_exe(
     if not _is_windows():
         return []
     names = set(_load_console_script_names(scripts_dir.parent.parent)) or {
-        "hermes",
-        "hermes-agent",
-        "hermes-acp",
+        "fulilian",
+        "fulilian-agent",
+        "fulilian-acp",
     }
-    names.add("hermes-gateway")
+    names.add("fulilian-gateway")
     moved: list[tuple[Path, Path]] = []
     for name in sorted(names):
         shim = scripts_dir / f"{name}.exe"
@@ -533,7 +533,7 @@ def _restore_quarantined_exes(moved: list[tuple[Path, Path]]) -> None:
     module: one retry ladder and one recovery message for every restore site,
     instead of the near-identical copies that had already drifted (#75584).
     Warnings land on stderr — this module runs in the early-recovery path and
-    ``hermes acp`` speaks JSON-RPC on stdout.
+    ``fulilian acp`` speaks JSON-RPC on stdout.
     """
     _er.restore_quarantined_shims(moved)
 
@@ -552,7 +552,7 @@ def _run_install_cmd(cmd: list[str], *, env: dict | None, root: Path) -> None:
     scripts_dir = _venv_scripts_dir(root) if _is_windows() else None
     failed: list[str] = []
     moved = (
-        _quarantine_running_hermes_exe(scripts_dir, failed_out=failed)
+        _quarantine_running_fulilian_exe(scripts_dir, failed_out=failed)
         if scripts_dir
         else []
     )
@@ -565,7 +565,7 @@ def _run_install_cmd(cmd: list[str], *, env: dict | None, root: Path) -> None:
         # Restore runs on success AND failure: a SUCCESSFUL install can still
         # skip the entry-points step entirely (uv audits an already-satisfied
         # editable install as a no-op and rewrites nothing), which would leave
-        # the quarantined shims renamed aside and `hermes` gone from PATH
+        # the quarantined shims renamed aside and `fulilian` gone from PATH
         # (#75584). _restore_quarantined_exes only renames back when the
         # installer did NOT write a fresh shim, so this is safe in both cases.
         if scripts_dir is not None:
@@ -606,7 +606,7 @@ def run_core_install(root: Path) -> None:
       to ``python -m pip`` when no uv binary is available
     - target ``.[all]`` (or ``.[termux-all]`` on Termux) with the per-extra
       fallback ladder when the combined extras resolve fails
-    - quarantine live ``hermes*.exe`` shims on Windows so they can be replaced
+    - quarantine live ``fulilian*.exe`` shims on Windows so they can be replaced
     - route ALL install output to stderr (acp/JSON-RPC safety)
     - Termux strips leaked PYTHONPATH/PYTHONHOME from the uv env
 

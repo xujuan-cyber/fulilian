@@ -33,12 +33,12 @@ import {
   windowIsActivelyViewed
 } from './use-background-sync'
 
-vi.mock('@/hermes', async importOriginal => ({
+vi.mock('@/fulilian', async importOriginal => ({
   ...(await importOriginal()),
   getLatestSessionMessages: vi.fn()
 }))
 
-const { getLatestSessionMessages } = await import('@/hermes')
+const { getLatestSessionMessages } = await import('@/fulilian')
 
 const ACTIVE_RUNTIME_ID = 'runtime-active'
 const ACTIVE_STORED_ID = 'stored-active'
@@ -117,7 +117,7 @@ function useSyncHarness({
     refreshActiveTranscript,
     refreshCronJobs: vi.fn(),
     refreshCurrentModel: vi.fn(),
-    refreshHermesConfig: vi.fn(),
+    refreshFulilianConfig: vi.fn(),
     refreshMessagingSessions: vi.fn(),
     refreshSessions: vi.fn(),
     updateSessionState,
@@ -651,7 +651,7 @@ describe('typing-aware sessions.changed deferral', () => {
       refreshActiveTranscript: async () => undefined,
       refreshCronJobs: vi.fn(),
       refreshCurrentModel: vi.fn(),
-      refreshHermesConfig: vi.fn(),
+      refreshFulilianConfig: vi.fn(),
       refreshMessagingSessions: vi.fn(),
       requestGateway: vi.fn(async () => ({ sessions: [] })) as never,
       // Required by the hook's params. This harness never drives the

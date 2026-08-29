@@ -1,6 +1,6 @@
-"""``hermes plugins`` subcommand parser.
+"""``fulilian plugins`` subcommand parser.
 
-Extracted from ``hermes_cli/main.py:main()`` (god-file Phase 2 follow-up).
+Extracted from ``fulilian_cli/main.py:main()`` (god-file Phase 2 follow-up).
 Handler injected to avoid importing ``main``.
 """
 
@@ -15,7 +15,7 @@ def build_plugins_parser(subparsers, *, cmd_plugins: Callable) -> None:
         "plugins",
         help="Manage and validate plugins",
         description=(
-            "Install, update, remove, list, or validate native Hermes plugins "
+            "Install, update, remove, list, or validate native Fulilian plugins "
             "and portable Agent Plugins v1 packages. Portable packages install disabled."
         ),
     )
@@ -27,9 +27,9 @@ def build_plugins_parser(subparsers, *, cmd_plugins: Callable) -> None:
     plugins_install.add_argument(
         "identifier",
         help=(
-            "Git URL, owner/repo shorthand (e.g. anpicasso/hermes-plugin-chrome-profiles), "
+            "Git URL, owner/repo shorthand (e.g. anpicasso/fulilian-plugin-chrome-profiles), "
             "or a bare plugin name resolved through the community index "
-            "(see `hermes plugins search`)"
+            "(see `fulilian plugins search`)"
         ),
     )
     plugins_install.add_argument(
@@ -52,7 +52,7 @@ def build_plugins_parser(subparsers, *, cmd_plugins: Callable) -> None:
     _install_enable_group.add_argument(
         "--no-enable",
         action="store_true",
-        help="Install disabled (skip confirmation prompt); enable later with `hermes plugins enable <name>`",
+        help="Install disabled (skip confirmation prompt); enable later with `fulilian plugins enable <name>`",
     )
 
     plugins_search = plugins_subparsers.add_parser(
@@ -175,7 +175,7 @@ def build_plugins_parser(subparsers, *, cmd_plugins: Callable) -> None:
 
     plugins_pack = plugins_subparsers.add_parser(
         "pack",
-        help="Declarative, shareable plugin sets (hermes-pack.yaml)",
+        help="Declarative, shareable plugin sets (fulilian-pack.yaml)",
         description=(
             "Install, export, or inspect plugin packs — a single YAML file "
             "pinning a set of plugins to exact commit SHAs, with optional "
@@ -189,7 +189,7 @@ def build_plugins_parser(subparsers, *, cmd_plugins: Callable) -> None:
         "install", help="Review and install a pack from a file path or https URL"
     )
     pack_install.add_argument(
-        "source", help="Path to a hermes-pack.yaml file, or an https:// URL"
+        "source", help="Path to a fulilian-pack.yaml file, or an https:// URL"
     )
     pack_install.add_argument(
         "--force",
@@ -209,7 +209,7 @@ def build_plugins_parser(subparsers, *, cmd_plugins: Callable) -> None:
     )
     pack_export.add_argument(
         "--name",
-        default="my-hermes-pack",
+        default="my-fulilian-pack",
         help="Pack name to embed in the exported YAML",
     )
 
@@ -217,7 +217,7 @@ def build_plugins_parser(subparsers, *, cmd_plugins: Callable) -> None:
         "show", help="Dry-run: parse and display a pack without installing"
     )
     pack_show.add_argument(
-        "source", help="Path to a hermes-pack.yaml file, or an https:// URL"
+        "source", help="Path to a fulilian-pack.yaml file, or an https:// URL"
     )
 
     plugins_show = plugins_subparsers.add_parser(

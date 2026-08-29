@@ -3,7 +3,7 @@
 Some inference tiers are cheap *because* the vendor trains future models on your
 prompts and completions. Selecting one for the low price without realising the
 data trade-off is a real footgun. This guard mirrors
-``hermes_cli.model_cost_guard`` — it returns a warning payload that the CLI and
+``fulilian_cli.model_cost_guard`` — it returns a warning payload that the CLI and
 web model-selection flows surface as an explicit confirm step.
 
 Why a static table (not a ProviderProfile hook): the guard runs inside core

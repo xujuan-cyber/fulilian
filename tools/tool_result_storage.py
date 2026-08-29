@@ -12,8 +12,8 @@ Defense against context-window overflow operates at three levels:
    in-context content is replaced with a preview + file path reference.
 
    The canonical home is ALWAYS host-side:
-   ``$HERMES_HOME/cache/spillover/{tool_use_id}.txt`` — alongside the other
-   Hermes-owned caches (images, audio, documents, ...) instead of littering
+   ``$FULILIAN_HOME/cache/spillover/{tool_use_id}.txt`` — alongside the other
+   Fulilian-owned caches (images, audio, documents, ...) instead of littering
    the OS temp dir. This needs no sandbox environment, so it also works for
    sessions that never ran a terminal command (MCP-only, cron, gateway) —
    previously those hit the inline-truncate fallback because
@@ -60,10 +60,10 @@ from tools.budget_config import (
 logger = logging.getLogger(__name__)
 PERSISTED_OUTPUT_TAG = "<persisted-output>"
 PERSISTED_OUTPUT_CLOSING_TAG = "</persisted-output>"
-STORAGE_DIR = "/tmp/hermes-results"
+STORAGE_DIR = "/tmp/fulilian-results"
 SPILLOVER_SUBDIR = "cache/spillover"
 SPILLOVER_MAX_AGE_HOURS = 24
-HEREDOC_MARKER = "HERMES_PERSIST_EOF"
+HEREDOC_MARKER = "FULILIAN_PERSIST_EOF"
 _BUDGET_TOOL_NAME = "__budget_enforcement__"
 _UNSAFE_RESULT_FILENAME_CHARS = re.compile(r"[^A-Za-z0-9_.-]+")
 _MAX_RESULT_FILENAME_STEM = 120
@@ -73,10 +73,10 @@ _spillover_pruned_once = False
 
 
 def get_spillover_dir():
-    """Return $HERMES_HOME/cache/spillover as a Path (not created)."""
-    from fulilian_constants import get_hermes_home
+    """Return $FULILIAN_HOME/cache/spillover as a Path (not created)."""
+    from fulilian_constants import get_fulilian_home
 
-    return get_hermes_home() / SPILLOVER_SUBDIR
+    return get_fulilian_home() / SPILLOVER_SUBDIR
 
 
 def cleanup_spillover_cache(max_age_hours: int = SPILLOVER_MAX_AGE_HOURS) -> int:
@@ -143,7 +143,7 @@ def _is_host_side_env(env) -> bool:
 
 
 def _write_to_spillover(content: str, filename: str):
-    """Write content host-side to $HERMES_HOME/cache/spillover.
+    """Write content host-side to $FULILIAN_HOME/cache/spillover.
 
     Returns the absolute path string on success, None on failure.
     """
@@ -206,7 +206,7 @@ def _resolve_storage_dir(env) -> str:
             else:
                 if temp_dir:
                     temp_dir = temp_dir.rstrip("/") or "/"
-                    return f"{temp_dir}/hermes-results"
+                    return f"{temp_dir}/fulilian-results"
     return STORAGE_DIR
 
 
@@ -243,7 +243,7 @@ def _heredoc_marker(content: str) -> str:
     """Return a heredoc delimiter that doesn't collide with content."""
     if HEREDOC_MARKER not in content:
         return HEREDOC_MARKER
-    return f"HERMES_PERSIST_{uuid.uuid4().hex[:8]}"
+    return f"FULILIAN_PERSIST_{uuid.uuid4().hex[:8]}"
 
 
 def _write_to_sandbox(content: str, remote_path: str, env) -> bool:
@@ -347,8 +347,8 @@ def maybe_persist_tool_result(
     filename = _safe_result_filename(tool_use_id)
     preview, has_more = generate_preview(content, max_chars=config.preview_size)
 
-    # Always persist host-side first: $HERMES_HOME/cache/spillover is the
-    # single canonical home for spilled results (with the other Hermes-owned
+    # Always persist host-side first: $FULILIAN_HOME/cache/spillover is the
+    # single canonical home for spilled results (with the other Fulilian-owned
     # caches, pruned by gateway housekeeping) regardless of backend.
     host_path = _write_to_spillover(content, filename)
 

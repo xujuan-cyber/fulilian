@@ -29,26 +29,26 @@ from fulilian_cli import goals
 
 
 @pytest.fixture
-def hermes_home(tmp_path, monkeypatch):
-    home = tmp_path / ".hermes"
+def fulilian_home(tmp_path, monkeypatch):
+    home = tmp_path / ".fulilian"
     home.mkdir()
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setenv("HERMES_HOME", str(home))
-    # get_hermes_home() prefers the context-local override over the env
-    # var, so a set_hermes_home_override() leaked by ANY earlier test in
+    monkeypatch.setenv("FULILIAN_HOME", str(home))
+    # get_fulilian_home() prefers the context-local override over the env
+    # var, so a set_fulilian_home_override() leaked by ANY earlier test in
     # this xdist worker would silently point the goals DB at a dead tmp
     # dir and make resume enqueue nothing (CI-only flake). Pin the
     # override to THIS home so the fixture is immune to leaks.
     from fulilian_constants import (
-        reset_hermes_home_override,
-        set_hermes_home_override,
+        reset_fulilian_home_override,
+        set_fulilian_home_override,
     )
 
-    token = set_hermes_home_override(str(home))
+    token = set_fulilian_home_override(str(home))
     goals._DB_CACHE.clear()
     yield home
     try:
-        reset_hermes_home_override(token)
+        reset_fulilian_home_override(token)
     except Exception:
         pass
     goals._DB_CACHE.clear()
@@ -59,7 +59,7 @@ def _exhaust_budget(session_id: str, goal_text: str = "ship the benchmark"):
     mgr = goals.GoalManager(session_id)
     mgr.set(goal_text, max_turns=1)
     with patch(
-        "hermes_cli.goals.judge_goal",
+        "fulilian_cli.goals.judge_goal",
         return_value=("continue", "needs more steps", False, None, False),
     ):
         decision = mgr.evaluate_after_turn("worked a bit")
@@ -75,9 +75,9 @@ def _exhaust_budget(session_id: str, goal_text: str = "ship the benchmark"):
 
 
 def _make_cli(session_id: str):
-    from cli import HermesCLI
+    from cli import FulilianCLI
 
-    cli = HermesCLI.__new__(HermesCLI)
+    cli = FulilianCLI.__new__(FulilianCLI)
     cli._pending_input = queue.Queue()
     cli.session_id = session_id
     cli.agent = MagicMock()
@@ -86,7 +86,7 @@ def _make_cli(session_id: str):
 
 
 class TestCliResumeRestartsWork:
-    def test_resume_after_budget_exhaustion_queues_continuation(self, hermes_home):
+    def test_resume_after_budget_exhaustion_queues_continuation(self, fulilian_home):
         sid = f"sid-cli-resume-{uuid.uuid4().hex}"
         cli = _make_cli(sid)
         _exhaust_budget(sid)
@@ -104,7 +104,7 @@ class TestCliResumeRestartsWork:
         assert state.status == "active"
         assert state.turns_used == 0
 
-    def test_resume_without_goal_queues_nothing(self, hermes_home):
+    def test_resume_without_goal_queues_nothing(self, fulilian_home):
         sid = f"sid-cli-noresume-{uuid.uuid4().hex}"
         cli = _make_cli(sid)
 
@@ -170,7 +170,7 @@ def _resume_event() -> MessageEvent:
 class TestGatewayResumeRestartsWork:
     @pytest.mark.asyncio
     async def test_resume_after_budget_exhaustion_enqueues_continuation(
-        self, hermes_home
+        self, fulilian_home
     ):
         runner, adapter = _make_runner()
         _exhaust_budget(_GW_SID)
@@ -193,7 +193,7 @@ class TestGatewayResumeRestartsWork:
         assert state.turns_used == 0
 
     @pytest.mark.asyncio
-    async def test_resume_without_goal_enqueues_nothing(self, hermes_home):
+    async def test_resume_without_goal_enqueues_nothing(self, fulilian_home):
         runner, adapter = _make_runner()
 
         response = await GatewayRunner._handle_goal_command(runner, _resume_event())

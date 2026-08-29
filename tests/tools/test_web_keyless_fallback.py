@@ -251,7 +251,7 @@ class TestProviderRouting:
 
     def test_provider_tier_reads_config(self, monkeypatch):
         monkeypatch.setattr(
-            "hermes_cli.config.load_config",
+            "fulilian_cli.config.load_config",
             lambda: {"web": {"provider_tier": {"exa": "FREE", "parallel": "bogus"}}},
         )
         assert keyless_mcp.provider_tier("exa") == "free"
@@ -365,7 +365,7 @@ class TestResolutionOrder:
 
 
 # ---------------------------------------------------------------------------
-# hermes tools picker: tier variant rows
+# fulilian tools picker: tier variant rows
 # ---------------------------------------------------------------------------
 
 
@@ -374,7 +374,7 @@ class TestPickerTierRows:
         from fulilian_cli import tools_config
 
         monkeypatch.setattr(
-            "hermes_cli.plugins._ensure_plugins_discovered", lambda: None
+            "fulilian_cli.plugins._ensure_plugins_discovered", lambda: None
         )
         rows = tools_config._plugin_web_search_providers()
         by_backend_tier = {

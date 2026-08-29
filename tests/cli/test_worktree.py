@@ -118,8 +118,8 @@ def _setup_worktree(repo_root):
     """Test version of _setup_worktree — creates a worktree."""
     import uuid
     short_id = uuid.uuid4().hex[:8]
-    wt_name = f"hermes-{short_id}"
-    branch_name = f"hermes/{wt_name}"
+    wt_name = f"fulilian-{short_id}"
+    branch_name = f"fulilian/{wt_name}"
 
     worktrees_dir = Path(repo_root) / ".worktrees"
     worktrees_dir.mkdir(parents=True, exist_ok=True)
@@ -217,7 +217,7 @@ class TestWorktreeCreation:
         info = _setup_worktree(str(git_repo))
         assert info is not None
         assert Path(info["path"]).exists()
-        assert info["branch"].startswith("hermes/hermes-")
+        assert info["branch"].startswith("fulilian/fulilian-")
         assert info["repo_root"] == str(git_repo)
 
         # Verify it's a valid git worktree
@@ -289,7 +289,7 @@ class TestWorktreeCleanup:
         """Cleanup should handle already-removed worktrees gracefully."""
         info = {
             "path": str(git_repo / ".worktrees" / "nonexistent"),
-            "branch": "hermes/nonexistent",
+            "branch": "fulilian/nonexistent",
             "repo_root": str(git_repo),
         }
         # Should not raise
@@ -486,7 +486,7 @@ class TestStaleWorktreePruning:
         cutoff = time.time() - (24 * 3600)
 
         for entry in worktrees_dir.iterdir():
-            if not entry.is_dir() or not entry.name.startswith("hermes-"):
+            if not entry.is_dir() or not entry.name.startswith("fulilian-"):
                 continue
             try:
                 mtime = entry.stat().st_mtime
@@ -532,7 +532,7 @@ class TestStaleWorktreePruning:
 
         pruned = False
         for entry in worktrees_dir.iterdir():
-            if not entry.is_dir() or not entry.name.startswith("hermes-"):
+            if not entry.is_dir() or not entry.name.startswith("fulilian-"):
                 continue
             mtime = entry.stat().st_mtime
             if mtime > cutoff:
@@ -657,22 +657,22 @@ class TestTerminalCWDIntegration:
 
 
 class TestOrphanedBranchPruning:
-    """Test cleanup of orphaned hermes/* and pr-* branches."""
+    """Test cleanup of orphaned fulilian/* and pr-* branches."""
 
-    def test_prunes_orphaned_hermes_branch(self, git_repo):
-        """hermes/hermes-* branches with no worktree should be deleted."""
+    def test_prunes_orphaned_fulilian_branch(self, git_repo):
+        """fulilian/fulilian-* branches with no worktree should be deleted."""
         # Create a branch that looks like a worktree branch but has no worktree
         subprocess.run(
-            ["git", "branch", "hermes/hermes-deadbeef", "HEAD"],
+            ["git", "branch", "fulilian/fulilian-deadbeef", "HEAD"],
             cwd=str(git_repo), capture_output=True,
         )
 
         # Verify it exists
         result = subprocess.run(
-            ["git", "branch", "--list", "hermes/hermes-deadbeef"],
+            ["git", "branch", "--list", "fulilian/fulilian-deadbeef"],
             capture_output=True, text=True, cwd=str(git_repo),
         )
-        assert "hermes/hermes-deadbeef" in result.stdout
+        assert "fulilian/fulilian-deadbeef" in result.stdout
 
         # Simulate _prune_orphaned_branches logic
         result = subprocess.run(
@@ -693,9 +693,9 @@ class TestOrphanedBranchPruning:
         orphaned = [
             b for b in all_branches
             if b not in active_branches
-            and (b.startswith("hermes/hermes-") or b.startswith("pr-"))
+            and (b.startswith("fulilian/fulilian-") or b.startswith("pr-"))
         ]
-        assert "hermes/hermes-deadbeef" in orphaned
+        assert "fulilian/fulilian-deadbeef" in orphaned
 
         # Delete them
         if orphaned:
@@ -706,10 +706,10 @@ class TestOrphanedBranchPruning:
 
         # Verify gone
         result = subprocess.run(
-            ["git", "branch", "--list", "hermes/hermes-deadbeef"],
+            ["git", "branch", "--list", "fulilian/fulilian-deadbeef"],
             capture_output=True, text=True, cwd=str(git_repo),
         )
-        assert "hermes/hermes-deadbeef" not in result.stdout
+        assert "fulilian/fulilian-deadbeef" not in result.stdout
 
     def test_prunes_orphaned_pr_branch(self, git_repo):
         """pr-* branches should be deleted during pruning."""
@@ -763,7 +763,7 @@ class TestOrphanedBranchPruning:
         orphaned = [
             b for b in all_branches
             if b not in active_branches
-            and (b.startswith("hermes/hermes-") or b.startswith("pr-"))
+            and (b.startswith("fulilian/fulilian-") or b.startswith("pr-"))
         ]
         assert "main" not in orphaned
 
@@ -818,12 +818,12 @@ class TestWorktreeLockReaping:
         p = repo / ".worktrees" / name
         (repo / ".worktrees").mkdir(exist_ok=True)
         subprocess.run(
-            ["git", "worktree", "add", str(p), "-b", f"hermes/{name}", "HEAD"],
+            ["git", "worktree", "add", str(p), "-b", f"fulilian/{name}", "HEAD"],
             cwd=repo, capture_output=True,
         )
         if pid is not None:
             subprocess.run(
-                ["git", "worktree", "lock", "--reason", f"hermes pid={pid}", str(p)],
+                ["git", "worktree", "lock", "--reason", f"fulilian pid={pid}", str(p)],
                 cwd=repo, capture_output=True,
             )
         if unpushed:
@@ -837,13 +837,13 @@ class TestWorktreeLockReaping:
 
     def test_live_locked_survives_at_any_age(self, git_repo):
         import cli
-        wt = self._mk(cli, git_repo, "hermes-live", pid=os.getpid())
+        wt = self._mk(cli, git_repo, "fulilian-live", pid=os.getpid())
         cli._prune_stale_worktrees(str(git_repo))
         assert wt.exists(), "live-locked worktree (this pid) must never be reaped"
 
     def test_dead_locked_clean_is_reaped(self, git_repo):
         import cli
-        wt = self._mk(cli, git_repo, "hermes-dead", pid=999999)
+        wt = self._mk(cli, git_repo, "fulilian-dead", pid=999999)
         # sanity: this is the accumulation bug — remove --force alone can't do it
         assert cli._worktree_lock_is_live(str(git_repo), str(wt)) == "dead"
         cli._prune_stale_worktrees(str(git_repo))
@@ -851,25 +851,25 @@ class TestWorktreeLockReaping:
 
     def test_dead_locked_dirty_survives(self, git_repo):
         import cli
-        wt = self._mk(cli, git_repo, "hermes-deaddirty", pid=999999, dirty=True)
+        wt = self._mk(cli, git_repo, "fulilian-deaddirty", pid=999999, dirty=True)
         cli._prune_stale_worktrees(str(git_repo))
         assert wt.exists(), "dead-locked worktree with uncommitted work must survive"
 
     def test_dead_locked_unpushed_survives(self, git_repo):
         import cli
-        wt = self._mk(cli, git_repo, "hermes-deadunp", pid=999999, unpushed=True)
+        wt = self._mk(cli, git_repo, "fulilian-deadunp", pid=999999, unpushed=True)
         cli._prune_stale_worktrees(str(git_repo))
         assert wt.exists(), "dead-locked worktree with unpushed commits must survive"
 
     def test_unlocked_clean_stale_is_reaped(self, git_repo):
         import cli
-        wt = self._mk(cli, git_repo, "hermes-nolock", pid=None)
+        wt = self._mk(cli, git_repo, "fulilian-nolock", pid=None)
         cli._prune_stale_worktrees(str(git_repo))
         assert not wt.exists(), "clean unlocked stale worktree should be reaped"
 
     def test_dirty_survives_over_72h(self, git_repo):
         import cli
-        wt = self._mk(cli, git_repo, "hermes-dirty72", pid=None, dirty=True, age_h=100)
+        wt = self._mk(cli, git_repo, "fulilian-dirty72", pid=None, dirty=True, age_h=100)
         cli._prune_stale_worktrees(str(git_repo))
         assert wt.exists(), "dirty worktree must survive even past the 72h tier"
 
@@ -882,7 +882,7 @@ class TestWorktreeLockPredicate:
         p = repo / ".worktrees" / name
         (repo / ".worktrees").mkdir(exist_ok=True)
         subprocess.run(
-            ["git", "worktree", "add", str(p), "-b", f"hermes/{name}", "HEAD"],
+            ["git", "worktree", "add", str(p), "-b", f"fulilian/{name}", "HEAD"],
             cwd=repo, capture_output=True,
         )
         subprocess.run(
@@ -893,10 +893,10 @@ class TestWorktreeLockPredicate:
 
     def test_unlocked_returns_none(self, git_repo):
         import cli
-        p = git_repo / ".worktrees" / "hermes-x"
+        p = git_repo / ".worktrees" / "fulilian-x"
         (git_repo / ".worktrees").mkdir(exist_ok=True)
         subprocess.run(
-            ["git", "worktree", "add", str(p), "-b", "hermes/hermes-x", "HEAD"],
+            ["git", "worktree", "add", str(p), "-b", "fulilian/fulilian-x", "HEAD"],
             cwd=git_repo, capture_output=True,
         )
         assert cli._worktree_lock_is_live(str(git_repo), str(p)) is None
@@ -905,7 +905,7 @@ class TestWorktreeLockPredicate:
 
     def test_foreign_lock_reason_returns_dead(self, git_repo):
         import cli
-        p = self._mk_locked(git_repo, "hermes-foreign", "some other tool")
+        p = self._mk_locked(git_repo, "fulilian-foreign", "some other tool")
         assert cli._worktree_lock_is_live(str(git_repo), str(p)) == "dead"
 
     def test_bad_repo_root_fails_safe_to_live(self, tmp_path):
@@ -918,7 +918,7 @@ class TestWidenedPruner:
     """Behavior contracts for the widened pruner (#all-.worktrees coverage,
     squash-merge escape hatch, kanban exclusion, preserved-work warning).
 
-    Previously only ``hermes-*`` directories were considered, so salvage/
+    Previously only ``fulilian-*`` directories were considered, so salvage/
     review/port lanes created with raw ``git worktree add`` accumulated
     forever (real incident: 117 dirs / 26 GB). And squash-merged branches'
     local commits are unreachable from refs/remotes/* forever, so the
@@ -974,7 +974,7 @@ class TestWidenedPruner:
             cwd=repo, capture_output=True,
         )
 
-    # -- named (non hermes-*) directories are now covered ------------------
+    # -- named (non fulilian-*) directories are now covered ------------------
 
     def test_named_clean_stale_tree_is_reaped(self, git_repo):
         import cli
@@ -995,7 +995,7 @@ class TestWidenedPruner:
 
     def test_squash_merged_tree_is_reaped(self, git_repo):
         import cli
-        wt, sha = self._mk(git_repo, "hermes-merged", commit=True, age_h=100)
+        wt, sha = self._mk(git_repo, "fulilian-merged", commit=True, age_h=100)
         self._merge_upstream(git_repo, sha)
         assert cli._worktree_has_unpushed_commits(str(wt)), (
             "precondition: commit unreachable from remotes (the leak this fixes)"
@@ -1015,7 +1015,7 @@ class TestWidenedPruner:
     def test_merged_predicate_fails_safe_without_upstream(self, git_repo_no_remote):
         import cli
         repo = git_repo_no_remote
-        p = repo / ".worktrees" / "hermes-noremote"
+        p = repo / ".worktrees" / "fulilian-noremote"
         (repo / ".worktrees").mkdir(exist_ok=True)
         subprocess.run(
             ["git", "worktree", "add", str(p), "-b", "wt/noremote", "HEAD"],
@@ -1031,7 +1031,7 @@ class TestWidenedPruner:
 
 class TestMergeVerdictCache:
     """The ``git cherry`` patch-equivalence probe is memoized on disk because it
-    dominates ``hermes -w`` startup (~0.2-1.0s per worktree, re-run on every
+    dominates ``fulilian -w`` startup (~0.2-1.0s per worktree, re-run on every
     launch for every tree preserved as unpushed).
 
     The invariant that makes caching safe: the verdict is a pure function of the
@@ -1047,7 +1047,7 @@ class TestMergeVerdictCache:
     def test_cache_hit_matches_uncached_verdict(self, git_repo):
         """A cached verdict must equal what the real git call returns."""
         import cli
-        wt, sha = self._mk(git_repo, "hermes-cachehit", commit=True)
+        wt, sha = self._mk(git_repo, "fulilian-cachehit", commit=True)
         self._merge_upstream(git_repo, sha)
 
         uncached = cli._worktree_commits_all_merged_upstream(str(wt))
@@ -1066,7 +1066,7 @@ class TestMergeVerdictCache:
         into a stale approval to delete a tree that has since gained real work.
         """
         import cli
-        wt, sha = self._mk(git_repo, "hermes-moves", commit=True)
+        wt, sha = self._mk(git_repo, "fulilian-moves", commit=True)
         self._merge_upstream(git_repo, sha)
 
         cache = {}
@@ -1107,19 +1107,19 @@ class TestPruneParallelEquivalence:
         """A board covering every verdict branch: reapable, dirty, unpushed."""
         names = {}
         for i in range(3):
-            n = f"hermes-merged{tag}{i}"
+            n = f"fulilian-merged{tag}{i}"
             wt, sha = self._mk(git_repo, n, commit=True)
             self._merge_upstream(git_repo, sha)
             names[n] = wt
         for i in range(3):
-            n = f"hermes-unpushed{tag}{i}"
+            n = f"fulilian-unpushed{tag}{i}"
             wt, _ = self._mk(git_repo, n, commit=True)
             names[n] = wt
         for i in range(2):
-            n = f"hermes-dirty{tag}{i}"
+            n = f"fulilian-dirty{tag}{i}"
             wt, _ = self._mk(git_repo, n, dirty=True)
             names[n] = wt
-        n = f"hermes-fresh{tag}"
+        n = f"fulilian-fresh{tag}"
         wt, _ = self._mk(git_repo, n, commit=True, age_h=1)
         names[n] = wt
         # Every tree must really exist, otherwise the survivor comparison below
@@ -1134,7 +1134,7 @@ class TestPruneParallelEquivalence:
         out = set()
         for n in survivors:
             for kind in ("merged", "unpushed", "dirty", "fresh"):
-                if n.startswith(f"hermes-{kind}"):
+                if n.startswith(f"fulilian-{kind}"):
                     out.add(kind)
         return out
 
@@ -1169,7 +1169,7 @@ class TestPruneParallelEquivalence:
         """A ThreadPoolExecutor failure must not block startup."""
         import cli
 
-        wt, sha = self._mk(git_repo, "hermes-poolfail", commit=True)
+        wt, sha = self._mk(git_repo, "fulilian-poolfail", commit=True)
         self._merge_upstream(git_repo, sha)
 
         class _Boom:
@@ -1189,7 +1189,7 @@ class TestShallowCloneDeepening:
     guard: the shallow boundary disconnects an older worktree HEAD from
     origin/*, so `git log HEAD --not --remotes` misreports already-public
     commits as unpushed and every aged worktree is preserved forever
-    (real incident: 21 of 25 hermes-* trees stuck on a default install).
+    (real incident: 21 of 25 fulilian-* trees stuck on a default install).
 
     These build a REAL shallow clone over file:// and verify the pruner
     deepens it and reaps the false-positive tree.
@@ -1247,10 +1247,10 @@ class TestShallowCloneDeepening:
         clone = self._shallow_clone(tmp_path, up)
         assert cli._repo_is_shallow(str(clone)), "fixture must start shallow"
 
-        wt = clone / ".worktrees" / "hermes-shallowstuck"
+        wt = clone / ".worktrees" / "fulilian-shallowstuck"
         (clone / ".worktrees").mkdir()
         self._run(
-            ["git", "worktree", "add", str(wt), "-b", "hermes/hermes-shallowstuck", "HEAD"],
+            ["git", "worktree", "add", str(wt), "-b", "fulilian/fulilian-shallowstuck", "HEAD"],
             clone,
         )
 
@@ -1363,7 +1363,7 @@ class TestPrMergedEscapeHatch:
         p = repo / ".worktrees" / name
         (repo / ".worktrees").mkdir(exist_ok=True)
         subprocess.run(
-            ["git", "worktree", "add", str(p), "-b", f"hermes/{name}", "HEAD"],
+            ["git", "worktree", "add", str(p), "-b", f"fulilian/{name}", "HEAD"],
             cwd=repo, capture_output=True,
         )
         (p / "salvaged.txt").write_text("diff that was reworked during salvage\n")
@@ -1382,7 +1382,7 @@ class TestPrMergedEscapeHatch:
 
     def test_merged_pr_tree_is_reaped(self, git_repo, tmp_path, monkeypatch):
         import cli
-        wt = self._mk_diverged(git_repo, "hermes-rebase-merged")
+        wt = self._mk_diverged(git_repo, "fulilian-rebase-merged")
         assert cli._worktree_commits_all_merged_upstream(str(wt)) is False, (
             "precondition: cherry must NOT consider this merged — the PR "
             "check is the only thing that can reap it"
@@ -1395,14 +1395,14 @@ class TestPrMergedEscapeHatch:
 
     def test_no_merged_pr_preserved(self, git_repo, tmp_path, monkeypatch):
         import cli
-        wt = self._mk_diverged(git_repo, "hermes-pr-open")
+        wt = self._mk_diverged(git_repo, "fulilian-pr-open")
         self._stub_gh(tmp_path, monkeypatch, stdout="[]")
         cli._prune_stale_worktrees(str(git_repo))
         assert wt.exists(), "no merged PR -> still unpushed work, preserve"
 
     def test_gh_failure_fails_safe(self, git_repo, tmp_path, monkeypatch):
         import cli
-        wt = self._mk_diverged(git_repo, "hermes-gh-down")
+        wt = self._mk_diverged(git_repo, "fulilian-gh-down")
         self._stub_gh(tmp_path, monkeypatch, stdout="", exit_code=1)
         cli._prune_stale_worktrees(str(git_repo))
         assert wt.exists(), "gh failure must preserve the tree (fail safe)"
@@ -1411,7 +1411,7 @@ class TestPrMergedEscapeHatch:
         self, git_repo, tmp_path, monkeypatch
     ):
         import cli
-        wt = self._mk_diverged(git_repo, "hermes-dirty-merged")
+        wt = self._mk_diverged(git_repo, "fulilian-dirty-merged")
         (wt / "uncommitted.txt").write_text("in-flight\n")
         self._age(wt, 100)
         self._stub_gh(tmp_path, monkeypatch)
@@ -1422,7 +1422,7 @@ class TestPrMergedEscapeHatch:
         self, git_repo, tmp_path, monkeypatch
     ):
         import cli
-        wt = self._mk_diverged(git_repo, "hermes-memo")
+        wt = self._mk_diverged(git_repo, "fulilian-memo")
         self._stub_gh(tmp_path, monkeypatch)
         cache: dict = {}
         assert cli._worktree_branch_pr_merged(str(wt), cache=cache) is True
@@ -1434,7 +1434,7 @@ class TestPrMergedEscapeHatch:
 
     def test_negative_verdict_not_cached(self, git_repo, tmp_path, monkeypatch):
         import cli
-        wt = self._mk_diverged(git_repo, "hermes-nocache-neg")
+        wt = self._mk_diverged(git_repo, "fulilian-nocache-neg")
         self._stub_gh(tmp_path, monkeypatch, stdout="[]")
         cache: dict = {}
         assert cli._worktree_branch_pr_merged(str(wt), cache=cache) is False

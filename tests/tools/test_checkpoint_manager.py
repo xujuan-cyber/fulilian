@@ -45,7 +45,7 @@ def work_dir(tmp_path):
 
 @pytest.fixture()
 def checkpoint_base(tmp_path):
-    """Isolated checkpoint base — never writes to ~/.hermes/."""
+    """Isolated checkpoint base — never writes to ~/.fulilian/."""
     return tmp_path / "checkpoints"
 
 
@@ -123,7 +123,7 @@ class TestStoreInit:
         fake_repo = base / "deadbeefcafebabe"
         fake_repo.mkdir()
         (fake_repo / "HEAD").write_text("ref: refs/heads/main\n")
-        (fake_repo / "HERMES_WORKDIR").write_text(str(work_dir) + "\n")
+        (fake_repo / "FULILIAN_WORKDIR").write_text(str(work_dir) + "\n")
         (fake_repo / "objects").mkdir()
 
         # Init store — should migrate the fake pre-v2 repo
@@ -307,7 +307,7 @@ class TestRestore:
 
 
 class TestSafeRestore:
-    """Safe restore: preserve user hand-edits, revert only Hermes-authored changes.
+    """Safe restore: preserve user hand-edits, revert only Fulilian-authored changes.
 
     Inspired by Copilot CLI's /rewind, which "restores only the files Copilot
     changed, skipping any file whose contents no longer match what Copilot
@@ -324,16 +324,16 @@ class TestSafeRestore:
     def test_safe_restore_skips_user_edited_file(self, mgr, work_dir):
         base = self._checkpoint(mgr, work_dir)
 
-        # Hermes writes main.py and records it in the ledger.
+        # Fulilian writes main.py and records it in the ledger.
         (work_dir / "main.py").write_text("agent version\n")
         mgr.record_agent_write(str(work_dir / "main.py"))
 
-        # The user then hand-edits README.md (Hermes never wrote it).
+        # The user then hand-edits README.md (Fulilian never wrote it).
         (work_dir / "README.md").write_text("user hand edit\n")
 
         result = mgr.restore(str(work_dir), base, safe=True)
         assert result["success"] is True
-        # Hermes-authored change reverted...
+        # Fulilian-authored change reverted...
         assert (work_dir / "main.py").read_text() == "print('hello')\n"
         # ...user's hand edit preserved.
         assert (work_dir / "README.md").read_text() == "user hand edit\n"
@@ -343,14 +343,14 @@ class TestSafeRestore:
     def test_safe_restore_skips_file_user_edited_after_agent(self, mgr, work_dir):
         base = self._checkpoint(mgr, work_dir)
 
-        # Hermes writes the file, then the user modifies it afterwards.
+        # Fulilian writes the file, then the user modifies it afterwards.
         (work_dir / "main.py").write_text("agent version\n")
         mgr.record_agent_write(str(work_dir / "main.py"))
         (work_dir / "main.py").write_text("user tweaked the agent's file\n")
 
         result = mgr.restore(str(work_dir), base, safe=True)
         assert result["success"] is True
-        # Content no longer matches what Hermes last wrote → preserved.
+        # Content no longer matches what Fulilian last wrote → preserved.
         assert (work_dir / "main.py").read_text() == "user tweaked the agent's file\n"
         assert "main.py" in result["skipped_user_edits"]
 
@@ -379,7 +379,7 @@ class TestSafeRestore:
     def test_safe_restore_removes_agent_created_file_keeps_user_edit(self, mgr, work_dir):
         base = self._checkpoint(mgr, work_dir)
 
-        # Hermes creates a brand-new file after the checkpoint...
+        # Fulilian creates a brand-new file after the checkpoint...
         (work_dir / "agent.txt").write_text("agent file\n")
         mgr.record_agent_write(str(work_dir / "agent.txt"))
         # ...and the user hand-edits an existing one.
@@ -387,7 +387,7 @@ class TestSafeRestore:
 
         result = mgr.restore(str(work_dir), base, safe=True)
         assert result["success"] is True
-        # User edit preserved; Hermes-created file removed (not in checkpoint).
+        # User edit preserved; Fulilian-created file removed (not in checkpoint).
         assert (work_dir / "README.md").read_text() == "user edit\n"
         assert not (work_dir / "agent.txt").exists()
         assert "README.md" in result["skipped_user_edits"]
@@ -398,7 +398,7 @@ class TestSafeRestore:
     # ``max_file_size_mb`` keeps generated assets out of a checkpoint
     # (test_max_file_size_mb_skips_large_files). Safe restore then sees such a
     # file as "changed since the checkpoint and absent from it" — the same
-    # shape as a file Hermes created — and the delete branch treats absence as
+    # shape as a file Fulilian created — and the delete branch treats absence as
     # proof of authorship. For a capped file that is wrong: no checkpoint holds
     # a copy, so deleting it destroys the only one.
 
@@ -833,7 +833,7 @@ def _seed_legacy_repo(base: Path, name: str, workdir: Path, mtime: float = None)
     shadow = base / name
     shadow.mkdir(parents=True)
     (shadow / "HEAD").write_text("ref: refs/heads/main\n")
-    (shadow / "HERMES_WORKDIR").write_text(str(workdir) + "\n")
+    (shadow / "FULILIAN_WORKDIR").write_text(str(workdir) + "\n")
     (shadow / "info").mkdir()
     (shadow / "info" / "exclude").write_text("node_modules/\n")
     if mtime is not None:
@@ -1016,7 +1016,7 @@ class TestPruneCheckpointsOrphanAllowlist:
 
     def test_end_to_end_timing_change_during_confirmation_prompt(self, tmp_path, monkeypatch):
         """Reproduces the exact PR #69141 review scenario end-to-end through
-        `hermes checkpoints prune`: the preview shows one pre-v2 orphan; a
+        `fulilian checkpoints prune`: the preview shows one pre-v2 orphan; a
         second project's workdir is removed by the input() callback while
         the human is "answering" the prompt. Only the previewed orphan may
         be deleted.

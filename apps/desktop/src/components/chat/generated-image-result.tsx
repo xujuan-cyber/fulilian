@@ -37,15 +37,15 @@ async function resolveImageSrc(path: string): Promise<string> {
     return path
   }
 
-  if (window.hermesDesktop && isRemoteGateway()) {
+  if (window.fulilianDesktop && isRemoteGateway()) {
     return gatewayMediaDataUrl(path)
   }
 
-  if (!window.hermesDesktop?.readFileDataUrl) {
+  if (!window.fulilianDesktop?.readFileDataUrl) {
     return mediaExternalUrl(path)
   }
 
-  return window.hermesDesktop.readFileDataUrl(filePathFromMediaPath(path))
+  return window.fulilianDesktop.readFileDataUrl(filePathFromMediaPath(path))
 }
 
 export const GeneratedImage: FC<{ aspectRatio?: string; result?: unknown }> = ({ aspectRatio, result }) => {
@@ -100,7 +100,7 @@ export const GeneratedImage: FC<{ aspectRatio?: string; result?: unknown }> = ({
         href="#"
         onClick={event => {
           event.preventDefault()
-          void window.hermesDesktop?.openExternal(mediaExternalUrl(image))
+          void window.fulilianDesktop?.openExternal(mediaExternalUrl(image))
         }}
       >
         {copy.openImage}: {mediaName(image)}

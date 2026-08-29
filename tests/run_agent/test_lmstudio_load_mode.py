@@ -25,7 +25,7 @@ def test_lmstudio_jit_load_mode_skips_explicit_preload(monkeypatch):
         calls.append((args, kwargs))
         return LMStudioLoadResult(64_000)
 
-    monkeypatch.setattr("hermes_cli.models.ensure_lmstudio_model_loaded", fake_ensure)
+    monkeypatch.setattr("fulilian_cli.models.ensure_lmstudio_model_loaded", fake_ensure)
 
     result = AIAgent._ensure_lmstudio_runtime_loaded(cast(Any, _agent("jit")))
 

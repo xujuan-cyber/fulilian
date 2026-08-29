@@ -134,7 +134,7 @@ def test_detect_flag_silent_without_flag():
     assert proc.stdout.strip() == ""
 
 
-# ── 进程内回调 + 注册（fulilian solve 默认路径，无 ~/.hermes 写入） ──────────
+# ── 进程内回调 + 注册（fulilian solve 默认路径，无 ~/.fulilian 写入） ──────────
 
 def test_inprocess_pre_hook_blocks_dangerous():
     from fulilian_ctf.hooks import _ctf_pre_tool_hook
@@ -195,7 +195,7 @@ def test_register_ctf_tool_hooks_idempotent(monkeypatch):
 def test_register_skipped_in_safe_mode(monkeypatch):
     import fulilian_ctf.hooks as hooks_mod
 
-    monkeypatch.setenv("HERMES_SAFE_MODE", "1")
+    monkeypatch.setenv("FULILIAN_SAFE_MODE", "1")
     assert hooks_mod.register_ctf_tool_hooks() == []
 
 

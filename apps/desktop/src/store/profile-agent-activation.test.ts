@@ -1,7 +1,7 @@
 import { atom } from 'nanostores'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { HermesConnection } from '@/global'
+import type { FulilianConnection } from '@/global'
 
 import { deferred } from '../test/deferred'
 
@@ -28,7 +28,7 @@ vi.mock('@/store/gateway', () => ({
   ensureGatewayForProfile,
   openGatewayForProfile
 }))
-vi.mock('@/hermes', () => ({
+vi.mock('@/fulilian', () => ({
   getProfiles: vi.fn(async () => ({ profiles: [] })),
   setApiRequestProfile: vi.fn()
 }))
@@ -38,16 +38,16 @@ vi.mock('@/store/starmap', () => ({ resetStarmapGraph }))
 const { $activeGatewayProfile, ensureGatewayAgent, ensureGatewayProfile } = await import('./profile')
 const { $connection } = await import('./session')
 
-const agentConn = (over: Partial<HermesConnection> = {}): HermesConnection =>
-  ({ baseUrl: 'https://homelab.invalid', mode: 'remote', profile: 'research', ...over }) as HermesConnection
+const agentConn = (over: Partial<FulilianConnection> = {}): FulilianConnection =>
+  ({ baseUrl: 'https://homelab.invalid', mode: 'remote', profile: 'research', ...over }) as FulilianConnection
 
-const localConn = (over: Partial<HermesConnection> = {}): HermesConnection =>
-  ({ baseUrl: '', mode: 'local', profile: 'default', ...over }) as HermesConnection
+const localConn = (over: Partial<FulilianConnection> = {}): FulilianConnection =>
+  ({ baseUrl: '', mode: 'local', profile: 'default', ...over }) as FulilianConnection
 
-const getConnection = vi.fn<(profile?: string | null) => Promise<HermesConnection>>()
+const getConnection = vi.fn<(profile?: string | null) => Promise<FulilianConnection>>()
 
 const getConnectionFor =
-  vi.fn<(payload: { connectionId?: null | string; profile?: null | string }) => Promise<HermesConnection>>()
+  vi.fn<(payload: { connectionId?: null | string; profile?: null | string }) => Promise<FulilianConnection>>()
 
 beforeEach(() => {
   getConnection.mockReset()
@@ -57,7 +57,7 @@ beforeEach(() => {
   $gateway.set({ id: 'live-socket' })
   $activeGatewayProfile.set('default')
   $connection.set(localConn())
-  vi.stubGlobal('window', { hermesDesktop: { getConnection, getConnectionFor } })
+  vi.stubGlobal('window', { fulilianDesktop: { getConnection, getConnectionFor } })
 })
 
 afterEach(() => {
@@ -309,7 +309,7 @@ describe('ensureGatewayAgent commit hook (beforeActivate) — the Sessions switc
     vi.useFakeTimers()
 
     try {
-      getConnectionFor.mockImplementationOnce(() => new Promise<HermesConnection>(() => undefined))
+      getConnectionFor.mockImplementationOnce(() => new Promise<FulilianConnection>(() => undefined))
 
       const activation = ensureGatewayAgent('homelab', 'research')
       await vi.advanceTimersByTimeAsync(20_000)

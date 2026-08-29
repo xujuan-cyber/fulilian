@@ -33,8 +33,8 @@ import sys
 from collections.abc import Callable, Iterable, Mapping
 from typing import Any
 
-_RECOVERY_ENV = "HERMES_UPDATE_RESTART_RECOVERY"
-_GATEWAY_MARKERS = ("_HERMES_GATEWAY", "HERMES_GATEWAY", "HERMES_GATEWAY_MODE")
+_RECOVERY_ENV = "FULILIAN_UPDATE_RESTART_RECOVERY"
+_GATEWAY_MARKERS = ("_FULILIAN_GATEWAY", "FULILIAN_GATEWAY", "FULILIAN_GATEWAY_MODE")
 _PROFILE_RESTART_TIMEOUT = 90
 _VERIFY_TIMEOUT = 15
 _PROFILE_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
@@ -46,7 +46,7 @@ def _profile_command(profile: str) -> list[str]:
     return [
         sys.executable,
         "-m",
-        "hermes_cli.main",
+        "fulilian_cli.main",
         "-p",
         profile,
         "gateway",
@@ -98,12 +98,12 @@ def _systemd_unit_candidates(profile: str) -> tuple[str, ...]:
     """Unit names the existing systemd gateway lifecycle produces per profile."""
     if profile == "default":
         return (
-            "hermes-gateway.service",
+            "fulilian-gateway.service",
             "gateway.service",
             "gateway-default.service",
         )
     return (
-        f"hermes-gateway-{profile}.service",
+        f"fulilian-gateway-{profile}.service",
         f"gateway-{profile}.service",
     )
 

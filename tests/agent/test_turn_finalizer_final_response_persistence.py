@@ -93,7 +93,7 @@ def test_final_response_closes_tool_tail_before_persistence(monkeypatch):
     way, the next turn reloads a stale/malformed history and can appear to loop
     because the assistant's visible final answer is missing from durable state.
     """
-    monkeypatch.setattr("hermes_cli.plugins.invoke_hook", lambda *_a, **_kw: [])
+    monkeypatch.setattr("fulilian_cli.plugins.invoke_hook", lambda *_a, **_kw: [])
     agent = FakeAgent()
     messages = [
         {"role": "user", "content": "do it"},
@@ -134,13 +134,13 @@ def test_fallback_timestamp_survives_delayed_sqlite_persistence(
     monkeypatch, tmp_path
 ):
     """The durable row records message creation, not the later DB flush."""
-    from hermes_state import SessionDB
+    from fulilian_state import SessionDB
 
     created_at = 1_781_976_577.25
     persisted_at = created_at + 600
     monkeypatch.setattr("agent.message_metadata.wall_time", lambda: created_at)
-    monkeypatch.setattr("hermes_state.time.time", lambda: persisted_at)
-    monkeypatch.setattr("hermes_cli.plugins.invoke_hook", lambda *_a, **_kw: [])
+    monkeypatch.setattr("fulilian_state.time.time", lambda: persisted_at)
+    monkeypatch.setattr("fulilian_cli.plugins.invoke_hook", lambda *_a, **_kw: [])
 
     db = SessionDB(db_path=tmp_path / "state.db")
     db.create_session("sess-test", source="cli")

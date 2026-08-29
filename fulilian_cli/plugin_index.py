@@ -2,7 +2,7 @@
 
 Mirrors the Skills Hub catalog pattern (``tools/skills_hub.py``): a static
 machine-readable JSON index hosted at a canonical URL, cached locally under
-``HERMES_HOME/cache/`` with a TTL, with a bundled seed file as the offline
+``FULILIAN_HOME/cache/`` with a TTL, with a bundled seed file as the offline
 fallback and format reference.
 
 Fallback chain: remote index → cached copy (fresh or stale) → bundled seed.
@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, List, Optional
 
-from fulilian_constants import get_hermes_home
+from fulilian_constants import get_fulilian_home
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +91,7 @@ class PluginIndexEntry:
 
 
 def _cache_path() -> Path:
-    return get_hermes_home() / "cache" / "plugin_index.json"
+    return get_fulilian_home() / "cache" / "plugin_index.json"
 
 
 def get_index_url() -> str:

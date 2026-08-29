@@ -1,21 +1,21 @@
 ---
 sidebar_position: 2
-title: "Hermes Agent Configuration"
-description: "Configure Hermes Agent — config.yaml, providers, models, API keys, and more"
+title: "FuLiLian Configuration"
+description: "Configure FuLiLian — config.yaml, providers, models, API keys, and more"
 ---
 
-# Hermes Agent Configuration
+# FuLiLian Configuration
 
-All settings are stored in the `~/.hermes/` directory for easy access.
+All settings are stored in the `~/.fulilian/` directory for easy access.
 
 :::tip Easiest path to a working `config.yaml`
-Run `hermes setup --portal` — one OAuth gets you a model provider and all four Tool Gateway tools without hand-editing YAML. Portal subscribers also get 10% off token-billed providers. See [Nous Portal](/integrations/nous-portal).
+Run `fulilian setup --portal` — one OAuth gets you a model provider and all four Tool Gateway tools without hand-editing YAML. Portal subscribers also get 10% off token-billed providers. See [Nous Portal](/integrations/nous-portal).
 :::
 
 ## Directory Structure
 
 ```text
-~/.hermes/
+~/.fulilian/
 ├── config.yaml     # Settings (model, terminal, TTS, compression, etc.)
 ├── .env            # API keys and secrets
 ├── auth.json       # OAuth provider credentials (Nous Portal, etc.)
@@ -30,33 +30,33 @@ Run `hermes setup --portal` — one OAuth gets you a model provider and all four
 ## Managing Configuration
 
 ```bash
-hermes config              # View current configuration
-hermes config edit         # Open config.yaml in your editor
-hermes config get KEY      # Print a resolved value
-hermes config set KEY VAL  # Set a specific value
-hermes config unset KEY    # Remove a user-set value
-hermes config check        # Check for missing options (after updates)
-hermes config migrate      # Interactively add missing options
+fulilian config              # View current configuration
+fulilian config edit         # Open config.yaml in your editor
+fulilian config get KEY      # Print a resolved value
+fulilian config set KEY VAL  # Set a specific value
+fulilian config unset KEY    # Remove a user-set value
+fulilian config check        # Check for missing options (after updates)
+fulilian config migrate      # Interactively add missing options
 
 # Examples:
-hermes config get model
-hermes config set model anthropic/claude-opus-4
-hermes config set terminal.backend docker
-hermes config unset terminal.backend
-hermes config set OPENROUTER_API_KEY sk-or-...  # Saves to .env
+fulilian config get model
+fulilian config set model anthropic/claude-opus-4
+fulilian config set terminal.backend docker
+fulilian config unset terminal.backend
+fulilian config set OPENROUTER_API_KEY sk-or-...  # Saves to .env
 ```
 
 :::tip
-The `hermes config set` command automatically routes values to the right file — API keys are saved to `.env`, everything else to `config.yaml`.
+The `fulilian config set` command automatically routes values to the right file — API keys are saved to `.env`, everything else to `config.yaml`.
 :::
 
 ## Configuration Precedence
 
 Settings are resolved in this order (highest priority first):
 
-1. **CLI arguments** — e.g., `hermes chat --model anthropic/claude-sonnet-4` (per-invocation override)
-2. **`~/.hermes/config.yaml`** — the primary config file for all non-secret settings
-3. **`~/.hermes/.env`** — fallback for env vars; **required** for secrets (API keys, tokens, passwords)
+1. **CLI arguments** — e.g., `fulilian chat --model anthropic/claude-sonnet-4` (per-invocation override)
+2. **`~/.fulilian/config.yaml`** — the primary config file for all non-secret settings
+3. **`~/.fulilian/.env`** — fallback for env vars; **required** for secrets (API keys, tokens, passwords)
 4. **Built-in defaults** — hardcoded safe defaults when nothing else is set
 
 :::info Rule of Thumb
@@ -71,8 +71,8 @@ cannot override, via a system-level managed directory. See
 
 ## Runtime Limits
 
-Long-running Hermes server surfaces (including the gateway and
-`hermes serve --isolated`) apply the configured `RLIMIT_NOFILE` soft limit
+Long-running Fulilian server surfaces (including the gateway and
+`fulilian serve --isolated`) apply the configured `RLIMIT_NOFILE` soft limit
 during startup when the operating system supports it:
 
 ```yaml
@@ -80,7 +80,7 @@ runtime:
   nofile_soft_limit: 4096
 ```
 
-The default is `4096`. Hermes clamps the target to the operating system's hard
+The default is `4096`. Fulilian clamps the target to the operating system's hard
 limit and never lowers a process that already has a higher soft limit. Set the
 value to `0`, `false`, or `null` to disable the adjustment. On Windows and in
 sandboxes
@@ -89,7 +89,7 @@ limit.
 
 ## Database Settings
 
-The `database:` section controls how Hermes opens its SQLite state database
+The `database:` section controls how Fulilian opens its SQLite state database
 (`state.db`), which stores sessions, messages, and gateway routing:
 
 ```yaml
@@ -97,7 +97,7 @@ database:
   # Journal mode for state.db: wal (default) or delete.
   # Use delete on filesystems where WAL is unsafe (network mounts, some
   # virtiofs setups). Note: an existing on-disk WAL database is never
-  # live-downgraded — Hermes keeps WAL and logs an error telling you the
+  # live-downgraded — Fulilian keeps WAL and logs an error telling you the
   # configured delete did not apply. To convert an existing database, stop
   # every process using it and run a one-time offline
   # `PRAGMA journal_mode=DELETE` on the file.
@@ -115,7 +115,7 @@ database:
   # journal_size_limit: 67108864 # cap the WAL/journal size in bytes
 ```
 
-Hermes also warns (once per process per database) when an existing
+Fulilian also warns (once per process per database) when an existing
 database's on-disk journal mode is silently flipped to WAL on open — for
 example a database an operator had manually converted to `delete` — and
 names `database.journal_mode` as the setting that makes the choice stick.
@@ -142,33 +142,33 @@ For AI provider setup (OpenRouter, Anthropic, Copilot, custom endpoints, self-ho
 
 ### Provider Timeouts
 
-You can set `providers.<id>.request_timeout_seconds` for a provider-wide request timeout, plus `providers.<id>.models.<model>.timeout_seconds` for a model-specific override. Applies to the primary turn client on every transport (OpenAI-wire, native Anthropic, Anthropic-compatible), the fallback chain, rebuilds after credential rotation, and (for OpenAI-wire) the per-request timeout kwarg — so the configured value wins over the legacy `HERMES_API_TIMEOUT` env var.
+You can set `providers.<id>.request_timeout_seconds` for a provider-wide request timeout, plus `providers.<id>.models.<model>.timeout_seconds` for a model-specific override. Applies to the primary turn client on every transport (OpenAI-wire, native Anthropic, Anthropic-compatible), the fallback chain, rebuilds after credential rotation, and (for OpenAI-wire) the per-request timeout kwarg — so the configured value wins over the legacy `FULILIAN_API_TIMEOUT` env var.
 
-You can also set `providers.<id>.stale_timeout_seconds` for the non-streaming stale-call detector, plus `providers.<id>.models.<model>.stale_timeout_seconds` for a model-specific override. This wins over the legacy `HERMES_API_CALL_STALE_TIMEOUT` env var.
+You can also set `providers.<id>.stale_timeout_seconds` for the non-streaming stale-call detector, plus `providers.<id>.models.<model>.stale_timeout_seconds` for a model-specific override. This wins over the legacy `FULILIAN_API_CALL_STALE_TIMEOUT` env var.
 
-Leaving these unset keeps the legacy defaults (`HERMES_API_TIMEOUT=1800`s, `HERMES_API_CALL_STALE_TIMEOUT=90`s, native Anthropic 900s). The non-streaming stale detector is auto-disabled for local endpoints when left implicit and can scale upward for very large contexts. Not currently wired for AWS Bedrock (both `bedrock_converse` and AnthropicBedrock SDK paths use boto3 with its own timeout configuration). See the commented example in [`cli-config.yaml.example`](https://github.com/NousResearch/hermes-agent/blob/main/cli-config.yaml.example).
+Leaving these unset keeps the legacy defaults (`FULILIAN_API_TIMEOUT=1800`s, `FULILIAN_API_CALL_STALE_TIMEOUT=90`s, native Anthropic 900s). The non-streaming stale detector is auto-disabled for local endpoints when left implicit and can scale upward for very large contexts. Not currently wired for AWS Bedrock (both `bedrock_converse` and AnthropicBedrock SDK paths use boto3 with its own timeout configuration). See the commented example in [`cli-config.yaml.example`](https://github.com/NousResearch/hermes-agent/blob/main/cli-config.yaml.example).
 
 ## Update Behavior
 
-`hermes update` settings live under `updates` in `config.yaml`:
+`fulilian update` settings live under `updates` in `config.yaml`:
 
 ```yaml
 updates:
-  pre_update_backup: quick       # quick (state snapshot, default) | full (snapshot + HERMES_HOME zip) | off
+  pre_update_backup: quick       # quick (state snapshot, default) | full (snapshot + FULILIAN_HOME zip) | off
   backup_keep: 5                 # Keep this many full pre-update backup zips
   non_interactive_local_changes: stash  # stash | discard
   auto_switch_parked_branch: true       # auto-switch a clean, fully merged parked branch back to main
 ```
 
-`pre_update_backup` is the single pre-update safety knob: `quick` (default) snapshots critical state files (pairing data, cron jobs, config, auth; files over 1 GiB are skipped) into `state-snapshots/`; `full` additionally zips all of `HERMES_HOME` into `backups/` and can add minutes on large homes; `off` disables both. Legacy booleans are honored (`true` → `full`, `false` → `off`).
+`pre_update_backup` is the single pre-update safety knob: `quick` (default) snapshots critical state files (pairing data, cron jobs, config, auth; files over 1 GiB are skipped) into `state-snapshots/`; `full` additionally zips all of `FULILIAN_HOME` into `backups/` and can add minutes on large homes; `off` disables both. Legacy booleans are honored (`true` → `full`, `false` → `off`).
 
-For git installs, Hermes auto-stashes dirty tracked files and untracked files before checking out the update branch or pulling. Interactive terminal updates prompt before restoring that stash. Non-interactive updates (desktop/chat app, gateway, or `--yes`) use `updates.non_interactive_local_changes`: `stash` restores local source edits after a successful pull, while `discard` drops the update-created stash after a successful pull. Use `discard` only on managed installs where local source edits are never meant to persist.
+For git installs, Fulilian auto-stashes dirty tracked files and untracked files before checking out the update branch or pulling. Interactive terminal updates prompt before restoring that stash. Non-interactive updates (desktop/chat app, gateway, or `--yes`) use `updates.non_interactive_local_changes`: `stash` restores local source edits after a successful pull, while `discard` drops the update-created stash after a successful pull. Use `discard` only on managed installs where local source edits are never meant to persist.
 
-Before that stash step, Hermes also restores tracked `package-lock.json` diffs left by npm install/build churn. Commit or manually stash intentional lockfile edits before updating.
+Before that stash step, Fulilian also restores tracked `package-lock.json` diffs left by npm install/build churn. Commit or manually stash intentional lockfile edits before updating.
 
 ## Terminal Backend Configuration
 
-Hermes supports seven terminal backends. Each determines where the agent's shell commands actually execute — your local machine, a Docker container, a remote server via SSH, a Modal cloud sandbox (direct or via the Nous-managed gateway), a Daytona workspace, a Vercel Sandbox, or a Singularity/Apptainer container.
+Fulilian supports seven terminal backends. Each determines where the agent's shell commands actually execute — your local machine, a Docker container, a remote server via SSH, a Modal cloud sandbox (direct or via the Nous-managed gateway), a Daytona workspace, a Vercel Sandbox, or a Singularity/Apptainer container.
 
 ```yaml
 terminal:
@@ -183,9 +183,9 @@ terminal:
   daytona_image: "nikolaik/python-nodejs:python3.11-nodejs20"               # Container image for Daytona backend
 ```
 
-`terminal.font_family` controls the embedded terminal in Hermes Desktop. It accepts either one locally installed family name (for example, `MesloLGS NF`) or a CSS font stack. Hermes appends its bundled JetBrains Mono stack as a fallback, and an empty value keeps the default. You can edit the same profile-scoped setting in **Settings → Appearance → Terminal Font**; no Google Fonts download or system-font permission is required.
+`terminal.font_family` controls the embedded terminal in Fulilian Desktop. It accepts either one locally installed family name (for example, `MesloLGS NF`) or a CSS font stack. Fulilian appends its bundled JetBrains Mono stack as a fallback, and an empty value keeps the default. You can edit the same profile-scoped setting in **Settings → Appearance → Terminal Font**; no Google Fonts download or system-font permission is required.
 
-For cloud sandboxes such as Modal, Daytona, and Vercel Sandbox, `container_persistent: true` means Hermes will try to preserve filesystem state across sandbox recreation. It does not promise that the same live sandbox, PID space, or background processes will still be running later.
+For cloud sandboxes such as Modal, Daytona, and Vercel Sandbox, `container_persistent: true` means Fulilian will try to preserve filesystem state across sandbox recreation. It does not promise that the same live sandbox, PID space, or background processes will still be running later.
 
 ### Backend Overview
 
@@ -210,22 +210,22 @@ terminal:
 
 By default, local tool subprocesses keep your real OS-user `HOME`. This lets
 external CLIs such as `git`, `ssh`, `gh`, `az`, `npm`, Claude Code, and Codex
-find the credentials and config they already use in your normal shell. Hermes
-state is still profile-scoped through `HERMES_HOME`; `HOME` is not how profiles
+find the credentials and config they already use in your normal shell. Fulilian
+state is still profile-scoped through `FULILIAN_HOME`; `HOME` is not how profiles
 select config, memory, sessions, or skills.
 
-Hermes does **not** change your system-wide `HOME`, your shell startup files, or
+Fulilian does **not** change your system-wide `HOME`, your shell startup files, or
 the operating system account home. This setting only controls the environment
-passed to subprocesses that Hermes launches through tools such as `terminal`,
+passed to subprocesses that Fulilian launches through tools such as `terminal`,
 background terminal processes, `execute_code`, and ACP helper processes.
 
 #### `terminal.home_mode`
 
 | Mode | Host installs | Containers | Tradeoff |
 |---|---|---|---|
-| `auto` | Keep the real OS-user `HOME` | Use `{HERMES_HOME}/home` | Recommended default. Host CLIs keep working; container state persists. |
+| `auto` | Keep the real OS-user `HOME` | Use `{FULILIAN_HOME}/home` | Recommended default. Host CLIs keep working; container state persists. |
 | `real` | Force the real OS-user `HOME` | Force the real OS-user `HOME` if visible | Useful if a parent process accidentally started with `HOME` pointed at a profile home. |
-| `profile` | Use `{HERMES_HOME}/home` when it exists | Use `{HERMES_HOME}/home` when it exists | Strict per-profile CLI config isolation, but normal `~/.ssh`, `~/.gitconfig`, `~/.azure`, `~/.config/gh`, Claude/Codex auth, npm state, etc. will not be visible unless you initialize or link them inside the profile home. |
+| `profile` | Use `{FULILIAN_HOME}/home` when it exists | Use `{FULILIAN_HOME}/home` when it exists | Strict per-profile CLI config isolation, but normal `~/.ssh`, `~/.gitconfig`, `~/.azure`, `~/.config/gh`, Claude/Codex auth, npm state, etc. will not be visible unless you initialize or link them inside the profile home. |
 
 The downside of the default is that host profiles share the same normal
 user-level CLI credentials/config under `~`. If you need a profile with a
@@ -240,31 +240,31 @@ terminal:
   home_mode: profile
 ```
 
-In that mode tool subprocesses use `{HERMES_HOME}/home` as `HOME`. Hermes also
-sets `HERMES_REAL_HOME` so scripts can still locate the actual user home when
-they need it. Container backends keep using `{HERMES_HOME}/home` in `auto` mode
-because that directory lives on the persistent Hermes data volume.
+In that mode tool subprocesses use `{FULILIAN_HOME}/home` as `HOME`. Fulilian also
+sets `FULILIAN_REAL_HOME` so scripts can still locate the actual user home when
+they need it. Container backends keep using `{FULILIAN_HOME}/home` in `auto` mode
+because that directory lives on the persistent Fulilian data volume.
 
 Scripts that need to distinguish profile state from the real user home should
-prefer `HERMES_HOME` for Hermes data and `HERMES_REAL_HOME` for the account home:
+prefer `FULILIAN_HOME` for Fulilian data and `FULILIAN_REAL_HOME` for the account home:
 
 ```python
 from pathlib import Path
 import os
 
-hermes_home = Path(os.environ["HERMES_HOME"])
-real_home = Path(os.environ.get("HERMES_REAL_HOME", os.environ["HOME"]))
+fulilian_home = Path(os.environ["FULILIAN_HOME"])
+real_home = Path(os.environ.get("FULILIAN_REAL_HOME", os.environ["HOME"]))
 ```
 
 :::warning
-The agent has the same filesystem access as your user account. Use `hermes tools` to disable tools you don't want, or switch to Docker for sandboxing.
+The agent has the same filesystem access as your user account. Use `fulilian tools` to disable tools you don't want, or switch to Docker for sandboxing.
 :::
 
 ### Docker Backend
 
 Runs commands inside a Docker container with security hardening (all capabilities dropped, no privilege escalation, PID limits).
 
-**Single persistent container, shared across Hermes processes.** Hermes starts ONE long-lived container on first use and routes every terminal, file, and `execute_code` call through `docker exec` into that same container — across sessions, `/new`, `/reset`, and `delegate_task` subagents. Working-directory changes, installed packages, files in `/workspace`, and **background processes** all carry over from one tool call to the next, and from one Hermes process to the next. When you close a TUI session, run `/quit`, or start a new `hermes` invocation, the container keeps running and the next Hermes process reuses it via a labeled lookup. See **Container lifecycle** below for the exact teardown rules.
+**Single persistent container, shared across Fulilian processes.** Fulilian starts ONE long-lived container on first use and routes every terminal, file, and `execute_code` call through `docker exec` into that same container — across sessions, `/new`, `/reset`, and `delegate_task` subagents. Working-directory changes, installed packages, files in `/workspace`, and **background processes** all carry over from one tool call to the next, and from one Fulilian process to the next. When you close a TUI session, run `/quit`, or start a new `fulilian` invocation, the container keeps running and the next Fulilian process reuses it via a labeled lookup. See **Container lifecycle** below for the exact teardown rules.
 
 **Per-session isolation mode (`container_persistent: false`).** Setting `container_persistent: false` on the Docker backend switches to one container **per session**: every chat (desktop app session, gateway conversation, TUI session) gets its own fresh sandbox, created on its first terminal/file call and removed when the session closes or goes idle past `lifetime_seconds`. Nothing carries over between sessions — no filesystem state, no mounts, no background processes. With `docker_mount_cwd_to_workspace: true`, only the workspace **attached to that session** is mounted at `/workspace`; a fresh session with no attached directory gets an empty workspace instead of inheriting the previous session's mount. `delegate_task` subagents still share their parent session's container. Use this mode when the sandbox is a security boundary between conversations; keep the default `true` when you want the long-lived shared container described above.
 
@@ -295,7 +295,7 @@ terminal:
 
   # Cross-process container reuse (defaults match the "one long-lived
   # container shared across sessions" contract — see Container lifecycle).
-  docker_persist_across_processes: true   # Reuse container across Hermes restarts
+  docker_persist_across_processes: true   # Reuse container across Fulilian restarts
   docker_shared_container_key: ""         # Opt in trusted profiles to one identity
   docker_orphan_reaper: true              # Sweep abandoned Exited containers at startup
 
@@ -304,25 +304,25 @@ terminal:
   lifetime_seconds: 300            # Idle-reaper window; also feeds 2× orphan-reaper threshold
 ```
 
-**`docker_env`** vs **`docker_forward_env`**: the former injects literal `KEY=value` pairs you specify in the config (the values live in your `config.yaml` or are passed as a JSON dict via `TERMINAL_DOCKER_ENV='{"DEBUG":"1"}'`). The latter forwards values from your shell or `~/.hermes/.env`, so the actual secret never appears in the config file. Use `docker_forward_env` for tokens and `docker_env` for static knobs the container needs.
+**`docker_env`** vs **`docker_forward_env`**: the former injects literal `KEY=value` pairs you specify in the config (the values live in your `config.yaml` or are passed as a JSON dict via `TERMINAL_DOCKER_ENV='{"DEBUG":"1"}'`). The latter forwards values from your shell or `~/.fulilian/.env`, so the actual secret never appears in the config file. Use `docker_forward_env` for tokens and `docker_env` for static knobs the container needs.
 
-**`terminal.docker_extra_args`** (also overridable via `TERMINAL_DOCKER_EXTRA_ARGS='["--gpus=all"]'`) lets you pass arbitrary `docker run` flags that Hermes doesn't surface as first-class keys — `--gpus`, `--network`, `--add-host`, alternative `--security-opt` overrides, etc. Each entry must be a string; the list is appended last to the assembled `docker run` invocation so it can override Hermes' defaults if needed. Use sparingly — flags that conflict with the sandbox hardening (capability drops, `--user`, the workspace bind mount) will silently weaken isolation.
+**`terminal.docker_extra_args`** (also overridable via `TERMINAL_DOCKER_EXTRA_ARGS='["--gpus=all"]'`) lets you pass arbitrary `docker run` flags that Fulilian doesn't surface as first-class keys — `--gpus`, `--network`, `--add-host`, alternative `--security-opt` overrides, etc. Each entry must be a string; the list is appended last to the assembled `docker run` invocation so it can override Fulilian' defaults if needed. Use sparingly — flags that conflict with the sandbox hardening (capability drops, `--user`, the workspace bind mount) will silently weaken isolation.
 
-**`terminal.docker_network`** (default `true`; env: `TERMINAL_DOCKER_NETWORK`) — set to `false` to run the sandbox container with `--network=none`, cutting off all network egress from agent commands. This applies to the execution container used by `terminal`, `execute_code`, and the file tools. Because containers persist across Hermes processes, flipping this to `false` while an older networked container exists will remove that container and start a fresh air-gapped one (a warning is logged); background processes running inside it are lost. Prefer this key over passing `--network=none` through `docker_extra_args`.
+**`terminal.docker_network`** (default `true`; env: `TERMINAL_DOCKER_NETWORK`) — set to `false` to run the sandbox container with `--network=none`, cutting off all network egress from agent commands. This applies to the execution container used by `terminal`, `execute_code`, and the file tools. Because containers persist across Fulilian processes, flipping this to `false` while an older networked container exists will remove that container and start a fresh air-gapped one (a warning is logged); background processes running inside it are lost. Prefer this key over passing `--network=none` through `docker_extra_args`.
 
-**Requirements:** Docker Desktop or Docker Engine installed and running. Hermes probes `$PATH` plus common macOS install locations (`/usr/local/bin/docker`, `/opt/homebrew/bin/docker`, Docker Desktop app bundle). Podman is supported out of the box: set `HERMES_DOCKER_BINARY=podman` (or the full path) to force it when both are installed.
+**Requirements:** Docker Desktop or Docker Engine installed and running. Fulilian probes `$PATH` plus common macOS install locations (`/usr/local/bin/docker`, `/opt/homebrew/bin/docker`, Docker Desktop app bundle). Podman is supported out of the box: set `FULILIAN_DOCKER_BINARY=podman` (or the full path) to force it when both are installed.
 
 #### Container lifecycle
 
-Every Hermes-managed container is tagged with three labels so subsequent processes (and the orphan reaper) can identify it:
+Every Fulilian-managed container is tagged with three labels so subsequent processes (and the orphan reaper) can identify it:
 
-- `hermes-agent=1` — marks it as Hermes-managed
-- `hermes-task-id=<sanitized task_id>` — keys the per-task reuse probe
-- `hermes-profile=<sanitized profile name>` — scopes reuse and reaping to the active Hermes profile by default; when `docker_shared_container_key` is set, its sanitized value is used instead
+- `fulilian-agent=1` — marks it as Fulilian-managed
+- `fulilian-task-id=<sanitized task_id>` — keys the per-task reuse probe
+- `fulilian-profile=<sanitized profile name>` — scopes reuse and reaping to the active Fulilian profile by default; when `docker_shared_container_key` is set, its sanitized value is used instead
 
-On startup, Hermes runs `docker ps --filter label=hermes-task-id=<id> --filter label=hermes-profile=<identity>` and **attaches to the existing container** when it finds one. The identity is the active profile unless `docker_shared_container_key` explicitly opts trusted profiles into a common value. If the container is `exited` (e.g. after a Docker daemon restart), it's `docker start`'d and reused — filesystem state and any installed packages survive, but in-container background processes do not.
+On startup, Fulilian runs `docker ps --filter label=fulilian-task-id=<id> --filter label=fulilian-profile=<identity>` and **attaches to the existing container** when it finds one. The identity is the active profile unless `docker_shared_container_key` explicitly opts trusted profiles into a common value. If the container is `exited` (e.g. after a Docker daemon restart), it's `docker start`'d and reused — filesystem state and any installed packages survive, but in-container background processes do not.
 
-When a Hermes process exits — `/quit`, closing a TUI session, gateway shutdown, even SIGKILL — the cleanup path is a **no-op for the container in default mode**. The container keeps running. The next Hermes process attaches to it in milliseconds via the label probe. This is the behavior the "one long-lived container shared across sessions" contract requires: it's the only way background processes (npm watchers, dev servers, long-running pytest) survive across sessions.
+When a Fulilian process exits — `/quit`, closing a TUI session, gateway shutdown, even SIGKILL — the cleanup path is a **no-op for the container in default mode**. The container keeps running. The next Fulilian process attaches to it in milliseconds via the label probe. This is the behavior the "one long-lived container shared across sessions" contract requires: it's the only way background processes (npm watchers, dev servers, long-running pytest) survive across sessions.
 
 **The container is only torn down (stopped and `docker rm -f`'d) in these cases:**
 
@@ -330,16 +330,16 @@ When a Hermes process exits — `/quit`, closing a TUI session, gateway shutdown
 |---|---|
 | `docker_persist_across_processes: false` | Explicit per-process isolation. Every `cleanup()` does `stop` + `rm -f`. Matches pre-issue-#20561 behavior. |
 | Idle reaper (`lifetime_seconds`, default 300s) | Only when the env is `persist_across_processes=false`. Persist-mode envs are no-op'd; container survives the idle sweep. |
-| Orphan reaper at next startup | Sweeps **Exited** hermes-labeled containers older than `2 × lifetime_seconds` (default 600s = 10 min), scoped to the current profile. **Running containers are never touched** — sibling-process safety. Set `docker_orphan_reaper: false` to disable. |
+| Orphan reaper at next startup | Sweeps **Exited** fulilian-labeled containers older than `2 × lifetime_seconds` (default 600s = 10 min), scoped to the current profile. **Running containers are never touched** — sibling-process safety. Set `docker_orphan_reaper: false` to disable. |
 | Direct user action | `docker rm -f`, `docker system prune`, Docker Desktop restart. We don't set `--restart=always`, so a host reboot leaves the container `Exited` (its CoW layer survives and gets reused on next startup, but bg processes are gone). |
 
 Edge cases worth knowing:
 
 - **OOM kill of in-container PID 1** transitions the container to `Exited`. Next reuse will `docker start` it; filesystem state survives, bg processes do not.
-- **Switching profiles** isolates containers from each other — a container labeled `hermes-profile=work` is invisible to a Hermes process running under `hermes-profile=research`. The orphan reaper is profile-scoped too, so cross-profile containers don't get reaped accidentally, but they also won't get cleaned up automatically until you start Hermes again under their original profile.
+- **Switching profiles** isolates containers from each other — a container labeled `fulilian-profile=work` is invisible to a Fulilian process running under `fulilian-profile=research`. The orphan reaper is profile-scoped too, so cross-profile containers don't get reaped accidentally, but they also won't get cleaned up automatically until you start Fulilian again under their original profile.
 - **Explicit cross-profile sharing** — set the same non-empty `docker_shared_container_key` under `terminal:` for profiles that intentionally collaborate in one trusted workspace. This replaces only their container identity label; task, egress, and network compatibility checks still apply. Profiles without the key remain isolated. The identity label is derived from the key with a short digest suffix, so similar-looking keys (`team/workspace` vs `team_workspace`) never collide into one container. **Important: a shared container is created once, by whichever profile starts it first** — that profile's `docker_image`, volumes, shm size, and other immutable Docker settings win, and later profiles attach to it as-is; differing settings in their configs are ignored until the container is removed and recreated. Profiles sharing a key should agree on image and mounts.
 
-Parallel subagents spawned via `delegate_task(tasks=[...])` share this one container — concurrent `cd`, env mutations, and writes to the same path will collide. If a subagent needs an isolated sandbox, it must register a per-task image override via `register_task_env_overrides()`, which RL and benchmark environments (TerminalBench2, HermesSweEnv, etc.) do automatically for their per-task Docker images.
+Parallel subagents spawned via `delegate_task(tasks=[...])` share this one container — concurrent `cd`, env mutations, and writes to the same path will collide. If a subagent needs an isolated sandbox, it must register a per-task image override via `register_task_env_overrides()`, which RL and benchmark environments (TerminalBench2, FulilianSweEnv, etc.) do automatically for their per-task Docker images.
 
 **Security hardening:**
 - `--cap-drop ALL` with only `DAC_OVERRIDE`, `CHOWN`, `FOWNER` added back
@@ -347,7 +347,7 @@ Parallel subagents spawned via `delegate_task(tasks=[...])` share this one conta
 - `--pids-limit 256`
 - Size-limited tmpfs for `/tmp` (512MB), `/var/tmp` (256MB), `/run` (64MB)
 
-**Credential forwarding:** Env vars listed in `docker_forward_env` are resolved from your shell environment first, then `~/.hermes/.env`. Skills can also declare `required_environment_variables` which are merged automatically.
+**Credential forwarding:** Env vars listed in `docker_forward_env` are resolved from your shell environment first, then `~/.fulilian/.env`. Skills can also declare `required_environment_variables` which are merged automatically.
 
 #### Environment variable overrides
 
@@ -372,7 +372,7 @@ Every key under `terminal:` has an env-var override of the form `TERMINAL_<KEY_U
 | `TERMINAL_CONTAINER_PERSISTENT` | `container_persistent` | `true` / `false` — controls the bind-mount workspace dirs, distinct from `docker_persist_across_processes` |
 | `TERMINAL_LIFETIME_SECONDS` | `lifetime_seconds` | Idle reaper window |
 | `TERMINAL_TIMEOUT` | `timeout` | Per-command timeout |
-| `HERMES_DOCKER_BINARY` | _none_ | Force a specific docker/podman binary path |
+| `FULILIAN_DOCKER_BINARY` | _none_ | Force a specific docker/podman binary path |
 
 ### SSH Backend
 
@@ -416,9 +416,9 @@ terminal:
 
 **Required:** Either `MODAL_TOKEN_ID` + `MODAL_TOKEN_SECRET` environment variables, or a `~/.modal.toml` config file.
 
-**Persistence:** When enabled, the sandbox filesystem is snapshotted on cleanup and restored on next session. Snapshots are tracked in `~/.hermes/modal_snapshots.json`. This preserves filesystem state, not live processes, PID space, or background jobs.
+**Persistence:** When enabled, the sandbox filesystem is snapshotted on cleanup and restored on next session. Snapshots are tracked in `~/.fulilian/modal_snapshots.json`. This preserves filesystem state, not live processes, PID space, or background jobs.
 
-**Credential files:** Automatically mounted from `~/.hermes/` (OAuth tokens, etc.) and synced before each command.
+**Credential files:** Automatically mounted from `~/.fulilian/` (OAuth tokens, etc.) and synced before each command.
 
 ### Daytona Backend
 
@@ -435,13 +435,13 @@ terminal:
 
 **Required:** `DAYTONA_API_KEY` environment variable.
 
-**Persistence:** When enabled, sandboxes are stopped (not deleted) on cleanup and resumed on next session. Sandbox names follow the pattern `hermes-{task_id}`.
+**Persistence:** When enabled, sandboxes are stopped (not deleted) on cleanup and resumed on next session. Sandbox names follow the pattern `fulilian-{task_id}`.
 
 **Disk limit:** Daytona enforces a 10 GiB maximum. Requests above this are capped with a warning.
 
 ### Vercel Sandbox Backend
 
-Runs commands in a [Vercel Sandbox](https://vercel.com/docs/vercel-sandbox) cloud microVM. Hermes uses the normal terminal and file tool surfaces; there are no Vercel-specific model-facing tools.
+Runs commands in a [Vercel Sandbox](https://vercel.com/docs/vercel-sandbox) cloud microVM. Fulilian uses the normal terminal and file tool surfaces; there are no Vercel-specific model-facing tools.
 
 ```yaml
 terminal:
@@ -455,32 +455,32 @@ terminal:
 **Required install:** Install the optional SDK extra:
 
 ```bash
-pip install 'hermes-agent[vercel]'
+pip install 'fulilian-agent[vercel]'
 ```
 
-**Required authentication:** Configure access-token auth with all three of `VERCEL_TOKEN`, `VERCEL_PROJECT_ID`, and `VERCEL_TEAM_ID`. This is the supported setup for deployments and normal long-running Hermes processes on Render, Railway, Docker, and similar hosts.
+**Required authentication:** Configure access-token auth with all three of `VERCEL_TOKEN`, `VERCEL_PROJECT_ID`, and `VERCEL_TEAM_ID`. This is the supported setup for deployments and normal long-running Fulilian processes on Render, Railway, Docker, and similar hosts.
 
-For one-off local development, Hermes also accepts short-lived Vercel OIDC tokens:
+For one-off local development, Fulilian also accepts short-lived Vercel OIDC tokens:
 
 ```bash
-VERCEL_OIDC_TOKEN="$(vc project token <project-name>)" hermes chat
+VERCEL_OIDC_TOKEN="$(vc project token <project-name>)" fulilian chat
 ```
 
 From a linked Vercel project directory, you can omit the project name:
 
 ```bash
-VERCEL_OIDC_TOKEN="$(vc project token)" hermes chat
+VERCEL_OIDC_TOKEN="$(vc project token)" fulilian chat
 ```
 
 OIDC tokens are short-lived and should not be used as the documented deployment path.
 
-**Runtime:** `terminal.vercel_runtime` supports `node24`, `node22`, and `python3.13`. If unset, Hermes defaults to `node24`.
+**Runtime:** `terminal.vercel_runtime` supports `node24`, `node22`, and `python3.13`. If unset, Fulilian defaults to `node24`.
 
-**Persistence:** When `container_persistent: true`, Hermes snapshots the sandbox filesystem during cleanup and restores a later sandbox for the same task from that snapshot. Snapshot contents can include Hermes-synced credentials, skills, and cache files that were copied into the sandbox. This preserves filesystem state only; it does not preserve live sandbox identity, PID space, shell state, or running background processes.
+**Persistence:** When `container_persistent: true`, Fulilian snapshots the sandbox filesystem during cleanup and restores a later sandbox for the same task from that snapshot. Snapshot contents can include Fulilian-synced credentials, skills, and cache files that were copied into the sandbox. This preserves filesystem state only; it does not preserve live sandbox identity, PID space, shell state, or running background processes.
 
-**Background commands:** `terminal(background=true)` uses Hermes' generic non-local background process flow. You can spawn, poll, wait, view logs, and kill processes through the normal process tool while the sandbox is alive. Hermes does not provide native Vercel detached-process recovery after cleanup or restart.
+**Background commands:** `terminal(background=true)` uses Fulilian' generic non-local background process flow. You can spawn, poll, wait, view logs, and kill processes through the normal process tool while the sandbox is alive. Fulilian does not provide native Vercel detached-process recovery after cleanup or restart.
 
-**Disk sizing:** Vercel Sandbox does not currently support Hermes' `container_disk` resource knob. Leave `container_disk` unset or at the shared default `51200`; non-default values fail diagnostics and backend creation instead of being silently ignored.
+**Disk sizing:** Vercel Sandbox does not currently support Fulilian' `container_disk` resource knob. Leave `container_disk` unset or at the shared default `51200`; non-default values fail diagnostics and backend creation instead of being silently ignored.
 
 ### Singularity/Apptainer Backend
 
@@ -499,7 +499,7 @@ terminal:
 
 **Image handling:** Docker URLs (`docker://...`) are automatically converted to SIF files and cached. Existing `.sif` files are used directly.
 
-**Scratch directory:** Resolved in order: `TERMINAL_SCRATCH_DIR` → `TERMINAL_SANDBOX_DIR/singularity` → `/scratch/$USER/hermes-agent` (HPC convention) → `~/.hermes/sandboxes/singularity`.
+**Scratch directory:** Resolved in order: `TERMINAL_SCRATCH_DIR` → `TERMINAL_SANDBOX_DIR/singularity` → `/scratch/$USER/fulilian-agent` (HPC convention) → `~/.fulilian/sandboxes/singularity`.
 
 **Isolation:** Uses `--containall --no-home` for full namespace isolation without mounting the host home directory.
 
@@ -508,9 +508,9 @@ terminal:
 If terminal commands fail immediately or the terminal tool is reported as disabled:
 
 - **Local** — No special requirements. The safest default when getting started.
-- **Docker** — Run `docker version` to verify Docker is working. If it fails, fix Docker or `hermes config set terminal.backend local`.
-- **SSH** — Both `TERMINAL_SSH_HOST` and `TERMINAL_SSH_USER` must be set. Hermes logs a clear error if either is missing.
-- **Modal** — Needs `MODAL_TOKEN_ID` env var or `~/.modal.toml`. Run `hermes doctor` to check.
+- **Docker** — Run `docker version` to verify Docker is working. If it fails, fix Docker or `fulilian config set terminal.backend local`.
+- **SSH** — Both `TERMINAL_SSH_HOST` and `TERMINAL_SSH_USER` must be set. Fulilian logs a clear error if either is missing.
+- **Modal** — Needs `MODAL_TOKEN_ID` env var or `~/.modal.toml`. Run `fulilian doctor` to check.
 - **Daytona** — Needs `DAYTONA_API_KEY`. The Daytona SDK handles server URL configuration.
 - **Singularity** — Needs `apptainer` or `singularity` in `$PATH`. Common on HPC clusters.
 
@@ -518,11 +518,11 @@ When in doubt, set `terminal.backend` back to `local` and verify that commands r
 
 ### Remote-to-Host State Sync on Teardown
 
-For the **SSH**, **Modal**, and **Daytona** backends, Hermes pushes your `~/.hermes/` state (credential files, skills, cache) into the remote sandbox during the session, and on teardown **syncs changed state files back** to their original host locations. Files that differ from what was originally pushed (compared by content hash) are applied back in place; new remote files under a synced directory (e.g. a skill the agent created remotely) are mapped back to the corresponding host path. Upload-only credential files are never overwritten on the host.
+For the **SSH**, **Modal**, and **Daytona** backends, Fulilian pushes your `~/.fulilian/` state (credential files, skills, cache) into the remote sandbox during the session, and on teardown **syncs changed state files back** to their original host locations. Files that differ from what was originally pushed (compared by content hash) are applied back in place; new remote files under a synced directory (e.g. a skill the agent created remotely) are mapped back to the corresponding host path. Upload-only credential files are never overwritten on the host.
 
 - The sync-back retries up to 3 times with backoff and refuses to extract remote archives larger than 2 GiB.
 - Docker and Singularity use bind mounts (live host filesystem view) and don't need this.
-- This covers Hermes state (`~/.hermes/`), **not** arbitrary working-tree files inside the sandbox — have the agent copy important artifacts out explicitly (e.g. `scp`, `modal volume put`) before the sandbox is destroyed.
+- This covers Fulilian state (`~/.fulilian/`), **not** arbitrary working-tree files inside the sandbox — have the agent copy important artifacts out explicitly (e.g. `scp`, `modal volume put`) before the sandbox is destroyed.
 
 ### Docker Volume Mounts
 
@@ -534,7 +534,7 @@ terminal:
   docker_volumes:
     - "/home/user/projects:/workspace/projects"   # Read-write (default)
     - "/home/user/datasets:/data:ro"              # Read-only
-    - "/home/user/.hermes/cache/documents:/output" # Gateway-visible exports
+    - "/home/user/.fulilian/cache/documents:/output" # Gateway-visible exports
 ```
 
 This is useful for:
@@ -544,11 +544,11 @@ This is useful for:
 
 If you use a messaging gateway and want the agent to send generated files via
 `MEDIA:/...`, prefer a dedicated host-visible export mount such as
-`/home/user/.hermes/cache/documents:/output`.
+`/home/user/.fulilian/cache/documents:/output`.
 
 - Write files inside Docker to `/output/...`
 - Emit the **host path** in `MEDIA:`, for example:
-  `MEDIA:/home/user/.hermes/cache/documents/report.txt`
+  `MEDIA:/home/user/.fulilian/cache/documents/report.txt`
 - Do **not** emit `/workspace/...` or `/output/...` unless that exact path also
   exists for the gateway process on the host
 
@@ -572,7 +572,7 @@ terminal:
     - "NPM_TOKEN"
 ```
 
-Hermes resolves each listed variable from your current shell first, then falls back to `~/.hermes/.env` if it was saved with `hermes config set`.
+Fulilian resolves each listed variable from your current shell first, then falls back to `~/.fulilian/.env` if it was saved with `fulilian config set`.
 
 :::warning
 Anything listed in `docker_forward_env` becomes visible to commands run inside the container. Only forward credentials you are comfortable exposing to the terminal session.
@@ -588,13 +588,13 @@ terminal:
   docker_run_as_host_user: true   # default: false
 ```
 
-When enabled, Hermes appends `--user $(id -u):$(id -g)` to the `docker run` command so files written into bind-mounted directories (`/workspace`, `/root`, anything in `docker_volumes`) are owned by your host user, not root. The trade-off: the container can no longer `apt install` or write to root-owned paths like `/root/.npm` — use a base image whose `HOME` is owned by a non-root user (or add your required tooling at image build time) if you need both.
+When enabled, Fulilian appends `--user $(id -u):$(id -g)` to the `docker run` command so files written into bind-mounted directories (`/workspace`, `/root`, anything in `docker_volumes`) are owned by your host user, not root. The trade-off: the container can no longer `apt install` or write to root-owned paths like `/root/.npm` — use a base image whose `HOME` is owned by a non-root user (or add your required tooling at image build time) if you need both.
 
 Leave this `false` (the default) for backwards-compatible behavior. Turn it on when your workflow is mostly "edit mounted host files" and you're tired of `sudo chown -R`.
 
 ### Optional: Mount the Launch Directory into `/workspace`
 
-Docker sandboxes stay isolated by default. Hermes does **not** pass your current host working directory into the container unless you explicitly opt in.
+Docker sandboxes stay isolated by default. Fulilian does **not** pass your current host working directory into the container unless you explicitly opt in.
 
 Enable it in `config.yaml`:
 
@@ -605,7 +605,7 @@ terminal:
 ```
 
 When enabled:
-- if you launch Hermes from `~/projects/my-app`, that host directory is bind-mounted to `/workspace`
+- if you launch Fulilian from `~/projects/my-app`, that host directory is bind-mounted to `/workspace`
 - the Docker backend starts in `/workspace`
 - file tools and terminal commands both see the same mounted project
 
@@ -613,7 +613,7 @@ When disabled, `/workspace` stays sandbox-owned unless you explicitly mount some
 
 Security tradeoff:
 - `false` preserves the sandbox boundary
-- `true` gives the sandbox direct access to the directory you launched Hermes from
+- `true` gives the sandbox direct access to the directory you launched Fulilian from
 
 Use the opt-in only when you intentionally want the container to work on live host files.
 
@@ -631,7 +631,7 @@ terminal:
 To disable:
 
 ```bash
-hermes config set terminal.persistent_shell false
+fulilian config set terminal.persistent_shell false
 ```
 
 **What persists across commands:**
@@ -672,21 +672,21 @@ skills:
 
 **How skill settings work:**
 
-- `hermes config migrate` scans all enabled skills, finds unconfigured settings, and offers to prompt you
-- `hermes config show` displays all skill settings under "Skill Settings" with the skill they belong to
+- `fulilian config migrate` scans all enabled skills, finds unconfigured settings, and offers to prompt you
+- `fulilian config show` displays all skill settings under "Skill Settings" with the skill they belong to
 - When a skill loads, its resolved config values are injected into the skill context automatically
 
 **Setting values manually:**
 
 ```bash
-hermes config set skills.config.myplugin.path ~/myplugin-data
+fulilian config set skills.config.myplugin.path ~/myplugin-data
 ```
 
 For details on declaring config settings in your own skills, see [Creating Skills — Config Settings](/developer-guide/creating-skills#config-settings-configyaml).
 
 ### Guard on agent-created skill writes
 
-When the agent uses `skill_manage` to create, edit, patch, or delete a skill, Hermes can optionally scan the new/updated content for dangerous keyword patterns (credential harvesting, obvious prompt injection, exfil instructions). The scanner is **off by default** — real agent workflows that legitimately touch `~/.ssh/` or mention `$OPENAI_API_KEY` were tripping the heuristic too often. Turn it back on if you want the scanner to prompt you before the agent's skill writes land:
+When the agent uses `skill_manage` to create, edit, patch, or delete a skill, Fulilian can optionally scan the new/updated content for dangerous keyword patterns (credential harvesting, obvious prompt injection, exfil instructions). The scanner is **off by default** — real agent workflows that legitimately touch `~/.ssh/` or mention `$OPENAI_API_KEY` were tripping the heuristic too often. Turn it back on if you want the scanner to prompt you before the agent's skill writes land:
 
 ```yaml
 skills:
@@ -704,7 +704,7 @@ skills:
   write_approval: false   # false = write freely (default) | true = stage every write for review
 ```
 
-When on, skill writes are staged under `~/.hermes/pending/skills/` and reviewed with `/skills pending`, `/skills diff <id>`, `/skills approve <id>`, `/skills reject <id>` — from the CLI or any messaging platform. Toggle at runtime with `/skills approval on|off`. Memory has the same gate (`memory.write_approval`, below). Full walkthrough: [Gating agent skill writes](/user-guide/features/skills#gating-agent-skill-writes-skillswrite_approval).
+When on, skill writes are staged under `~/.fulilian/pending/skills/` and reviewed with `/skills pending`, `/skills diff <id>`, `/skills approve <id>`, `/skills reject <id>` — from the CLI or any messaging platform. Toggle at runtime with `/skills approval on|off`. Memory has the same gate (`memory.write_approval`, below). Full walkthrough: [Gating agent skill writes](/user-guide/features/skills#gating-agent-skill-writes-skillswrite_approval).
 
 ## Memory Configuration
 
@@ -721,7 +721,7 @@ With `memory.write_approval: true`, memory writes need your approval before they
 
 ## Context File Truncation
 
-Controls how much content Hermes loads from each automatic context file before applying head/tail truncation. This applies to files injected into the system prompt such as `SOUL.md`, `.hermes.md`, `AGENTS.md`, `CLAUDE.md`, and `.cursorrules`. It does **not** affect the `read_file` tool.
+Controls how much content Fulilian loads from each automatic context file before applying head/tail truncation. This applies to files injected into the system prompt such as `SOUL.md`, `.fulilian.md`, `AGENTS.md`, `CLAUDE.md`, and `.cursorrules`. It does **not** affect the `read_file` tool.
 
 ```yaml
 context_file_max_chars: null  # default — dynamic cap scaled to the model's context window (floor 20K, ceiling 500K chars)
@@ -755,7 +755,7 @@ The agent also deduplicates file reads automatically — if the same file region
 
 ## Tool Output Truncation Limits
 
-Three related caps control how much raw output a tool can return before Hermes truncates it:
+Three related caps control how much raw output a tool can return before Fulilian truncates it:
 
 ```yaml
 tool_output:
@@ -764,7 +764,7 @@ tool_output:
   max_line_length: 2000   # per-line cap in read_file's line-numbered view
 ```
 
-- **`max_bytes`** — When a `terminal` command produces more than this many characters of combined stdout/stderr, Hermes keeps the first 40% and last 60% and inserts a `[OUTPUT TRUNCATED]` notice between them. Default `50000` (≈12-15K tokens across typical tokenisers).
+- **`max_bytes`** — When a `terminal` command produces more than this many characters of combined stdout/stderr, Fulilian keeps the first 40% and last 60% and inserts a `[OUTPUT TRUNCATED]` notice between them. Default `50000` (≈12-15K tokens across typical tokenisers).
 - **`max_lines`** — Upper bound on the `limit` parameter of a single `read_file` call. Requests above this are clamped so a single read can't flood the context window. Default `2000`.
 - **`max_line_length`** — Per-line cap applied when `read_file` emits the line-numbered view. Lines longer than this are truncated to this many chars followed by `... [truncated]`. Default `2000`.
 
@@ -784,7 +784,7 @@ tool_output:
 
 ### Tool-Result Spillover Budget
 
-Separately from truncation, oversized tool *results* are spilled to disk rather than cut: the full output is saved under `$HERMES_HOME/cache/spillover/` and the in-context content is replaced by a preview plus the saved file's path (readable with `read_file` using `offset`/`limit`, or processable with `execute_code`). The generic per-result spillover threshold is 100,000 chars, scaled down automatically for small-context models.
+Separately from truncation, oversized tool *results* are spilled to disk rather than cut: the full output is saved under `$FULILIAN_HOME/cache/spillover/` and the in-context content is replaced by a preview plus the saved file's path (readable with `read_file` using `offset`/`limit`, or processable with `execute_code`). The generic per-result spillover threshold is 100,000 chars, scaled down automatically for small-context models.
 
 MCP tool results (tools named `mcp_*`) spill at a tighter **50,000-char** default: MCP servers routinely return large un-paginated payloads (tool-discovery catalogs, batched executions) that would otherwise sit under the generic threshold and bloat context on every subsequent turn. Nothing is lost — the full result is preserved on disk. Override the threshold via:
 
@@ -795,7 +795,7 @@ tool_budget:
 
 The MCP threshold is always capped at the (possibly context-scaled) generic per-result threshold, so raising it cannot exceed what the active model's window allows.
 
-Hermes also flags **provider-side elision**: when an MCP or web tool result embeds its own truncation markers (`...N more items`, `"has_more": true`, "saved to sandbox" notes), a one-line notice is appended to the result warning that the visible data is incomplete and should be paged/fetched before treating any enumeration as complete.
+Fulilian also flags **provider-side elision**: when an MCP or web tool result embeds its own truncation markers (`...N more items`, `"has_more": true`, "saved to sandbox" notes), a one-line notice is appended to the result warning that the visible data is incomplete and should be paged/fetched before treating any enumeration as complete.
 
 ## Global Toolset Disable
 
@@ -810,10 +810,10 @@ agent:
 ```
 
 This applies **after** per-platform tool config (`platform_toolsets` written by
-`hermes tools`), so a toolset listed here is always removed — even if a
+`fulilian tools`), so a toolset listed here is always removed — even if a
 platform's saved config still lists it. Use this when you want a single
 switch for "turn X off everywhere" rather than editing 15+ platform rows in
-the `hermes tools` UI.
+the `fulilian tools` UI.
 
 Leaving the list empty, or omitting the key, is a no-op.
 
@@ -822,7 +822,7 @@ Leaving the list empty, or omitting the key, is a no-op.
 Enable isolated git worktrees for running multiple agents in parallel on the same repo:
 
 ```yaml
-worktree: true    # Always create a worktree (same as hermes -w)
+worktree: true    # Always create a worktree (same as fulilian -w)
 # worktree: false # Default — only when -w flag is passed
 ```
 
@@ -846,7 +846,7 @@ node_modules/
 
 ## Context Compression
 
-Hermes automatically compresses long conversations to stay within your model's context window. The compression summarizer is a separate LLM call — you can point it at any provider or endpoint.
+Fulilian automatically compresses long conversations to stay within your model's context window. The compression summarizer is a separate LLM call — you can point it at any provider or endpoint.
 
 All compression settings live in `config.yaml` (no environment variables).
 
@@ -898,9 +898,9 @@ Older configs with `compression.summary_model`, `compression.summary_provider`, 
 
 The value is the **first rung** of an escalating ladder, not a fixed interval: consecutive failures for the same session wait `1x`, `3x`, then `9x` this value, capped at one hour. A session whose summary model is permanently broken therefore backs off instead of retrying forever on a fixed interval, and a run that actually shrinks the transcript resets it to the first rung. Escalation is per-session and process-local — a gateway restart resets it to the first rung while the cooldown deadline itself survives.
 
-`context_timeout_seconds` (default `120`) is the same **inactivity budget** for in-agent `compress_context` — the conversation loop, preflight compaction, and manual `/compress` — so a hung summary model cannot stall a session indefinitely. Streamed summary tokens extend the wait; only a silent worker is cut off. On timeout Hermes retries the summary once against the first entry of `auxiliary.compression.fallback_chain` (using that entry's own `timeout` when it declares one) — a stalled route never raises, so the auxiliary client's own fallback handling cannot see it. Only if that attempt also fails, or no fallback chain is configured, does Hermes skip compaction, keep the existing messages, and warn the user. Set to `0` to disable. Gateway session hygiene keeps its own `hygiene_timeout_seconds` path and is not double-wrapped.
+`context_timeout_seconds` (default `120`) is the same **inactivity budget** for in-agent `compress_context` — the conversation loop, preflight compaction, and manual `/compress` — so a hung summary model cannot stall a session indefinitely. Streamed summary tokens extend the wait; only a silent worker is cut off. On timeout Fulilian retries the summary once against the first entry of `auxiliary.compression.fallback_chain` (using that entry's own `timeout` when it declares one) — a stalled route never raises, so the auxiliary client's own fallback handling cannot see it. Only if that attempt also fails, or no fallback chain is configured, does Fulilian skip compaction, keep the existing messages, and warn the user. Set to `0` to disable. Gateway session hygiene keeps its own `hygiene_timeout_seconds` path and is not double-wrapped.
 
-`context_total_ceiling_seconds` (default `600`) bounds the in-agent **pre-commit** wait (summary / stream phase) even while tokens are still moving. It is clamped to at least `context_timeout_seconds`. The exact guarantee: **the summary phase is bounded by this ceiling; the commit phase is logged and surfaced if it exceeds it.** Once the worker has entered the compression commit fence and SessionDB mutation is in flight, the commit is never abandoned mid-flight — that would risk transcript divergence — but the wait is no longer silent: if the commit runs past the ceiling, Hermes logs the overrun (WARNING, escalating to ERROR on repeat), sends a one-shot warning through the user-visible warning channel, and keeps waiting in bounded increments until the commit completes.
+`context_total_ceiling_seconds` (default `600`) bounds the in-agent **pre-commit** wait (summary / stream phase) even while tokens are still moving. It is clamped to at least `context_timeout_seconds`. The exact guarantee: **the summary phase is bounded by this ceiling; the commit phase is logged and surfaced if it exceeds it.** Once the worker has entered the compression commit fence and SessionDB mutation is in flight, the commit is never abandoned mid-flight — that would risk transcript divergence — but the wait is no longer silent: if the commit runs past the ceiling, Fulilian logs the overrun (WARNING, escalating to ERROR on repeat), sends a one-shot warning through the user-visible warning channel, and keeps waiting in bounded increments until the commit completes.
 
 `protect_first_n` controls how many **non-system** head messages are pinned across every compaction. Default `3` — the opening user/assistant exchange survives every summarizer pass so the original goal stays visible. On long-running rolling-compaction sessions where the opening turn is no longer relevant, set `protect_first_n: 0` to pin nothing but the system prompt + summary + tail. The system prompt itself is always preserved regardless of this setting.
 
@@ -967,9 +967,9 @@ agent:
   gateway_turn_lease_timeout: 1800
 ```
 
-If another turn still holds the session lease when this budget expires, Hermes
+If another turn still holds the session lease when this budget expires, Fulilian
 fails closed: it does not load the transcript or run the model for the waiting
-message. The user receives a rejection notice and must resend. Hermes does not
+message. The user receives a rejection notice and must resend. Fulilian does not
 automatically requeue the message because doing so without durable ordering and
 idempotency could process it twice. Non-positive values use the 1800-second
 default.
@@ -1000,7 +1000,7 @@ When a platform adapter fails to connect (network outage, revoked bot token, bro
 Two mechanisms make permanent failures visible:
 
 - **Terminal classification.** Failures whose exception *type* proves they can never self-heal — rejected/revoked tokens (`telegram_auth_error`, `discord_auth_error`, `email_auth_error`), missing privileged intents (`discord_intents_required`), a Photon sidecar whose dependencies cannot install (`SIDECAR_DEPS_MISSING`) or whose node binary is missing (`SIDECAR_NODE_MISSING`) — are marked fatal instead of entering the retry queue. Classification is strictly type-based; ambiguous errors always keep retrying.
-- **Needs-attention escalation.** A platform continuously in the retry queue past `agent.reconnect_attention_after` (default `7200` seconds = 2 hours, `0` disables) gets `needs_attention: true` and a `retrying_since` timestamp in gateway runtime status (`hermes status`), plus a WARNING log. Retries continue unchanged — this is a signal, not a circuit breaker. The flag clears on successful reconnect.
+- **Needs-attention escalation.** A platform continuously in the retry queue past `agent.reconnect_attention_after` (default `7200` seconds = 2 hours, `0` disables) gets `needs_attention: true` and a `retrying_since` timestamp in gateway runtime status (`fulilian status`), plus a WARNING log. Retries continue unchanged — this is a signal, not a circuit breaker. The flag clears on successful reconnect.
 
 ```yaml
 agent:
@@ -1047,15 +1047,15 @@ context:
   engine: "lcm"          # must match the plugin's name
 ```
 
-Plugin engines are **never auto-activated** — you must explicitly set `context.engine` to the plugin name. Available engines can be browsed and selected via `hermes plugins` → Provider Plugins → Context Engine.
+Plugin engines are **never auto-activated** — you must explicitly set `context.engine` to the plugin name. Available engines can be browsed and selected via `fulilian plugins` → Provider Plugins → Context Engine.
 
 See [Memory Providers](/user-guide/features/memory-providers) for the analogous single-select system for memory plugins.
 
 ## Iteration Budget
 
-When the agent is working on a complex task with many tool calls, it can burn through its iteration budget (default: 500 turns). Hermes does **not** inject mid-task pressure warnings — earlier builds warned the model at 70%/90% budget, which caused models to abandon complex tasks prematurely and was removed in April 2026.
+When the agent is working on a complex task with many tool calls, it can burn through its iteration budget (default: 500 turns). Fulilian does **not** inject mid-task pressure warnings — earlier builds warned the model at 70%/90% budget, which caused models to abandon complex tasks prematurely and was removed in April 2026.
 
-Instead, when the budget is actually exhausted (500/500), Hermes injects one message asking the model to wrap up and allows a single **grace call** so it can deliver a final response. If that grace call still doesn't produce text, the agent is asked to summarise what it accomplished.
+Instead, when the budget is actually exhausted (500/500), Fulilian injects one message asking the model to wrap up and allows a single **grace call** so it can deliver a final response. If that grace call still doesn't produce text, the agent is asked to summarise what it accomplished.
 
 ```yaml
 agent:
@@ -1065,9 +1065,9 @@ agent:
   api_max_retries: 3           # Retries per provider before fallback engages (default: 3)
 ```
 
-`agent.max_turns` is **unlimited by default** — the turn cap caused more problems than it solved (silent mid-task truncation), so out of the box Hermes runs a conversation turn to completion. To impose a cap, set a positive integer. To be explicit about "no limit", any of these case-insensitive spellings work: `"none"`, `"null"`, `"unlimited"`, `"infinite"`, `"infinity"`, `"inf"`, `0`, `-1` (they resolve to a `sys.maxsize` sentinel so the loop never exits on a turn count).
+`agent.max_turns` is **unlimited by default** — the turn cap caused more problems than it solved (silent mid-task truncation), so out of the box Fulilian runs a conversation turn to completion. To impose a cap, set a positive integer. To be explicit about "no limit", any of these case-insensitive spellings work: `"none"`, `"null"`, `"unlimited"`, `"infinite"`, `"infinity"`, `"inf"`, `0`, `-1` (they resolve to a `sys.maxsize` sentinel so the loop never exits on a turn count).
 
-`agent.api_max_retries` controls how many times Hermes retries a provider API call on transient errors (rate limits, connection drops, 5xx) **before** fallback-provider switching engages. The default is `3` — four attempts total. If you have [fallback providers](/user-guide/features/fallback-providers) configured and want to fail over faster, drop this to `0` so the first transient error on your primary immediately hands off to the fallback instead of churning retries against the flaky endpoint.
+`agent.api_max_retries` controls how many times Fulilian retries a provider API call on transient errors (rate limits, connection drops, 5xx) **before** fallback-provider switching engages. The default is `3` — four attempts total. If you have [fallback providers](/user-guide/features/fallback-providers) configured and want to fail over faster, drop this to `0` so the first transient error on your primary immediately hands off to the fallback instead of churning retries against the flaky endpoint.
 
 ## Wall-Clock Run Budget
 
@@ -1081,19 +1081,19 @@ agent:
 Or per-invocation via the CLI:
 
 ```bash
-hermes chat --run-budget 850 -q "..."
+fulilian chat --run-budget 850 -q "..."
 ```
 
 When a budget is set, two things happen:
 
-1. **Wrap-up notice at 80%.** When 80% of the budget has elapsed, Hermes injects a **one-time** notice (delivered cache-safely, appended to the newest tool result like `/steer` messages) telling the model to stop new discovery/verification work and produce the final deliverable from the state it already has. It fires at most once per run and mirrors the existing iteration-budget wrap-up mechanism — there are no repeated pressure warnings.
-2. **Deadline-scaled stale timeouts.** Implicit non-streaming stale timeouts (the 90s default and the reasoning-model floors, e.g. 600s for DeepSeek reasoning models) are capped at `max(60, remaining_budget × 0.5)` so a single silently-hung provider call can never consume the rest of the run. The cap only ever *tightens* the timeout — it never raises it — and an explicitly configured `stale_timeout_seconds` (provider/model config or `HERMES_API_CALL_STALE_TIMEOUT`) always wins untouched.
+1. **Wrap-up notice at 80%.** When 80% of the budget has elapsed, Fulilian injects a **one-time** notice (delivered cache-safely, appended to the newest tool result like `/steer` messages) telling the model to stop new discovery/verification work and produce the final deliverable from the state it already has. It fires at most once per run and mirrors the existing iteration-budget wrap-up mechanism — there are no repeated pressure warnings.
+2. **Deadline-scaled stale timeouts.** Implicit non-streaming stale timeouts (the 90s default and the reasoning-model floors, e.g. 600s for DeepSeek reasoning models) are capped at `max(60, remaining_budget × 0.5)` so a single silently-hung provider call can never consume the rest of the run. The cap only ever *tightens* the timeout — it never raises it — and an explicitly configured `stale_timeout_seconds` (provider/model config or `FULILIAN_API_CALL_STALE_TIMEOUT`) always wins untouched.
 
 The budget is per `run_conversation` turn (it resets on each user message) and the feature is completely dormant when unset — no clock reads, no injection, no timeout changes.
 
 ## Verify-on-Stop (coding verification)
 
-When enabled, Hermes refuses to accept a final answer on a turn where the agent edited code in a workspace but produced no fresh verification evidence (a passing test run, build, lint, etc.) — it injects a synthetic follow-up asking the agent to verify or explain why it can't. Doc/markdown/skill-only edits never trigger it, and the loop is bounded so it can never trap the agent.
+When enabled, Fulilian refuses to accept a final answer on a turn where the agent edited code in a workspace but produced no fresh verification evidence (a passing test run, build, lint, etc.) — it injects a synthetic follow-up asking the agent to verify or explain why it can't. Doc/markdown/skill-only edits never trigger it, and the loop is bounded so it can never trap the agent.
 
 ```yaml
 agent:
@@ -1103,37 +1103,37 @@ agent:
   coding_instructions: ""      # Standing project-wide coding rules appended to the coding brief
 ```
 
-`verify_on_stop` accepts `true` (on everywhere), `false` (off — the default), or `"auto"` (legacy surface-aware behavior: on for interactive coding surfaces — CLI, TUI, desktop — and programmatic callers; off for messaging surfaces like Telegram/Discord where the verification narrative reads as chat noise). Off is the default everywhere: fresh installs ship `false` and the config migration turned it off on existing installs, so enabling it is an explicit opt-in. The `HERMES_VERIFY_ON_STOP` env var overrides the config value when set.
+`verify_on_stop` accepts `true` (on everywhere), `false` (off — the default), or `"auto"` (legacy surface-aware behavior: on for interactive coding surfaces — CLI, TUI, desktop — and programmatic callers; off for messaging surfaces like Telegram/Discord where the verification narrative reads as chat noise). Off is the default everywhere: fresh installs ship `false` and the config migration turned it off on existing installs, so enabling it is an explicit opt-in. The `FULILIAN_VERIFY_ON_STOP` env var overrides the config value when set.
 
 For a user/plugin policy gate at the same point — keep the agent going with your own checks — see the [`pre_verify` hook](/user-guide/features/hooks#pre_verify).
 
 ## Standing Goals (`/goal`)
 
-When a standing goal is active, Hermes judges whether each assistant response satisfies it. If not, it feeds a continuation prompt back into the same session and keeps working until the goal is done, the turn budget is exhausted, or the user pauses/clears it. The turn budget is the real backstop — judge failures fail **open** (continue) so a flaky judge never wedges progress.
+When a standing goal is active, Fulilian judges whether each assistant response satisfies it. If not, it feeds a continuation prompt back into the same session and keeps working until the goal is done, the turn budget is exhausted, or the user pauses/clears it. The turn budget is the real backstop — judge failures fail **open** (continue) so a flaky judge never wedges progress.
 
 ```yaml
 goals:
-  max_turns: 20   # Max continuation turns before Hermes auto-pauses the goal (default: 20)
+  max_turns: 20   # Max continuation turns before Fulilian auto-pauses the goal (default: 20)
 ```
 
-`max_turns` caps how many continuation turns a goal can drive before Hermes auto-pauses it and asks the user to `/goal resume`. It protects against judge false negatives (goal actually done but judge says continue) and unbounded model spend on fuzzy or unachievable goals. See [Goals](/user-guide/features/goals) for the full feature.
+`max_turns` caps how many continuation turns a goal can drive before Fulilian auto-pauses it and asks the user to `/goal resume`. It protects against judge false negatives (goal actually done but judge says continue) and unbounded model spend on fuzzy or unachievable goals. See [Goals](/user-guide/features/goals) for the full feature.
 
 ### API Timeouts
 
-Hermes has separate timeout layers for streaming, plus a stale detector for non-streaming calls. The stale detectors auto-adjust for local providers only when you leave them at their implicit defaults.
+Fulilian has separate timeout layers for streaming, plus a stale detector for non-streaming calls. The stale detectors auto-adjust for local providers only when you leave them at their implicit defaults.
 
 | Timeout | Default | Local providers | Config / env |
 |---------|---------|----------------|--------------|
-| Socket read timeout | 120s | Auto-raised to 1800s | `HERMES_STREAM_READ_TIMEOUT` |
-| Stale stream detection | 180s | Raised to a 900s ceiling (`agent.local_stream_stale_timeout`) | `HERMES_STREAM_STALE_TIMEOUT` |
-| Stale non-stream detection | 90s | Auto-disabled when left implicit | `providers.<id>.stale_timeout_seconds` or `HERMES_API_CALL_STALE_TIMEOUT` |
-| API call (non-streaming) | 1800s | Unchanged | `providers.<id>.request_timeout_seconds` / `timeout_seconds` or `HERMES_API_TIMEOUT` |
+| Socket read timeout | 120s | Auto-raised to 1800s | `FULILIAN_STREAM_READ_TIMEOUT` |
+| Stale stream detection | 180s | Raised to a 900s ceiling (`agent.local_stream_stale_timeout`) | `FULILIAN_STREAM_STALE_TIMEOUT` |
+| Stale non-stream detection | 90s | Auto-disabled when left implicit | `providers.<id>.stale_timeout_seconds` or `FULILIAN_API_CALL_STALE_TIMEOUT` |
+| API call (non-streaming) | 1800s | Unchanged | `providers.<id>.request_timeout_seconds` / `timeout_seconds` or `FULILIAN_API_TIMEOUT` |
 
-The **socket read timeout** controls how long httpx waits for the next chunk of data from the provider. Local LLMs can take minutes for prefill on large contexts before producing the first token, so Hermes raises this to 30 minutes when it detects a local endpoint. If you explicitly set `HERMES_STREAM_READ_TIMEOUT`, that value is always used regardless of endpoint detection.
+The **socket read timeout** controls how long httpx waits for the next chunk of data from the provider. Local LLMs can take minutes for prefill on large contexts before producing the first token, so Fulilian raises this to 30 minutes when it detects a local endpoint. If you explicitly set `FULILIAN_STREAM_READ_TIMEOUT`, that value is always used regardless of endpoint detection.
 
-The **stale stream detection** kills connections that receive SSE keep-alive pings but no actual content. For local providers (which don't send keep-alive pings during prefill) the default is raised to a finite 900-second ceiling instead of the 180s base — configurable via `agent.local_stream_stale_timeout` or the `HERMES_LOCAL_STREAM_STALE_TIMEOUT` env var.
+The **stale stream detection** kills connections that receive SSE keep-alive pings but no actual content. For local providers (which don't send keep-alive pings during prefill) the default is raised to a finite 900-second ceiling instead of the 180s base — configurable via `agent.local_stream_stale_timeout` or the `FULILIAN_LOCAL_STREAM_STALE_TIMEOUT` env var.
 
-The **stale non-stream detection** kills non-streaming calls that produce no response for too long. By default Hermes disables this on local endpoints to avoid false positives during long prefills. If you explicitly set `providers.<id>.stale_timeout_seconds`, `providers.<id>.models.<model>.stale_timeout_seconds`, or `HERMES_API_CALL_STALE_TIMEOUT`, that explicit value is honored even on local endpoints.
+The **stale non-stream detection** kills non-streaming calls that produce no response for too long. By default Fulilian disables this on local endpoints to avoid false positives during long prefills. If you explicitly set `providers.<id>.stale_timeout_seconds`, `providers.<id>.models.<model>.stale_timeout_seconds`, or `FULILIAN_API_CALL_STALE_TIMEOUT`, that explicit value is honored even on local endpoints.
 
 This budget bounds every non-streaming call, including the ones cron jobs and delegated subagents run inline. A provider that accepts a request and then goes silent — connection held open, no bytes, no error — is aborted at the stale timeout and retried, rather than hanging until the much longer socket read timeout (or, for an unattended cron run, until something external kills the process).
 
@@ -1176,26 +1176,26 @@ Options: `fill_first` (default), `round_robin`, `least_used`, `random`. See [Cre
 
 ## Prompt caching
 
-Hermes turns on cross-session prompt caching automatically when the active provider supports it — no user config needed.
+Fulilian turns on cross-session prompt caching automatically when the active provider supports it — no user config needed.
 
-For Claude on **native Anthropic**, **OpenRouter**, and **Nous Portal**, Hermes attaches `cache_control` breakpoints with the 1-hour TTL (`ttl: "1h"`) on the system prompt and skill blocks. The first send within a fresh hour pays full input rates; subsequent sends across any session within the same hour pull from the cache at the discounted cached-read rate. This means the system prompt, loaded skill content, and the early portion of any long-context include get reused across `hermes` sessions and across forked subagents for the first hour.
+For Claude on **native Anthropic**, **OpenRouter**, and **Nous Portal**, Fulilian attaches `cache_control` breakpoints with the 1-hour TTL (`ttl: "1h"`) on the system prompt and skill blocks. The first send within a fresh hour pays full input rates; subsequent sends across any session within the same hour pull from the cache at the discounted cached-read rate. This means the system prompt, loaded skill content, and the early portion of any long-context include get reused across `fulilian` sessions and across forked subagents for the first hour.
 
-The Qwen Cloud (Alibaba DashScope) upstream caps cache TTL at 5 minutes, so Hermes uses the 5-minute breakpoint TTL there instead. Other Claude-via-third-party paths (AWS Bedrock, Azure Foundry) fall back to the provider's own caching defaults. xAI Grok uses a separate session-pinned conversation-id mechanism — see [xAI prompt caching](/integrations/providers#xai-grok--responses-api--prompt-caching).
+The Qwen Cloud (Alibaba DashScope) upstream caps cache TTL at 5 minutes, so Fulilian uses the 5-minute breakpoint TTL there instead. Other Claude-via-third-party paths (AWS Bedrock, Azure Foundry) fall back to the provider's own caching defaults. xAI Grok uses a separate session-pinned conversation-id mechanism — see [xAI prompt caching](/integrations/providers#xai-grok--responses-api--prompt-caching).
 
 No knob exists to disable this — caching is always-on and saves money even on single-turn conversations because the system prompt alone is a meaningful fraction of the input token count.
 
-The one explicit knob is the cache TTL tier Hermes requests on Anthropic-style breakpoints:
+The one explicit knob is the cache TTL tier Fulilian requests on Anthropic-style breakpoints:
 
 ```yaml
 prompt_caching:
   cache_ttl: "5m"   # "5m" or "1h" (Anthropic-supported tiers); other values are ignored
 ```
 
-`cache_ttl` selects the breakpoint TTL Hermes attaches for Claude via the native Anthropic API, OpenRouter, and Nous Portal. Only the two Anthropic-supported tiers (`"5m"`, `"1h"`) are honored — any other value is ignored. Providers with their own caps (e.g. Qwen Cloud, which maxes at 5 minutes) still clamp to what the upstream allows.
+`cache_ttl` selects the breakpoint TTL Fulilian attaches for Claude via the native Anthropic API, OpenRouter, and Nous Portal. Only the two Anthropic-supported tiers (`"5m"`, `"1h"`) are honored — any other value is ignored. Providers with their own caps (e.g. Qwen Cloud, which maxes at 5 minutes) still clamp to what the upstream allows.
 
 ## Auxiliary Models
 
-Hermes uses "auxiliary" models for side tasks like image analysis, browser screenshot analysis, session-title generation, and context compression. By default (`auxiliary.*.provider: "auto"`), Hermes routes every auxiliary task to your **main chat model** — the same provider/model you picked in `hermes model`. You don't need to configure anything to get started, but be aware that on expensive reasoning models (Opus, MiniMax M2.7, etc.) auxiliary tasks add meaningful cost. If you want cheap-and-fast side tasks regardless of your main model, set `auxiliary.<task>.provider` and `auxiliary.<task>.model` explicitly (for example, Gemini Flash on OpenRouter for vision). (Web extraction is not an auxiliary task: `web_extract` and browser snapshots truncate long content deterministically and store the full text for `read_file` paging — no LLM involved.)
+Fulilian uses "auxiliary" models for side tasks like image analysis, browser screenshot analysis, session-title generation, and context compression. By default (`auxiliary.*.provider: "auto"`), Fulilian routes every auxiliary task to your **main chat model** — the same provider/model you picked in `fulilian model`. You don't need to configure anything to get started, but be aware that on expensive reasoning models (Opus, MiniMax M2.7, etc.) auxiliary tasks add meaningful cost. If you want cheap-and-fast side tasks regardless of your main model, set `auxiliary.<task>.provider` and `auxiliary.<task>.model` explicitly (for example, Gemini Flash on OpenRouter for vision). (Web extraction is not an auxiliary task: `web_extract` and browser snapshots truncate long content deterministically and store the full text for `read_file` paging — no LLM involved.)
 
 :::note Why "auto" uses your main model
 Earlier builds split aggregator users (OpenRouter, Nous Portal) onto a cheap provider-side default. That was surprising — users who paid for an aggregator subscription would see a different model handling their auxiliary traffic. `auto` now uses the main model for everyone, and per-task overrides in `config.yaml` still win (see [Full auxiliary config reference](#full-auxiliary-config-reference) below).
@@ -1203,10 +1203,10 @@ Earlier builds split aggregator users (OpenRouter, Nous Portal) onto a cheap pro
 
 ### Configuring auxiliary models interactively
 
-Instead of hand-editing YAML, run `hermes model` and pick **"Configure auxiliary models"** from the menu. You'll get an interactive per-task picker:
+Instead of hand-editing YAML, run `fulilian model` and pick **"Configure auxiliary models"** from the menu. You'll get an interactive per-task picker:
 
 ```
-$ hermes model
+$ fulilian model
 → Configure auxiliary models
 
 [ ] vision               currently: auto / main model
@@ -1224,13 +1224,13 @@ Select a task, pick a provider (OAuth flows open a browser; API-key providers pr
 
 The **Delegation** entry is special: it routes the model used by `delegate_task` subagents and persists to the top-level `delegation.*` section (`delegation.provider` / `delegation.model`) rather than `auxiliary.*`, because subagents are full child agents, not side-LLM calls. Its `auto` means "inherit the parent agent's provider, model, and credentials."
 
-If you do not want Hermes to auto-generate titles after the first exchange, set
+If you do not want Fulilian to auto-generate titles after the first exchange, set
 `auxiliary.title_generation.enabled: false`. Manual titles still work through
-`/title` and `hermes sessions rename`.
+`/title` and `fulilian sessions rename`.
 
 ### Stream-only endpoints
 
-Some OpenAI-compatible endpoints reject non-streaming chat requests outright (e.g. Tencent Copilot returns HTTP 400 `"Non-stream chat request is currently not supported"`). Interactive chat already streams, but auxiliary tasks (title generation, compression, vision) use non-streaming calls and would fail on every attempt. Hermes always treats `copilot.tencent.com` as stream-only; for any other such endpoint, list a URL substring under `auxiliary.stream_only_base_urls`:
+Some OpenAI-compatible endpoints reject non-streaming chat requests outright (e.g. Tencent Copilot returns HTTP 400 `"Non-stream chat request is currently not supported"`). Interactive chat already streams, but auxiliary tasks (title generation, compression, vision) use non-streaming calls and would fail on every attempt. Fulilian always treats `copilot.tencent.com` as stream-only; for any other such endpoint, list a URL substring under `auxiliary.stream_only_base_urls`:
 
 ```yaml
 auxiliary:
@@ -1245,7 +1245,7 @@ Matching auxiliary calls are sent with `stream=True` and the chunks (including t
 <div style={{position: 'relative', width: '100%', aspectRatio: '16 / 9', marginBottom: '1.5rem'}}>
   <iframe
     src="https://www.youtube.com/embed/NoF-YajElIM"
-    title="Hermes Agent — Auxiliary Models Tutorial"
+    title="FuLiLian — Auxiliary Models Tutorial"
     style={{position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 0}}
     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
     allowFullScreen
@@ -1254,7 +1254,7 @@ Matching auxiliary calls are sent with `stream=True` and the chunks (including t
 
 ### The universal config pattern
 
-Every model slot in Hermes — auxiliary tasks, compression, fallback — uses the same three knobs:
+Every model slot in Fulilian — auxiliary tasks, compression, fallback — uses the same three knobs:
 
 | Key | What it does | Default |
 |-----|-------------|---------|
@@ -1280,16 +1280,16 @@ auxiliary:
     reasoning_effort: "none"   # disable thinking for image description
 ```
 
-When `base_url` is set, Hermes ignores the provider and calls that endpoint directly (using `api_key` or `OPENAI_API_KEY` for auth). When only `provider` is set, Hermes uses that provider's built-in auth and base URL.
+When `base_url` is set, Fulilian ignores the provider and calls that endpoint directly (using `api_key` or `OPENAI_API_KEY` for auth). When only `provider` is set, Fulilian uses that provider's built-in auth and base URL.
 
 Available providers for auxiliary tasks: `auto`, `main`, plus any provider in the [provider registry](/reference/environment-variables) — `openrouter`, `nous`, `openai-codex`, `copilot`, `copilot-acp`, `anthropic`, `gemini`, `qwen-oauth`, `zai`, `kimi-coding`, `kimi-coding-cn`, `minimax`, `minimax-cn`, `minimax-oauth`, `deepseek`, `nvidia`, `xai`, `xai-oauth`, `ollama-cloud`, `alibaba`, `bedrock`, `huggingface`, `arcee`, `xiaomi`, `kilocode`, `opencode-zen`, `opencode-go`, `opencode-free`, `commandcode`, `commandcode-anthropic`, `ai-gateway`, `azure-foundry` — or any named custom provider from your `providers:` dict (e.g. `provider: "beans"`).
 
 :::tip MiniMax OAuth
-`minimax-oauth` logs in via browser OAuth (no API key needed). Run `hermes model` and select **MiniMax (OAuth)** to authenticate. Auxiliary tasks use `MiniMax-M2.7-highspeed` automatically. See the [MiniMax OAuth guide](../guides/minimax-oauth.md).
+`minimax-oauth` logs in via browser OAuth (no API key needed). Run `fulilian model` and select **MiniMax (OAuth)** to authenticate. Auxiliary tasks use `MiniMax-M2.7-highspeed` automatically. See the [MiniMax OAuth guide](../guides/minimax-oauth.md).
 :::
 
 :::tip xAI Grok OAuth
-`xai-oauth` logs in via browser OAuth for SuperGrok and X Premium+ subscribers (no API key needed). Run `hermes model` and select **xAI Grok OAuth (SuperGrok / Premium+)** to authenticate. The same OAuth token is reused for every direct-to-xAI surface (chat, auxiliary tasks, TTS, image gen, video gen, transcription). See the [xAI Grok OAuth guide](../guides/xai-grok-oauth.md), and if Hermes is on a remote host see [OAuth over SSH / Remote Hosts](../guides/oauth-over-ssh.md).
+`xai-oauth` logs in via browser OAuth for SuperGrok and X Premium+ subscribers (no API key needed). Run `fulilian model` and select **xAI Grok OAuth (SuperGrok / Premium+)** to authenticate. The same OAuth token is reused for every direct-to-xAI surface (chat, auxiliary tasks, TTS, image gen, video gen, transcription). See the [xAI Grok OAuth guide](../guides/xai-grok-oauth.md), and if Fulilian is on a remote host see [OAuth over SSH / Remote Hosts](../guides/oauth-over-ssh.md).
 :::
 
 :::warning `"main"` is for auxiliary tasks only
@@ -1379,7 +1379,7 @@ auxiliary:
     timeout: 30
     # max_concurrency: 2       # Optional: cap simultaneous title-generation calls
 
-  # Kanban triage specifier — `hermes kanban specify <id>` (or the
+  # Kanban triage specifier — `fulilian kanban specify <id>` (or the
   # dashboard's ✨ Specify button on Triage-column cards) uses this
   # slot to expand a one-liner into a concrete spec and promote the
   # task to `todo`. Cheap fast models work well here; spec expansion
@@ -1402,7 +1402,7 @@ Context compression has its own `compression:` block for thresholds and an `auxi
 
 ### Per-task fallback chain for auxiliary tasks
 
-Each auxiliary task can optionally define a `fallback_chain` — a list of provider/model entries that Hermes tries when the primary auxiliary provider fails due to rate limits, connectivity issues, or payment restrictions:
+Each auxiliary task can optionally define a `fallback_chain` — a list of provider/model entries that Fulilian tries when the primary auxiliary provider fails due to rate limits, connectivity issues, or payment restrictions:
 
 ```yaml
 auxiliary:
@@ -1416,7 +1416,7 @@ auxiliary:
         model: google/gemini-2.5-flash
 ```
 
-When the primary auxiliary provider (`openrouter` / `openai/gpt-4o-mini`) returns a rate-limit, connection timeout, or payment-required error, Hermes walks the `fallback_chain` in order. It skips entries whose provider matches the already-failed provider, and tries each remaining entry until one succeeds or the chain is exhausted. If all fallbacks fail, Hermes falls back to the main agent model as a final safety net.
+When the primary auxiliary provider (`openrouter` / `openai/gpt-4o-mini`) returns a rate-limit, connection timeout, or payment-required error, Fulilian walks the `fallback_chain` in order. It skips entries whose provider matches the already-failed provider, and tries each remaining entry until one succeeds or the chain is exhausted. If all fallbacks fail, Fulilian falls back to the main agent model as a final safety net.
 
 Each entry supports the same three knobs as any auxiliary task config:
 
@@ -1467,7 +1467,7 @@ auxiliary:
           min_coding_score: 0.5            # 0.0–1.0; higher = stronger coders
 ```
 
-The shape mirrors what OpenRouter accepts in the chat completions request body. Hermes forwards the entire `extra_body` verbatim, so any other OpenRouter request-body field documented at [openrouter.ai/docs](https://openrouter.ai/docs) works the same way.
+The shape mirrors what OpenRouter accepts in the chat completions request body. Fulilian forwards the entire `extra_body` verbatim, so any other OpenRouter request-body field documented at [openrouter.ai/docs](https://openrouter.ai/docs) works the same way.
 
 ### Changing the Vision Model
 
@@ -1479,7 +1479,7 @@ auxiliary:
     model: "openai/gpt-4o"
 ```
 
-Or via environment variable (in `~/.hermes/.env`):
+Or via environment variable (in `~/.fulilian/.env`):
 
 ```bash
 AUXILIARY_VISION_MODEL=openai/gpt-4o
@@ -1493,11 +1493,11 @@ These options apply to **auxiliary task configs** (`auxiliary:`, `compression:`)
 |----------|-------------|-------------|
 | `"auto"` | Best available (default). Vision tries OpenRouter → Nous → Codex. | — |
 | `"openrouter"` | Force OpenRouter — routes to any model (Gemini, GPT-4o, Claude, etc.) | `OPENROUTER_API_KEY` |
-| `"nous"` | Force Nous Portal | `hermes auth` |
-| `"codex"` | Force Codex OAuth (ChatGPT account). Supports vision (gpt-5.3-codex). | `hermes model` → ChatGPT or Codex Subscription |
-| `"minimax-oauth"` | Force MiniMax OAuth (browser login, no API key). Uses MiniMax-M2.7-highspeed for auxiliary tasks. | `hermes model` → MiniMax (OAuth) |
-| `"xai-oauth"` | Force xAI Grok OAuth (browser login for SuperGrok or X Premium+ subscribers, no API key). Same OAuth token covers chat, TTS, image, video, and transcription. | `hermes model` → xAI Grok OAuth (SuperGrok / Premium+) |
-| `"main"` | Use your active custom/main endpoint. This can come from `OPENAI_BASE_URL` + `OPENAI_API_KEY` or from a custom endpoint saved via `hermes model` / `config.yaml`. Works with OpenAI, local models, or any OpenAI-compatible API. **Auxiliary tasks only — not valid for `model.provider`.** | Custom endpoint credentials + base URL |
+| `"nous"` | Force Nous Portal | `fulilian auth` |
+| `"codex"` | Force Codex OAuth (ChatGPT account). Supports vision (gpt-5.3-codex). | `fulilian model` → ChatGPT or Codex Subscription |
+| `"minimax-oauth"` | Force MiniMax OAuth (browser login, no API key). Uses MiniMax-M2.7-highspeed for auxiliary tasks. | `fulilian model` → MiniMax (OAuth) |
+| `"xai-oauth"` | Force xAI Grok OAuth (browser login for SuperGrok or X Premium+ subscribers, no API key). Same OAuth token covers chat, TTS, image, video, and transcription. | `fulilian model` → xAI Grok OAuth (SuperGrok / Premium+) |
+| `"main"` | Use your active custom/main endpoint. This can come from `OPENAI_BASE_URL` + `OPENAI_API_KEY` or from a custom endpoint saved via `fulilian model` / `config.yaml`. Works with OpenAI, local models, or any OpenAI-compatible API. **Auxiliary tasks only — not valid for `model.provider`.** | Custom endpoint credentials + base URL |
 
 Direct API-key providers from the main provider catalog also work here when you want side tasks to bypass your default router. For example, `gmi` is valid once `GMI_API_KEY` is configured, and `fireworks` is valid once `FIREWORKS_API_KEY` is configured:
 
@@ -1521,11 +1521,11 @@ auxiliary:
     model: "qwen2.5-vl"
 ```
 
-`base_url` takes precedence over `provider`, so this is the most explicit way to route an auxiliary task to a specific endpoint. For direct endpoint overrides, Hermes uses the configured `api_key` or falls back to `OPENAI_API_KEY`; it does not reuse `OPENROUTER_API_KEY` for that custom endpoint.
+`base_url` takes precedence over `provider`, so this is the most explicit way to route an auxiliary task to a specific endpoint. For direct endpoint overrides, Fulilian uses the configured `api_key` or falls back to `OPENAI_API_KEY`; it does not reuse `OPENROUTER_API_KEY` for that custom endpoint.
 
 **Using OpenAI API key for vision:**
 ```yaml
-# In ~/.hermes/.env:
+# In ~/.fulilian/.env:
 # OPENAI_BASE_URL=https://api.openai.com/v1
 # OPENAI_API_KEY=sk-...
 
@@ -1558,7 +1558,7 @@ model:
   provider: minimax-oauth
   base_url: https://api.minimax.io/anthropic
 ```
-Run `hermes model` and select **MiniMax (OAuth)** to log in and set this automatically. For the China region, the base URL will be `https://api.minimaxi.com/anthropic`. See the [MiniMax OAuth guide](../guides/minimax-oauth.md) for the full walkthrough.
+Run `fulilian model` and select **MiniMax (OAuth)** to log in and set this automatically. For the China region, the base URL will be `https://api.minimaxi.com/anthropic`. See the [MiniMax OAuth guide](../guides/minimax-oauth.md) for the full walkthrough.
 
 **Using a local/self-hosted model:**
 ```yaml
@@ -1568,7 +1568,7 @@ auxiliary:
     model: "my-local-model"
 ```
 
-`provider: "main"` uses whatever provider Hermes uses for normal chat — whether that's a named custom provider (e.g. `beans`), a built-in provider like `openrouter`, or a legacy `OPENAI_BASE_URL` endpoint.
+`provider: "main"` uses whatever provider Fulilian uses for normal chat — whether that's a named custom provider (e.g. `beans`), a built-in provider like `openrouter`, or a legacy `OPENAI_BASE_URL` endpoint.
 
 :::tip
 If you use Codex OAuth as your main model provider, vision works automatically — no extra configuration needed. Codex is included in the auto-detection chain for vision.
@@ -1592,7 +1592,7 @@ Auxiliary models can also be configured via environment variables. However, `con
 Compression and fallback model settings are config.yaml-only. (`AUXILIARY_WEB_EXTRACT_*` variables are obsolete — web extraction no longer uses an auxiliary LLM.)
 
 :::tip
-Run `hermes config` to see your current auxiliary model settings. Overrides only show up when they differ from the defaults.
+Run `fulilian config` to see your current auxiliary model settings. Overrides only show up when they differ from the defaults.
 :::
 
 ## Reasoning Effort
@@ -1608,7 +1608,7 @@ When unset (default), reasoning effort defaults to "medium" — a balanced level
 
 :::note Adaptive-thinking models (Claude 4.6+, Fable/Mythos-class) over OpenRouter
 These models use *adaptive* thinking and don't accept the usual `reasoning.effort`
-field — OpenRouter ignores it for them. Hermes transparently routes your
+field — OpenRouter ignores it for them. Fulilian transparently routes your
 `reasoning_effort` to OpenRouter's `verbosity` parameter instead (which maps to
 Anthropic's `output_config.effort`), so the same effort knob keeps working with
 the levels supported by the selected model. `none` (or unset) leaves the model
@@ -1617,14 +1617,14 @@ native Anthropic provider already controls effort directly and is unaffected.
 :::
 
 :::note OpenRouter models and supported effort levels
-For other models routed through OpenRouter, Hermes reads the live model
+For other models routed through OpenRouter, Fulilian reads the live model
 catalog's reasoning metadata (`supported_parameters` + per-model
 `reasoning.supported_efforts`) to decide whether to send reasoning controls at
 all and to clamp your requested effort to the nearest level the route actually
 supports (always downward — e.g. `ultra` becomes `high` on a route that stops
 at `high`, never a silent escalation). New reasoning-capable vendors work
-automatically without waiting for a Hermes update; when the catalog is
-unreachable or a model isn't listed, Hermes falls back to its built-in
+automatically without waiting for a Fulilian update; when the catalog is
+unreachable or a model isn't listed, Fulilian falls back to its built-in
 model-family list and passes your effort through unchanged.
 :::
 
@@ -1661,7 +1661,7 @@ The key matching is **spelling-tolerant** — any reasonable spelling will match
 - Exact matches take precedence over variants
 
 :::note
-There is no `hermes config set` support for `reasoning_overrides` keys — edit the YAML file directly. This is because model names often contain dots (e.g. `claude-opus-4.5`), which conflict with the CLI's dotted-key syntax.
+There is no `fulilian config set` support for `reasoning_overrides` keys — edit the YAML file directly. This is because model names often contain dots (e.g. `claude-opus-4.5`), which conflict with the CLI's dotted-key syntax.
 :::
 
 **Resolution priority:**
@@ -1710,7 +1710,7 @@ agent:
 
 ## Execution-Discipline Guidance
 
-Separately from tool-use enforcement, Hermes injects an **execution-discipline** block for model families that share a set of agentic failure modes observed in eval traces: doing arithmetic in prose instead of code, skipping read-back verification after external writes, "repairing" malformed identifiers, claiming completeness despite count mismatches, and declaring "done" without verifying every acceptance criterion.
+Separately from tool-use enforcement, Fulilian injects an **execution-discipline** block for model families that share a set of agentic failure modes observed in eval traces: doing arithmetic in prose instead of code, skipping read-back verification after external writes, "repairing" malformed identifiers, claiming completeness despite count mismatches, and declaring "done" without verifying every acceptance criterion.
 
 ```yaml
 agent:
@@ -1737,7 +1737,7 @@ The gate is independent of `tool_use_enforcement` — either can be on without t
 
 ## Tool-Loop Guardrails
 
-Hermes detects when the agent is stuck in an unproductive tool-calling loop — the same tool call failing repeatedly, the same tool failing over and over, or an idempotent call returning the same result with no progress. By default it injects a **warning** into the tool result so the model self-corrects; it does not hard-stop, since a person watching the CLI/TUI can intervene.
+Fulilian detects when the agent is stuck in an unproductive tool-calling loop — the same tool call failing repeatedly, the same tool failing over and over, or an idempotent call returning the same result with no progress. By default it injects a **warning** into the tool result so the model self-corrects; it does not hard-stop, since a person watching the CLI/TUI can intervene.
 
 For unattended gateway / server deployments, enable hard stops so a stuck agent is circuit-broken instead of burning the iteration budget:
 
@@ -1770,7 +1770,7 @@ This mirrors Claude Code's per-session WebSearch and subagent caps (v2.1.212), w
 
 ### Runtime anti-stall guards
 
-Complementing the failure-based guardrails above, `agent.stall_guards` (default `true`) enables two conservative runtime guards against wasted turns. First, an **identical-call loop breaker**: when the same tool is called 3+ consecutive times with identical arguments *and* returns an identical result, a short one-line notice is appended to that tool result telling the model not to repeat the call — it never blocks the call, and legitimately-repeatable pollers (`process`, `*_get_result`, `*_poll`) are exempt. Second, a **continue-intent recovery**: when the model ends a turn with no tool calls but its short reply trails off announcing an action ("Let me now update the file…"), Hermes re-prompts it to act via the same bounded continuation mechanism used for intent-ack recovery (max 2 re-prompts per turn). Both are cache-safe (notices are added at result construction, never retroactively) and can be disabled together:
+Complementing the failure-based guardrails above, `agent.stall_guards` (default `true`) enables two conservative runtime guards against wasted turns. First, an **identical-call loop breaker**: when the same tool is called 3+ consecutive times with identical arguments *and* returns an identical result, a short one-line notice is appended to that tool result telling the model not to repeat the call — it never blocks the call, and legitimately-repeatable pollers (`process`, `*_get_result`, `*_poll`) are exempt. Second, a **continue-intent recovery**: when the model ends a turn with no tool calls but its short reply trails off announcing an action ("Let me now update the file…"), Fulilian re-prompts it to act via the same bounded continuation mechanism used for intent-ack recovery (max 2 re-prompts per turn). Both are cache-safe (notices are added at result construction, never retroactively) and can be disabled together:
 
 ```yaml
 agent:
@@ -1869,7 +1869,7 @@ The tally is observed from the tool-progress feed the CLI already receives, so i
 
 - Wall time is the turn's real duration (`2m05s` past the one-minute mark).
 - Tool calls are grouped by verb (`edited`, `read`, `ran`, `searched`, …) with correct pluralisation; plugin/MCP tools without a curated verb collapse into `called N tools`.
-- `+X -Y` line deltas appear only when the tool result already reports a diff (currently `patch`). Hermes never shells out to git to compute them, so a `write_file` edit is counted without a delta.
+- `+X -Y` line deltas appear only when the tool result already reports a diff (currently `patch`). Fulilian never shells out to git to compute them, so a `write_file` edit is counted without a delta.
 - **Failed tool calls are not counted** — a denied write never renders as a successful edit (see the [file-mutation verifier](#file-mutation-verifier) for the complementary warning).
 - Long turns cap at four verb segments plus a `+N more` tail so the line never wraps.
 - A fast turn with no tool calls prints nothing at all.
@@ -1886,7 +1886,7 @@ Both keys are display-only and CLI-only: they are suppressed in quiet mode, when
 
 ### File-mutation verifier
 
-When `display.file_mutation_verifier` is `true` (default), Hermes appends a one-line advisory to the assistant's final response whenever a `write_file` or `patch` call failed during the turn and was never superseded by a successful write to the same path. This catches the "batch of parallel patches, half silently fail, model summarises success" class of over-claim without requiring you to manually run `git status` after every edit.
+When `display.file_mutation_verifier` is `true` (default), Fulilian appends a one-line advisory to the assistant's final response whenever a `write_file` or `patch` call failed during the turn and was never superseded by a successful write to the same path. This catches the "batch of parallel patches, half silently fail, model summarises success" class of over-claim without requiring you to manually run `git status` after every edit.
 
 Example footer:
 
@@ -1897,11 +1897,11 @@ Example footer:
   • concepts/rag-pipeline.md — [patch] Could not find match for old_string
 ```
 
-Set `file_mutation_verifier: false` (or `HERMES_FILE_MUTATION_VERIFIER=0`) to suppress the footer. The verifier only fires when real failures are outstanding at turn end — a model that retries a failed patch and succeeds within the same turn will not trigger it for that file.
+Set `file_mutation_verifier: false` (or `FULILIAN_FILE_MUTATION_VERIFIER=0`) to suppress the footer. The verifier only fires when real failures are outstanding at turn end — a model that retries a failed patch and succeeds within the same turn will not trigger it for that file.
 
 **Trust the verifier over the model's summary.** The footer means the listed files were **not** modified on disk, even if the assistant's closing message says the task is done. Common causes:
 
-- **Write denied** — path is on the credential denylist or outside `HERMES_WRITE_SAFE_ROOT` (see [File write safety](./security.md#file-write-safety))
+- **Write denied** — path is on the credential denylist or outside `FULILIAN_WRITE_SAFE_ROOT` (see [File write safety](./security.md#file-write-safety))
 - **Patch mismatch** — `old_string` did not match the file on disk
 - **Syntax gate** — candidate content failed JSON/YAML/TOML validation before write
 
@@ -1909,11 +1909,11 @@ Example footer when writes are blocked:
 
 ```
 ⚠️ File-mutation verifier: 2 file(s) were NOT modified this turn despite any wording above that may suggest otherwise. Run `git status` or `read_file` to confirm.
-  • ~/.hermes/cron/jobs.json — [patch] Write denied: '…' is outside HERMES_WRITE_SAFE_ROOT (/path/to/project)
-  • ~/.hermes/scripts/monitor.py — [write_file] Write denied: '…' is outside HERMES_WRITE_SAFE_ROOT (/path/to/project)
+  • ~/.fulilian/cron/jobs.json — [patch] Write denied: '…' is outside FULILIAN_WRITE_SAFE_ROOT (/path/to/project)
+  • ~/.fulilian/scripts/monitor.py — [write_file] Write denied: '…' is outside FULILIAN_WRITE_SAFE_ROOT (/path/to/project)
 ```
 
-If writes to Hermes state (cron jobs, skills, scripts under `~/.hermes/`) are failing, check whether `HERMES_WRITE_SAFE_ROOT` is set in your environment. For cron changes, use the `cronjob` tool or `hermes cron edit` instead of patching `jobs.json` directly.
+If writes to Fulilian state (cron jobs, skills, scripts under `~/.fulilian/`) are failing, check whether `FULILIAN_WRITE_SAFE_ROOT` is set in your environment. For cron changes, use the `cronjob` tool or `fulilian cron edit` instead of patching `jobs.json` directly.
 
 ### UI language for static messages
 
@@ -1921,7 +1921,7 @@ The `display.language` setting translates a small set of static user-facing mess
 
 Supported values: `en` (default), `zh` (Simplified Chinese), `zh-hant` (Traditional Chinese), `ja` (Japanese), `de` (German), `es` (Spanish), `fr` (French), `tr` (Turkish), `uk` (Ukrainian), `af` (Afrikaans), `ko` (Korean), `it` (Italian), `ga` (Irish), `pt` (Portuguese), `ru` (Russian), `hu` (Hungarian). Unknown values fall back to English.
 
-You can also set this per-session with the `HERMES_LANGUAGE` env var, which overrides the config value.
+You can also set this per-session with the `FULILIAN_LANGUAGE` env var, which overrides the config value.
 
 ```yaml
 display:
@@ -1953,7 +1953,7 @@ Focus view is **display-only**. It never edits conversation history, the system 
 
 ### Runtime-metadata footer (gateway only)
 
-When `display.runtime_footer.enabled: true`, Hermes appends a small runtime-context footer to the **final** message of each gateway turn. The current footer can show the model, context-window percentage, and current working directory. Off by default; opt in per-gateway if your team wants every reply to include this provenance.
+When `display.runtime_footer.enabled: true`, Fulilian appends a small runtime-context footer to the **final** message of each gateway turn. The current footer can show the model, context-window percentage, and current working directory. Off by default; opt in per-gateway if your team wants every reply to include this provenance.
 
 ```yaml
 display:
@@ -2003,7 +2003,7 @@ Platforms without an override fall back to the global `tool_progress` value. Val
 
 Signal is listed as a valid platform key because the setting can be saved per platform, but the current Signal adapter cannot edit sent messages and does not render tool-progress bubbles. Keep Signal `tool_progress` set to `off`; use the CLI or an editing-capable messaging platform if you need to watch each tool call live.
 
-`interim_assistant_messages` is gateway-only. When enabled, Hermes sends completed mid-turn assistant updates as separate chat messages. This is independent from `tool_progress` and does not require gateway streaming.
+`interim_assistant_messages` is gateway-only. When enabled, Fulilian sends completed mid-turn assistant updates as separate chat messages. This is independent from `tool_progress` and does not require gateway streaming.
 
 `show_commentary` (default `true`) controls Codex Responses models' commentary channel — the polished progress narration these models produce alongside their private reasoning. When enabled, each completed commentary message is delivered as a visible mid-turn update (on the gateway this also requires `interim_assistant_messages`). Set it to `false` if the extra narration annoys you: commentary then falls back to the reasoning channel and is only shown when `show_reasoning` is enabled.
 
@@ -2032,7 +2032,7 @@ Hashes are deterministic — the same user always maps to the same hash, so the 
 
 OpenAI requires third-party Codex harnesses to identify themselves.
 ChatGPT-authenticated requests to the official Codex endpoint automatically
-send `originator: hermes-agent` and `User-Agent: HermesAgent/<version>`.
+send `originator: fulilian-agent` and `User-Agent: FulilianAgent/<version>`.
 The existing ChatGPT account header is preserved. No additional prompt content
 or telemetry request is sent.
 Direct OpenAI API requests and custom proxy endpoints are unchanged.
@@ -2048,7 +2048,7 @@ stt:
   cloud_trim_silence: true     # trim long pauses with ffmpeg before uploading to a cloud provider (default: true)
   cloud_trim_threshold_db: -40 # audio quieter than this counts as silence
   cloud_trim_keep_ms: 300      # how much of each pause survives the trim (keeps natural pacing)
-  # prompt: "Hermes, Teknium, Nous Research, kanban"   # Static vocabulary hint (see below)
+  # prompt: "Fulilian, Teknium, Nous Research, kanban"   # Static vocabulary hint (see below)
   local:
     model: "base"              # tiny, base, small, medium, large-v3
     language: ""               # per-provider override of stt.language
@@ -2066,19 +2066,19 @@ stt:
   # model: "whisper-1"         # Legacy fallback key still respected
 ```
 
-Language resolution is the same for **every** STT provider (local, groq, openai, mistral, xai, elevenlabs, deepinfra, command providers, and plugins): `stt.<provider>.language` → `stt.language` → `HERMES_LOCAL_STT_LANGUAGE` env var → provider auto-detect. **The default is `stt.language: "en"`** — Whisper auto-detection frequently misidentifies short or accented clips, which shows up as voice notes transcribed in the wrong language. Non-English speakers should set `stt.language` to their language code once (e.g. `"es"`, `"zh"`, `"uk"`); set it to `""` to restore auto-detection for multilingual use.
+Language resolution is the same for **every** STT provider (local, groq, openai, mistral, xai, elevenlabs, deepinfra, command providers, and plugins): `stt.<provider>.language` → `stt.language` → `FULILIAN_LOCAL_STT_LANGUAGE` env var → provider auto-detect. **The default is `stt.language: "en"`** — Whisper auto-detection frequently misidentifies short or accented clips, which shows up as voice notes transcribed in the wrong language. Non-English speakers should set `stt.language` to their language code once (e.g. `"es"`, `"zh"`, `"uk"`); set it to `""` to restore auto-detection for multilingual use.
 
 Set `stt.echo_transcripts: false` when the gateway should transcribe voice notes for the agent but must not post the raw transcript back to the chat (for example, customer-facing WhatsApp bots).
 
 Provider behavior:
 
 - `local` uses `faster-whisper` running on your machine. Install it separately with `pip install faster-whisper`. Silence-hallucination hardening is on by default: a Silero VAD filter keeps silence/noise from ever reaching Whisper, cross-window conditioning is disabled, and segments the model itself flags as probably-not-speech *and* low-confidence are dropped. Set `stt.local.vad: false` to transcribe non-speech audio (music, ambient) with the raw behavior. The model stays loaded in memory between voice messages for low-latency transcription; set `stt.local.unload_after_idle_seconds` (e.g. `300` for 5 minutes) to automatically release the model when idle. This frees GPU memory on CUDA hosts (the main win when a local LLM shares the GPU); on CPU the memory becomes reusable by the process, though the OS-visible footprint may not shrink until the process needs the space for something else. The next voice message reloads the model transparently.
-- `groq` uses Groq's Whisper-compatible endpoint and reads `GROQ_API_KEY`. Pass `stt.groq.language` (or the global `HERMES_LOCAL_STT_LANGUAGE` env var) to skip auto-detection and reduce latency.
+- `groq` uses Groq's Whisper-compatible endpoint and reads `GROQ_API_KEY`. Pass `stt.groq.language` (or the global `FULILIAN_LOCAL_STT_LANGUAGE` env var) to skip auto-detection and reduce latency.
 - `openai` uses the OpenAI speech API and reads `VOICE_TOOLS_OPENAI_KEY`.
 
 Cloud providers (groq, openai, mistral, xai, elevenlabs, deepinfra) get a **pre-upload silence trim** by default when `ffmpeg` is installed: long pauses in a voice note are collapsed client-side before the file uploads, keeping `cloud_trim_keep_ms` of each pause so natural pacing survives. Shorter audio means faster uploads, lower per-audio-minute billing, and fewer silence hallucinations from the remote model. Clips shorter than 12 seconds skip the trim entirely (savings can't matter there, and several providers bill a per-request minimum anyway). The trim is best-effort — if ffmpeg is missing, the trim fails, the clip is mostly silence, or trimming would save less than ~10%, the original file is uploaded untouched. Set `stt.cloud_trim_silence: false` to always upload the original (e.g. when transcribing music or ambient audio through a cloud provider). Command-type and plugin providers never get trimmed audio.
 
-An explicitly selected `stt.provider` is honored strictly — if it's unavailable, transcription errors with guidance to run `hermes tools` rather than switching providers. Only when no provider has ever been selected does Hermes auto-detect in this order: `local` → `groq` → `openai`.
+An explicitly selected `stt.provider` is honored strictly — if it's unavailable, transcription errors with guidance to run `fulilian tools` rather than switching providers. Only when no provider has ever been selected does Fulilian auto-detect in this order: `local` → `groq` → `openai`.
 
 Groq and OpenAI model overrides are environment-driven:
 
@@ -2096,7 +2096,7 @@ STT_OPENAI_BASE_URL=https://api.openai.com/v1
 ```yaml
 stt:
   provider: "local"
-  prompt: "Hermes, Teknium, Nous Research, kanban, Ollama"
+  prompt: "Fulilian, Teknium, Nous Research, kanban, Ollama"
 ```
 
 **Composition.** The config value is the base. Plugins that register the [`pre_transcription`](/user-guide/features/hooks#pre_transcription) hook mutate on top of it, last-writer-wins per field. Multiple plugins' hints compose deterministically: plugin discovery loads plugins in sorted order by plugin id, and each plugin's callbacks run in its own registration order, so the same set of plugins always produces the same final prompt. A hook returning an empty string for `prompt` clears the config prompt for that request. Hooks may also override `language` and `model`; `file_path` is read-only and any attempt to change it is logged and dropped. With no hook registered and no `stt.prompt` set, the outgoing request is identical to previous releases.
@@ -2116,7 +2116,7 @@ stt:
 | `stt.providers.<name>` with `type: command` | not supported | Logged at DEBUG, the request proceeds without the prompt |
 | Plugin-registered providers | `prompt` in the `transcribe(**extra)` kwargs | Only sent when a prompt is set, so providers that predate this key see unchanged calls |
 
-**Length.** Whisper-family models only condition on the final ~224 prompt tokens. For the whisper-family backends (`local`, `openai`, `groq`, `deepinfra`) Hermes enforces that cap client-side: an over-long final prompt is truncated to its tail with a logged warning — the request never errors because of prompt length. Other backends (`mistral`, plugin providers) receive the prompt unchanged and own their own validation. Keep hints short and specific either way.
+**Length.** Whisper-family models only condition on the final ~224 prompt tokens. For the whisper-family backends (`local`, `openai`, `groq`, `deepinfra`) Fulilian enforces that cap client-side: an over-long final prompt is truncated to its tail with a logged warning — the request never errors because of prompt length. Other backends (`mistral`, plugin providers) receive the prompt unchanged and own their own validation. Keep hints short and specific either way.
 
 :::warning Prompts are uploaded with your audio
 The final prompt is sent to the configured STT provider alongside the audio file. Keep secrets and session-derived context out of `stt.prompt` and out of anything a `pre_transcription` hook returns, especially when the provider is a hosted API rather than local `faster-whisper`.
@@ -2172,7 +2172,7 @@ For separate natural mid-turn assistant updates without progressive token editin
 **Fresh final (Telegram):** Telegram's `editMessageText` preserves the original message timestamp, so a long-running streamed reply would keep the first-token timestamp even after completion. Set `fresh_final_after_seconds > 0` to opt in to delivering old previews as brand-new final messages with best-effort preview deletion. The default is `0`, which always finalizes streamed replies in place and avoids the brief duplicate-message/delete sequence on clients that show both operations.
 
 :::note Per-platform streaming defaults
-The master `streaming.enabled` switch is `false` by default — nothing streams until you flip it. Once enabled, streaming is decided **per platform**: Telegram ships with `display.platforms.telegram.streaming: true` (streams) and Discord with `display.platforms.discord.streaming: false` (does not). So after enabling streaming, Telegram streams out of the box and Discord stays on whole-message replies until you change its toggle. You can adjust these per-platform switches from the dashboard's **Channels** toggles or directly in `~/.hermes/config.yaml`.
+The master `streaming.enabled` switch is `false` by default — nothing streams until you flip it. Once enabled, streaming is decided **per platform**: Telegram ships with `display.platforms.telegram.streaming: true` (streams) and Discord with `display.platforms.discord.streaming: false` (does not). So after enabling streaming, Telegram streams out of the box and Discord stays on whole-message replies until you change its toggle. You can adjust these per-platform switches from the dashboard's **Channels** toggles or directly in `~/.fulilian/config.yaml`.
 :::
 
 ## Group Chat Session Isolation
@@ -2189,17 +2189,17 @@ is opened. Opening, resuming or reconnecting to a chat costs nothing until you
 send a message, so idle desktop tabs (and the background resumes a flaky
 websocket triggers) cannot starve the messaging gateway that shares this cap.
 
-When the cap is reached, Hermes returns a direct limit message naming which
+When the cap is reached, Fulilian returns a direct limit message naming which
 surfaces hold the slots. Existing active sessions keep their normal behavior.
-Run `hermes status` to see the current slot usage and every holder.
+Run `fulilian status` to see the current slot usage and every holder.
 
-The canonical key is top-level `max_concurrent_sessions`. Hermes also accepts
+The canonical key is top-level `max_concurrent_sessions`. Fulilian also accepts
 `gateway.max_concurrent_sessions` as a fallback, but the top-level key wins when
 both are set.
 
-The cap is enforced with a local runtime lease file and is best-effort: Hermes
+The cap is enforced with a local runtime lease file and is best-effort: Fulilian
 fails open if the registry cannot be read or locked so users are not stranded.
-It is intended for a single host/profile runtime, not a shared `$HERMES_HOME`
+It is intended for a single host/profile runtime, not a shared `$FULILIAN_HOME`
 mounted across multiple machines.
 
 Control whether shared chats keep one conversation per room or one conversation per participant:
@@ -2209,15 +2209,15 @@ group_sessions_per_user: true  # true = per-user isolation in groups/channels, f
 ```
 
 - `true` is the default and recommended setting. In Discord channels, Telegram groups, Slack channels, and similar shared contexts, each sender gets their own session when the platform provides a user ID.
-- `false` reverts to the old shared-room behavior. That can be useful if you explicitly want Hermes to treat a channel like one collaborative conversation, but it also means users share context, token costs, and interrupt state.
-- Direct messages are unaffected. Hermes still keys DMs by chat/DM ID as usual.
+- `false` reverts to the old shared-room behavior. That can be useful if you explicitly want Fulilian to treat a channel like one collaborative conversation, but it also means users share context, token costs, and interrupt state.
+- Direct messages are unaffected. Fulilian still keys DMs by chat/DM ID as usual.
 - Threads stay isolated from their parent channel either way; with `true`, each participant also gets their own session inside the thread.
 
 For the behavior details and examples, see [Sessions](/user-guide/sessions) and the [Discord guide](/user-guide/messaging/discord).
 
 ## Unauthorized DM Behavior
 
-Control what Hermes does when an unknown user sends a direct message:
+Control what Fulilian does when an unknown user sends a direct message:
 
 ```yaml
 unauthorized_dm_behavior: pair
@@ -2226,7 +2226,7 @@ whatsapp:
   unauthorized_dm_behavior: ignore
 ```
 
-- `pair` is the default for chat-style DM platforms. Hermes denies access, but replies with a one-time pairing code in DMs.
+- `pair` is the default for chat-style DM platforms. Fulilian denies access, but replies with a one-time pairing code in DMs.
 - `ignore` silently drops unauthorized DMs.
 - Email defaults to `ignore` unless `platforms.email.unauthorized_dm_behavior: pair` is set, because inboxes can contain unrelated unread mail.
 - Platform sections override the global default, so you can keep pairing enabled broadly while making one platform quieter.
@@ -2239,13 +2239,13 @@ Define custom commands that either run shell commands without invoking the LLM, 
 quick_commands:
   status:
     type: exec
-    command: systemctl status hermes-agent
+    command: systemctl status fulilian-agent
   disk:
     type: exec
     command: df -h /
   update:
     type: exec
-    command: cd ~/.hermes/hermes-agent && git pull && uv pip install -e .
+    command: cd ~/.fulilian/fulilian-agent && git pull && uv pip install -e .
   gpu:
     type: exec
     command: nvidia-smi --query-gpu=name,utilization.gpu,memory.used,memory.total --format=csv,noheader
@@ -2289,13 +2289,13 @@ code_execution:
 **`mode`** controls the working directory and Python interpreter for scripts:
 
 - **`project`** (default) — scripts run in the session's working directory with the active virtualenv/conda env's python. Project deps (`pandas`, `torch`, project packages) and relative paths (`.env`, `./data.csv`) resolve naturally, matching what `terminal()` sees.
-- **`strict`** — scripts run in a temp staging directory with `sys.executable` (Hermes's own python). Maximum reproducibility, but project deps and relative paths won't resolve.
+- **`strict`** — scripts run in a temp staging directory with `sys.executable` (Fulilian's own python). Maximum reproducibility, but project deps and relative paths won't resolve.
 
 Environment scrubbing (strips `*_API_KEY`, `*_TOKEN`, `*_SECRET`, `*_PASSWORD`, `*_CREDENTIAL`, `*_PASSWD`, `*_AUTH`) and the tool whitelist apply identically in both modes — switching mode does not change the security posture.
 
 ## Web Search Backends
 
-The `web_search` and `web_extract` tools support five backend providers. Configure the backend in `config.yaml` or via `hermes tools`:
+The `web_search` and `web_extract` tools support five backend providers. Configure the backend in `config.yaml` or via `fulilian tools`:
 
 ```yaml
 web:
@@ -2315,7 +2315,7 @@ web:
   # call attempts the chosen backend again (never sticky).
   keyless_rescue: true
 
-  # Pin Exa/Parallel to a tier (set by the hermes tools Free/Paid rows).
+  # Pin Exa/Parallel to a tier (set by the fulilian tools Free/Paid rows).
   # free = always the anonymous endpoint; paid = always the keyed SDK path;
   # unset = auto (key present -> paid, otherwise free).
   provider_tier:
@@ -2331,7 +2331,7 @@ web:
 | **Tavily** | `TAVILY_API_KEY` (optional — keyless when selected) | ✔ | ✔ |
 | **Exa** | `EXA_API_KEY` (optional — keyless free tier) | ✔ | ✔ |
 
-**Backend selection:** The runtime always uses the stored `web.backend` selection (set via `hermes tools`; `nous` routes through the managed Tool Gateway). Only if no web backend has ever been selected is one auto-detected from available API keys: if only `SEARXNG_URL` is set, SearXNG is used; if only `EXA_API_KEY` is set, Exa; if only `TAVILY_API_KEY` is set, Tavily; if only `PARALLEL_API_KEY` is set, Parallel; if only `KEENABLE_API_KEY` is set, Keenable. With **no selection and no credentials at all**, requests rotate round-robin across the keyless free-tier ring (Exa / Parallel / Tavily / Firecrawl / Keenable) with automatic next-in-line failover on rate limits — see the [Web Search guide](/user-guide/features/web-search) for details. Once a selection exists, adding a key to `.env` does not change the route. Selecting Tavily, Firecrawl, or Keenable in `hermes tools` also works without a key.
+**Backend selection:** The runtime always uses the stored `web.backend` selection (set via `fulilian tools`; `nous` routes through the managed Tool Gateway). Only if no web backend has ever been selected is one auto-detected from available API keys: if only `SEARXNG_URL` is set, SearXNG is used; if only `EXA_API_KEY` is set, Exa; if only `TAVILY_API_KEY` is set, Tavily; if only `PARALLEL_API_KEY` is set, Parallel; if only `KEENABLE_API_KEY` is set, Keenable. With **no selection and no credentials at all**, requests rotate round-robin across the keyless free-tier ring (Exa / Parallel / Tavily / Firecrawl / Keenable) with automatic next-in-line failover on rate limits — see the [Web Search guide](/user-guide/features/web-search) for details. Once a selection exists, adding a key to `.env` does not change the route. Selecting Tavily, Firecrawl, or Keenable in `fulilian tools` also works without a key.
 
 **SearXNG** is a free, self-hosted, privacy-respecting metasearch engine that queries 70+ search engines. No API key needed — just set `SEARXNG_URL` to your instance (e.g., `http://localhost:8080`). SearXNG is search-only; `web_extract` requires a separate extract provider (set `web.extract_backend`). See the [Web Search setup guide](/user-guide/features/web-search) for Docker setup instructions.
 
@@ -2339,7 +2339,7 @@ web:
 
 **Parallel search modes:** Set `PARALLEL_SEARCH_MODE` to control search behavior — `fast`, `one-shot`, or `agentic` (default: `agentic`).
 
-**Exa:** Set `EXA_API_KEY` in `~/.hermes/.env`. Supports `category` filtering (`company`, `research paper`, `news`, `people`, `personal site`, `pdf`) and domain/date filters.
+**Exa:** Set `EXA_API_KEY` in `~/.fulilian/.env`. Supports `category` filtering (`company`, `research paper`, `news`, `people`, `personal site`, `pdf`) and domain/date filters.
 
 ## Browser
 
@@ -2349,8 +2349,8 @@ Configure browser automation behavior:
 browser:
   inactivity_timeout: 120        # Seconds before auto-closing idle sessions
   command_timeout: 30             # Timeout in seconds for browser commands (screenshot, navigate, etc.)
-  record_sessions: false         # Auto-record browser sessions as WebM videos to ~/.hermes/browser_recordings/
-  # Optional CDP override — when set, Hermes attaches directly to your own
+  record_sessions: false         # Auto-record browser sessions as WebM videos to ~/.fulilian/browser_recordings/
+  # Optional CDP override — when set, Fulilian attaches directly to your own
   # Chromium-family browser (via /browser connect) rather than starting a headless browser.
   cdp_url: ""
   # Dialog supervisor — controls how native JS dialogs (alert / confirm / prompt)
@@ -2361,7 +2361,7 @@ browser:
   camofox:
     managed_persistence: false   # When true, Camofox sessions persist cookies/logins across restarts
     user_id: ""                  # Optional externally managed Camofox userId
-    session_key: ""              # Optional session key sent when Hermes creates a tab
+    session_key: ""              # Optional session key sent when Fulilian creates a tab
     adopt_existing_tab: false    # Reuse an existing tab for this identity before creating one
 ```
 
@@ -2436,7 +2436,7 @@ security:
       - "admin.example.com"
       - "*.local"
     shared_files:                # Load additional rules from external files
-      - "/etc/hermes/blocked-sites.txt"
+      - "/etc/fulilian/blocked-sites.txt"
 ```
 
 When enabled, any URL matching a blocked domain pattern is rejected before the web or browser tool executes. This applies to `web_search`, `web_extract`, `browser_navigate`, and any tool that accesses URLs.
@@ -2452,7 +2452,7 @@ The policy is cached for 30 seconds, so config changes take effect quickly witho
 
 ## Smart Approvals
 
-Control how Hermes handles potentially dangerous commands:
+Control how Fulilian handles potentially dangerous commands:
 
 ```yaml
 approvals:
@@ -2463,7 +2463,7 @@ approvals:
 |------|----------|
 | `smart` (default) | Use an auxiliary LLM to assess whether a flagged command is actually dangerous. Low-risk commands are auto-approved for that command only. Genuinely risky commands are denied; uncertain decisions escalate to the user. |
 | `manual` | Prompt the user before executing any flagged command. In the CLI, shows an interactive approval dialog. In messaging, queues a pending approval request. |
-| `off` | Skip all approval checks. Equivalent to `HERMES_YOLO_MODE=true`. **Use with caution.** |
+| `off` | Skip all approval checks. Equivalent to `FULILIAN_YOLO_MODE=true`. **Use with caution.** |
 
 Smart mode is particularly useful for reducing approval fatigue — it lets the agent work more autonomously on safe operations while still catching genuinely destructive commands.
 
@@ -2511,7 +2511,7 @@ Automatic filesystem snapshots before destructive file operations. See the [Chec
 
 ```yaml
 checkpoints:
-  enabled: false                 # Enable automatic checkpoints (also: hermes chat --checkpoints). Default: false (opt-in).
+  enabled: false                 # Enable automatic checkpoints (also: fulilian chat --checkpoints). Default: false (opt-in).
   max_snapshots: 20              # Max checkpoints to keep per directory (default: 20)
 ```
 
@@ -2535,9 +2535,9 @@ delegation:
 
 **Subagent provider:model override:** By default, subagents inherit the parent agent's provider and model. Set `delegation.provider` and `delegation.model` to route subagents to a different provider:model pair — e.g., use a cheap/fast model for narrowly-scoped subtasks while your primary agent runs an expensive reasoning model.
 
-**Direct endpoint override:** If you want the obvious custom-endpoint path, set `delegation.base_url`, `delegation.api_key`, and `delegation.model`. That sends subagents directly to that OpenAI-compatible endpoint and takes precedence over `delegation.provider`. If `delegation.api_key` is omitted, Hermes falls back to `OPENAI_API_KEY` only.
+**Direct endpoint override:** If you want the obvious custom-endpoint path, set `delegation.base_url`, `delegation.api_key`, and `delegation.model`. That sends subagents directly to that OpenAI-compatible endpoint and takes precedence over `delegation.provider`. If `delegation.api_key` is omitted, Fulilian falls back to `OPENAI_API_KEY` only.
 
-**Wire protocol (`api_mode`):** Hermes auto-detects the wire protocol from `delegation.base_url` (e.g. paths ending in `/anthropic` → `anthropic_messages`; Codex / native Anthropic / Kimi-coding hostnames keep their existing detection). For endpoints the heuristic can't classify — for example Azure AI Foundry, MiniMax, Zhipu GLM, or LiteLLM proxies fronting an Anthropic-shaped backend — set `delegation.api_mode` explicitly to one of `chat_completions`, `codex_responses`, or `anthropic_messages`. Leave it empty (the default) to keep auto-detection.
+**Wire protocol (`api_mode`):** Fulilian auto-detects the wire protocol from `delegation.base_url` (e.g. paths ending in `/anthropic` → `anthropic_messages`; Codex / native Anthropic / Kimi-coding hostnames keep their existing detection). For endpoints the heuristic can't classify — for example Azure AI Foundry, MiniMax, Zhipu GLM, or LiteLLM proxies fronting an Anthropic-shaped backend — set `delegation.api_mode` explicitly to one of `chat_completions`, `codex_responses`, or `anthropic_messages`. Leave it empty (the default) to keep auto-detection.
 
 The delegation provider uses the same credential resolution as CLI/gateway startup. All configured providers are supported: `openrouter`, `nous`, `copilot`, `zai`, `kimi-coding`, `minimax`, `minimax-cn`. When a provider is set, the system automatically resolves the correct base URL, API key, and API mode — no manual credential wiring needed.
 
@@ -2558,22 +2558,22 @@ agent:
 
 ## Context Files (SOUL.md, AGENTS.md)
 
-Hermes uses two different context scopes:
+Fulilian uses two different context scopes:
 
 | File | Purpose | Scope |
 |------|---------|-------|
-| `SOUL.md` | **Primary agent identity** — defines who the agent is (slot #1 in the system prompt) | `~/.hermes/SOUL.md` or `$HERMES_HOME/SOUL.md` |
-| `.hermes.md` / `HERMES.md` | Project-specific instructions (highest priority) | Walks to git root |
+| `SOUL.md` | **Primary agent identity** — defines who the agent is (slot #1 in the system prompt) | `~/.fulilian/SOUL.md` or `$FULILIAN_HOME/SOUL.md` |
+| `.fulilian.md` / `FULILIAN.md` | Project-specific instructions (highest priority) | Walks to git root |
 | `AGENTS.md` | Project-specific instructions, coding conventions | Recursive directory walk |
 | `CLAUDE.md` | Claude Code context files (also detected) | Working directory only |
 | `.cursorrules` | Cursor IDE rules (also detected) | Working directory only |
 | `.cursor/rules/*.mdc` | Cursor rule files (also detected) | Working directory only |
 
 - **SOUL.md** is the agent's primary identity. It occupies slot #1 in the system prompt, completely replacing the built-in default identity. Edit it to fully customize who the agent is.
-- If SOUL.md is missing, empty, or cannot be loaded, Hermes falls back to a built-in default identity.
-- **Project context files use a priority system** — only ONE type is loaded (first match wins): `.hermes.md` → `AGENTS.md` → `CLAUDE.md` → `.cursorrules`. SOUL.md is always loaded independently.
+- If SOUL.md is missing, empty, or cannot be loaded, Fulilian falls back to a built-in default identity.
+- **Project context files use a priority system** — only ONE type is loaded (first match wins): `.fulilian.md` → `AGENTS.md` → `CLAUDE.md` → `.cursorrules`. SOUL.md is always loaded independently.
 - **AGENTS.md** is hierarchical: if subdirectories also have AGENTS.md, all are combined.
-- Hermes automatically seeds a default `SOUL.md` if one does not already exist.
+- Fulilian automatically seeds a default `SOUL.md` if one does not already exist.
 - All loaded context files are capped at `context_file_max_chars` characters (default 20,000) with smart truncation.
 
 See also:
@@ -2584,18 +2584,18 @@ See also:
 
 | Context | Default |
 |---------|---------|
-| **CLI (`hermes`)** | Current directory where you run the command |
-| **Messaging gateway** | `terminal.cwd` from `~/.hermes/config.yaml`; if unset, home directory `~` |
+| **CLI (`fulilian`)** | Current directory where you run the command |
+| **Messaging gateway** | `terminal.cwd` from `~/.fulilian/config.yaml`; if unset, home directory `~` |
 | **Docker / Singularity / Modal / SSH** | User's home directory inside the container or remote machine |
 
 Override the working directory:
 ```yaml
-# In ~/.hermes/config.yaml:
+# In ~/.fulilian/config.yaml:
 terminal:
   cwd: /home/myuser/projects
 ```
 
-`MESSAGING_CWD` and direct `TERMINAL_CWD` entries in `~/.hermes/.env` are legacy compatibility fallbacks. New configurations should use `terminal.cwd`.
+`MESSAGING_CWD` and direct `TERMINAL_CWD` entries in `~/.fulilian/.env` are legacy compatibility fallbacks. New configurations should use `terminal.cwd`.
 
 ## Network
 
@@ -2619,7 +2619,7 @@ onboarding:
 ```
 
 - `profile_build` — controls the profile-build path offered on the very first gateway message ever. `"ask"` (default) offers to build a user profile; the offer is **opt-in and consent-gated** — the agent asks before any lookup and never reads connected accounts silently. `"off"` shows a plain intro only. The offer fires at most once.
-- `seen` — internal state. Hermes latches each shown hint here so it never fires again; the profile-build offer is also recorded here once shown. Don't hand-edit it — wipe the whole `onboarding` section if you want to re-see all hints.
+- `seen` — internal state. Fulilian latches each shown hint here so it never fires again; the profile-build offer is also recorded here once shown. Don't hand-edit it — wipe the whole `onboarding` section if you want to re-see all hints.
 
 ## Dashboard
 
@@ -2629,7 +2629,7 @@ Configuration for the [web dashboard](/user-guide/features/web-dashboard) — vi
 dashboard:
   theme: "default"            # "default" | "midnight" | "ember" | "mono" | "cyberpunk" | "rose"
   show_token_analytics: false # Re-enable the (local-estimate-only) token/cost analytics surfaces
-  public_url: ""              # Full public authority for OAuth redirect_uri (env: HERMES_DASHBOARD_PUBLIC_URL)
+  public_url: ""              # Full public authority for OAuth redirect_uri (env: FULILIAN_DASHBOARD_PUBLIC_URL)
   trusted_proxies: []         # Proxy IPs/CIDRs allowed to supply X-Forwarded-* headers
   oauth:                      # Portal OAuth gate (engaged with --host and not --insecure)
     client_id: ""             # agent:{instance_id} — Portal provisions this
@@ -2653,7 +2653,7 @@ dashboard:
 - `show_token_analytics` — off by default. The Analytics page and token/cost figures are a **local lower-bound estimate** (they exclude auxiliary calls, retries, fallbacks, and cache writes), so they can read far below the provider bill. Set `true` only if you understand they're not billing.
 - `public_url` — when set, this is the complete authority (scheme + host + optional path prefix) the OAuth `redirect_uri` is built from. Set it for deploys behind reverse proxies that don't reliably forward `X-Forwarded-*` headers. Leave empty to use proxy-header reconstruction.
 - `trusted_proxies` — IP addresses or bounded CIDR networks allowed to supply `X-Forwarded-Proto` and `X-Forwarded-For`. Loopback remains trusted automatically. Configure this when the TLS reverse proxy connects from another container or host. Prefer the proxy's exact IP; use a small dedicated network only when its address is dynamic. Wildcards and `/0` networks are rejected.
-- `oauth` / `basic_auth` / `drain_auth` — auth provider config read by the bundled dashboard-auth plugins. The drain secret itself is **not** set here; it's provisioned via the `HERMES_DASHBOARD_DRAIN_SECRET` env var. See [Web Dashboard](/user-guide/features/web-dashboard) for full auth setup.
+- `oauth` / `basic_auth` / `drain_auth` — auth provider config read by the bundled dashboard-auth plugins. The drain secret itself is **not** set here; it's provisioned via the `FULILIAN_DASHBOARD_DRAIN_SECRET` env var. See [Web Dashboard](/user-guide/features/web-dashboard) for full auth setup.
 - `ws_ping_interval` / `ws_ping_timeout` — WebSocket keepalive tuning for non-loopback binds (loopback connections never ping). Raise these on high-latency links (Tailscale, distant SSH tunnels) where the 20 s defaults can manufacture spurious 1006 disconnects.
-- `ws_orphan_reap_grace_s` — how long a WS-detached session waits before the orphan reaper collects it. Raise alongside the keepalive values if clients reconnect slowly. (`HERMES_TUI_WS_ORPHAN_REAP_GRACE_S` remains as an internal override.)
-- `startup_orphan_sweep` (default `true`) — the WS-orphan reap timer above is in-process, so a gateway restart (update, crash, systemd) before it fires leaves the session row open forever — phantom "active" work in `/resume` and dashboards. On every gateway boot — both the stdio TUI (`entry.main`) and the desktop/dashboard WebSocket sidecar (`handle_ws`) — rows with source `tui` / `desktop` / `subagent` whose start time **and** newest message are both older than the session TTL (`HERMES_TUI_SESSION_TTL_S`, default 6 hours) are closed with `end_reason: startup_orphan_reap`. Messaging-platform sessions (Telegram, Discord, …) are never touched, live in-memory sessions (a client that already resumed) are excluded, and swept sessions remain resumable.
+- `ws_orphan_reap_grace_s` — how long a WS-detached session waits before the orphan reaper collects it. Raise alongside the keepalive values if clients reconnect slowly. (`FULILIAN_TUI_WS_ORPHAN_REAP_GRACE_S` remains as an internal override.)
+- `startup_orphan_sweep` (default `true`) — the WS-orphan reap timer above is in-process, so a gateway restart (update, crash, systemd) before it fires leaves the session row open forever — phantom "active" work in `/resume` and dashboards. On every gateway boot — both the stdio TUI (`entry.main`) and the desktop/dashboard WebSocket sidecar (`handle_ws`) — rows with source `tui` / `desktop` / `subagent` whose start time **and** newest message are both older than the session TTL (`FULILIAN_TUI_SESSION_TTL_S`, default 6 hours) are closed with `end_reason: startup_orphan_reap`. Messaging-platform sessions (Telegram, Discord, …) are never touched, live in-memory sessions (a client that already resumed) are excluded, and swept sessions remain resumable.

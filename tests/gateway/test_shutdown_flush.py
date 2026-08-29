@@ -125,7 +125,7 @@ def test_recover_closes_owned_db_when_unexpected_exception_escapes(
             self.closed = True
 
     db = InterruptingDB()
-    monkeypatch.setattr("hermes_state.SessionDB", lambda: db)
+    monkeypatch.setattr("fulilian_state.SessionDB", lambda: db)
 
     with pytest.raises(KeyboardInterrupt):
         recover_pending_to_db()
@@ -149,19 +149,19 @@ def test_serialise_object_with_text():
     assert result["session_id"] == "sid"
 
 
-def test_get_flush_dir_uses_get_hermes_home(tmp_path, monkeypatch):
-    """Flush dir must use get_hermes_home(), not hardcoded Path.home()."""
+def test_get_flush_dir_uses_get_fulilian_home(tmp_path, monkeypatch):
+    """Flush dir must use get_fulilian_home(), not hardcoded Path.home()."""
     import gateway.shutdown_flush as mod
 
     captured = {}
 
-    def fake_get_hermes_home():
+    def fake_get_fulilian_home():
         from pathlib import Path
         captured["called"] = True
         return tmp_path
 
     monkeypatch.setattr(
-        "hermes_constants.get_hermes_home", fake_get_hermes_home
+        "fulilian_constants.get_fulilian_home", fake_get_fulilian_home
     )
     result = mod._get_flush_dir()
     assert captured.get("called") is True

@@ -19,11 +19,11 @@ import pytest
 
 
 @pytest.fixture()
-def hermes_home(tmp_path, monkeypatch):
-    home = tmp_path / ".hermes"
+def fulilian_home(tmp_path, monkeypatch):
+    home = tmp_path / ".fulilian"
     home.mkdir()
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setenv("HERMES_HOME", str(home))
+    monkeypatch.setenv("FULILIAN_HOME", str(home))
 
     from fulilian_cli import goals
 
@@ -33,12 +33,12 @@ def hermes_home(tmp_path, monkeypatch):
 
 
 @pytest.fixture()
-def server(hermes_home):
+def server(fulilian_home):
     with patch.dict(
         "sys.modules",
         {
-            "hermes_cli.env_loader": MagicMock(),
-            "hermes_cli.banner": MagicMock(),
+            "fulilian_cli.env_loader": MagicMock(),
+            "fulilian_cli.banner": MagicMock(),
         },
     ):
         mod = importlib.import_module("tui_gateway.server")

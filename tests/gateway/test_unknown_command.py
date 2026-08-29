@@ -137,7 +137,7 @@ async def test_known_slash_command_not_flagged_as_unknown(monkeypatch):
 async def test_egress_slash_command_reports_proxy_status(monkeypatch):
     runner = _make_runner()
     monkeypatch.setattr(
-        "hermes_cli.proxy_cli.format_status_text",
+        "fulilian_cli.proxy_cli.format_status_text",
         lambda: "Egress proxy status\nEnabled: no",
     )
 

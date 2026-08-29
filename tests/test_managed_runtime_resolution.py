@@ -1,18 +1,18 @@
-"""Guard: Hermes-owned subprocesses must not resolve managed runtimes by bare PATH.
+"""Guard: Fulilian-owned subprocesses must not resolve managed runtimes by bare PATH.
 
-Hermes installs runtimes for itself — ``uv`` at ``$HERMES_HOME/bin/uv``, Node at
-``$HERMES_HOME/node``. Neither directory is on the ambient PATH of an arbitrary
-process, so ``shutil.which("uv")`` / ``shutil.which("node")`` in Hermes's own
+Fulilian installs runtimes for itself — ``uv`` at ``$FULILIAN_HOME/bin/uv``, Node at
+``$FULILIAN_HOME/node``. Neither directory is on the ambient PATH of an arbitrary
+process, so ``shutil.which("uv")`` / ``shutil.which("node")`` in Fulilian's own
 code has two failure modes:
 
 * the managed runtime is invisible, so the caller reports "not installed" or
   degrades to a slower tier on a machine that has exactly what it needed; and
-* when a system copy also exists, the one Hermes does not own wins — which is
+* when a system copy also exists, the one Fulilian does not own wins — which is
   how a generated systemd unit or launchd plist can bake a system Node in and
   keep resolving it across reboots.
 
 The fix per call site is one of ``find_node_executable()``,
-``iter_hermes_node_dirs()``, ``resolve_uv()``, or ``ensure_uv()``. This test is
+``iter_fulilian_node_dirs()``, ``resolve_uv()``, or ``ensure_uv()``. This test is
 the ratchet that stops a new bare lookup from being added back.
 
 Reading source is normally banned (see AGENTS.md). It is the right tool here and
@@ -33,11 +33,11 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-# Runtimes Hermes provisions into HERMES_HOME and must therefore resolve
+# Runtimes Fulilian provisions into FULILIAN_HOME and must therefore resolve
 # through a managed-aware helper rather than PATH.
 _MANAGED_COMMANDS = frozenset({"uv", "node", "npm", "npx"})
 
-# Directories that are not Hermes-owned subprocess code: plugins ship their own
+# Directories that are not Fulilian-owned subprocess code: plugins ship their own
 # resolution policy, tests assert against PATH deliberately, and skills/scripts
 # run as standalone user-invoked programs.
 _EXEMPT_DIRS = (
@@ -63,32 +63,32 @@ _ALLOWED: dict[tuple[str, str], str] = {
         "can only run what is on that subshell's PATH, which local.py populates "
         "with the managed dirs — so PATH is the correct question to ask here."
     ),
-    ("hermes_cli/update_cmd.py", "uv"): (
+    ("fulilian_cli/update_cmd.py", "uv"): (
         "Termux fallback: a pkg-installed uv lands on PATH but not in the "
         "managed bin dir, and it is checked only after resolve_uv() misses."
     ),
-    ("hermes_cli/update_cmd.py", "npm"): (
+    ("fulilian_cli/update_cmd.py", "npm"): (
         "WSL diagnostic: deliberately inspects what PATH resolves so it can "
         "warn that the only reachable npm is the Windows one."
     ),
     ("tools/lazy_deps.py", "uv"): (
         "Fallback after resolve_uv(), plus the except-branch for the "
-        "hermes_cli import guard."
+        "fulilian_cli import guard."
     ),
     ("tools/browser_use_cli.py", "uv"): (
         "install_cli()'s fallback after ensure_uv() misses — a user-installed "
         "uv on PATH is a legitimate last rung before giving up with install "
         "guidance."
     ),
-    ("hermes_cli/gateway.py", "node"): (
+    ("fulilian_cli/gateway.py", "node"): (
         "Fallback rung of _append_node_dir_for_service(), after the managed "
-        "dirs from iter_hermes_node_dirs() are already appended."
+        "dirs from iter_fulilian_node_dirs() are already appended."
     ),
-    ("hermes_cli/main.py", "node"): (
+    ("fulilian_cli/main.py", "node"): (
         "_ensure_tui_node()'s idempotence gate: the question really is 'is "
         "node already discoverable on PATH', before bootstrapping one."
     ),
-    ("hermes_cli/main.py", "npm"): (
+    ("fulilian_cli/main.py", "npm"): (
         "Same _ensure_tui_node() gate as node."
     ),
     ("tools/browser_tool.py", "npx"): (
@@ -127,7 +127,7 @@ def _source_files() -> list[Path]:
         if rel.parts and rel.parts[0] in _EXEMPT_DIRS:
             continue
         # Skip packaging copies of the source tree (sdist extractions like
-        # hermes_agent-0.20.5/, build/ and *.egg-info dirs). CI jobs that
+        # fulilian_agent-0.20.5/, build/ and *.egg-info dirs). CI jobs that
         # build the wheel leave one in the workspace; scanning it re-finds
         # every already-exempted call site under a versioned path prefix
         # that can never match an _ALLOWED key, failing the guard on code
@@ -180,15 +180,15 @@ def test_no_unreviewed_bare_managed_runtime_lookups():
     ]
 
     assert not unexpected, (
-        "Bare PATH lookup for a Hermes-managed runtime.\n\n"
+        "Bare PATH lookup for a Fulilian-managed runtime.\n\n"
         + "\n".join(f"  {rel}:{lineno}  which({cmd!r})" for rel, cmd, lineno in unexpected)
-        + "\n\n$HERMES_HOME/bin (uv) and $HERMES_HOME/node are not on an "
+        + "\n\n$FULILIAN_HOME/bin (uv) and $FULILIAN_HOME/node are not on an "
         "arbitrary process's PATH, so this resolves a system copy — or nothing "
         "— on an install that has a managed one.\n"
         "Use instead:\n"
         "  uv       -> managed_uv.resolve_uv() (lookup) or ensure_uv() (may install)\n"
-        "  node/npm -> hermes_constants.find_node_executable()\n"
-        "  PATH env -> hermes_constants.iter_hermes_node_dirs()\n"
+        "  node/npm -> fulilian_constants.find_node_executable()\n"
+        "  PATH env -> fulilian_constants.iter_fulilian_node_dirs()\n"
         "If PATH really is the right question, add the site to _ALLOWED with a "
         "reason."
     )
@@ -210,16 +210,16 @@ def test_allowlist_has_no_stale_entries():
     "helper",
     [
         "find_node_executable",
-        "find_hermes_node_executable",
-        "iter_hermes_node_dirs",
-        "with_hermes_node_path",
+        "find_fulilian_node_executable",
+        "iter_fulilian_node_dirs",
+        "with_fulilian_node_path",
     ],
 )
 def test_managed_node_helpers_exist(helper):
     """The alternatives this guard points contributors at must be importable."""
     import fulilian_constants
 
-    assert callable(getattr(hermes_constants, helper))
+    assert callable(getattr(fulilian_constants, helper))
 
 
 def test_managed_uv_helpers_exist():

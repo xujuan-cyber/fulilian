@@ -658,13 +658,13 @@ def _submit_fal_video_request(endpoint: str, arguments: Dict[str, Any]):
                 f"(HTTP {status}). This model may not yet be enabled on "
                 f"the Nous Portal's FAL proxy. Either:\n"
                 f"  • Set FAL_KEY in your environment to use FAL.ai directly, or\n"
-                f"  • Pick a different model via `hermes tools` → Video Generation."
+                f"  • Pick a different model via `fulilian tools` → Video Generation."
             ) from exc
         raise
 
 
 def _check_fal_video_available() -> bool:
-    """True if the FAL video backend selected via `hermes tools` (or, on a
+    """True if the FAL video backend selected via `fulilian tools` (or, on a
     never-configured install, any FAL backend) is reachable.
 
     Never raises — a stored-but-broken selection reports False here; the
@@ -865,8 +865,8 @@ class FALVideoGenProvider(VideoGenProvider):
             return error_response(
                 error=(
                     "No FAL backend available. Either set FAL_KEY "
-                    "(run `hermes tools` → Video Generation → FAL to configure) "
-                    "or sign in to Nous (`hermes setup`) for managed gateway access."
+                    "(run `fulilian tools` → Video Generation → FAL to configure) "
+                    "or sign in to Nous (`fulilian setup`) for managed gateway access."
                 ),
                 error_type="auth_required",
                 provider="fal",
@@ -896,7 +896,7 @@ class FALVideoGenProvider(VideoGenProvider):
                     error=(
                         f"FAL family {family_id} has no image-to-video "
                         f"endpoint. Pick a family with image-to-video support "
-                        f"via `hermes tools` → Video Generation."
+                        f"via `fulilian tools` → Video Generation."
                     ),
                     error_type="modality_unsupported",
                     provider="fal", model=family_id, prompt=prompt,

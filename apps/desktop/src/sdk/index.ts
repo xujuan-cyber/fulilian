@@ -1,12 +1,12 @@
 /**
- * @hermes/plugin-sdk — THE plugin language. The vscode-module model: plugin
+ * @fulilian/plugin-sdk — THE plugin language. The vscode-module model: plugin
  * authors import exactly one module and get everything — they never touch
  * `@/…` internals (lint-fenced) and never need codebase access.
  *
  * Two delivery modes, one surface:
  *  - bundled (`src/plugins/<name>/`): the import resolves here via alias;
  *  - runtime-fetched (plugin host, next phase): the loader injects this same
- *    object as `window.__HERMES_PLUGIN_SDK__` and maps the import to it, so a
+ *    object as `window.__FULILIAN_PLUGIN_SDK__` and maps the import to it, so a
  *    published plugin builds against the types with the SDK marked external.
  *
  * Capability tiers (WoW-style):
@@ -41,7 +41,7 @@ import {
 import { onGatewayEvent } from '@/contrib/events'
 import { registry } from '@/contrib/registry'
 import type { WorkspaceMode } from '@/contrib/types'
-import { deleteProfile, getLogs, getStatus, hermesApi, type HermesGateway } from '@/hermes'
+import { deleteProfile, getLogs, getStatus, fulilianApi, type FulilianGateway } from '@/fulilian'
 import {
   $gateway,
   activeGatewayConnectionId,
@@ -95,7 +95,7 @@ import {
   sessionTileDelegate
 } from '@/store/session-states'
 import { runGatewayRestart } from '@/store/system-actions'
-import type { PaginatedSessions, UsageStats } from '@/types/hermes'
+import type { PaginatedSessions, UsageStats } from '@/types/fulilian'
 
 import { planPluginOpenSession } from './plugin-open-session-plan'
 
@@ -196,7 +196,7 @@ export interface PluginProfileRoute {
   mode: 'local' | 'remote'
   /** Desktop profile used to select the connection route. */
   profile: string
-  /** Backend Hermes profile served by that route. */
+  /** Backend Fulilian profile served by that route. */
   targetProfile: string
 }
 
@@ -240,7 +240,7 @@ async function requestPluginProfile<T>(
     return requestGatewayForAgent<T>(route.connectionId, route.profile, method, params)
   }
 
-  const getAgentRoster = window.hermesDesktop?.getAgentRoster
+  const getAgentRoster = window.fulilianDesktop?.getAgentRoster
 
   if (!getAgentRoster) {
     return requestGatewayForProfile<T>(route, method, params)
@@ -268,7 +268,7 @@ async function requestPluginProfile<T>(
  *  no longer authority to touch that backend, even when its labels still look
  *  identical. */
 async function pluginRouteStillRegistered(route: PluginProfileRoute): Promise<boolean> {
-  const getProfileRoutes = window.hermesDesktop?.getProfileRoutes
+  const getProfileRoutes = window.fulilianDesktop?.getProfileRoutes
 
   if (!getProfileRoutes) {
     return false
@@ -511,7 +511,7 @@ function waitForFocusedSessionHydration({
 
 // Wait for a profile switch, but never longer than the wake budget.
 //
-// ensureGatewayProfile awaits the store's dial, and HermesGateway.connect() has
+// ensureGatewayProfile awaits the store's dial, and FulilianGateway.connect() has
 // no dial timeout of its own: a backend that accepts the socket and then never
 // completes the handshake leaves this promise pending for the life of the
 // window. That is not merely a slow open. waitForFocusedSessionHydration arms
@@ -746,10 +746,10 @@ export const host = {
   /** The registered connection list (labels, kinds, primary) — token bytes
    *  never included. Rejects on Desktop builds without the registry. */
   connections: async () => {
-    const bridge = window.hermesDesktop?.connections
+    const bridge = window.fulilianDesktop?.connections
 
     if (!bridge) {
-      throw new Error('This Desktop build has no connection registry. Update Hermes Desktop.')
+      throw new Error('This Desktop build has no connection registry. Update Fulilian Desktop.')
     }
 
     const registryPayload = await bridge.list()
@@ -763,10 +763,10 @@ export const host = {
    *  duplicates. Sources that are unreachable (or ssh connect-on-demand)
    *  appear in `sources` with an error instead of failing the call. */
   agents: async () => {
-    const roster = window.hermesDesktop?.getAgentRoster
+    const roster = window.fulilianDesktop?.getAgentRoster
 
     if (!roster) {
-      throw new Error('This Desktop build cannot enumerate multi-source agents. Update Hermes Desktop.')
+      throw new Error('This Desktop build cannot enumerate multi-source agents. Update Fulilian Desktop.')
     }
 
     return roster()
@@ -1167,7 +1167,7 @@ export const host = {
       const openTab = $newSessionTabAction.get()
 
       if (!openTab) {
-        notify({ kind: 'error', message: 'Update Hermes Desktop to open another Bot chat.' })
+        notify({ kind: 'error', message: 'Update Fulilian Desktop to open another Bot chat.' })
 
         return
       }
@@ -1217,11 +1217,11 @@ export const host = {
   /** Credential-free routes across every current registry source. Identity is
    *  the (connectionId, profile) pair; endpoint/auth details stay in Electron. */
   profileRoutes: async () => {
-    const desktop = window.hermesDesktop
+    const desktop = window.fulilianDesktop
     const getProfileRoutes = desktop?.getProfileRoutes
 
     if (!getProfileRoutes) {
-      throw new Error('Hermes Desktop connection routing unavailable')
+      throw new Error('Fulilian Desktop connection routing unavailable')
     }
 
     let profiles = $profiles.get()
@@ -1306,7 +1306,7 @@ export const host = {
       profile
     })
 
-    return hermesApi<PaginatedSessions>({
+    return fulilianApi<PaginatedSessions>({
       ...(route ? { connectionId: route.connectionId } : {}),
       path: `/api/profiles/sessions?${query.toString()}`,
       timeoutMs: 60_000
@@ -1330,7 +1330,7 @@ export const host = {
       throw new Error('Persisted session updates require a profile and session id')
     }
 
-    return hermesApi<{ ok: boolean; hidden: boolean }>({
+    return fulilianApi<{ ok: boolean; hidden: boolean }>({
       ...(route ? { connectionId: route.connectionId } : {}),
       path: `/api/sessions/${encodeURIComponent(options.sessionId)}`,
       method: 'PATCH',
@@ -1344,7 +1344,7 @@ export const host = {
     const gateway = $gateway.get()
 
     if (!gateway) {
-      throw new Error('Hermes gateway unavailable')
+      throw new Error('Fulilian gateway unavailable')
     }
 
     return gateway.request<T>(method, params)
@@ -1352,10 +1352,10 @@ export const host = {
 
   /** The LIVE gateway instance for the active profile (null before the first
    *  socket opens). Most plugins want `host.request`; this exists for SDK
-   *  components that take a `HermesGateway` prop directly (e.g. `McpTab`),
+   *  components that take a `FulilianGateway` prop directly (e.g. `McpTab`),
    *  which need the instance, not just a JSON-RPC door. Re-read per use — the
    *  active instance changes on a profile swap. */
-  getGateway: (): HermesGateway | null => $gateway.get()
+  getGateway: (): FulilianGateway | null => $gateway.get()
 }
 
 // -- react bridge -------------------------------------------------------------
@@ -1470,7 +1470,7 @@ export { Textarea } from '@/components/ui/textarea'
 export { Tip, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 export type { GatewayEventListener } from '@/contrib/events'
 export type {
-  HermesPlugin,
+  FulilianPlugin,
   PluginContext,
   PluginContribution,
   PluginNativeNotificationInput,
@@ -1491,7 +1491,7 @@ export { Contribute, type ContributeProps } from '@/contrib/react/contribute'
 export type { Contribution } from '@/contrib/types'
 /** The live gateway instance type — for typing the `gateway` prop `McpTab`
  *  takes; obtain the instance from `host.getGateway()`. */
-export type { HermesGateway } from '@/hermes'
+export type { FulilianGateway } from '@/fulilian'
 /** Grab-to-pan for overflow containers (boards, timelines, wide tables) —
  *  the shared scrub primitive; don't hand-roll drag-to-scroll. */
 export { type GrabScroll, useGrabScroll } from '@/hooks/use-grab-scroll'
@@ -1527,7 +1527,7 @@ export {
   type SurfaceModelSwitchConfirmOptions
 } from '@/lib/guarded-model-switch'
 export { triggerHaptic as haptic } from '@/lib/haptics'
-export type { HermesOpenTarget } from '@/lib/hermes-open-target'
+export type { FulilianOpenTarget } from '@/lib/fulilian-open-target'
 /** The app's lucide icon set (RefreshCw, LayoutDashboard, Activity, …). */
 export * as icons from '@/lib/icons'
 export { type KeybindContribution, KEYBINDS_AREA } from '@/lib/keybinds/actions'
@@ -1540,7 +1540,7 @@ export { profileColor, profileColorSoft } from '@/lib/profile-color'
  *  `ctx.socket` frame invalidating a query). Inside components keep using
  *  `useQueryClient`. */
 export { queryClient } from '@/lib/query-client'
-/** Hermes' reasoning levels + their compact labels, so a plugin surfacing a
+/** Fulilian' reasoning levels + their compact labels, so a plugin surfacing a
  *  thinking depth uses the same scale and spelling as the rest of the app. */
 export {
   DEFAULT_REASONING_EFFORT,
@@ -1598,7 +1598,7 @@ export { requestTheme } from '@/themes/request'
 export { retintTheme, themeHue } from '@/themes/retint'
 export type { DesktopTheme, DesktopThemeColors } from '@/themes/types'
 export { THEMES_AREA } from '@/themes/user-themes'
-export type { RpcEvent, StatusResponse } from '@/types/hermes'
+export type { RpcEvent, StatusResponse } from '@/types/fulilian'
 /** Subscribe a component to a `host.state` atom. */
 export { useStore as useValue } from '@nanostores/react'
 /** The app's data-fetching layer. Plugins share the ONE QueryClient mounted at

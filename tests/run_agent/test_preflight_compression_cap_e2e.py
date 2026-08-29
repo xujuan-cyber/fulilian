@@ -23,7 +23,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from hermes_state import SessionDB
+from fulilian_state import SessionDB
 from run_agent import AIAgent
 
 

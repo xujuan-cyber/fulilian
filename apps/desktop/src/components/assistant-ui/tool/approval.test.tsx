@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
-import type { HermesGateway } from '@/hermes'
+import type { FulilianGateway } from '@/fulilian'
 import { $gateway } from '@/store/gateway'
 import { $approvalRequest, clearAllPrompts, setApprovalRequest } from '@/store/prompts'
 import { $activeSessionId } from '@/store/session'
@@ -41,7 +41,7 @@ function setRequest(
 
 function mockGateway() {
   const request = vi.fn().mockResolvedValue({ resolved: true })
-  $gateway.set({ request } as unknown as HermesGateway)
+  $gateway.set({ request } as unknown as FulilianGateway)
 
   return request
 }
@@ -164,7 +164,7 @@ describe('PendingToolApproval', () => {
   })
 
   it('renders a floating fallback when no pending tool row is mounted', () => {
-    setRequest('rm /tmp/hermes_approval_test.txt')
+    setRequest('rm /tmp/fulilian_approval_test.txt')
     const { container } = render(<PendingApprovalFallback />)
     const fallback = container.querySelector('[data-slot="tool-approval-fallback"]')
 
@@ -174,7 +174,7 @@ describe('PendingToolApproval', () => {
   })
 
   it('hides the floating fallback once the inline approval bar is mounted', async () => {
-    setRequest('rm /tmp/hermes_approval_test.txt')
+    setRequest('rm /tmp/fulilian_approval_test.txt')
 
     const { container } = render(
       <>

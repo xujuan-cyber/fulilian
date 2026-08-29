@@ -137,7 +137,7 @@ class TestRunCleanupWiring(unittest.TestCase):
                     "agent.auxiliary_client.shutdown_cached_clients",
                     lambda *a, **k: None,
                 ),
-                patch("hermes_cli.plugins.invoke_hook", lambda *a, **k: None),
+                patch("fulilian_cli.plugins.invoke_hook", lambda *a, **k: None),
             ):
                 if extra_patches.get("terminals_raise"):
                     with patch.object(

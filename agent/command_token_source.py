@@ -17,7 +17,7 @@ rather than stored::
 This is the established pattern for agent tooling — Claude Code's
 ``apiKeyHelper``, the ``gcloud auth print-access-token`` / ``aws ecr
 get-login-password`` idiom, and vendor helpers such as ``databricks auth
-token`` all expose exactly this contract. Hermes already accepts a callable
+token`` all expose exactly this contract. Fulilian already accepts a callable
 API key on both wire clients (the Entra ID / Azure identity path) and invokes
 it per request, so nothing downstream changes: the token is simply always
 fresh. It is cached until shortly before expiry, so the command runs about
@@ -122,7 +122,7 @@ def _mint(command: str, label: str) -> tuple[str, Optional[float]]:
             # commonly print an absolute ISO 8601 deadline instead. Treating
             # that as "no TTL advertised" caches the token for the life of the
             # process, so every request 401s once the deadline passes.
-            # Imported lazily: hermes_cli.auth imports from agent.* at module
+            # Imported lazily: fulilian_cli.auth imports from agent.* at module
             # level, so a top-level import here would risk a cycle.
             from fulilian_cli.auth import _parse_iso_timestamp
 

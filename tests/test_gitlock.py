@@ -1,4 +1,4 @@
-"""Tests for hermes_cli.gitlock — stale git lock recovery + ancestry probe.
+"""Tests for fulilian_cli.gitlock — stale git lock recovery + ancestry probe.
 
 These cover the two failure modes that produced the false "update available"
 notification and the hard ``update --check`` failure after a crashed fetch on

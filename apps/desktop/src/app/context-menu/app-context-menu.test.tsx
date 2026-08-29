@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { registerTerminalContextMenu } from '@/app/right-sidebar/terminal/terminal-context-menu'
-import { ContextMenu, ContextMenuTrigger, HERMES_CONTEXT_MENU_TRIGGER_ATTR } from '@/components/ui/context-menu'
+import { ContextMenu, ContextMenuTrigger, FULILIAN_CONTEXT_MENU_TRIGGER_ATTR } from '@/components/ui/context-menu'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { formatCombo } from '@/lib/keybinds/combo'
 import { $previewTabs, closeRightRail } from '@/store/preview'
@@ -19,14 +19,14 @@ import {
 } from './store'
 import { resolveDomTarget } from './target'
 
-const desktopWindow = window as unknown as { hermesDesktop?: Window['hermesDesktop'] }
+const desktopWindow = window as unknown as { fulilianDesktop?: Window['fulilianDesktop'] }
 
-function installBridge(partial: Partial<Window['hermesDesktop']> = {}) {
-  desktopWindow.hermesDesktop = {
+function installBridge(partial: Partial<Window['fulilianDesktop']> = {}) {
+  desktopWindow.fulilianDesktop = {
     openExternal: vi.fn().mockResolvedValue(undefined),
     writeClipboard: vi.fn().mockResolvedValue(undefined),
     ...partial
-  } as unknown as Window['hermesDesktop']
+  } as unknown as Window['fulilianDesktop']
 }
 
 function mountMenu() {
@@ -53,7 +53,7 @@ afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
   document.body.innerHTML = ''
-  delete desktopWindow.hermesDesktop
+  delete desktopWindow.fulilianDesktop
 })
 
 describe('resolveDomTarget', () => {
@@ -124,8 +124,8 @@ describe('AppContextMenu', () => {
     const writeClipboard = vi.fn().mockResolvedValue(undefined)
 
     installBridge({
-      reachPreviewUrl: reachPreviewUrl as unknown as Window['hermesDesktop']['reachPreviewUrl'],
-      writeClipboard: writeClipboard as unknown as Window['hermesDesktop']['writeClipboard']
+      reachPreviewUrl: reachPreviewUrl as unknown as Window['fulilianDesktop']['reachPreviewUrl'],
+      writeClipboard: writeClipboard as unknown as Window['fulilianDesktop']['writeClipboard']
     })
     mountMenu()
     const host = attach('<a href="http://localhost:5173/">Dev</a>')
@@ -189,7 +189,7 @@ describe('AppContextMenu', () => {
   it('runs edit verbs after the menu closed, with focus back on the editable', async () => {
     const contextMenuEdit = vi.fn().mockResolvedValue(undefined)
 
-    installBridge({ contextMenuEdit: contextMenuEdit as unknown as Window['hermesDesktop']['contextMenuEdit'] })
+    installBridge({ contextMenuEdit: contextMenuEdit as unknown as Window['fulilianDesktop']['contextMenuEdit'] })
     mountMenu()
     const host = attach('<textarea>some draft text</textarea>')
     const textarea = host.querySelector('textarea')!
@@ -212,7 +212,7 @@ describe('AppContextMenu', () => {
     const contextMenuEdit = vi.fn().mockResolvedValue(undefined)
 
     installBridge({
-      contextMenuEdit: contextMenuEdit as unknown as Window['hermesDesktop']['contextMenuEdit'],
+      contextMenuEdit: contextMenuEdit as unknown as Window['fulilianDesktop']['contextMenuEdit'],
       readClipboard: vi.fn().mockResolvedValue('clipboard payload')
     })
     render(
@@ -284,7 +284,7 @@ describe('AppContextMenu', () => {
   it('select all stays inside the field and never reaches main', async () => {
     const contextMenuEdit = vi.fn().mockResolvedValue(undefined)
 
-    installBridge({ contextMenuEdit: contextMenuEdit as unknown as Window['hermesDesktop']['contextMenuEdit'] })
+    installBridge({ contextMenuEdit: contextMenuEdit as unknown as Window['fulilianDesktop']['contextMenuEdit'] })
     mountMenu()
     const host = attach('<textarea>alpha beta gamma</textarea>')
     const textarea = host.querySelector('textarea')!
@@ -343,7 +343,7 @@ describe('AppContextMenu', () => {
     // gray the item out; pasting on a truly empty clipboard is a no-op.
     const readClipboard = vi.fn().mockResolvedValue('')
 
-    installBridge({ readClipboard: readClipboard as unknown as Window['hermesDesktop']['readClipboard'] })
+    installBridge({ readClipboard: readClipboard as unknown as Window['fulilianDesktop']['readClipboard'] })
     mountMenu()
     const host = attach('<textarea>text</textarea>')
 
@@ -628,6 +628,6 @@ describe('ContextMenuTrigger asChild', () => {
     const footer = screen.getByText('bar')
 
     expect(footer.getAttribute('data-slot')).toBe('statusbar')
-    expect(footer.hasAttribute(HERMES_CONTEXT_MENU_TRIGGER_ATTR)).toBe(true)
+    expect(footer.hasAttribute(FULILIAN_CONTEXT_MENU_TRIGGER_ATTR)).toBe(true)
   })
 })

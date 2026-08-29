@@ -199,8 +199,8 @@ _index_lock = threading.Lock()
 
 def _cache_dir() -> Optional[Path]:
     try:
-        from fulilian_constants import get_hermes_dir
-        d = get_hermes_dir("cache/web", "web_cache")
+        from fulilian_constants import get_fulilian_dir
+        d = get_fulilian_dir("cache/web", "web_cache")
         d.mkdir(parents=True, exist_ok=True)
         return d
     except Exception:  # noqa: BLE001

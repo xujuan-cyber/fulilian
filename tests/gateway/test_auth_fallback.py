@@ -20,7 +20,7 @@ class TestResolveRuntimeAgentKwargsAuthFallback:
             "  model: meta-llama/llama-4-maverick\n"
         )
 
-        monkeypatch.setattr("gateway.run._hermes_home", tmp_path)
+        monkeypatch.setattr("gateway.run._fulilian_home", tmp_path)
 
         call_count = {"n": 0}
 
@@ -43,7 +43,7 @@ class TestResolveRuntimeAgentKwargsAuthFallback:
             }
 
         with patch(
-            "hermes_cli.runtime_provider.resolve_runtime_provider",
+            "fulilian_cli.runtime_provider.resolve_runtime_provider",
             side_effect=_mock_resolve,
         ):
             from gateway.run import _resolve_runtime_agent_kwargs

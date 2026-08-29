@@ -75,7 +75,7 @@ _VOICE_RESERVED_CTRL_CHARS = frozenset({"c", "d", "l"})
 
 # On macOS the classic CLI's prompt_toolkit bindings for copy / exit /
 # clear also claim ``a-c`` / ``a-d`` / ``a-l`` via the action-modifier
-# lookup, and hermes-ink reports Alt as ``key.meta`` on many terminals.
+# lookup, and fulilian-ink reports Alt as ``key.meta`` on many terminals.
 # Mirror the TUI parser's darwin-only reservation so ``option+c`` etc.
 # don't bind Alt+C in the CLI while the TUI silently falls back to
 # Ctrl+B (Copilot round-14 on #19835).
@@ -134,7 +134,7 @@ def normalize_voice_record_key_for_prompt_toolkit(raw: Any) -> str:
         return _DEFAULT_PT_KEY
 
     # Multi-modifier chords like ``ctrl+alt+r`` bind different shortcuts
-    # in prompt_toolkit (a-c-r form) and hermes-ink rejects them; collapse
+    # in prompt_toolkit (a-c-r form) and fulilian-ink rejects them; collapse
     # to the documented default instead of silently diverging.
     if len(parts) > 2:
         return _DEFAULT_PT_KEY
@@ -237,7 +237,7 @@ logger = logging.getLogger(__name__)
 
 
 def _debug(msg: str) -> None:
-    """Emit a debug breadcrumb when HERMES_VOICE_DEBUG=1.
+    """Emit a debug breadcrumb when FULILIAN_VOICE_DEBUG=1.
 
     Goes to stderr so the TUI gateway wraps it as a gateway.stderr event,
     which createGatewayEventHandler shows as an Activity line — exactly
@@ -249,7 +249,7 @@ def _debug(msg: str) -> None:
     broken stderr pipe must not kill the whole gateway — the main
     command pipe (stdin+stdout) is what actually matters.
     """
-    if os.environ.get("HERMES_VOICE_DEBUG", "").strip() != "1":
+    if os.environ.get("FULILIAN_VOICE_DEBUG", "").strip() != "1":
         return
     try:
         print(f"[voice] {msg}", file=sys.stderr, flush=True)
@@ -1010,10 +1010,10 @@ def speak_text(text: str, stop_event: Optional[threading.Event] = None) -> None:
         # MP3 output path, pre-chosen so we can play the MP3 directly even
         # when text_to_speech_tool auto-converts to OGG for messaging
         # platforms.  afplay's OGG support is flaky, MP3 always works.
-        os.makedirs(os.path.join(tempfile.gettempdir(), "hermes_voice"), exist_ok=True)
+        os.makedirs(os.path.join(tempfile.gettempdir(), "fulilian_voice"), exist_ok=True)
         mp3_path = os.path.join(
             tempfile.gettempdir(),
-            "hermes_voice",
+            "fulilian_voice",
             f"tts_{time.strftime('%Y%m%d_%H%M%S')}.mp3",
         )
 

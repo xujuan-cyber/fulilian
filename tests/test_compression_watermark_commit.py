@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from hermes_state import SessionCompressionInProgressError, SessionDB
+from fulilian_state import SessionCompressionInProgressError, SessionDB
 
 
 @pytest.fixture

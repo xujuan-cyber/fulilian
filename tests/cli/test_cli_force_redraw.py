@@ -14,13 +14,13 @@ from unittest.mock import MagicMock
 import pytest
 
 import cli as cli_mod
-from cli import HermesCLI
+from cli import FulilianCLI
 
 
 @pytest.fixture
 def bare_cli():
-    """A HermesCLI with no __init__ — we only exercise the redraw helper."""
-    cli = object.__new__(HermesCLI)
+    """A FulilianCLI with no __init__ — we only exercise the redraw helper."""
+    cli = object.__new__(FulilianCLI)
     return cli
 
 
@@ -127,7 +127,7 @@ class TestForceFullRedraw:
         """Same-width SIGWINCH (tmux attach, benign focus/tab signals) must not
         clear the viewport or replay: a 2J without replay erases the visible
         transcript, and a replay duplicates it (#65293). The tmux-attach
-        stale-paint crash is handled by _hermes_call_output_screen_diff's
+        stale-paint crash is handled by _fulilian_call_output_screen_diff's
         retry instead (#83874)."""
         app = MagicMock()
         events = []
@@ -175,7 +175,7 @@ class TestForceFullRedraw:
         previous = MagicMock()
         previous.height = 8
 
-        result = cli_mod._hermes_call_output_screen_diff(
+        result = cli_mod._fulilian_call_output_screen_diff(
             fake_osd,
             app=None,
             output=None,

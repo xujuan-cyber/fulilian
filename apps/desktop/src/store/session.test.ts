@@ -2,13 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { ClientSessionState } from '@/app/types'
 import { createClientSessionState } from '@/lib/chat-runtime'
-import type { SessionInfo } from '@/types/hermes'
+import type { SessionInfo } from '@/types/fulilian'
 
 const setUnreadRemote = vi.fn<(id: string, unread: boolean, profile?: null | string) => Promise<{ ok: boolean }>>(() =>
   Promise.resolve({ ok: true })
 )
 
-vi.mock('@/hermes', () => ({
+vi.mock('@/fulilian', () => ({
   // Opening a session now PATCHes its persisted unread flag (clearUnreadOnOpen
   // -> markSessionUnread); keep the REST mutation minimal for the suite.
   setApiRequestProfile: () => {},
@@ -144,7 +144,7 @@ describe('session owner hints', () => {
 
   it('ignores malformed persisted entries and never throws on hydrate', () => {
     window.localStorage.setItem(
-      'hermes.desktop.sessionOwnerHints.v1',
+      'fulilian.desktop.sessionOwnerHints.v1',
       JSON.stringify([
         'junk',
         ['no-route', null],
@@ -605,10 +605,10 @@ describe('workspaceCwdForNewSession', () => {
     $connection.set(null)
     $currentCwd.set('')
     $activeSessionId.set(null)
-    window.localStorage.removeItem('hermes.desktop.workspace-cwd')
-    window.localStorage.removeItem('hermes.desktop.workspace-cwd.remote.http%3A%2F%2Fbackend-a.default')
-    window.localStorage.removeItem('hermes.desktop.workspace-cwd.remote.http%3A%2F%2Fbackend-b.default')
-    delete (window as { hermesDesktop?: unknown }).hermesDesktop
+    window.localStorage.removeItem('fulilian.desktop.workspace-cwd')
+    window.localStorage.removeItem('fulilian.desktop.workspace-cwd.remote.http%3A%2F%2Fbackend-a.default')
+    window.localStorage.removeItem('fulilian.desktop.workspace-cwd.remote.http%3A%2F%2Fbackend-b.default')
+    delete (window as { fulilianDesktop?: unknown }).fulilianDesktop
   })
 
   it('does not publish a delayed configured default after ownership is lost', async () => {
@@ -620,7 +620,7 @@ describe('workspaceCwdForNewSession', () => {
 
     const sanitizeWorkspaceCwd = vi.fn(async (cwd: string) => ({ cwd }))
 
-    ;(window as { hermesDesktop?: unknown }).hermesDesktop = {
+    ;(window as { fulilianDesktop?: unknown }).fulilianDesktop = {
       sanitizeWorkspaceCwd,
       settings: { getDefaultProjectDir: vi.fn(() => settingsResult.promise) }
     }
@@ -640,7 +640,7 @@ describe('workspaceCwdForNewSession', () => {
   it('does not publish a delayed sanitized cwd after ownership is lost', async () => {
     const sanitized = deferred<{ cwd: string }>()
 
-    ;(window as { hermesDesktop?: unknown }).hermesDesktop = {
+    ;(window as { fulilianDesktop?: unknown }).fulilianDesktop = {
       sanitizeWorkspaceCwd: vi.fn(() => sanitized.promise),
       settings: {
         getDefaultProjectDir: vi.fn(async () => ({
@@ -662,7 +662,7 @@ describe('workspaceCwdForNewSession', () => {
   })
 
   it('prefers the configured default over the sticky remembered workspace', () => {
-    window.localStorage.setItem('hermes.desktop.workspace-cwd', '/home/user/sticky')
+    window.localStorage.setItem('fulilian.desktop.workspace-cwd', '/home/user/sticky')
     applyConfiguredDefaultProjectDir('/home/user/configured')
 
     expect(workspaceCwdForNewSession()).toBe('/home/user/configured')
@@ -681,7 +681,7 @@ describe('workspaceCwdForNewSession', () => {
     // A bare new chat must NOT inherit the sticky/remembered or live workspace —
     // that's the "why is my new session already on a branch" bug. Only an
     // explicit configured default pre-attaches.
-    window.localStorage.setItem('hermes.desktop.workspace-cwd', '/home/user/sticky')
+    window.localStorage.setItem('fulilian.desktop.workspace-cwd', '/home/user/sticky')
     $currentCwd.set('/home/user/live')
 
     expect(workspaceCwdForNewSession()).toBe('')
@@ -697,7 +697,7 @@ describe('workspaceCwdForNewSession', () => {
   })
 
   it('keeps remote workspace memory separate from local and other remotes', () => {
-    window.localStorage.setItem('hermes.desktop.workspace-cwd', '/local/project')
+    window.localStorage.setItem('fulilian.desktop.workspace-cwd', '/local/project')
     $currentCwd.set('/live/session/path')
     $connection.set({ baseUrl: 'http://backend-a', mode: 'remote' } as never)
 
@@ -1007,14 +1007,14 @@ describe('remembered session id (per profile)', () => {
 
   it('discards legacy unsuffixed keys on first read (zero-migration, refuse-to-guess)', () => {
     // An existing install remembered its session under the pre-per-profile key.
-    localStorage.setItem('hermes.desktop.lastSessionId', 'legacy-session')
+    localStorage.setItem('fulilian.desktop.lastSessionId', 'legacy-session')
 
     // Reading from any profile discards the legacy key — ownership is unknowable.
     expect(getRememberedSessionId('default')).toBeNull()
     expect(getRememberedSessionId('coder')).toBeNull()
 
     // The legacy key must be cleared.
-    expect(localStorage.getItem('hermes.desktop.lastSessionId')).toBeNull()
+    expect(localStorage.getItem('fulilian.desktop.lastSessionId')).toBeNull()
   })
 
   it('uses encodeURIComponent so profile names with reserved chars are isolated', () => {
@@ -1022,7 +1022,7 @@ describe('remembered session id (per profile)', () => {
 
     expect(getRememberedSessionId('research/ops')).toBe('ops-session')
     // Verify the storage key uses encoded form.
-    expect(localStorage.getItem('hermes.desktop.lastSessionId.profile.research%2Fops')).toBe('ops-session')
+    expect(localStorage.getItem('fulilian.desktop.lastSessionId.profile.research%2Fops')).toBe('ops-session')
     // Another profile with a different encoding cannot read it.
     expect(getRememberedSessionId('research')).toBeNull()
   })
@@ -1060,20 +1060,20 @@ describe('remembered route (per profile)', () => {
   })
 
   it('discards legacy unsuffixed keys on first read (zero-migration, refuse-to-guess)', () => {
-    localStorage.setItem('hermes.desktop.lastRoute', '/skills')
+    localStorage.setItem('fulilian.desktop.lastRoute', '/skills')
 
     // Reading from any profile discards the legacy key.
     expect(getRememberedRoute('default')).toBeNull()
     expect(getRememberedRoute('coder')).toBeNull()
 
-    expect(localStorage.getItem('hermes.desktop.lastRoute')).toBeNull()
+    expect(localStorage.getItem('fulilian.desktop.lastRoute')).toBeNull()
   })
 
   it('uses encodeURIComponent so profile names with reserved chars are isolated', () => {
     setRememberedRoute('/cron', 'research/ops')
 
     expect(getRememberedRoute('research/ops')).toBe('/cron')
-    expect(localStorage.getItem('hermes.desktop.lastRoute.profile.research%2Fops')).toBe('/cron')
+    expect(localStorage.getItem('fulilian.desktop.lastRoute.profile.research%2Fops')).toBe('/cron')
     expect(getRememberedRoute('research')).toBeNull()
   })
 

@@ -10,7 +10,7 @@ registry for any ``TERMINAL_ENV`` / ``terminal.backend`` value that is not a
 built-in backend (local, docker, singularity, modal, daytona,
 vercel_sandbox, ssh).
 
-Providers live in ``~/.hermes/plugins/<name>/`` (user, opt-in via
+Providers live in ``~/.fulilian/plugins/<name>/`` (user, opt-in via
 ``plugins.enabled``) or ship as standalone plugin repos. Built-in backends
 stay in-tree under ``tools/environments/`` — this extension point exists so
 third-party sandbox vendors do NOT have to live in core (see AGENTS.md:
@@ -39,9 +39,9 @@ recur for plugin backends:
   dangerous-command approval prompts are skipped (a wiped filesystem is
   disposable). Defaults to ``is_container``. Backends that can mount host
   paths should override to ``False``.
-* ``cache_path_base`` — where auto-synced ``~/.hermes/cache`` files land
-  inside the backend (e.g. ``"~/.hermes"`` for home-synced backends,
-  ``"/root/.hermes"`` for root-homed containers), or ``None`` when host
+* ``cache_path_base`` — where auto-synced ``~/.fulilian/cache`` files land
+  inside the backend (e.g. ``"~/.fulilian"`` for home-synced backends,
+  ``"/root/.fulilian"`` for root-homed containers), or ``None`` when host
   paths remain correct (nothing is translated).
 * ``strip_env_keys`` — credential env var names owned by this backend
   (API tokens for the sandbox vendor). Stripped from every subprocess the
@@ -58,7 +58,7 @@ Environment object contract
 interface as :class:`tools.environments.base.BaseEnvironment` (``execute()``,
 ``cleanup()`` …). Subclassing ``BaseEnvironment`` is recommended but not
 required — the registry does not isinstance-check the returned environment.
-The factory stamps ``_hermes_backend_name`` on the returned object so
+The factory stamps ``_fulilian_backend_name`` on the returned object so
 file-path resolution can identify plugin backends without class-name
 sniffing.
 """
@@ -112,7 +112,7 @@ class TerminalEnvironmentProvider(abc.ABC):
 
     @property
     def cache_path_base(self) -> Optional[str]:
-        """Base dir for synced Hermes cache files inside the backend."""
+        """Base dir for synced Fulilian cache files inside the backend."""
         return None
 
     @property
@@ -161,7 +161,7 @@ class TerminalEnvironmentProvider(abc.ABC):
         return ("needs_setup", f"{self.display_name} is not configured.")
 
     def setup_instructions(self) -> List[str]:
-        """Lines printed by ``hermes setup`` after this backend is selected.
+        """Lines printed by ``fulilian setup`` after this backend is selected.
 
         Use for token acquisition hints, SDK install commands, etc. The
         wizard persists ``terminal.backend`` itself; providers that need an
@@ -170,12 +170,12 @@ class TerminalEnvironmentProvider(abc.ABC):
         return []
 
     def post_setup(self) -> None:
-        """Optional interactive setup hook run by ``hermes setup`` after the
+        """Optional interactive setup hook run by ``fulilian setup`` after the
         backend is selected (prompt for tokens, install SDKs). Default no-op.
         """
 
     def doctor_checks(self) -> List[Tuple[bool, str, str]]:
-        """``hermes doctor`` rows: ``(ok, label, detail)`` triples.
+        """``fulilian doctor`` rows: ``(ok, label, detail)`` triples.
 
         Default: a single row reflecting :meth:`is_available`.
         """

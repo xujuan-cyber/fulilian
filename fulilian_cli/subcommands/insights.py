@@ -1,6 +1,6 @@
-"""``hermes insights`` subcommand parser.
+"""``fulilian insights`` subcommand parser.
 
-Extracted from ``hermes_cli/main.py:main()`` (god-file Phase 2 follow-up).
+Extracted from ``fulilian_cli/main.py:main()`` (god-file Phase 2 follow-up).
 Handler injected to avoid importing ``main``.
 """
 

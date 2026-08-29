@@ -1,5 +1,5 @@
 import { asText, normalize } from '@/lib/text'
-import type { ConfigFieldSchema, HermesConfigRecord, ToolsetInfo } from '@/types/hermes'
+import type { ConfigFieldSchema, FulilianConfigRecord, ToolsetInfo } from '@/types/fulilian'
 
 import { BUILTIN_PERSONALITIES, ENUM_OPTIONS, PROVIDER_GROUPS, SECTIONS } from './constants'
 
@@ -79,7 +79,7 @@ function safeSet(target: Record<string, unknown>, key: string, value: unknown): 
   })
 }
 
-export function getNested(obj: HermesConfigRecord, path: string): unknown {
+export function getNested(obj: FulilianConfigRecord, path: string): unknown {
   let cur: unknown = obj
 
   for (const part of configPathParts(path)) {
@@ -113,7 +113,7 @@ export function getNested(obj: HermesConfigRecord, path: string): unknown {
  * use this to confirm the destructive transition before applying it. Any edit
  * that keeps at least one toolset — or that never had one — returns false.
  */
-export function clearsEnabledToolsets(prev: HermesConfigRecord, next: HermesConfigRecord): boolean {
+export function clearsEnabledToolsets(prev: FulilianConfigRecord, next: FulilianConfigRecord): boolean {
   const prevToolsets = getNested(prev, 'toolsets')
   const nextToolsets = getNested(next, 'toolsets')
   const hadToolsets = Array.isArray(prevToolsets) && prevToolsets.length > 0
@@ -124,7 +124,7 @@ export function clearsEnabledToolsets(prev: HermesConfigRecord, next: HermesConf
 
 // Voice renders only fields for the selected TTS/STT provider. Search and the
 // page share this rule so every indexed field can actually mount when opened.
-export function voiceFieldVisible(key: string, config: HermesConfigRecord): boolean {
+export function voiceFieldVisible(key: string, config: FulilianConfigRecord): boolean {
   const match = /^(tts|stt)\.([^.]+)\./.exec(key)
 
   if (!match) {
@@ -159,7 +159,7 @@ export function inferFieldSchema(value: unknown): ConfigFieldSchema {
 // Backend schema omits some declared keys; config presence is the availability signal.
 export function sectionFieldEntries(
   schema: Record<string, ConfigFieldSchema>,
-  config: HermesConfigRecord
+  config: FulilianConfigRecord
 ): Map<string, [string, ConfigFieldSchema][]> {
   return new Map(
     SECTIONS.map(s => [
@@ -174,7 +174,7 @@ export function sectionFieldEntries(
   )
 }
 
-export function setNested(obj: HermesConfigRecord, path: string, value: unknown): HermesConfigRecord {
+export function setNested(obj: FulilianConfigRecord, path: string, value: unknown): FulilianConfigRecord {
   const clone = structuredClone(obj)
   const parts = configPathParts(path)
   let cur: Record<string, unknown> = clone
@@ -200,7 +200,7 @@ export function setNested(obj: HermesConfigRecord, path: string, value: unknown)
   return clone
 }
 
-function personalityOptions(config: HermesConfigRecord): string[] {
+function personalityOptions(config: FulilianConfigRecord): string[] {
   const custom = getNested(config, 'agent.personalities')
 
   const customNames =
@@ -281,7 +281,7 @@ function isCommandProvider(value: unknown): boolean {
 // name the runtime would actually resolve as a command provider — built-ins are
 // excluded case-insensitively, matching the runtime's `provider.lower().strip()`
 // guard, so a ``providers.EDGE`` command block is not offered.
-function commandProviderNames(config: HermesConfigRecord, section: 'tts' | 'stt'): string[] {
+function commandProviderNames(config: FulilianConfigRecord, section: 'tts' | 'stt'): string[] {
   const builtins = section === 'tts' ? BUILTIN_TTS_PROVIDERS : BUILTIN_STT_PROVIDERS
   const names = new Set<string>()
 
@@ -311,7 +311,7 @@ const OPENAI_TTS1_VOICES = new Set(['alloy', 'ash', 'coral', 'echo', 'fable', 'n
 export function enumOptionsFor(
   key: string,
   value: unknown,
-  config: HermesConfigRecord,
+  config: FulilianConfigRecord,
   dynamicOptions?: string[]
 ): string[] | undefined {
   let opts = dynamicOptions ?? (key === 'display.personality' ? personalityOptions(config) : ENUM_OPTIONS[key])

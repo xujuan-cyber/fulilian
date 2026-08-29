@@ -1,6 +1,6 @@
-"""Shared curses-based UI components for Hermes CLI.
+"""Shared curses-based UI components for Fulilian CLI.
 
-Used by `hermes tools` and `hermes skills` for interactive checklists.
+Used by `fulilian tools` and `fulilian skills` for interactive checklists.
 Provides a curses multi-select with keyboard navigation, plus a
 text-based numbered fallback for terminals without curses support.
 """
@@ -50,10 +50,10 @@ class MenuNavigationHandler(Protocol):
 
 
 _MENU_NAVIGATION_HANDLER: ContextVar[MenuNavigationHandler | None] = ContextVar(
-    "hermes_menu_navigation_handler", default=None
+    "fulilian_menu_navigation_handler", default=None
 )
 _NUMBERED_BACK_ENABLED: ContextVar[bool] = ContextVar(
-    "hermes_numbered_back_enabled", default=False
+    "fulilian_numbered_back_enabled", default=False
 )
 
 

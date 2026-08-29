@@ -230,7 +230,7 @@ function scrollableAncestor(element: HTMLElement): HTMLElement | null {
 
 /**
  * The connections registry section of Settings → Gateways: manage the named
- * agent sources (local runtime + any number of remote gateways / Hermes Cloud
+ * agent sources (local runtime + any number of remote gateways / Fulilian Cloud
  * instances / SSH hosts). Storage-level management — the active/primary
  * switchover UX is the connection-mode controls above this section.
  */
@@ -263,7 +263,7 @@ export function ConnectionsRegistrySection() {
   const [oauthConnected, setOauthConnected] = useState(false)
   const probeSeq = useRef(0)
 
-  const bridge = window.hermesDesktop?.connections
+  const bridge = window.fulilianDesktop?.connections
 
   const hasLocal = Boolean(registry?.connections.some(c => c.kind === 'local'))
 
@@ -280,7 +280,7 @@ export function ConnectionsRegistrySection() {
   // URL doesn't fire a request per keystroke. Best-effort: a failed probe just
   // leaves the generic provider label, it never blocks signing in.
   useEffect(() => {
-    if (!editorWantsOauth || !editorUrl || !window.hermesDesktop?.probeConnectionConfig) {
+    if (!editorWantsOauth || !editorUrl || !window.fulilianDesktop?.probeConnectionConfig) {
       setAuthProbe(null)
 
       return
@@ -293,7 +293,7 @@ export function ConnectionsRegistrySection() {
     let cancelled = false
 
     const timer = setTimeout(() => {
-      window.hermesDesktop
+      window.fulilianDesktop
         .probeConnectionConfig(editorUrl)
         .then(result => {
           if (!cancelled && seq === probeSeq.current) {
@@ -335,7 +335,7 @@ export function ConnectionsRegistrySection() {
     setSigningIn(true)
 
     try {
-      const result = await window.hermesDesktop.oauthLoginConnectionConfig(editorUrl)
+      const result = await window.fulilianDesktop.oauthLoginConnectionConfig(editorUrl)
 
       setOauthConnected(Boolean(result.connected))
 
@@ -564,7 +564,7 @@ export function ConnectionsRegistrySection() {
     [bridge, s.testFailed, s.testOk]
   )
 
-  // Fan out `hermes update` to every eligible source; per-connection results
+  // Fan out `fulilian update` to every eligible source; per-connection results
   // land as individual toasts so one dead box doesn't hide the others.
   const updateAll = useCallback(async () => {
     if (!bridge?.updateAll) {

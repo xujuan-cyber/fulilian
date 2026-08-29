@@ -14,7 +14,7 @@ Serverless GPU cloud for ML jobs and model APIs.
 
 | | |
 |---|---|
-| Source | Optional — install with `hermes skills install official/mlops/modal` |
+| Source | Optional — install with `fulilian skills install official/mlops/modal` |
 | Path | `optional-skills/mlops/modal` |
 | Version | `1.0.1` |
 | Author | Orchestra Research |
@@ -26,7 +26,7 @@ Serverless GPU cloud for ML jobs and model APIs.
 ## Reference: full SKILL.md
 
 :::info
-The following is the complete skill definition that Hermes loads when this skill is triggered. This is what the agent sees as instructions when the skill is active.
+The following is the complete skill definition that Fulilian loads when this skill is triggered. This is what the agent sees as instructions when the skill is active.
 :::
 
 # Modal Serverless GPU

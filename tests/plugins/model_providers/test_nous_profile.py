@@ -88,7 +88,7 @@ class TestNousReasoningWireShape:
     def test_disable_dropped_for_non_reasoning_route(self, nous_profile, portal_catalog):
         """A route the catalog says takes no reasoning parameter gets none.
 
-        Hermes' own ``supports_reasoning`` can disagree with the Portal about a
+        Fulilian' own ``supports_reasoning`` can disagree with the Portal about a
         given route; when it does, the catalog of the service actually serving
         the model wins, and we don't send it a parameter it doesn't accept.
         """

@@ -98,7 +98,7 @@ class WSTransport:
         self._peer = peer
         #: Server-verified identity carried from the WS-upgrade credential
         #: (dashboard ticket / internal credential) — stamped by
-        #: ``hermes_cli.web_server._ws_auth_reason`` onto the WS object and
+        #: ``fulilian_cli.web_server._ws_auth_reason`` onto the WS object and
         #: passed through ``handle_ws``. None for transports that
         #: authenticated via the legacy token path or stdio. RPC params can
         #: never populate this: it is the only identity authority for
@@ -326,7 +326,7 @@ async def handle_ws(
     """Run one WebSocket session. Wire-compatible with ``tui_gateway.entry``.
 
     *auth_identity* is the server-minted ``{user_id, provider}`` recorded at
-    WS-upgrade authentication (``hermes_cli.web_server._ws_auth_reason``); it
+    WS-upgrade authentication (``fulilian_cli.web_server._ws_auth_reason``); it
     is stored on the transport as ``WSTransport.auth_identity`` and is the
     only identity authority for browser-controller registration. Existing
     callers (stdio-free harnesses, the embedded TUI child) omit it and get a
@@ -388,7 +388,7 @@ async def handle_ws(
             }
         )
         if ready_ok:
-            # Live-apply skins Hermes activates mid-conversation.
+            # Live-apply skins Fulilian activates mid-conversation.
             server._ensure_skin_watcher()
             # Track this peer for session-less global broadcasts (skin.changed
             # from the background watcher) — write_json can't route those.

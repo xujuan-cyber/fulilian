@@ -22,7 +22,7 @@ beforeAll(() => {
 
 const getGlobalModelOptions = vi.fn()
 
-vi.mock('@/hermes', () => ({
+vi.mock('@/fulilian', () => ({
   getGlobalModelOptions: (...args: unknown[]) => getGlobalModelOptions(...args),
   setApiRequestProfile: vi.fn()
 }))

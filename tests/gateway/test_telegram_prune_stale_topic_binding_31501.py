@@ -31,7 +31,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from hermes_state import SessionDB
+from fulilian_state import SessionDB
 
 
 # ---------------------------------------------------------------------------

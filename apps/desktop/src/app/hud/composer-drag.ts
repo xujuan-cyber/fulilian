@@ -52,7 +52,7 @@ function releasePointer(state: PressState): void {
 }
 
 function setWorkspaceTransfer(transferring: boolean): void {
-  window.hermesDesktop?.hud?.setWorkspaceTransfer?.(transferring)
+  window.fulilianDesktop?.hud?.setWorkspaceTransfer?.(transferring)
 }
 
 /**
@@ -73,7 +73,7 @@ function setWorkspaceTransfer(transferring: boolean): void {
  * same clientX every frame — zero delta, and the drag dies one pixel in.
  *
  * The size is snapshotted at press and sent with every move, so main can pin it
- * (see hermes:hud:move-by — a transparent frameless window drifts wider on
+ * (see fulilian:hud:move-by — a transparent frameless window drifts wider on
  * Windows otherwise). Same shape as the pet overlay's drag.
  */
 export function useHudComposerDrag(
@@ -215,7 +215,7 @@ export function useHudComposerDrag(
       state.lastX = event.screenX
       state.lastY = event.screenY
 
-      window.hermesDesktop?.hud?.moveBy?.({
+      window.fulilianDesktop?.hud?.moveBy?.({
         x: dx,
         y: dy,
         width: state.originW,

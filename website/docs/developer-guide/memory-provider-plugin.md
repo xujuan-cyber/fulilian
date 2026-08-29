@@ -1,27 +1,27 @@
 ---
 sidebar_position: 8
 title: "Memory Provider Plugins"
-description: "How to build a memory provider plugin for Hermes Agent"
+description: "How to build a memory provider plugin for FuLiLian"
 ---
 
 # Building a Memory Provider Plugin
 
-Memory provider plugins give Hermes Agent persistent, cross-session knowledge beyond the built-in MEMORY.md and USER.md. This guide covers how to build one.
+Memory provider plugins give FuLiLian persistent, cross-session knowledge beyond the built-in MEMORY.md and USER.md. This guide covers how to build one.
 
 :::tip
-Memory providers are one of two **provider plugin** types. The other is [Context Engine Plugins](/developer-guide/context-engine-plugin), which replace the built-in context compressor. Both follow the same pattern: single-select, config-driven, managed via `hermes plugins`.
+Memory providers are one of two **provider plugin** types. The other is [Context Engine Plugins](/developer-guide/context-engine-plugin), which replace the built-in context compressor. Both follow the same pattern: single-select, config-driven, managed via `fulilian plugins`.
 :::
 
 ## Installation Layouts
 
-Hermes discovers memory providers from four sources, in this precedence order:
+Fulilian discovers memory providers from four sources, in this precedence order:
 
 | Source | Location | Notes |
 |---|---|---|
-| Bundled | `plugins/memory/<name>/` | Ships with Hermes. Closed to new providers — see [CONTRIBUTING](https://github.com/NousResearch/hermes-agent/blob/main/CONTRIBUTING.md). |
-| User | `$HERMES_HOME/plugins/<name>/` | Dropped in by the user, per profile. |
-| Project | `./.hermes/plugins/<name>/` | Opt-in via `HERMES_ENABLE_PROJECT_PLUGINS=1`. |
-| Package | `hermes_agent.memory_providers` entry point | `pip install`, nothing to copy. |
+| Bundled | `plugins/memory/<name>/` | Ships with Fulilian. Closed to new providers — see [CONTRIBUTING](https://github.com/NousResearch/hermes-agent/blob/main/CONTRIBUTING.md). |
+| User | `$FULILIAN_HOME/plugins/<name>/` | Dropped in by the user, per profile. |
+| Project | `./.fulilian/plugins/<name>/` | Opt-in via `FULILIAN_ENABLE_PROJECT_PLUGINS=1`. |
+| Package | `fulilian_agent.memory_providers` entry point | `pip install`, nothing to copy. |
 
 Earlier sources win on a name collision, so a directory dropped into a working
 tree can never shadow a shipped provider.
@@ -38,8 +38,8 @@ Discovery only *enumerates* — it never imports a provider. Nothing runs until
 ### Directory Provider
 
 A directory provider lives in `plugins/memory/<name>/` when bundled with
-Hermes, in `$HERMES_HOME/plugins/<name>/` when installed by a user, or in
-`./.hermes/plugins/<name>/` for a project-local one:
+Fulilian, in `$FULILIAN_HOME/plugins/<name>/` when installed by a user, or in
+`./.fulilian/plugins/<name>/` for a project-local one:
 
 ```
 plugins/memory/my-provider/
@@ -51,22 +51,22 @@ plugins/memory/my-provider/
 ### Packaged Provider
 
 A pip-installed provider publishes an entry point in the
-`hermes_agent.memory_providers` group. The entry-point name is the provider
+`fulilian_agent.memory_providers` group. The entry-point name is the provider
 name users select in `memory.provider`; its value points to the provider's
 `register(ctx)` function:
 
 ```toml title="pyproject.toml"
-[project.entry-points."hermes_agent.memory_providers"]
+[project.entry-points."fulilian_agent.memory_providers"]
 my-provider = "my_provider:register"
 ```
 
 Point the entry point at the **package**, or at a `register(ctx)` inside it, and
 keep your implementation, skills, and other resources in the normal Python
-package layout. No copy under `$HERMES_HOME/plugins/` is required.
+package layout. No copy under `$FULILIAN_HOME/plugins/` is required.
 
 A package entry point gets everything a directory install does, including the
-two files Hermes reads from disk rather than importing — `config_schema.py`
-(the dashboard config panel) and `cli.py` (your `hermes <provider>`
+two files Fulilian reads from disk rather than importing — `config_schema.py`
+(the dashboard config panel) and `cli.py` (your `fulilian <provider>`
 subcommands). Both are found next to your package's `__init__.py`, so point the
 entry point at a package rather than a single module if you ship either.
 
@@ -90,7 +90,7 @@ class MyMemoryProvider(MemoryProvider):
         """Called once at agent startup.
 
         kwargs always includes:
-          hermes_home (str): Active HERMES_HOME path. Use for storage.
+          fulilian_home (str): Active FULILIAN_HOME path. Use for storage.
         """
         self._api_key = os.environ.get("MY_API_KEY", "")
         self._session_id = session_id
@@ -114,8 +114,8 @@ class MyMemoryProvider(MemoryProvider):
 
 | Method | Purpose | Must Implement? |
 |--------|---------|-----------------|
-| `get_config_schema()` | Declare config fields for `hermes memory setup` | **Yes** |
-| `save_config(values, hermes_home)` | Write non-secret config to native location | **Yes** (unless env-var-only) |
+| `get_config_schema()` | Declare config fields for `fulilian memory setup` | **Yes** |
+| `save_config(values, fulilian_home)` | Write non-secret config to native location | **Yes** (unless env-var-only) |
 
 ### Optional Hooks
 
@@ -166,14 +166,14 @@ uncompressed transcript is preserved, the compaction attempt errors with
 `BLOCKED_MISSING_PREREQUISITE`, and it can be retried once your store
 recovers. With the gate off (default), nothing changes for existing providers.
 
-The gate binds to every compaction authority, not just the Hermes
+The gate binds to every compaction authority, not just the Fulilian
 summarizer: server-side native compaction (`compression.codex_responses_native`)
 is suppressed while the gate is armed, post-turn micro-compaction
 (`compression.micro_compact`) is forced off at agent init (it absorbs old
 exchanges into a rolling summary with no checkpoint hook in its path), and
 the `codex_app_server` API mode is refused at agent init — the codex agent
 compacts its own thread with no truthful pre-compaction boundary, so a
-required checkpoint cannot be guaranteed there. The checkpoint-aware Hermes
+required checkpoint cannot be guaranteed there. The checkpoint-aware Fulilian
 compressor stays the only lossy authority.
 
 What your provider receives depends on its declared API version. Version 1
@@ -198,7 +198,7 @@ Contract tests: `tests/agent/test_pre_compress_checkpoint_contract.py`.
 
 ## Config Schema
 
-`get_config_schema()` returns a list of field descriptors used by `hermes memory setup`:
+`get_config_schema()` returns a list of field descriptors used by `fulilian memory setup`:
 
 ```python
 def get_config_schema(self):
@@ -220,7 +220,7 @@ def get_config_schema(self):
         {
             "key": "project",
             "description": "Project identifier",
-            "default": "hermes",
+            "default": "fulilian",
         },
     ]
 ```
@@ -228,17 +228,17 @@ def get_config_schema(self):
 Fields with `secret: True` and `env_var` go to `.env`. Non-secret fields are passed to `save_config()`.
 
 :::tip Minimal vs Full Schema
-Every field in `get_config_schema()` is prompted during `hermes memory setup`. Providers with many options should keep the schema minimal — only include fields the user **must** configure (API key, required credentials). Document optional settings in a config file reference (e.g. `$HERMES_HOME/myprovider.json`) rather than prompting for them all during setup. This keeps the setup wizard fast while still supporting advanced configuration. See the Supermemory provider for an example — it only prompts for the API key; all other options live in `supermemory.json`.
+Every field in `get_config_schema()` is prompted during `fulilian memory setup`. Providers with many options should keep the schema minimal — only include fields the user **must** configure (API key, required credentials). Document optional settings in a config file reference (e.g. `$FULILIAN_HOME/myprovider.json`) rather than prompting for them all during setup. This keeps the setup wizard fast while still supporting advanced configuration. See the Supermemory provider for an example — it only prompts for the API key; all other options live in `supermemory.json`.
 :::
 
 ## Save Config
 
 ```python
-def save_config(self, values: dict, hermes_home: str) -> None:
+def save_config(self, values: dict, fulilian_home: str) -> None:
     """Write non-secret config to your native location."""
     import json
     from pathlib import Path
-    config_path = Path(hermes_home) / "my-provider.json"
+    config_path = Path(fulilian_home) / "my-provider.json"
     config_path.write_text(json.dumps(values, indent=2))
 ```
 
@@ -304,7 +304,7 @@ def sync_turn(self, user_content, assistant_content, *, session_id="", messages=
 `messages` is optional OpenAI-style conversation context as of the completed
 turn. When present, it includes user/assistant messages, assistant tool calls,
 and tool result messages. Providers that do not need raw turn context can omit
-the `messages` parameter; Hermes will continue calling them with the legacy
+the `messages` parameter; Fulilian will continue calling them with the legacy
 signature.
 
 Cloud providers should document what parts of `messages` are sent off-device.
@@ -313,15 +313,15 @@ workspace data.
 
 ## Profile Isolation
 
-All storage paths **must** use the `hermes_home` kwarg from `initialize()`, not hardcoded `~/.hermes`:
+All storage paths **must** use the `fulilian_home` kwarg from `initialize()`, not hardcoded `~/.fulilian`:
 
 ```python
 # CORRECT — profile-scoped
-from hermes_constants import get_hermes_home
-data_dir = get_hermes_home() / "my-provider"
+from fulilian_constants import get_fulilian_home
+data_dir = get_fulilian_home() / "my-provider"
 
 # WRONG — shared across all profiles
-data_dir = Path("~/.hermes/my-provider").expanduser()
+data_dir = Path("~/.fulilian/my-provider").expanduser()
 ```
 
 ## Testing
@@ -346,16 +346,16 @@ mgr.shutdown_all()
 
 ## Adding CLI Commands
 
-Memory provider plugins can register their own CLI subcommand tree (e.g. `hermes my-provider status`, `hermes my-provider config`). This uses a convention-based discovery system — no changes to core files needed.
+Memory provider plugins can register their own CLI subcommand tree (e.g. `fulilian my-provider status`, `fulilian my-provider config`). This uses a convention-based discovery system — no changes to core files needed.
 
 ### How it works
 
 1. Add a `cli.py` file to your plugin directory
 2. Define a `register_cli(subparser)` function that builds the argparse tree
 3. The memory plugin system discovers it at startup via `discover_plugin_cli_commands()`
-4. Your commands appear under `hermes <provider-name> <subcommand>`
+4. Your commands appear under `fulilian <provider-name> <subcommand>`
 
-**Active-provider gating:** Your CLI commands only appear when your provider is the active `memory.provider` in config. If a user hasn't configured your provider, your commands won't show in `hermes --help`.
+**Active-provider gating:** Your CLI commands only appear when your provider is the active `memory.provider` in config. If a user hasn't configured your provider, your commands won't show in `fulilian --help`.
 
 ### Example
 
@@ -370,10 +370,10 @@ def my_command(args):
     elif sub == "config":
         print("Showing config...")
     else:
-        print("Usage: hermes my-provider <status|config>")
+        print("Usage: fulilian my-provider <status|config>")
 
 def register_cli(subparser) -> None:
-    """Build the hermes my-provider argparse tree.
+    """Build the fulilian my-provider argparse tree.
 
     Called by discover_plugin_cli_commands() at argparse setup time.
     """

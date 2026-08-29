@@ -718,7 +718,7 @@ class CompressionCommitFence:
 
 
 # Defaults for the in-agent (non-hygiene) progress-aware compress_context wrap.
-# Mirror hermes_cli.config.DEFAULT_CONFIG["compression"] keys of the same name.
+# Mirror fulilian_cli.config.DEFAULT_CONFIG["compression"] keys of the same name.
 DEFAULT_CONTEXT_TIMEOUT_SECONDS = 120.0
 DEFAULT_CONTEXT_TOTAL_CEILING_SECONDS = 600.0
 
@@ -1329,13 +1329,13 @@ def _lock_api_is_absent_on_session_db(lock_db: Any) -> bool:
     """Whether the live in-memory SessionDB class structurally predates locks.
 
     In the supported hot-reload skew, this module is new while the already
-    imported ``hermes_state.SessionDB`` class (and its live instances) is old.
+    imported ``fulilian_state.SessionDB`` class (and its live instances) is old.
     Only that exact class identity may fail open. Proxies, nominal lookalikes,
     non-callables, and descriptor failures must fail closed. Static lookup
     avoids invoking a present-but-broken descriptor.
     """
     try:
-        from hermes_state import SessionDB
+        from fulilian_state import SessionDB
 
         missing = object()
         return (
@@ -1487,9 +1487,9 @@ def _adopt_live_compression_child(
 
         set_current_session_id(child_session_id)
     except Exception:
-        os.environ["HERMES_SESSION_ID"] = child_session_id
+        os.environ["FULILIAN_SESSION_ID"] = child_session_id
     try:
-        from hermes_logging import set_session_context
+        from fulilian_logging import set_session_context
 
         set_session_context(child_session_id)
     except Exception:
@@ -1758,7 +1758,7 @@ def _direct_messages_for_pre_compress_memory(messages: Any) -> list[dict[str, An
 
     Compression summaries are derivative context, not new source evidence.
     Tool rows and system messages are likewise omitted so memory providers
-    receive one normalized host contract instead of having to infer Hermes
+    receive one normalized host contract instead of having to infer Fulilian
     transcript internals independently. Assistant messages that carry both
     prose and ``tool_calls`` keep their prose (the ``tool_calls`` payload is
     stripped); pure tool-call wrappers without prose are dropped.
@@ -1939,7 +1939,7 @@ def check_compression_model_feasibility(agent: Any) -> None:
                 msg = (
                     "⚠ No auxiliary LLM provider configured — context "
                     "compression will drop middle turns without a summary. "
-                    "Run `hermes setup` or set OPENROUTER_API_KEY."
+                    "Run `fulilian setup` or set OPENROUTER_API_KEY."
                 )
             agent._compression_warning = msg
             agent._emit_status(msg)
@@ -1982,7 +1982,7 @@ def check_compression_model_feasibility(agent: Any) -> None:
             raise ValueError(
                 f"Auxiliary compression model {aux_model} has a context "
                 f"window of {aux_context:,} tokens, which is below the "
-                f"minimum {MINIMUM_CONTEXT_LENGTH:,} required by Hermes "
+                f"minimum {MINIMUM_CONTEXT_LENGTH:,} required by Fulilian "
                 f"Agent.  Choose a compression model with at least "
                 f"{MINIMUM_CONTEXT_LENGTH // 1000}K context (set "
                 f"auxiliary.compression.model in config.yaml), or set "
@@ -2103,7 +2103,7 @@ def check_compression_model_feasibility(agent: Any) -> None:
                     f"           model: <model-with-{old_threshold:,}+-context>\n"
                     f"  (Lowering compression.threshold cannot help here — "
                     f"with {_main_label}'s {main_ctx:,}-token window, "
-                    f"Hermes's small-context floor and output reservation "
+                    f"Fulilian's small-context floor and output reservation "
                     f"would recompute the trigger to "
                     f"{recomputed_threshold:,} tokens, still above the "
                     f"compression model's {aux_context:,}.)"
@@ -2612,11 +2612,11 @@ def compress_context(
         pass
 
     # Codex app-server sessions: the codex agent owns the real thread context;
-    # Hermes' summarizer would only rewrite a local mirror without shrinking
+    # Fulilian' summarizer would only rewrite a local mirror without shrinking
     # the actual thread (#36801). Route compaction to the app server's own
     # thread/compact mechanism. Behavior is controlled by
-    # ``compression.codex_app_server_auto`` (native|hermes|off).
-    # The memory-provider context handoff below is intentionally Hermes-only:
+    # ``compression.codex_app_server_auto`` (native|fulilian|off).
+    # The memory-provider context handoff below is intentionally Fulilian-only:
     # the app server does not expose its native summary prompt, so there is no
     # truthful injection point for ``on_pre_compress()`` return text here.
     # `is True` (not bool()): unit tests drive this path with bare MagicMock
@@ -2850,7 +2850,7 @@ def compress_context(
                     "compression lock subsystem unavailable for session=%s "
                     "— proceeding without lock. This usually means a stale "
                     "in-memory module after an update; restart the process "
-                    "(or `hermes update`) to resync.",
+                    "(or `fulilian update`) to resync.",
                     _lock_sid,
                 )
             _lock_acquired = True  # acquired-but-unlocked compatibility path
@@ -4002,7 +4002,7 @@ def compress_context(
                     # mirror _ensure_db_session's stamp ("default" persists as
                     # NULL). publish_compression_child additionally COALESCEs
                     # from the parent row, covering app-global remote sessions
-                    # whose thread lacks the HERMES_HOME context.
+                    # whose thread lacks the FULILIAN_HOME context.
                     try:
                         from fulilian_cli.profiles import get_active_profile_name
 
@@ -4021,7 +4021,7 @@ def compress_context(
                         parent_session_id=old_session_id,
                         child_session_id=new_session_id,
                         source=agent.platform
-                        or os.environ.get("HERMES_SESSION_SOURCE", "cli"),
+                        or os.environ.get("FULILIAN_SESSION_SOURCE", "cli"),
                         model=agent.model,
                         model_config=agent._session_init_model_config,
                         system_prompt=new_system_prompt,
@@ -4163,9 +4163,9 @@ def compress_context(
 
                         set_current_session_id(agent.session_id)
                     except Exception:
-                        os.environ["HERMES_SESSION_ID"] = agent.session_id
+                        os.environ["FULILIAN_SESSION_ID"] = agent.session_id
                     try:
-                        from hermes_logging import set_session_context
+                        from fulilian_logging import set_session_context
 
                         set_session_context(agent.session_id)
                     except Exception:
@@ -4346,9 +4346,9 @@ def compress_context(
                 )
 
         # Notify the context engine that a compaction boundary occurred. Plugin
-        # engines (e.g. hermes-lcm) use boundary_reason="compression" to preserve
+        # engines (e.g. fulilian-lcm) use boundary_reason="compression" to preserve
         # DAG lineage / checkpoint per-session state across the boundary instead of
-        # re-initializing fresh. See hermes-lcm#68. Built-in ContextCompressor
+        # re-initializing fresh. See fulilian-lcm#68. Built-in ContextCompressor
         # ignores kwargs. Fires in BOTH modes: rotation passes old→new ids; in-place
         # passes the SAME id (the boundary is real even though the id didn't move).
         if _context_engine_boundary_committed:
@@ -4509,17 +4509,17 @@ def _compress_context_via_codex_app_server(
 ) -> Tuple[list, str]:
     """Route compaction to Codex app-server for Codex-owned threads.
 
-    Hermes' normal compressor rewrites the local OpenAI-style transcript.
+    Fulilian' normal compressor rewrites the local OpenAI-style transcript.
     That does not shrink the actual Codex app-server thread context. For this
-    runtime, ask Codex to compact its own thread and keep Hermes' transcript
+    runtime, ask Codex to compact its own thread and keep Fulilian' transcript
     unchanged.
     """
     auto_mode = str(
         getattr(agent, "codex_app_server_auto_compaction", "native") or "native"
     ).lower()
-    if auto_mode not in {"native", "hermes", "off"}:
+    if auto_mode not in {"native", "fulilian", "off"}:
         auto_mode = "native"
-    if not force and auto_mode != "hermes":
+    if not force and auto_mode != "fulilian":
         logger.info(
             "codex app-server compaction skipped: mode=%s force=false "
             "(session=%s messages=%d tokens=~%s)",
@@ -4751,7 +4751,7 @@ def try_shrink_image_parts_in_messages(
                 "image/jpeg": ".jpg", "image/jpg": ".jpg", "image/bmp": ".bmp",
             }.get(mime, ".jpg")
             tmp = tempfile.NamedTemporaryFile(
-                prefix="hermes_shrink_", suffix=suffix, delete=False,
+                prefix="fulilian_shrink_", suffix=suffix, delete=False,
             )
             try:
                 tmp.write(raw)

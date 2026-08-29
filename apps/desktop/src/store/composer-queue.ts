@@ -26,7 +26,7 @@ export const isSteerableEntry = (entry: Pick<QueuedPromptEntry, 'attachments' | 
 
 type QueueState = Record<string, QueuedPromptEntry[]>
 
-const STORAGE_KEY = 'hermes.desktop.composerQueue.v1'
+const STORAGE_KEY = 'fulilian.desktop.composerQueue.v1'
 
 const load = (): QueueState => {
   if (typeof window === 'undefined') {

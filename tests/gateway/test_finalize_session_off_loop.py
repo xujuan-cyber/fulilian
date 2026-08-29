@@ -11,7 +11,7 @@ run inline on the event loop from three call sites:
 On a wedged/slow hook the whole loop froze — adapter heartbeats stopped and
 systemd SIGKILLed the process mid-shutdown. All three sites now dispatch
 through ``GatewayRunner._finalize_session_off_loop``, which runs
-``hermes_cli.lifecycle.finalize_session`` in the gateway executor under a
+``fulilian_cli.lifecycle.finalize_session`` in the gateway executor under a
 bounded ``asyncio.wait_for``.
 """
 

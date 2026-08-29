@@ -1,12 +1,12 @@
 """Small shared size-formatting helpers for CLI/agent output.
 
-Sibling of ``hermes_cli.timefmt`` (same extraction rationale: a tiny
+Sibling of ``fulilian_cli.timefmt`` (same extraction rationale: a tiny
 purpose-named module lightweight consumers can import without dragging in
 the CLI surface). Replaces six near-identical private byte formatters.
 
 Two in-repo formatters intentionally do NOT delegate here:
 
-* ``hermes_cli/session_recovery.py`` uses binary suffixes (KiB/MiB/GiB)
+* ``fulilian_cli/session_recovery.py`` uses binary suffixes (KiB/MiB/GiB)
   throughout its recovery report — a deliberate, self-consistent style.
 * ``gateway/platforms/qqbot/chunked_upload.py`` renders bytes with one
   decimal ("100.0 B", pinned by tests) inside a self-contained upload

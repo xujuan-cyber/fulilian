@@ -1,4 +1,4 @@
-"""Shared helpers for attaching Hermes to a local Chromium-family CDP port."""
+"""Shared helpers for attaching Fulilian to a local Chromium-family CDP port."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from fulilian_constants import get_hermes_home
+from fulilian_constants import get_fulilian_home
 
 logger = logging.getLogger(__name__)
 
@@ -445,7 +445,7 @@ def detect_default_chromium(system: str | None = None) -> str | None:
 # default user-data-dir. Chromium ≥136 (Google-branded builds) refuses
 # remote debugging on the default dir no matter who launches it, and the
 # live dir is usually held by the user's running browser (SingletonLock).
-# Instead we snapshot the real profile into ``~/.hermes/browser-profile/``
+# Instead we snapshot the real profile into ``~/.fulilian/browser-profile/``
 # — a non-default dir Chrome will happily debug, that never contends with
 # the user's browser — launch the user's real binary on the copy with a
 # devtools port, and hand the CDP URL to whichever browser lane is active
@@ -511,8 +511,8 @@ _AUTH_REFRESH_PROFILE_FILES = (
 )
 
 def real_profile_copy_dir(browser: str) -> str:
-    """Return the hermes-owned snapshot dir for ``browser``'s real profile."""
-    return str(get_hermes_home() / "browser-profile" / browser)
+    """Return the fulilian-owned snapshot dir for ``browser``'s real profile."""
+    return str(get_fulilian_home() / "browser-profile" / browser)
 
 
 def _last_used_profile(src: str) -> str:
@@ -539,12 +539,12 @@ def _last_used_profile(src: str) -> str:
 
 
 def _secure_snapshot_root(path: str) -> None:
-    """Lock down a snapshot dir through Hermes' canonical secret-store policy.
+    """Lock down a snapshot dir through Fulilian' canonical secret-store policy.
 
     The snapshot holds copies of the user's Cookies / Login Data, so it is a
     credential store and must get the same owner-only permissions (and
-    managed-mode / NixOS group-share carve-out, HERMES_UID/GID ownership) as
-    every other Hermes secret dir — via ``hermes_cli.config._secure_dir``,
+    managed-mode / NixOS group-share carve-out, FULILIAN_UID/GID ownership) as
+    every other Fulilian secret dir — via ``fulilian_cli.config._secure_dir``,
     not a bespoke chmod. Deferred import avoids a config↔browser import cycle.
     """
     try:
@@ -627,7 +627,7 @@ def _mirror_profile_auth(src: str, dst: str, source_profile: str) -> int:
     return failed_dbs
 
 
-_SNAPSHOT_DONE_MARKER = ".hermes-snapshot-complete"
+_SNAPSHOT_DONE_MARKER = ".fulilian-snapshot-complete"
 
 # Prefix stamped on the "profile is locked" error so the calling layer can
 # recognize it as the specific needs-the-browser-closed condition (vs a generic
@@ -780,7 +780,7 @@ def close_browser_holding_profile(src: str, timeout: float = 15.0) -> tuple[bool
 
 
 def snapshot_real_profile(browser: str, src: str | None = None) -> tuple[str | None, str | None]:
-    """Snapshot ``browser``'s real ACTIVE profile into the hermes copy dir.
+    """Snapshot ``browser``'s real ACTIVE profile into the fulilian copy dir.
 
     Copies only what the launched browser needs: the user-data-dir's
     ``Local State`` plus the auth-bearing files of the profile the user
@@ -789,7 +789,7 @@ def snapshot_real_profile(browser: str, src: str | None = None) -> tuple[str | N
     We deliberately do NOT copy every profile dir: non-active profiles are
     unused here and would just be stale credential copies sitting on disk.
 
-    A ``.hermes-snapshot-complete`` marker is written only after a copy fully
+    A ``.fulilian-snapshot-complete`` marker is written only after a copy fully
     succeeds; a torn/interrupted first copy (disk full, Ctrl+C) therefore never
     looks "already populated" on the next run — it is redone from scratch.
 
@@ -820,7 +820,7 @@ def snapshot_real_profile(browser: str, src: str | None = None) -> tuple[str | N
         if _real_profile_autoclose():
             msg = (
                 f"{browser} is running and has its profile locked, so its login "
-                "data can't be copied yet. Hermes can close it for you "
+                "data can't be copied yet. Fulilian can close it for you "
                 "(this quits the browser — you'll lose unsaved tabs). Ask the "
                 "user to confirm, then close it and retry; if it's still locked "
                 "after that, they must fully quit it (including any "
@@ -832,7 +832,7 @@ def snapshot_real_profile(browser: str, src: str | None = None) -> tuple[str | N
                 "data can't be copied. Fully quit the browser (including any "
                 "background/tray instance) and retry, or turn "
                 "browser.use_real_profile off. (Enable "
-                "browser.real_profile_autoclose to let Hermes offer to close it "
+                "browser.real_profile_autoclose to let Fulilian offer to close it "
                 "for you.)"
             )
         return None, _PROFILE_LOCKED_PREFIX + msg
@@ -923,7 +923,7 @@ def cleanup_real_profile_snapshots() -> None:
     Called when consent is OFF: the copied Cookies / Login Data must not
     outlive the toggle. Best-effort and idempotent — missing dir is fine.
     """
-    root = str(get_hermes_home() / "browser-profile")
+    root = str(get_fulilian_home() / "browser-profile")
     try:
         if os.path.isdir(root):
             shutil.rmtree(root, ignore_errors=True)
@@ -986,7 +986,7 @@ def get_chrome_debug_candidates(system: str) -> list[str]:
 
 
 def chrome_debug_data_dir() -> str:
-    return str(get_hermes_home() / "chrome-debug")
+    return str(get_fulilian_home() / "chrome-debug")
 
 
 def _chrome_debug_args(port: int) -> list[str]:

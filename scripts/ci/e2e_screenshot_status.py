@@ -10,8 +10,8 @@ import shutil
 from pathlib import Path
 
 SOURCE = "playwright e2e"
-EVIDENCE_START = "<!-- hermes-e2e-evidence:start -->"
-EVIDENCE_END = "<!-- hermes-e2e-evidence:end -->"
+EVIDENCE_START = "<!-- fulilian-e2e-evidence:start -->"
+EVIDENCE_END = "<!-- fulilian-e2e-evidence:end -->"
 
 
 def _files(root: Path, pattern: str) -> list[Path]:

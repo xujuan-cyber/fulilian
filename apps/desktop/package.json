@@ -1,9 +1,9 @@
 {
-  "name": "hermes",
-  "productName": "Hermes",
+  "name": "fulilian",
+  "productName": "Fulilian",
   "private": true,
   "version": "0.17.0",
-  "description": "Native desktop shell for Hermes Agent.",
+  "description": "Native desktop shell for FuLiLian.",
   "author": "Nous Research",
   "repository": {
     "type": "git",
@@ -20,12 +20,12 @@
     "clean:renderer": "tsc --build tsconfig.json --clean ",
     "clean:electron": "tsc --build tsconfig.electron.json --clean",
     "dev": "concurrently -k \"npm:dev:renderer\" \"npm:dev:electron\"",
-    "dev:fake-boot": "cross-env HERMES_DESKTOP_BOOT_FAKE=1 HERMES_DESKTOP_BOOT_FAKE_STEP_MS=650 npm run dev",
+    "dev:fake-boot": "cross-env FULILIAN_DESKTOP_BOOT_FAKE=1 FULILIAN_DESKTOP_BOOT_FAKE_STEP_MS=650 npm run dev",
     "dev:mock": "node scripts/dev-mock.mjs",
     "dev:renderer": "node scripts/assert-root-install.mjs && npm run clean:renderer && vite --host 127.0.0.1 --port 5174",
-    "dev:electron": "tsc --build tsconfig.electron.json && wait-on http://127.0.0.1:5174 && node scripts/bundle-electron-main.mjs --dev && cross-env XCURSOR_SIZE=24 HERMES_DESKTOP_DEV_SERVER=http://127.0.0.1:5174 electron .",
-    "profile:main": "tsc --build tsconfig.electron.json && wait-on http://127.0.0.1:5174 && node scripts/bundle-electron-main.mjs --dev && cross-env XCURSOR_SIZE=24 HERMES_DESKTOP_DEV_SERVER=http://127.0.0.1:5174 electron --inspect=9229 .",
-    "profile:main:cpu": "tsc --build tsconfig.electron.json && wait-on http://127.0.0.1:5174 && node scripts/bundle-electron-main.mjs --dev && cross-env XCURSOR_SIZE=24 NODE_OPTIONS=--cpu-prof HERMES_DESKTOP_DEV_SERVER=http://127.0.0.1:5174 electron .",
+    "dev:electron": "tsc --build tsconfig.electron.json && wait-on http://127.0.0.1:5174 && node scripts/bundle-electron-main.mjs --dev && cross-env XCURSOR_SIZE=24 FULILIAN_DESKTOP_DEV_SERVER=http://127.0.0.1:5174 electron .",
+    "profile:main": "tsc --build tsconfig.electron.json && wait-on http://127.0.0.1:5174 && node scripts/bundle-electron-main.mjs --dev && cross-env XCURSOR_SIZE=24 FULILIAN_DESKTOP_DEV_SERVER=http://127.0.0.1:5174 electron --inspect=9229 .",
+    "profile:main:cpu": "tsc --build tsconfig.electron.json && wait-on http://127.0.0.1:5174 && node scripts/bundle-electron-main.mjs --dev && cross-env XCURSOR_SIZE=24 NODE_OPTIONS=--cpu-prof FULILIAN_DESKTOP_DEV_SERVER=http://127.0.0.1:5174 electron .",
     "start": "npm run build && electron .",
     "prebuild": "npm run clean",
     "build": "node scripts/assert-root-install.mjs && node scripts/write-build-stamp.mjs && vite build && node scripts/bundle-electron-main.mjs && node scripts/stage-native-deps.mjs",
@@ -92,7 +92,7 @@
     "@dnd-kit/core": "6.3.1",
     "@dnd-kit/sortable": "10.0.0",
     "@dnd-kit/utilities": "3.2.2",
-    "@hermes/shared": "file:../shared",
+    "@fulilian/shared": "file:../shared",
     "@icons-pack/react-simple-icons": "13.11.1",
     "@lezer/highlight": "1.2.3",
     "@nanostores/react": "1.1.0",
@@ -187,18 +187,18 @@
   },
   "build": {
     "electronVersion": "40.10.2",
-    "appId": "com.nousresearch.hermes",
-    "productName": "Hermes",
-    "executableName": "Hermes",
+    "appId": "com.nousresearch.fulilian",
+    "productName": "Fulilian",
+    "executableName": "Fulilian",
     "protocols": [
       {
-        "name": "Hermes Protocol",
+        "name": "Fulilian Protocol",
         "schemes": [
-          "hermes"
+          "fulilian"
         ]
       }
     ],
-    "artifactName": "Hermes-${version}-${os}-${arch}.${ext}",
+    "artifactName": "Fulilian-${version}-${os}-${arch}.${ext}",
     "icon": "assets/icon",
     "directories": {
       "output": "release"
@@ -234,19 +234,19 @@
       "entitlements": "electron/entitlements.mac.plist",
       "entitlementsInherit": "electron/entitlements.mac.inherit.plist",
       "extendInfo": {
-        "CFBundleDisplayName": "Hermes",
-        "CFBundleExecutable": "Hermes",
-        "CFBundleName": "Hermes",
-        "NSAudioCaptureUsageDescription": "Hermes uses audio capture for voice conversations.",
-        "NSCameraUsageDescription": "Hermes uses the camera when a plugin or feature you enable requests it.",
-        "NSMicrophoneUsageDescription": "Hermes uses the microphone for voice input and voice conversations.",
-        "NSCalendarsUsageDescription": "Hermes needs access to Calendar to provide requested meeting and scheduling support.",
-        "NSCalendarsFullAccessUsageDescription": "Hermes needs full access to Calendar to read and manage events when explicitly requested.",
-        "NSRemindersUsageDescription": "Hermes needs access to Reminders to provide requested personal-assistant and scheduling support.",
-        "NSRemindersFullAccessUsageDescription": "Hermes needs full access to Reminders to read and manage reminders when explicitly requested.",
-        "NSScreenCaptureUsageDescription": "Hermes captures the screen when you ask the agent to screenshot or record it.",
-        "NSLocalNetworkUsageDescription": "Hermes connects to devices on your local network when a plugin or feature you enable requests it.",
-        "NSAppleMusicUsageDescription": "Hermes accesses your music library when a plugin or feature you enable requests it."
+        "CFBundleDisplayName": "Fulilian",
+        "CFBundleExecutable": "Fulilian",
+        "CFBundleName": "Fulilian",
+        "NSAudioCaptureUsageDescription": "Fulilian uses audio capture for voice conversations.",
+        "NSCameraUsageDescription": "Fulilian uses the camera when a plugin or feature you enable requests it.",
+        "NSMicrophoneUsageDescription": "Fulilian uses the microphone for voice input and voice conversations.",
+        "NSCalendarsUsageDescription": "Fulilian needs access to Calendar to provide requested meeting and scheduling support.",
+        "NSCalendarsFullAccessUsageDescription": "Fulilian needs full access to Calendar to read and manage events when explicitly requested.",
+        "NSRemindersUsageDescription": "Fulilian needs access to Reminders to provide requested personal-assistant and scheduling support.",
+        "NSRemindersFullAccessUsageDescription": "Fulilian needs full access to Reminders to read and manage reminders when explicitly requested.",
+        "NSScreenCaptureUsageDescription": "Fulilian captures the screen when you ask the agent to screenshot or record it.",
+        "NSLocalNetworkUsageDescription": "Fulilian connects to devices on your local network when a plugin or feature you enable requests it.",
+        "NSAppleMusicUsageDescription": "Fulilian accesses your music library when a plugin or feature you enable requests it."
       },
       "gatekeeperAssess": false,
       "hardenedRuntime": true,
@@ -256,7 +256,7 @@
       ]
     },
     "dmg": {
-      "title": "Install Hermes",
+      "title": "Install Fulilian",
       "backgroundColor": "#f5f5f7",
       "iconSize": 96,
       "window": {
@@ -278,7 +278,7 @@
       ]
     },
     "win": {
-      "legalTrademarks": "Hermes",
+      "legalTrademarks": "Fulilian",
       "target": [
         "nsis",
         "msi"
@@ -288,7 +288,7 @@
     "linux": {
       "category": "Development",
       "maintainer": "Nous Research <support@nousresearch.com>",
-      "synopsis": "Native desktop shell for Hermes Agent.",
+      "synopsis": "Native desktop shell for FuLiLian.",
       "target": [
         "AppImage",
         "deb",
@@ -299,8 +299,8 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "perMachine": false,
-      "shortcutName": "Hermes",
-      "uninstallDisplayName": "Hermes",
+      "shortcutName": "Fulilian",
+      "uninstallDisplayName": "Fulilian",
       "warningsAsErrors": false
     }
   }

@@ -1,8 +1,8 @@
-import { skillInvocationText } from '@hermes/shared'
+import { skillInvocationText } from '@fulilian/shared'
 
 import { extractImageRefs } from '@/lib/embedded-images'
 import { dedupeGeneratedImageEchoesInParts } from '@/lib/generated-images'
-import type { MessageReaction, SessionMessage } from '@/types/hermes'
+import type { MessageReaction, SessionMessage } from '@/types/fulilian'
 
 import { assistantTextPart, chatMessageText, dedupeRepeatedTextInParts, reasoningPart, textPart } from './parts'
 import {

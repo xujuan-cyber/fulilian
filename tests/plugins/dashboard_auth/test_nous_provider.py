@@ -1,6 +1,6 @@
 """Tests for the bundled Nous dashboard-auth plugin.
 
-Covers four shapes from Phase 4 of ``.hermes/plans/2026-05-21-dashboard-oauth-auth.md``:
+Covers four shapes from Phase 4 of ``.fulilian/plans/2026-05-21-dashboard-oauth-auth.md``:
 
 1. Plugin entry-point registration gating (env var checks).
 2. ``start_login`` shape (PKCE/state, authorize URL parameters).
@@ -159,7 +159,7 @@ class TestConstruction:
     def test_rejects_malformed_client_id(self):
         with pytest.raises(ValueError, match="agent:"):
             nous_plugin.NousDashboardAuthProvider(
-                client_id="hermes-dashboard", portal_url="https://x"
+                client_id="fulilian-dashboard", portal_url="https://x"
             )
 
 
@@ -170,22 +170,22 @@ class TestConstruction:
 
 class TestPluginRegister:
     def test_skips_when_client_id_missing(self, monkeypatch):
-        monkeypatch.delenv("HERMES_DASHBOARD_OAUTH_CLIENT_ID", raising=False)
-        monkeypatch.delenv("HERMES_DASHBOARD_PORTAL_URL", raising=False)
+        monkeypatch.delenv("FULILIAN_DASHBOARD_OAUTH_CLIENT_ID", raising=False)
+        monkeypatch.delenv("FULILIAN_DASHBOARD_PORTAL_URL", raising=False)
         ctx = MagicMock()
         nous_plugin.register(ctx)
         ctx.register_dashboard_auth_provider.assert_not_called()
         # Skip reason is surfaced for the gate's fail-closed message.
-        assert "HERMES_DASHBOARD_OAUTH_CLIENT_ID" in nous_plugin.LAST_SKIP_REASON
+        assert "FULILIAN_DASHBOARD_OAUTH_CLIENT_ID" in nous_plugin.LAST_SKIP_REASON
 
     def test_registers_with_default_portal_url_when_only_client_id_set(
         self, monkeypatch
     ):
-        """Phase 7 follow-up: HERMES_DASHBOARD_PORTAL_URL is optional —
+        """Phase 7 follow-up: FULILIAN_DASHBOARD_PORTAL_URL is optional —
         defaults to the production Nous Portal. The user shouldn't have
         to set it for the common production deployment path."""
-        monkeypatch.setenv("HERMES_DASHBOARD_OAUTH_CLIENT_ID", "agent:inst1")
-        monkeypatch.delenv("HERMES_DASHBOARD_PORTAL_URL", raising=False)
+        monkeypatch.setenv("FULILIAN_DASHBOARD_OAUTH_CLIENT_ID", "agent:inst1")
+        monkeypatch.delenv("FULILIAN_DASHBOARD_PORTAL_URL", raising=False)
         ctx = MagicMock()
         nous_plugin.register(ctx)
         ctx.register_dashboard_auth_provider.assert_called_once()
@@ -200,8 +200,8 @@ class TestPluginRegister:
         """Explicit empty string still falls back to the production
         default — same handling as 'unset' so an empty Fly secret can't
         accidentally point the dashboard at nowhere."""
-        monkeypatch.setenv("HERMES_DASHBOARD_OAUTH_CLIENT_ID", "agent:inst1")
-        monkeypatch.setenv("HERMES_DASHBOARD_PORTAL_URL", "")
+        monkeypatch.setenv("FULILIAN_DASHBOARD_OAUTH_CLIENT_ID", "agent:inst1")
+        monkeypatch.setenv("FULILIAN_DASHBOARD_PORTAL_URL", "")
         ctx = MagicMock()
         nous_plugin.register(ctx)
         registered = ctx.register_dashboard_auth_provider.call_args.args[0]
@@ -215,8 +215,8 @@ class TestPluginRegister:
 
 class TestConfigYamlSource:
     """``dashboard.oauth.{client_id,portal_url}`` in ``config.yaml`` is the
-    canonical surface for these settings. ``HERMES_DASHBOARD_OAUTH_CLIENT_ID``
-    and ``HERMES_DASHBOARD_PORTAL_URL`` are operator overrides that win when
+    canonical surface for these settings. ``FULILIAN_DASHBOARD_OAUTH_CLIENT_ID``
+    and ``FULILIAN_DASHBOARD_PORTAL_URL`` are operator overrides that win when
     set — this is the contract Fly.io's platform-secret injection relies on,
     and the contract that lets local devs experiment without setting env
     vars.
@@ -229,7 +229,7 @@ class TestConfigYamlSource:
 
     @pytest.fixture
     def patch_config(self, monkeypatch):
-        """Yield a callable that replaces ``hermes_cli.config.load_config``
+        """Yield a callable that replaces ``fulilian_cli.config.load_config``
         with a stub returning the given dict. Tests pass the intended
         ``dashboard.oauth`` block; the stub returns the wrapping structure."""
 
@@ -238,7 +238,7 @@ class TestConfigYamlSource:
             if oauth_block is not None:
                 cfg = {"dashboard": {"oauth": oauth_block}}
             monkeypatch.setattr(
-                "hermes_cli.config.load_config", lambda: cfg
+                "fulilian_cli.config.load_config", lambda: cfg
             )
 
         return _set
@@ -247,8 +247,8 @@ class TestConfigYamlSource:
         """No env var, only config.yaml — plugin reads from config and
         registers successfully. This is the path Teknium's review pushed
         for (".env is for secrets only")."""
-        monkeypatch.delenv("HERMES_DASHBOARD_OAUTH_CLIENT_ID", raising=False)
-        monkeypatch.delenv("HERMES_DASHBOARD_PORTAL_URL", raising=False)
+        monkeypatch.delenv("FULILIAN_DASHBOARD_OAUTH_CLIENT_ID", raising=False)
+        monkeypatch.delenv("FULILIAN_DASHBOARD_PORTAL_URL", raising=False)
         patch_config({"client_id": "agent:from-config"})
         ctx = MagicMock()
         nous_plugin.register(ctx)
@@ -262,9 +262,9 @@ class TestConfigYamlSource:
 
     def test_env_overrides_config_client_id(self, patch_config, monkeypatch):
         """Env wins. Critical for Fly.io: the Portal injects
-        HERMES_DASHBOARD_OAUTH_CLIENT_ID at deploy time and we MUST
+        FULILIAN_DASHBOARD_OAUTH_CLIENT_ID at deploy time and we MUST
         honour it even if a stale config.yaml ships in the image."""
-        monkeypatch.setenv("HERMES_DASHBOARD_OAUTH_CLIENT_ID", "agent:from-env")
+        monkeypatch.setenv("FULILIAN_DASHBOARD_OAUTH_CLIENT_ID", "agent:from-env")
         patch_config({"client_id": "agent:from-config"})
         ctx = MagicMock()
         nous_plugin.register(ctx)
@@ -281,13 +281,13 @@ class TestConfigYamlSource:
         """Neither env nor config.yaml set — skip with a reason that
         mentions BOTH surfaces so operators don't guess wrong about
         which one to populate."""
-        monkeypatch.delenv("HERMES_DASHBOARD_OAUTH_CLIENT_ID", raising=False)
+        monkeypatch.delenv("FULILIAN_DASHBOARD_OAUTH_CLIENT_ID", raising=False)
         patch_config(None)
         ctx = MagicMock()
         nous_plugin.register(ctx)
         ctx.register_dashboard_auth_provider.assert_not_called()
         # Old behaviour: skip reason mentions the env var.
-        assert "HERMES_DASHBOARD_OAUTH_CLIENT_ID" in nous_plugin.LAST_SKIP_REASON
+        assert "FULILIAN_DASHBOARD_OAUTH_CLIENT_ID" in nous_plugin.LAST_SKIP_REASON
         # New behaviour: skip reason ALSO mentions the config.yaml path
         # so the user knows it's a valid alternative.
         assert "dashboard.oauth.client_id" in nous_plugin.LAST_SKIP_REASON, (
@@ -340,8 +340,8 @@ class TestStartLogin:
         result = provider.start_login(
             redirect_uri="https://hermes.fly.dev/auth/callback"
         )
-        assert "hermes_session_pkce" in result.cookie_payload
-        pkce = result.cookie_payload["hermes_session_pkce"]
+        assert "fulilian_session_pkce" in result.cookie_payload
+        pkce = result.cookie_payload["fulilian_session_pkce"]
         # Shape: ``state=…;verifier=…`` (matches stub-provider convention so
         # the auth-route layer's parser works uniformly across providers).
         parts = dict(seg.split("=", 1) for seg in pkce.split(";") if "=" in seg)
@@ -355,7 +355,7 @@ class TestStartLogin:
         )
         parsed = urllib.parse.urlparse(result.redirect_url)
         params = dict(urllib.parse.parse_qsl(parsed.query))
-        pkce = result.cookie_payload["hermes_session_pkce"]
+        pkce = result.cookie_payload["fulilian_session_pkce"]
         parts = dict(seg.split("=", 1) for seg in pkce.split(";") if "=" in seg)
         assert parts["state"] == params["state"]
 
@@ -367,8 +367,8 @@ class TestStartLogin:
         b = provider.start_login(
             redirect_uri="https://hermes.fly.dev/auth/callback"
         )
-        assert a.cookie_payload["hermes_session_pkce"] != b.cookie_payload[
-            "hermes_session_pkce"
+        assert a.cookie_payload["fulilian_session_pkce"] != b.cookie_payload[
+            "fulilian_session_pkce"
         ]
 
 
@@ -541,7 +541,7 @@ class TestVerifySession:
             lifespan=nous_plugin._JWKS_CACHE_SECONDS,
             headers={
                 "Accept": "application/json",
-                "User-Agent": "HermesAgent/1.0",
+                "User-Agent": "FulilianAgent/1.0",
             },
         )
 
@@ -559,7 +559,7 @@ class TestVerifySession:
         self, provider, rsa_keypair
     ):
         """Operators need to see the actual iss/aud the token carries to debug
-        config drift between HERMES_DASHBOARD_PORTAL_URL/CLIENT_ID and Portal."""
+        config drift between FULILIAN_DASHBOARD_PORTAL_URL/CLIENT_ID and Portal."""
         token = _mint_token(rsa_keypair, iss="https://evil.example")
         with pytest.raises(ProviderError) as excinfo:
             provider.verify_session(access_token=token)

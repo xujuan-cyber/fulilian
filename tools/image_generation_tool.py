@@ -3,7 +3,7 @@
 Image Generation Tools Module
 
 Provides image generation via FAL.ai. Multiple FAL models are supported and
-selectable via ``hermes tools`` → Image Generation; the active model is
+selectable via ``fulilian tools`` → Image Generation; the active model is
 persisted to ``image_gen.model`` in ``config.yaml``.
 
 Architecture:
@@ -734,7 +734,7 @@ _managed_fal_client_lock = threading.Lock()
 # Managed FAL gateway (Nous Subscription)
 # ---------------------------------------------------------------------------
 def _resolve_managed_fal_gateway():
-    """Resolve the FAL route from the stored `hermes tools` selection.
+    """Resolve the FAL route from the stored `fulilian tools` selection.
 
     Dispatch is a plain switch on the stored ``image_gen`` provider string:
     - ``"nous"`` (or legacy ``use_gateway: true``) → managed fal-queue
@@ -876,7 +876,7 @@ def _submit_fal_request(model: str, arguments: Dict[str, Any]):
                 f"(HTTP {status}). This model may not yet be enabled on "
                 f"the Nous Portal's FAL proxy. Either:\n"
                 f"  • Set FAL_KEY in your environment to use FAL.ai directly, or\n"
-                f"  • Pick a different model via `hermes tools` → Image Generation."
+                f"  • Pick a different model via `fulilian tools` → Image Generation."
                 f"{gateway_message}"
             ) from exc
         raise
@@ -1120,21 +1120,21 @@ def _agent_cache_base_for_env(env: Any) -> str | None:
 
         remote_home = getattr(env, "_remote_home", None)
         if remote_home:
-            return f"{str(remote_home).rstrip('/')}/.hermes"
+            return f"{str(remote_home).rstrip('/')}/.fulilian"
 
         env_name = env.__class__.__name__
         if env_name in {"DockerEnvironment", "SingularityEnvironment", "ModalEnvironment"}:
-            return "/root/.hermes"
+            return "/root/.fulilian"
 
     # If no environment has been created yet, only backends with deterministic
-    # Hermes cache roots can be translated without side effects. SSH can still
+    # Fulilian cache roots can be translated without side effects. SSH can still
     # use a shell-visible tilde path; its first environment sync will upload
     # the cache file before the first command runs.
     backend = (os.getenv("TERMINAL_ENV") or "local").strip().lower()
     if backend in {"docker", "singularity", "modal"}:
-        return "/root/.hermes"
+        return "/root/.fulilian"
     if backend == "ssh":
-        return "~/.hermes"
+        return "~/.fulilian"
     return None
 
 
@@ -1278,7 +1278,7 @@ def image_generate_tool(
                 f"Model '{meta.get('display', model_id)}' ({model_id}) is not "
                 f"capable of image-to-image / editing. Provide a text-only "
                 f"prompt (omit image_url), or switch to an edit-capable model "
-                f"via `hermes tools` → Image Generation."
+                f"via `fulilian tools` → Image Generation."
             )
 
         aspect_lc = (aspect_ratio or DEFAULT_ASPECT_RATIO).lower().strip()
@@ -1411,7 +1411,7 @@ def image_generate_tool(
 
 
 def check_fal_api_key() -> bool:
-    """True if the FAL backend selected via `hermes tools` (or, on a
+    """True if the FAL backend selected via `fulilian tools` (or, on a
     never-configured install, any FAL backend) is available.
 
     A stored-but-broken selection reports False here (registry gating);
@@ -1457,11 +1457,11 @@ def _build_no_backend_setup_message() -> str:
     if managed_nous_tools_enabled():
         lines.append(
             "  2. Sign in to a Nous account that has the managed FAL "
-            "gateway enabled (`hermes setup`)"
+            "gateway enabled (`fulilian setup`)"
         )
     lines.append(
-        "  3. Configure a different image_gen provider via `hermes tools` "
-        "→ Image Generation (run `hermes plugins list` to see installed "
+        "  3. Configure a different image_gen provider via `fulilian tools` "
+        "→ Image Generation (run `fulilian plugins list` to see installed "
         "backends)"
     )
     return "\n".join(lines)
@@ -1716,7 +1716,7 @@ def _dispatch_to_plugin_provider(
             "image": None,
             "error": (
                 f"image_gen.provider='{configured}' is set but no plugin "
-                f"registered that name. Run `hermes plugins list` to see "
+                f"registered that name. Run `fulilian plugins list` to see "
                 f"available image gen backends."
             ),
             "error_type": "provider_not_registered",
@@ -1757,7 +1757,7 @@ def _dispatch_to_plugin_provider(
                     f"support image-to-image / editing (its generate() "
                     f"signature is out of date with the image_generate schema). "
                     f"Omit image_url for text-to-image, or pick a backend that "
-                    f"supports editing via `hermes tools` → Image Generation."
+                    f"supports editing via `fulilian tools` → Image Generation."
                 ),
                 "error_type": "modality_unsupported",
             })
@@ -2017,7 +2017,7 @@ def _handle_image_generate(args, **kw):
 # model up front ("the active model is text-to-image only — image_url will be
 # rejected") saves a wasted turn. Memoized by config.yaml mtime in
 # model_tools.get_tool_definitions(), so it rebuilds when the user switches
-# model/provider via `hermes tools` or `/skills`.
+# model/provider via `fulilian tools` or `/skills`.
 
 
 _GENERIC_IMAGE_DESCRIPTION = IMAGE_GENERATE_SCHEMA["description"]

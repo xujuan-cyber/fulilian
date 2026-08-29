@@ -1,5 +1,5 @@
 /**
- * Shared HTTP transport policy for the Electron main process's Hermes REST
+ * Shared HTTP transport policy for the Electron main process's Fulilian REST
  * helpers (fetchJson / fetchPublicJson / downloadViaTokenToFile).
  *
  * Two concerns live here so they can be unit-tested without Electron:

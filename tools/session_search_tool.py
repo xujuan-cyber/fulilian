@@ -23,7 +23,7 @@ mode parameter):
      previews, timestamps).
 
 All four modes operate on the SQLite session DB via the FTS5 index and
-the get_anchored_view / get_messages_around primitives in hermes_state.
+the get_anchored_view / get_messages_around primitives in fulilian_state.
 No LLM calls anywhere — every shape returns actual messages from the DB.
 
 History: PR #20238 (JabberELF) seeded a fast/summary dual-mode split; the
@@ -37,10 +37,10 @@ import json
 import logging
 from typing import Any, Dict, List, Optional, Union
 
-from hermes_state_common import _RESET_END_REASONS
+from fulilian_state_common import _RESET_END_REASONS
 
 # Sources that are excluded from session browsing/searching by default.
-# Third-party integrations tag their sessions with HERMES_SESSION_SOURCE=tool;
+# Third-party integrations tag their sessions with FULILIAN_SESSION_SOURCE=tool;
 # delegate subagent runs are tagged "subagent"; kanban dispatcher workers are
 # tagged "kanban" — none belongs in the user's session history.
 _HIDDEN_SESSION_SOURCES = ("kanban", "subagent", "tool")
@@ -356,7 +356,7 @@ def _resolve_profile_db(profile: str):
         return None
 
     from fulilian_cli import profiles as profiles_mod
-    from hermes_state import SessionDB
+    from fulilian_state import SessionDB
 
     canon = profiles_mod.normalize_profile_name(profile)
     profiles_mod.validate_profile_name(canon)
@@ -401,7 +401,7 @@ def _locate_session_db(session_id: str):
 
     try:
         from fulilian_cli import profiles as profiles_mod
-        from hermes_state import SessionDB
+        from fulilian_state import SessionDB
     except Exception:
         return None, None
 
@@ -1100,13 +1100,13 @@ def session_search(
     owned_dbs: List[Any] = []
     if db is None:
         try:
-            from hermes_state import SessionDB
+            from fulilian_state import SessionDB
 
             db = SessionDB()
             owned_dbs.append(db)
         except Exception:
             logging.debug("SessionDB unavailable for session_search", exc_info=True)
-            from hermes_state import format_session_db_unavailable
+            from fulilian_state import format_session_db_unavailable
 
             return tool_error(format_session_db_unavailable(), success=False)
 
@@ -1136,7 +1136,7 @@ def session_search(
 def check_session_search_requirements() -> bool:
     """Requires the SQLite state database."""
     try:
-        from hermes_state import _default_db_path
+        from fulilian_state import _default_db_path
         return _default_db_path().parent.exists()
     except ImportError:
         return False
@@ -1145,7 +1145,7 @@ def check_session_search_requirements() -> bool:
 SESSION_SEARCH_SCHEMA = {
     "name": "session_search",
     "description": (
-        "Search past Hermes sessions (FTS5 over the local session DB), or read/"
+        "Search past Fulilian sessions (FTS5 over the local session DB), or read/"
         "scroll inside one. Four shapes, picked by args: `query` = discovery "
         "(top-N matching sessions, top result fully hydrated); `session_id` + "
         "`around_message_id` = scroll (window of messages around an anchor); "
@@ -1236,7 +1236,7 @@ SESSION_SEARCH_SCHEMA = {
             "profile": {
                 "type": "string",
                 "description": (
-                    "Optional. Read sessions from another Hermes profile's database "
+                    "Optional. Read sessions from another Fulilian profile's database "
                     "(read-only). Use when resolving an `@session:<profile>/<id>` link: "
                     "pass the profile segment here with session_id as the id segment. "
                     "Omit to use the current profile."

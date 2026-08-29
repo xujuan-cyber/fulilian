@@ -10,7 +10,7 @@ integrity_check` on the file reported the torn-b-tree signature:
     Tree 5 page 60788 cell 4: Rowid 34637 out of order
     Page 50549..52587: never used
 
-The defect: hermes_state already knows macOS `fsync()` does not guarantee
+The defect: fulilian_state already knows macOS `fsync()` does not guarantee
 write ordering, and mitigates it with `synchronous=FULL` +
 `checkpoint_fullfsync=1` (see `_enforce_macos_synchronous_full`, whose
 docstring names this exact failure: "a WAL checkpoint race with process
@@ -34,8 +34,8 @@ import sqlite3
 import sys
 from pathlib import Path
 
-import hermes_state
-from hermes_state import (
+import fulilian_state
+from fulilian_state import (
     _connect_repair_durable,
     repair_state_db_schema,
 )
@@ -102,8 +102,8 @@ def test_repair_path_has_no_bare_connects() -> None:
     Source-level guard: the bare form is exactly what regressed, and a unit
     test on the helper alone would not notice a sixth site being added.
     """
-    source = Path(hermes_state.__file__).read_text(encoding="utf-8")
-    tree = ast.parse(source, filename=str(hermes_state.__file__))
+    source = Path(fulilian_state.__file__).read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(fulilian_state.__file__))
 
     def is_db_path_connect(node: ast.AST) -> bool:
         if not isinstance(node, ast.Call):

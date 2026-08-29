@@ -30,7 +30,7 @@ import time
 from contextlib import contextmanager
 from contextvars import ContextVar
 from pathlib import Path
-from fulilian_constants import get_hermes_home
+from fulilian_constants import get_fulilian_home
 from typing import Dict, Any, List, Optional, Tuple
 
 from utils import atomic_write_text, is_truthy_value
@@ -58,12 +58,12 @@ _memory_surface_flags: ContextVar[Optional[Tuple[bool, bool]]] = ContextVar(
 )
 
 # Where memory files live — resolved dynamically so profile overrides
-# (HERMES_HOME env var changes) are always respected.  The old module-level
+# (FULILIAN_HOME env var changes) are always respected.  The old module-level
 # constant was cached at import time and could go stale if a profile switch
 # happened after the first import.
 def get_memory_dir() -> Path:
     """Return the profile-scoped memories directory."""
-    return get_hermes_home() / "memories"
+    return get_fulilian_home() / "memories"
 
 # Stable header prefixes for the system-prompt memory blocks rendered by
 # MemoryStore._render_block. Exported so compression's prompt-retention check

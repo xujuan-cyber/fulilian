@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Apply a layout preset in the Hermes desktop GUI.
+"""Apply a layout preset in the Fulilian desktop GUI.
 
 Lives in the ``desktop_ui`` toolset (like ``focus_pane``), which the GUI
 gateway enables only for desktop-sourced sessions. Emits ``layout.apply``
@@ -22,7 +22,7 @@ from tools.registry import registry, tool_error
 
 # Renderer answer arrives via the blocking-prompt bridge with this timeout;
 # applying a layout is synchronous in the renderer, so this is generous.
-_TIMEOUT_NOTE = "Layout apply is only available in the Hermes desktop app."
+_TIMEOUT_NOTE = "Layout apply is only available in the Fulilian desktop app."
 
 
 def apply_layout_tool(preset: str) -> str:
@@ -44,7 +44,7 @@ def apply_layout_tool(preset: str) -> str:
 APPLY_LAYOUT_SCHEMA = {
     "name": "apply_layout",
     "description": (
-        "Apply a saved layout preset to the Hermes desktop app when the user asks to "
+        "Apply a saved layout preset to the Fulilian desktop app when the user asks to "
         "rearrange the workspace — e.g. \"set up my layout for coding\", \"give me a "
         "focused view\", \"put the terminal front and center\". Built-in presets: "
         "default (chat + sidebars), focus (chat only), terminal-deck (terminal "

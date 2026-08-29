@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import type { ProfileInfo } from '@/types/hermes'
+import type { ProfileInfo } from '@/types/fulilian'
 
 vi.mock('@/app/chat/session-view', async () => {
   const { atom } = await import('nanostores')
@@ -14,7 +14,7 @@ vi.mock('@/components/pane-shell/tree/store', async () => {
   return { $narrowViewport: atom(false) }
 })
 vi.mock('@/contrib/events', () => ({ onGatewayEvent: vi.fn() }))
-vi.mock('@/hermes', () => ({ deleteProfile: vi.fn(), getLogs: vi.fn(), getStatus: vi.fn(), hermesApi: vi.fn() }))
+vi.mock('@/fulilian', () => ({ deleteProfile: vi.fn(), getLogs: vi.fn(), getStatus: vi.fn(), fulilianApi: vi.fn() }))
 vi.mock('@/store/notifications', () => ({ notify: vi.fn(), notifyError: vi.fn() }))
 vi.mock('@/store/system-actions', () => ({ runGatewayRestart: vi.fn() }))
 vi.mock('@/store/session', async () => {
@@ -108,7 +108,7 @@ vi.mock('@/store/gateway', async () => {
 const { BOT_CHAT_SESSION_HYDRATION_TIMEOUT_MS, DEFAULT_SESSION_HYDRATION_TIMEOUT_MS, host } = await import('./index')
 
 const { openSession: openSessionCore } = await import('@/app/open-session')
-const { deleteProfile, hermesApi } = await import('@/hermes')
+const { deleteProfile, fulilianApi } = await import('@/fulilian')
 
 const {
   activeGatewayConnectionId,
@@ -178,7 +178,7 @@ afterEach(() => {
   setMockAtom($messages, [])
   $profiles.set([profile('cached-only')])
   setWorkspaceScope('sessions')
-  delete (window as unknown as { hermesDesktop?: unknown }).hermesDesktop
+  delete (window as unknown as { fulilianDesktop?: unknown }).fulilianDesktop
 })
 
 describe('connection-aware plugin host APIs', () => {
@@ -227,7 +227,7 @@ describe('connection-aware plugin host APIs', () => {
     ])
 
     vi.mocked(refreshProfiles).mockResolvedValueOnce([profile('desktop-primary'), profile('remote-worker')])
-    ;(window as unknown as { hermesDesktop: unknown }).hermesDesktop = { getProfileRoutes }
+    ;(window as unknown as { fulilianDesktop: unknown }).fulilianDesktop = { getProfileRoutes }
 
     const routes = await host.profileRoutes()
 
@@ -251,7 +251,7 @@ describe('connection-aware plugin host APIs', () => {
 
     $profiles.set([profile('cached-worker')])
     vi.mocked(refreshProfiles).mockRejectedValueOnce(new Error('profile backend unavailable'))
-    ;(window as unknown as { hermesDesktop: unknown }).hermesDesktop = { getProfileRoutes }
+    ;(window as unknown as { fulilianDesktop: unknown }).fulilianDesktop = { getProfileRoutes }
 
     await expect(host.profileRoutes()).resolves.toEqual([
       { connectionId: 'connection-cached', mode: 'remote', profile: 'cached-worker', targetProfile: 'cached-worker' }
@@ -289,7 +289,7 @@ describe('connection-aware plugin host APIs', () => {
       targetProfile: 'backend-worker'
     }
 
-    vi.mocked(hermesApi)
+    vi.mocked(fulilianApi)
       .mockResolvedValueOnce({ sessions: [{ id: 'bot-chat', profile: 'backend-worker', title: 'Bot Chat' }] })
       .mockResolvedValueOnce({ ok: true, hidden: true })
 
@@ -300,20 +300,20 @@ describe('connection-aware plugin host APIs', () => {
       host.setPersistedSessionHidden(route, { sessionId: 'bot-chat', profile: 'backend-worker', hidden: true })
     ).resolves.toMatchObject({ ok: true, hidden: true })
 
-    expect(hermesApi).toHaveBeenNthCalledWith(
+    expect(fulilianApi).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
         connectionId: 'source-a',
         path: expect.stringContaining('/api/profiles/sessions?')
       })
     )
-    expect(hermesApi).toHaveBeenNthCalledWith(2, {
+    expect(fulilianApi).toHaveBeenNthCalledWith(2, {
       connectionId: 'source-a',
       path: '/api/sessions/bot-chat',
       method: 'PATCH',
       body: { hidden: true, profile: 'backend-worker' }
     })
-    expect(vi.mocked(hermesApi).mock.calls.every(([request]) => !('profile' in request))).toBe(true)
+    expect(vi.mocked(fulilianApi).mock.calls.every(([request]) => !('profile' in request))).toBe(true)
     expect(requestGatewayForAgent).not.toHaveBeenCalled()
     expect(requestGatewayForProfile).not.toHaveBeenCalled()
   })
@@ -417,7 +417,7 @@ describe('connection-aware plugin host APIs', () => {
   })
 
   it('rejects a profile-only request when the current registry makes it ambiguous', async () => {
-    ;(window as unknown as { hermesDesktop: unknown }).hermesDesktop = {
+    ;(window as unknown as { fulilianDesktop: unknown }).fulilianDesktop = {
       getAgentRoster: vi.fn(async () => ({
         agents: [
           { connectionId: 'source-a', profile: 'research' },
@@ -435,7 +435,7 @@ describe('connection-aware plugin host APIs', () => {
   })
 
   it('keeps profile-only compatibility when sole-local enumeration fails', async () => {
-    ;(window as unknown as { hermesDesktop: unknown }).hermesDesktop = {
+    ;(window as unknown as { fulilianDesktop: unknown }).fulilianDesktop = {
       getAgentRoster: vi.fn(async () => ({
         agents: [],
         sources: [{ connectionId: 'local', kind: 'local', label: 'This device' }]
@@ -450,7 +450,7 @@ describe('connection-aware plugin host APIs', () => {
   })
 
   it('rejects profile-only routing when another source is undialed', async () => {
-    ;(window as unknown as { hermesDesktop: unknown }).hermesDesktop = {
+    ;(window as unknown as { fulilianDesktop: unknown }).fulilianDesktop = {
       getAgentRoster: vi.fn(async () => ({
         agents: [{ connectionId: 'local', profile: 'research' }],
         sources: [
@@ -608,7 +608,7 @@ describe('profile-aware plugin session opens', () => {
   })
 
   it('revalidates an exact route before the one allowed hydration retry', async () => {
-    ;(window as unknown as { hermesDesktop: unknown }).hermesDesktop = {
+    ;(window as unknown as { fulilianDesktop: unknown }).fulilianDesktop = {
       getProfileRoutes: vi.fn(async () => [])
     }
 

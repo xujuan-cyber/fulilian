@@ -34,10 +34,10 @@ describe('pickWindowBelow', () => {
   })
 
   it('skips our own other windows (same pid) while walking down', () => {
-    const secondHermesWindow = win(SELF_PID, 150, 150)
+    const secondFulilianWindow = win(SELF_PID, 150, 150)
     const target = win(7, 160, 160)
 
-    const { below } = pickWindowBelow([win(SELF_PID, 100, 100), secondHermesWindow, target], SELF_PID, SELF_BOUNDS)
+    const { below } = pickWindowBelow([win(SELF_PID, 100, 100), secondFulilianWindow, target], SELF_PID, SELF_BOUNDS)
 
     expect(below).toBe(target)
   })

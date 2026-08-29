@@ -1,4 +1,4 @@
-"""``hermes approvals`` subcommand parser.
+"""``fulilian approvals`` subcommand parser.
 
 Follows the cron/security pattern: parser construction lives here, the
 handler is injected by ``main.py`` so this module never imports ``main``
@@ -18,7 +18,7 @@ def build_approvals_parser(subparsers, *, cmd_approvals: Callable) -> None:
         help="Approval-prompt tools (mine history into allowlist proposals)",
         description=(
             "Tools for the dangerous-command approval system. "
-            "`hermes approvals suggest` mines past approval decisions from "
+            "`fulilian approvals suggest` mines past approval decisions from "
             "the session database and proposes command_allowlist entries so "
             "repeatedly-approved commands stop prompting."
         ),
@@ -72,7 +72,7 @@ def build_approvals_parser(subparsers, *, cmd_approvals: Callable) -> None:
     )
     suggest_parser.add_argument(
         "--db",
-        help="Path to an alternate session database (default: ~/.hermes/state.db)",
+        help="Path to an alternate session database (default: ~/.fulilian/state.db)",
     )
     suggest_parser.set_defaults(func=cmd_approvals)
 
@@ -87,7 +87,7 @@ def build_approvals_parser(subparsers, *, cmd_approvals: Callable) -> None:
             "executing the command, prompting anyone, or persisting anything. "
             "Exit codes: 0 allow, 2 ask-approval, 3 deny (hardline or user "
             "deny rule). Tip: use `--` before the command so its own flags "
-            "aren't parsed: hermes approvals test -- rm -rf /tmp/x"
+            "aren't parsed: fulilian approvals test -- rm -rf /tmp/x"
         ),
     )
     test_parser.add_argument(

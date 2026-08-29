@@ -1,5 +1,5 @@
 /**
- * Unit + live-transport tests for the Electron main process's Hermes REST
+ * Unit + live-transport tests for the Electron main process's Fulilian REST
  * retry policy (#92976 / PR #92977 salvage).
  *
  * The live tests run REAL node http servers that misbehave the way the

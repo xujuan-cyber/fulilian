@@ -74,7 +74,7 @@ const emojibaseDir =
 const EMOJIBASE_PATH = /^[a-z-]+\/(data|messages|shortcodes\/emojibase)\.json$/
 
 const emojibaseAssets = () => ({
-  name: 'hermes:emojibase-assets',
+  name: 'fulilian:emojibase-assets',
   configureServer(server: {
     middlewares: { use: (route: string, handler: (req: any, res: any, next: () => void) => void) => void }
   }) {
@@ -110,7 +110,7 @@ export default defineConfig(({ command }) => ({
     // without this, Vite's `postcss-load-config` walks UP the filesystem
     // looking for a stray `postcss.config.*` / `tailwind.config.*`. The desktop
     // build runs from inside the user's home tree (e.g.
-    // `C:\Users\<name>\AppData\Local\hermes\hermes-agent\apps\desktop`), so an
+    // `C:\Users\<name>\AppData\Local\fulilian\fulilian-agent\apps\desktop`), so an
     // unrelated Tailwind v3 config higher up the tree gets picked up and
     // reprocesses our v4 stylesheet, failing the build with
     // "`@layer base` is used but no matching `@tailwind base` directive is
@@ -187,9 +187,9 @@ export default defineConfig(({ command }) => ({
     alias: {
       '@/debug/dev-only': debugEntry(command, process.env as Record<string, string>),
       '@': path.resolve(__dirname, './src'),
-      '@hermes/plugin-sdk': path.resolve(__dirname, './src/sdk/index.ts'),
-      '@hermes/shared/billing': path.resolve(__dirname, '../shared/src/billing-types.ts'),
-      '@hermes/shared': path.resolve(__dirname, '../shared/src'),
+      '@fulilian/plugin-sdk': path.resolve(__dirname, './src/sdk/index.ts'),
+      '@fulilian/shared/billing': path.resolve(__dirname, '../shared/src/billing-types.ts'),
+      '@fulilian/shared': path.resolve(__dirname, '../shared/src'),
       // The tour tool's preview surface injects driver.js's prebuilt IIFE into
       // the pane's guest page as raw source; the package's exports map doesn't
       // expose that dist file (nor ./package.json), so resolve the main entry

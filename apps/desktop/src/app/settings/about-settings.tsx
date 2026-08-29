@@ -119,7 +119,7 @@ export function AboutSettings() {
                     href={INSTALLER_URL}
                     onClick={event => {
                       event.preventDefault()
-                      void window.hermesDesktop?.openExternal?.(INSTALLER_URL)
+                      void window.fulilianDesktop?.openExternal?.(INSTALLER_URL)
                     }}
                     rel="noreferrer"
                     target="_blank"
@@ -187,7 +187,7 @@ export function AboutSettings() {
                 href={RELEASE_NOTES_URL}
                 onClick={event => {
                   event.preventDefault()
-                  void window.hermesDesktop?.openExternal?.(RELEASE_NOTES_URL)
+                  void window.fulilianDesktop?.openExternal?.(RELEASE_NOTES_URL)
                 }}
                 rel="noreferrer"
                 target="_blank"

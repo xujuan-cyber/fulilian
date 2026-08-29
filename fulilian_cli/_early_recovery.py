@@ -1,8 +1,8 @@
-"""Dependency-light venv recovery that runs BEFORE hermes_cli.main's imports.
+"""Dependency-light venv recovery that runs BEFORE fulilian_cli.main's imports.
 
-The ``hermes`` console entry point is ``hermes_cli.main:main``.  Importing
-``hermes_cli.main`` pulls in third-party packages at module level (``dotenv``
-via ``hermes_cli.env_loader``, ``yaml`` via ``hermes_cli.config``, ...).  In
+The ``fulilian`` console entry point is ``fulilian_cli.main:main``.  Importing
+``fulilian_cli.main`` pulls in third-party packages at module level (``dotenv``
+via ``fulilian_cli.env_loader``, ``yaml`` via ``fulilian_cli.config``, ...).  In
 the exact failure state the update-recovery markers exist for — a failed lazy
 backend refresh or interrupted core install that wiped a core package's
 import files (#57828) — a normal launch crashes *while importing main.py*,
@@ -10,11 +10,11 @@ before ``_recover_from_interrupted_install()`` can run.  The marker system is
 unreachable precisely when it is needed most.
 
 This module is deliberately **stdlib-only** so importing it can never fail on
-a corrupted venv.  ``hermes_cli.main`` imports and calls
+a corrupted venv.  ``fulilian_cli.main`` imports and calls
 :func:`recover_if_needed` at the very top of its module body, before any
 third-party import.
 
-Scope: this early pass only repairs enough for ``hermes_cli.main`` to become
+Scope: this early pass only repairs enough for ``fulilian_cli.main`` to become
 importable again (force-reinstall of the known-fragile core packages, using
 the pins from pyproject.toml).  It NEVER clears the recovery markers — the
 full, confirmed marker lifecycle stays with ``_recover_from_interrupted_install()``
@@ -59,10 +59,10 @@ LAZY_REFRESH_REPAIR_PACKAGES: dict[str, str] = {
 
 # --- Windows entry-point shim quarantine -----------------------------------
 #
-# ``hermes update`` renames the live ``hermes*.exe`` shims aside
-# (``hermes.exe.old.<unix-ms>``) so uv can write replacements. Putting them BACK
+# ``fulilian update`` renames the live ``fulilian*.exe`` shims aside
+# (``fulilian.exe.old.<unix-ms>``) so uv can write replacements. Putting them BACK
 # is the safety-critical direction: losing that rename leaves the install with
-# no ``hermes`` on PATH, and the command that would repair it IS ``hermes
+# no ``fulilian`` on PATH, and the command that would repair it IS ``fulilian
 # update`` (#75584).
 #
 # Three call sites restore a quarantined shim -- the updater, the
@@ -91,8 +91,8 @@ def restore_quarantined_shims(
     race. Both are silent, so two processes sweeping the same orphan cannot
     produce a spurious error.
 
-    Messages go to stderr by default -- the startup sweep runs on EVERY hermes
-    invocation, and ``hermes acp`` speaks JSON-RPC on stdout.
+    Messages go to stderr by default -- the startup sweep runs on EVERY fulilian
+    invocation, and ``fulilian acp`` speaks JSON-RPC on stdout.
     """
     if stream is None:
         stream = sys.stderr
@@ -298,12 +298,12 @@ def _find_uv_binary() -> str | None:
 
     uv-managed base interpreters carry an ``EXTERNALLY-MANAGED`` marker, so
     the stdlib ``pip`` fallback below refuses to touch them.  In that state
-    the only sanctioned installer is uv itself, which Hermes already vendors
-    (``~/.hermes/bin/uv.exe``) or the user has on PATH.  Stdlib-only.
+    the only sanctioned installer is uv itself, which Fulilian already vendors
+    (``~/.fulilian/bin/uv.exe``) or the user has on PATH.  Stdlib-only.
     """
     exe = "uv.exe" if sys.platform == "win32" else "uv"
     candidates = [
-        Path.home() / ".hermes" / "bin" / exe,
+        Path.home() / ".fulilian" / "bin" / exe,
         Path.home() / ".local" / "bin" / exe,
         Path.home() / ".cargo" / "bin" / exe,
     ]
@@ -339,7 +339,7 @@ def _base_interpreter_is_externally_managed() -> bool:
 def _run_repair_install(specs: list[str], project_root: Path) -> bool:
     """``uv pip`` (or stdlib ``pip``) force-reinstall of the given specs.
 
-    Streams nothing to stdout (``hermes acp`` speaks JSON-RPC on stdout);
+    Streams nothing to stdout (``fulilian acp`` speaks JSON-RPC on stdout);
     output is captured and replayed to stderr only on failure.  Never raises.
 
     Two installer paths, in priority order:
@@ -417,7 +417,7 @@ def _pytest_owns_live_checkout(root: Path) -> bool:
     """True when running under pytest AND ``root`` is this module's own
     checkout — the one whose venv is executing the suite right now.
 
-    Lifecycle tests spawn real subprocesses that import ``hermes_cli.main``
+    Lifecycle tests spawn real subprocesses that import ``fulilian_cli.main``
     with recovery armed; ``PYTEST_CURRENT_TEST`` rides the inherited env into
     those children. Without this guard, a genuinely-broken dev venv gets a
     REAL ``ensurepip`` + ``pip install --force-reinstall`` from inside a
@@ -433,10 +433,10 @@ def recover_if_needed(
     project_root: Path | None = None,
     argv: list[str] | None = None,
 ) -> None:
-    """Repair wiped core packages so ``hermes_cli.main`` can import at all.
+    """Repair wiped core packages so ``fulilian_cli.main`` can import at all.
 
     Fast path (no marker present) is two ``lstat`` calls.  Only acts when a
-    recovery marker from a prior ``hermes update`` exists AND an import probe
+    recovery marker from a prior ``fulilian update`` exists AND an import probe
     confirms a core package is actually broken.  Markers are intentionally
     NOT cleared here — ``_recover_from_interrupted_install()`` in main.py owns
     the confirmed marker lifecycle and runs immediately after import succeeds.
@@ -473,7 +473,7 @@ def recover_if_needed(
         # A live marker owner means another updater is currently inside the
         # marker-to-install window.  Never race it.  A dead owner means this is
         # a prior deferral/interruption and MUST be recovered even when this
-        # launch is itself `hermes update`: CLI and Desktop retries preserve
+        # launch is itself `fulilian update`: CLI and Desktop retries preserve
         # that argv, and skipping solely on argv recreates the self-lock loop.
         if core_marker.exists():
             if _marker_owner_is_live(core_marker):
@@ -542,7 +542,7 @@ def recover_if_needed(
 
 # Cap on automatic early-pass install retries.  A persistently failing
 # install (e.g. network down, index unreachable) must not reinstall-hammer
-# every `hermes` launch: past this many attempts the early pass hands the
+# every `fulilian` launch: past this many attempts the early pass hands the
 # marker to main.py's post-import recovery, which presents the manual
 # recovery command.  The counter lives inside the marker file itself (JSON
 # body) and is bumped on each failed attempt.
@@ -582,17 +582,17 @@ def _complete_pending_core_install(root: Path, core_marker: Path) -> bool:
     """Run the pending core install BEFORE main.py can import native modules.
 
     ``recover_if_needed`` invokes this when ``.update-incomplete`` exists —
-    a prior ``hermes update`` (or the self-lock preflight, #83569) left the
+    a prior ``fulilian update`` (or the self-lock preflight, #83569) left the
     dependency sync deliberately unfinished.  Completing it here matters on
     Windows: the deferral exists precisely because the process that wrote the
     marker had a native venv extension mapped; this process, running before
-    ``hermes_cli.main``'s third-party imports, maps nothing yet, so the
+    ``fulilian_cli.main``'s third-party imports, maps nothing yet, so the
     installer can replace ``.pyd`` files without hitting the lock.
 
     Marker lifecycle: cleared on success; kept (attempts counter bumped) on
     failure for the next launch or main.py's post-import recovery.  An
     attempts ceiling caps automatic retries so a persistent installer
-    failure does not block every launch (``hermes acp`` included).
+    failure does not block every launch (``fulilian acp`` included).
 
     Never raises: any failure leaves the marker for the post-import path and
     returns ``False``.  Returns ``True`` only after the install succeeds.
@@ -630,7 +630,7 @@ def _complete_pending_core_install(root: Path, core_marker: Path) -> bool:
 
         try:
             print(
-                "⚠ A previous `hermes update` was interrupted mid-install — "
+                "⚠ A previous `fulilian update` was interrupted mid-install — "
                 "finishing dependency installation now (before any native "
                 "extensions load)...",
                 file=sys.stderr,
@@ -644,7 +644,7 @@ def _complete_pending_core_install(root: Path, core_marker: Path) -> bool:
                 file=sys.stderr,
             )
             print(
-                "  The next launch will retry; hermes will keep working from "
+                "  The next launch will retry; fulilian will keep working from "
                 "the current venv in the meantime.",
                 file=sys.stderr,
             )

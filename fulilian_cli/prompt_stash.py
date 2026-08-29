@@ -18,7 +18,7 @@ the common "undo my last Ctrl+S" case is a single keystroke.
 Nothing is written to disk. Drafts frequently contain credentials, prompts
 under NDA, or pasted secrets, and a session-scoped stash keeps that material
 in memory only. Callers that later want cross-restart persistence must route
-through ``get_hermes_home()`` rather than hardcoding ``~/.hermes``.
+through ``get_fulilian_home()`` rather than hardcoding ``~/.fulilian``.
 """
 
 from __future__ import annotations
@@ -60,7 +60,7 @@ class StashEntry:
     preview: str = ""
 
     def as_dict(self) -> dict:
-        """Render in the shape ``HermesCLI._render_stash_panel`` consumes."""
+        """Render in the shape ``FulilianCLI._render_stash_panel`` consumes."""
         return {
             "text": self.text,
             "images": list(self.images),

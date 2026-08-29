@@ -1,7 +1,7 @@
-"""Vertex AI (Google Cloud) adapter for Hermes Agent.
+"""Vertex AI (Google Cloud) adapter for FuLiLian.
 
 Provides authentication and configuration for Vertex AI's OpenAI-compatible
-endpoint. This allows Hermes to use Gemini models via Google Cloud with
+endpoint. This allows Fulilian to use Gemini models via Google Cloud with
 enterprise-grade rate limits and quotas.
 
 Requires: pip install google-auth
@@ -26,7 +26,7 @@ from agent.secret_scope import get_secret as _get_secret, is_multiplex_active
 # Ensure google-auth is installed before importing. The [vertex] extra is no
 # longer in [all] per the lazy-install policy added 2026-05-12 — lazy_deps
 # handles on-demand installation so the Vertex provider still works for users
-# who installed plain `hermes-agent` and only later selected a Gemini model.
+# who installed plain `fulilian-agent` and only later selected a Gemini model.
 try:
     from tools.lazy_deps import ensure as _lazy_ensure
     _lazy_ensure("provider.vertex", prompt=False)
@@ -229,19 +229,19 @@ def has_vertex_credentials() -> bool:
 
 
 def has_explicit_vertex_config() -> bool:
-    """True only when the user deliberately pointed Hermes at Vertex.
+    """True only when the user deliberately pointed Fulilian at Vertex.
 
     Stricter than :func:`has_vertex_credentials`, which also returns True for
     an ambient ``GOOGLE_APPLICATION_CREDENTIALS`` path — a var commonly set
     globally for unrelated GCP work. That ambient signal must NOT mark Vertex
     "explicitly configured" for the model-picker gate, or a user who never set
-    Hermes up for Vertex would suddenly see it (and could spend against those
-    credentials). So this checks only Hermes-scoped signals:
+    Fulilian up for Vertex would suddenly see it (and could spend against those
+    credentials). So this checks only Fulilian-scoped signals:
 
       * ``VERTEX_PROJECT_ID`` env or ``vertex.project_id`` in config.yaml
         (``_resolve_project_override``), or
       * a resolvable ``VERTEX_CREDENTIALS_PATH`` service-account file
-        (the Hermes-specific path var — NOT ``GOOGLE_APPLICATION_CREDENTIALS``).
+        (the Fulilian-specific path var — NOT ``GOOGLE_APPLICATION_CREDENTIALS``).
     """
     if _resolve_project_override():
         return True

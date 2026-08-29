@@ -129,13 +129,13 @@ class TestFallbackMirrorEndToEnd:
 
     @pytest.fixture()
     def slack_env(self, monkeypatch, tmp_path):
-        home = tmp_path / "hermes-home"
+        home = tmp_path / "fulilian-home"
         home.mkdir()
         (home / "config.yaml").write_text(
             "cron:\n  mirror_delivery: true\n"
             "platforms:\n  slack:\n    enabled: true\n    token: xoxb-test\n"
         )
-        monkeypatch.setenv("HERMES_HOME", str(home))
+        monkeypatch.setenv("FULILIAN_HOME", str(home))
 
         send_calls = []
 

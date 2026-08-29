@@ -1,16 +1,16 @@
 ---
 sidebar_label: "Build a Plugin"
 slug: /developer-guide/plugins
-title: "Build a Hermes Plugin"
-description: "Step-by-step guide to building a complete Hermes plugin with tools, hooks, data files, and skills"
+title: "Build a Fulilian Plugin"
+description: "Step-by-step guide to building a complete Fulilian plugin with tools, hooks, data files, and skills"
 ---
 
-# Build a Hermes Plugin
+# Build a Fulilian Plugin
 
-This guide walks through building a complete Hermes plugin from scratch. By the end you'll have a working plugin with multiple tools, lifecycle hooks, shipped data files, and a bundled skill — everything the plugin system supports.
+This guide walks through building a complete Fulilian plugin from scratch. By the end you'll have a working plugin with multiple tools, lifecycle hooks, shipped data files, and a bundled skill — everything the plugin system supports.
 
 :::info Not sure which guide you need?
-Hermes has several distinct pluggable interfaces — some use Python `register_*` APIs, others are config-driven or drop-in directories. Use this map first:
+Fulilian has several distinct pluggable interfaces — some use Python `register_*` APIs, others are config-driven or drop-in directories. Use this map first:
 
 | If you want to add… | Read |
 |---|---|
@@ -28,25 +28,25 @@ Hermes has several distinct pluggable interfaces — some use Python `register_*
 | A **secret-manager backend** (vault / password manager / OS keystore) | [Secret Source Plugins](/developer-guide/secret-source-plugin) |
 | A **dashboard OIDC/auth provider** | [Web Dashboard — custom providers](/user-guide/features/web-dashboard#custom-providers) — `ctx.register_dashboard_auth_provider()` |
 | A **TTS backend** (any CLI — Piper, VoxCPM, Kokoro, voice cloning, …) | [TTS custom command providers](/user-guide/features/tts#custom-command-providers) — config-driven, no Python needed |
-| An **STT backend** (custom whisper / ASR CLI) | [Voice Message Transcription](/user-guide/features/tts#voice-message-transcription-stt) — set `HERMES_LOCAL_STT_COMMAND` to an argv-tokenized template |
+| An **STT backend** (custom whisper / ASR CLI) | [Voice Message Transcription](/user-guide/features/tts#voice-message-transcription-stt) — set `FULILIAN_LOCAL_STT_COMMAND` to an argv-tokenized template |
 | **External tools via MCP** (filesystem, GitHub, Linear, any MCP server) | [MCP](/user-guide/features/mcp) — declare `mcp_servers.<name>` in `config.yaml` |
-| **Gateway event hooks** (fire on startup, session events, commands) | [Event Hooks](/user-guide/features/hooks#gateway-event-hooks) — drop `HOOK.yaml` + `handler.py` into `~/.hermes/hooks/<name>/` |
+| **Gateway event hooks** (fire on startup, session events, commands) | [Event Hooks](/user-guide/features/hooks#gateway-event-hooks) — drop `HOOK.yaml` + `handler.py` into `~/.fulilian/hooks/<name>/` |
 | **Shell hooks** (run a shell command on events) | [Shell Hooks](/user-guide/features/hooks#shell-hooks) — declare under `hooks:` in `config.yaml` |
-| **Additional skill sources** (custom GitHub repos, private skill indexes) | [Skills](/user-guide/features/skills) — `hermes skills tap add <repo>` · [Publishing a tap](/user-guide/features/skills#publishing-a-custom-skill-tap) |
+| **Additional skill sources** (custom GitHub repos, private skill indexes) | [Skills](/user-guide/features/skills) — `fulilian skills tap add <repo>` · [Publishing a tap](/user-guide/features/skills#publishing-a-custom-skill-tap) |
 | A first-class **core** inference provider (not a plugin) | [Adding Providers](/developer-guide/adding-providers) |
 
 See the full [Pluggable interfaces table](/user-guide/features/plugins#pluggable-interfaces--where-to-go-for-each) for a consolidated view of every extension surface including config-driven (TTS, STT, MCP, shell hooks) and drop-in directory (gateway hooks) styles.
 :::
 
 :::caution Third-party-product plugins ship standalone — not into the core tree
-Plugins that integrate **someone else's product or project** — observability/metrics backends, vendor SaaS connectors, analytics dashboards, paid-service tie-ins — are built and distributed as **standalone plugin repos**, not merged into `NousResearch/hermes-agent`. Users install them into `~/.hermes/plugins/` or via a pip entry point; everything in this guide works the same way from a standalone repo. This is a coupling-and-maintenance decision (the core moves fast and we don't own your backend), not a quality bar — a plugin can be excellent and still belong in its own repo. Promote it in the Nous Research Discord `#plugins-skills-and-skins` channel. See [CONTRIBUTING.md](https://github.com/NousResearch/hermes-agent/blob/main/CONTRIBUTING.md) for the policy.
+Plugins that integrate **someone else's product or project** — observability/metrics backends, vendor SaaS connectors, analytics dashboards, paid-service tie-ins — are built and distributed as **standalone plugin repos**, not merged into `NousResearch/hermes-agent`. Users install them into `~/.fulilian/plugins/` or via a pip entry point; everything in this guide works the same way from a standalone repo. This is a coupling-and-maintenance decision (the core moves fast and we don't own your backend), not a quality bar — a plugin can be excellent and still belong in its own repo. Promote it in the Nous Research Discord `#plugins-skills-and-skins` channel. See [CONTRIBUTING.md](https://github.com/NousResearch/hermes-agent/blob/main/CONTRIBUTING.md) for the policy.
 :::
 
 ## Portable Agent Plugins v1 packages
 
-Hermes can also install and load directory packages that target the Agent
+Fulilian can also install and load directory packages that target the Agent
 Plugins v1.0.0 format. This is a compatibility adapter for the portable
-components Hermes already owns. It does not replace native `plugin.yaml` plus
+components Fulilian already owns. It does not replace native `plugin.yaml` plus
 `register(ctx)` plugins.
 
 ```text
@@ -62,9 +62,9 @@ my-portable-plugin/
 Install and activate a portable package through the normal workflow:
 
 ```bash
-hermes plugins install owner/repository --no-enable
-hermes plugins list
-hermes plugins enable <plugin-name>
+fulilian plugins install owner/repository --no-enable
+fulilian plugins list
+fulilian plugins enable <plugin-name>
 ```
 
 Portable packages are disabled after installation unless you explicitly enable
@@ -76,17 +76,17 @@ Use `skills_list` to discover the full qualified skill name. Portable skill
 namespaces have the deterministic form `agent-plugin-<slug>-<hash>`, derived
 from the discovered plugin key so sanitized names cannot collide.
 
-Hermes validates `plugin.json`, Agent Skills frontmatter, fixed component
+Fulilian validates `plugin.json`, Agent Skills frontmatter, fixed component
 locations, `mcp.json`, resolved paths, and symlink containment locally. It does
 not fetch JSON schemas while loading a package. A bad skill or MCP entry is
 skipped at its own boundary when valid sibling components can still load.
 `PLUGIN_ROOT` points to the resolved package root. `PLUGIN_DATA` points to a
-profile-scoped writable directory managed by Hermes.
+profile-scoped writable directory managed by Fulilian.
 Values declared in portable MCP `env` are visible package data, not a secret
 storage mechanism. Do not place credentials in `mcp.json`.
 
 The current portable subset supports stdio and Streamable HTTP MCP entries.
-Portable `streamable-http` entries are routed through Hermes' existing native
+Portable `streamable-http` entries are routed through Fulilian' existing native
 remote MCP client (the same runtime that powers URL-based `mcp_servers`
 config), with the v1 boundary rules enforced: the URL must be absolute
 http(s) with no user information or fragment, plain HTTP is accepted only
@@ -94,22 +94,22 @@ for `localhost`/loopback hosts, and configured headers are never forwarded
 across a cross-origin redirect. Legacy `sse` entries are reported and
 skipped. Agent Plugins v1 does not define trust, permissions, provenance, or a
 sandbox. Enabling a package grants its instructions and local executable the
-same full-trust posture as other installed Hermes plugins.
+same full-trust posture as other installed Fulilian plugins.
 
 The [rendered specification](https://agent-plugins.org/specification) currently
 labels v1.0.0 a Working Draft, while the
 [versioned specification repository](https://github.com/agentplugins/agent-plugins-spec/blob/main/spec/1.0.0.md)
-records it as Published. Hermes keys behavior on the canonical v1.0.0 schema
+records it as Published. Fulilian keys behavior on the canonical v1.0.0 schema
 identifiers and normative text, not either mutable status label. This is an
 explicit supported subset, not a claim of full Agent Plugins conformance.
 
 ## Native plugin compatibility contract
 
 Native `plugin.yaml` plus `register(ctx)` plugins are protected by behavior,
-not by one global plugin API number. Hermes does not expose a
+not by one global plugin API number. Fulilian does not expose a
 `PLUGIN_API_VERSION`, require a manifest-wide `api:` match, or attach an API
 version to unrelated values. A plugin that uses a documented behavior should
-continue to work after a normal Hermes upgrade.
+continue to work after a normal Fulilian upgrade.
 
 The compatibility rules are:
 
@@ -118,12 +118,12 @@ The compatibility rules are:
   keyword-only. Existing return fields are not removed or silently retyped.
 - **Hook payloads are keyword payloads.** New hook data is added as keyword
   fields, never by changing the meaning or position of an existing field.
-  Hermes inspects callback signatures: a legacy callback receives the fields it
+  Fulilian inspects callback signatures: a legacy callback receives the fields it
   declares, while a callback with `**kwargs` receives the complete current
   payload. New plugins should accept `**kwargs` so they can opt into additive
   data without another signature change.
 - **Manifests are open to additions.** Unknown `plugin.yaml` fields are ignored.
-  Older Hermes releases can therefore load a plugin whose manifest contains
+  Older Fulilian releases can therefore load a plugin whose manifest contains
   metadata introduced by a newer release, provided the plugin code itself uses
   supported runtime behavior.
 - **Provider interfaces grow through defaults.** New provider methods have a
@@ -157,8 +157,8 @@ Removal after the window must include any migration needed for persisted data
 or resumable sessions. In practice, additive aliases and adapters are preferred
 to removal.
 
-Hermes enforces this contract with frozen external-plugin fixtures discovered
-from an isolated `HERMES_HOME`. Those tests load and invoke the plugin through
+Fulilian enforces this contract with frozen external-plugin fixtures discovered
+from an isolated `FULILIAN_HOME`. Those tests load and invoke the plugin through
 `PluginManager`; they assert real registration and callback outcomes rather
 than internal symbol lists or source-code shape.
 
@@ -175,23 +175,23 @@ Plus a hook that logs every tool call, and a bundled skill file.
 Create a directory and continue with Step 2:
 
 ```bash
-mkdir -p ~/.hermes/plugins/calculator
-cd ~/.hermes/plugins/calculator
+mkdir -p ~/.fulilian/plugins/calculator
+cd ~/.fulilian/plugins/calculator
 ```
 
 ### Validate with Plugin Doctor
 
-`hermes plugins doctor [path-or-id]` runs the same directory discovery,
+`fulilian plugins doctor [path-or-id]` runs the same directory discovery,
 manifest parser, namespaced import, `register(ctx)`, hook registry, and tool
-registry used by Hermes itself. It reports invalid hook names, callbacks that do
+registry used by Fulilian itself. It reports invalid hook names, callbacks that do
 not accept `**kwargs`, registration failures, and drift between declared and
 registered tools/hooks. Pass `--ci` to exit non-zero on an error:
 
 ```bash
-hermes plugins doctor . --ci
+fulilian plugins doctor . --ci
 ```
 
-Doctor uses a temporary `HERMES_HOME`, restores plugin registration state after
+Doctor uses a temporary `FULILIAN_HOME`, restores plugin registration state after
 the check, and blocks direct Python socket connections to catch accidental
 network access while registration runs. This is not a sandbox: plugin code still
 executes in-process with the current user's permissions and can spawn subprocesses,
@@ -212,7 +212,7 @@ provides_hooks:
   - post_tool_call
 ```
 
-This tells Hermes: "I'm a plugin called calculator, I provide tools and hooks." The `provides_tools` and `provides_hooks` fields are lists of what the plugin registers.
+This tells Fulilian: "I'm a plugin called calculator, I provide tools and hooks." The `provides_tools` and `provides_hooks` fields are lists of what the plugin registers.
 
 Optional fields you could add:
 ```yaml
@@ -247,7 +247,7 @@ def register(ctx):
 
 Known capability ids: `tools.override`, `llm.provider_override`,
 `llm.model_override`, `llm.agent_id_override`, `llm.profile_override`,
-`llm.task_override` (see `hermes_cli/plugin_capabilities.py` for the
+`llm.task_override` (see `fulilian_cli/plugin_capabilities.py` for the
 canonical registry). Unknown ids are ignored. The older per-capability
 config keys (`plugins.entries.<id>.allow_tool_override`, …) still work but
 are deprecated — declare capabilities instead so users get a single,
@@ -256,20 +256,20 @@ sandbox**: they gate host API surfaces, nothing more.
 
 **Pip-distributed plugins** have no `plugin.yaml` directory once installed,
 so declare capabilities in distribution metadata instead, via the companion
-`hermes_agent.plugin_capabilities` entry-point group. Each declaration is
+`fulilian_agent.plugin_capabilities` entry-point group. Each declaration is
 named `<plugin-id>.<capability-id>` and points at the same object as your
-`hermes_agent.plugins` entry point:
+`fulilian_agent.plugins` entry point:
 
 ```toml
-[project.entry-points."hermes_agent.plugins"]
+[project.entry-points."fulilian_agent.plugins"]
 calculator = "my_pkg:register"
 
-[project.entry-points."hermes_agent.plugin_capabilities"]
+[project.entry-points."fulilian_agent.plugin_capabilities"]
 "calculator.tools.override" = "my_pkg:register"
 ```
 
-Hermes reads these from installed metadata without importing your code, so
-`hermes plugins capabilities` and the consent flow stay accurate for pip
+Fulilian reads these from installed metadata without importing your code, so
+`fulilian plugins capabilities` and the consent flow stay accurate for pip
 installs.
 
 ### Manifest v2 reference
@@ -278,14 +278,14 @@ installs.
 optional; a manifest without `manifest_version` is a v1 manifest and stays
 fully supported forever. Unknown fields never break loading — they are ignored
 with a warning (forward compatibility), and a `manifest_version` newer than
-this Hermes understands still loads with a warning.
+this Fulilian understands still loads with a warning.
 
 | Field | Type | Meaning |
 |---|---|---|
 | `manifest_version` | int | Manifest **file-format** version. Absent = `1`. Current max: `2`. Independent from `api_version`. |
 | `api_version` | int | Runtime **plugin API generation** the plugin targets (ctx surface / hook signatures). Deliberately a separate axis from `manifest_version` — an `api_version: 1` plugin can use a v2 manifest. |
 | `requires_plugins` | list | Inter-plugin dependencies: `- id: other-plugin` with optional `version_range: ">=1.0,<2"`. **Advisory**: a missing dependency logs a clear warning but the plugin still loads — probe at runtime with `ctx.has_plugin("other-plugin")`. Load **order** honors these edges: when A requires B, B's `register()` runs before A's (topological sort, alphabetical tiebreak; cycles warn and fall back to alphabetical order). |
-| `python_dependencies` | list of str | Declared pip requirements (e.g. `"requests>=2.0,<3"`). **Declaration seam only** — Hermes validates them, and `hermes plugins install` / `hermes plugins doctor` surface missing ones with a `pip install` hint, but Hermes **never auto-installs** them. Pin upper bounds. |
+| `python_dependencies` | list of str | Declared pip requirements (e.g. `"requests>=2.0,<3"`). **Declaration seam only** — Fulilian validates them, and `fulilian plugins install` / `fulilian plugins doctor` surface missing ones with a `pip install` hint, but Fulilian **never auto-installs** them. Pin upper bounds. |
 | `config_schema` | mapping | JSON-schema-ish description of keys under `plugins.entries.<id>.settings`: `api_url: {type: str, default: "", description: "...", required: false}`. Validated at load; mismatches log actionable warnings naming the key and expected type — never load failures. Types: `str`, `int`, `float`, `bool`, `list`, `dict` (plus JSON-schema aliases). |
 | `license` | str | SPDX-style license id (e.g. `MIT`). |
 | `homepage` | str | Project URL. |
@@ -311,7 +311,7 @@ config_schema:
 
 :::note pip-dependency isolation is deferred
 `python_dependencies` is intentionally declare-and-surface only. Installing
-arbitrary packages into Hermes' shared venv is a conflict and supply-chain
+arbitrary packages into Fulilian' shared venv is a conflict and supply-chain
 surface, so the install seam's isolation design (constraints-file installs
 against the host lock vs. per-plugin vendored dirs vs. conflict detection
 with refusal) is an explicitly deferred follow-up — see the round-2 review on
@@ -468,7 +468,7 @@ def unit_convert(args: dict, **kwargs) -> str:
 1. **Signature:** `def my_handler(args: dict, **kwargs) -> str`
 2. **Return:** Always a JSON string. Success and errors alike.
 3. **Never raise:** Catch all exceptions, return error JSON instead.
-4. **Accept `**kwargs`:** Hermes may pass additional context in the future.
+4. **Accept `**kwargs`:** Fulilian may pass additional context in the future.
 
 ## Step 5: Write the registration
 
@@ -509,11 +509,11 @@ def register(ctx):
 - Called exactly once at startup
 - `ctx.register_tool()` puts your tool in the registry — the model sees it immediately
 - `ctx.register_hook()` subscribes to lifecycle events
-- `ctx.register_cli_command()` registers a CLI subcommand (e.g. `hermes my-plugin <subcommand>`)
+- `ctx.register_cli_command()` registers a CLI subcommand (e.g. `fulilian my-plugin <subcommand>`)
 - `ctx.register_command()` registers an in-session slash command (e.g. `/myplugin <args>` inside CLI / gateway chat) — see [Register slash commands](#register-slash-commands) below
 - `ctx.dispatch_tool(name, arguments)` — call any other tool (built-in or from another plugin) with the parent agent's context (approvals, credentials, task_id) wired up automatically. Useful from slash-command handlers that need to invoke `terminal`, `read_file`, or any other tool as if the model had called it directly.
 - `ctx.get_config()` / `ctx.set_config()` access only this plugin's settings namespace; `ctx.state` stores plugin-owned runtime data under the active profile.
-- If this function crashes, the plugin is disabled but Hermes continues fine
+- If this function crashes, the plugin is disabled but Fulilian continues fine
 
 **`dispatch_tool` example — a slash command that runs a tool:**
 
@@ -536,7 +536,7 @@ The dispatched tool goes through the normal approval, redaction, and budget pipe
 
 ### Store settings and runtime state
 
-Use plugin-relative config keys for user-visible behavior. Hermes resolves them
+Use plugin-relative config keys for user-visible behavior. Fulilian resolves them
 under `plugins.entries.<plugin-id>.settings` and rejects global, cross-plugin,
 and traversal paths:
 
@@ -565,14 +565,14 @@ Windows-safe namespace. Malformed existing state is reported and preserved.
 
 Config and state have different owners: settings are user-visible behavior in
 `config.yaml`, while state is plugin-owned runtime data under
-`<HERMES_HOME>/plugin-data/`. Neither API exposes another plugin's namespace.
+`<FULILIAN_HOME>/plugin-data/`. Neither API exposes another plugin's namespace.
 
 ## Step 6: Test it
 
-Start Hermes:
+Start Fulilian:
 
 ```bash
-hermes
+fulilian
 ```
 
 You should see `calculator: calculate, unit_convert` in the banner's tool list.
@@ -598,10 +598,10 @@ Plugins (1):
 
 ### Debugging plugin discovery
 
-If your plugin doesn't show up — or shows up but isn't loading — set `HERMES_PLUGINS_DEBUG=1` to get verbose discovery logs on stderr:
+If your plugin doesn't show up — or shows up but isn't loading — set `FULILIAN_PLUGINS_DEBUG=1` to get verbose discovery logs on stderr:
 
 ```bash
-HERMES_PLUGINS_DEBUG=1 hermes plugins list
+FULILIAN_PLUGINS_DEBUG=1 fulilian plugins list
 ```
 
 You'll see, for every plugin source (bundled, user, project, entry-points):
@@ -613,23 +613,23 @@ You'll see, for every plugin source (bundled, user, project, entry-points):
 - on parse failure: a full traceback for the exception (YAML scanner errors, etc.)
 - on `register()` failure: a full traceback pointing at the line in your `__init__.py` that raised
 
-The same logs are always written to `~/.hermes/logs/agent.log` at WARNING level (failures only) and DEBUG level (everything) when the env var is set. So if you can't run with the env var (e.g. from inside the gateway), tail the log file instead:
+The same logs are always written to `~/.fulilian/logs/agent.log` at WARNING level (failures only) and DEBUG level (everything) when the env var is set. So if you can't run with the env var (e.g. from inside the gateway), tail the log file instead:
 
 ```bash
-hermes logs --level WARNING | grep -i plugin
+fulilian logs --level WARNING | grep -i plugin
 ```
 
 Common reasons a plugin doesn't appear:
 
-- **Not enabled in config** — plugins are opt-in. Run `hermes plugins enable <name>` (the name comes from the `plugins list` output, which can be `<category>/<plugin>` for nested layouts).
-- **Wrong directory layout:** Native packages use `~/.hermes/plugins/<plugin-name>/plugin.yaml` (flat) or one category level. Portable packages use root `plugin.json` in the same locations. Anything deeper is ignored.
+- **Not enabled in config** — plugins are opt-in. Run `fulilian plugins enable <name>` (the name comes from the `plugins list` output, which can be `<category>/<plugin>` for nested layouts).
+- **Wrong directory layout:** Native packages use `~/.fulilian/plugins/<plugin-name>/plugin.yaml` (flat) or one category level. Portable packages use root `plugin.json` in the same locations. Anything deeper is ignored.
 - **Missing `__init__.py`:** Native packages need both `plugin.yaml` and `__init__.py` with a `register(ctx)` function. Portable packages do not import Python and do not require `__init__.py`.
 - **Wrong `kind`** — gateway adapters need `kind: platform` in their manifest. Memory providers are auto-detected as `kind: exclusive` and routed through the `memory.provider` config instead of `plugins.enabled`.
 
 ## Your plugin's final structure
 
 ```
-~/.hermes/plugins/calculator/
+~/.fulilian/plugins/calculator/
 ├── plugin.yaml      # "I'm calculator, I provide tools and hooks"
 ├── __init__.py      # Wiring: schemas → handlers, register hooks
 ├── schemas.py       # What the LLM reads (descriptions + parameter specs)
@@ -665,14 +665,14 @@ section.
 ### Store durable state
 
 Never write runtime state into your plugin directory: that's the install
-tree, and `hermes plugins update` / `remove` git-pull or delete it — your
+tree, and `fulilian plugins update` / `remove` git-pull or delete it — your
 users' data dies with it. The sanctioned home is the per-plugin data root,
 which survives both and follows the active profile:
 
 ```python
 from plugins.plugin_storage import plugin_data_dir, plugin_db
 
-# <hermes home>/plugin-data/<name>/ — created on first use
+# <fulilian home>/plugin-data/<name>/ — created on first use
 state_file = plugin_data_dir("my-plugin") / "state.json"
 
 # Or a SQLite database at <data dir>/data.db (WAL mode, thread-friendly)
@@ -689,7 +689,7 @@ the standard `.env` / secret-scope path like everywhere else.
 Plugins can ship skill files that the agent loads via `skill_view("plugin:skill")`. Register them in your `__init__.py`:
 
 ```
-~/.hermes/plugins/my-plugin/
+~/.fulilian/plugins/my-plugin/
 ├── __init__.py
 ├── plugin.yaml
 └── skills/
@@ -718,13 +718,13 @@ skill_view("my-workflow")              # → built-in version (unchanged)
 ```
 
 **Key properties:**
-- Plugin skills are **read-only** — they don't enter `~/.hermes/skills/` and can't be edited via `skill_manage`.
+- Plugin skills are **read-only** — they don't enter `~/.fulilian/skills/` and can't be edited via `skill_manage`.
 - Plugin skills are **not** listed in the system prompt's `<available_skills>` index — they're opt-in explicit loads.
 - Bare skill names are unaffected — the namespace prevents collisions with built-in skills.
 - When the agent loads a plugin skill, a bundle context banner is prepended listing sibling skills from the same plugin.
 
 :::tip Legacy pattern
-The old `shutil.copy2` pattern (copying a skill into `~/.hermes/skills/`) still works but creates name collision risk with built-in skills. Prefer `ctx.register_skill()` for new plugins.
+The old `shutil.copy2` pattern (copying a skill into `~/.fulilian/skills/`) still works but creates name collision risk with built-in skills. Prefer `ctx.register_skill()` for new plugins.
 :::
 
 ### Gate on environment variables
@@ -739,7 +739,7 @@ requires_env:
 
 If `WEATHER_API_KEY` isn't set, the plugin is disabled with a clear message. No crash, no error in the agent — just "Plugin weather disabled (missing: WEATHER_API_KEY)".
 
-When users run `hermes plugins install`, they're **prompted interactively** for any missing `requires_env` variables. Values are saved to `.env` automatically.
+When users run `fulilian plugins install`, they're **prompted interactively** for any missing `requires_env` variables. Values are saved to `.env` automatically.
 
 For a better install experience, use the rich format with descriptions and signup URLs:
 
@@ -763,7 +763,7 @@ Both formats can be mixed in the same list. Already-set variables are skipped si
 
 ### Lazy-install optional Python dependencies
 
-If your plugin wraps an SDK that not every user will have installed (a vendor SDK, a heavy ML lib, a platform-specific package), don't `import` it at the top of the module. Use the `tools.lazy_deps.ensure(...)` helper inside the tool handler — Hermes will install the package on first use, gated by the user's `security.allow_lazy_installs` config.
+If your plugin wraps an SDK that not every user will have installed (a vendor SDK, a heavy ML lib, a platform-specific package), don't `import` it at the top of the module. Use the `tools.lazy_deps.ensure(...)` helper inside the tool handler — Fulilian will install the package on first use, gated by the user's `security.allow_lazy_installs` config.
 
 ```python
 # tools.py
@@ -783,10 +783,10 @@ Two rules from the security model in `tools/lazy_deps.py`:
 
 | Rule | Why |
 |---|---|
-| Your feature key must appear in the in-tree `LAZY_DEPS` allowlist | Prevents a malicious config from coaxing Hermes into installing arbitrary packages — only specs Hermes itself ships are eligible |
+| Your feature key must appear in the in-tree `LAZY_DEPS` allowlist | Prevents a malicious config from coaxing Fulilian into installing arbitrary packages — only specs Fulilian itself ships are eligible |
 | Specs are PyPI-by-name only | No `--index-url`, `git+https://`, or file: paths. Pin versions with PEP 440 (`"my-sdk>=1.2,<2"`) inside the allowlist entry |
 
-For third-party plugins distributed via pip, declare the optional deps as `[project.optional-dependencies]` extras in your own `pyproject.toml` and tell users to `pip install your-plugin[backend]` — that path doesn't go through `lazy_deps`. The lazy-install dance is most useful for **bundled** plugins where shipping a hard dependency on every install would bloat the base Hermes footprint.
+For third-party plugins distributed via pip, declare the optional deps as `[project.optional-dependencies]` extras in your own `pyproject.toml` and tell users to `pip install your-plugin[backend]` — that path doesn't go through `lazy_deps`. The lazy-install dance is most useful for **bundled** plugins where shipping a hard dependency on every install would bloat the base Fulilian footprint.
 
 When `security.allow_lazy_installs: false` is set globally, `ensure()` raises `FeatureUnavailable` immediately with a remediation hint — your plugin should catch it and degrade gracefully (return an error result, not crash the tool loop).
 
@@ -807,7 +807,7 @@ def get_client():
     return _client
 ```
 
-This is a footgun. Hermes runs multiple threads in one process (delegated tool calls, background workers, the self-improvement fork), so two threads can hit `get_client()` before `_client` is set, **both** pass the `is not None` check, **both** run the expensive build, and the second write clobbers the first — leaking whatever resource the loser opened (connection, file handle, background thread).
+This is a footgun. Fulilian runs multiple threads in one process (delegated tool calls, background workers, the self-improvement fork), so two threads can hit `get_client()` before `_client` is set, **both** pass the `is not None` check, **both** run the expensive build, and the second write clobbers the first — leaking whatever resource the loser opened (connection, file handle, background thread).
 
 Don't hand-roll the lock. Use the helpers in `plugins/plugin_utils.py`:
 
@@ -876,31 +876,31 @@ requires the operator to opt in via
 `plugins.entries.<plugin_id>.allow_tool_override: true` in `config.yaml`;
 without that gate, `register_tool(override=True)` raises
 `PluginToolOverrideError`. The override is logged so it's
-auditable in `~/.hermes/logs/agent.log`. Plugins load after built-in
+auditable in `~/.fulilian/logs/agent.log`. Plugins load after built-in
 tools, so the registration order is correct: your handler replaces the
 built-in one.
 
 **Non-bundled plugins also need an operator grant.** For any plugin that
-does not ship with Hermes core (user, project, or pip source),
+does not ship with Fulilian core (user, project, or pip source),
 `override=True` against an existing built-in tool additionally requires a
 per-plugin opt-in in `config.yaml`:
 
 ```yaml
 plugins:
   entries:
-    my-plugin:                    # the plugin's registry key from `hermes plugins list`
+    my-plugin:                    # the plugin's registry key from `fulilian plugins list`
       allow_tool_override: true
 ```
 
 Without the grant, `ctx.register_tool(..., override=True)` raises
 `PluginToolOverrideError`; since `register()` exceptions are caught by the
-loader, the plugin is disabled and Hermes continues. The gate exists
+loader, the plugin is disabled and Fulilian continues. The gate exists
 because an enabled plugin that silently replaces a privileged built-in
 like `shell_exec` or `write_file` could intercept everything the model
 routes through it. Bundled plugins are exempt: an override there is a
 maintainer decision. If config cannot be loaded, the gate fails closed.
 
-You normally never edit this key by hand. `hermes plugins enable <name>`
+You normally never edit this key by hand. `fulilian plugins enable <name>`
 asks whether to grant the capability when enabling a non-bundled plugin
 (defaulting to no), and the `--allow-tool-override` /
 `--no-allow-tool-override` flags skip the prompt for scripted installs.
@@ -945,19 +945,19 @@ Most hooks are fire-and-forget observers — their return values are ignored. Th
 
 All callbacks should accept `**kwargs` for forward compatibility. If a hook callback crashes, it's logged and skipped. Other hooks and the agent continue normally.
 
-The kanban lifecycle hooks fire **after** the board DB change commits, so a callback always sees durable state and can never hold the SQLite write lock. Because kanban workers run as separate `hermes -p <profile> chat -q` subprocesses, `kanban_task_claimed` fires in the **dispatcher** process while `kanban_task_completed` / `kanban_task_blocked` fire in the **worker** process — hook in the dispatcher to observe every transition centrally, or in the worker for per-task in-session context.
+The kanban lifecycle hooks fire **after** the board DB change commits, so a callback always sees durable state and can never hold the SQLite write lock. Because kanban workers run as separate `fulilian -p <profile> chat -q` subprocesses, `kanban_task_claimed` fires in the **dispatcher** process while `kanban_task_completed` / `kanban_task_blocked` fire in the **worker** process — hook in the dispatcher to observe every transition centrally, or in the worker for per-task in-session context.
 
 The **API request hooks** are observers for the raw provider request, one level below the per-turn `pre_llm_call` / `post_llm_call` pair: a single turn that calls tools makes several API requests, and these hooks fire around each one. They exist for observability plugins (tracing, cost accounting, latency dashboards). The `request` and `response` kwargs are sanitized, size-capped JSON views of the provider payload (sensitive keys redacted, long strings truncated, SDK objects normalized), and `usage` is a plain token-summary dict. Every payload carries the correlation fields `turn_id`, `api_request_id`, `task_id`, `session_id`, and `api_call_count`, so a plugin can stitch requests, tool calls, and turns together. `api_request_error` fires when a provider call raises and adds `status_code`, `retry_count` / `max_retries`, `retryable`, `reason`, and an `error` dict with `type` and `message`.
 
 ### `pre_llm_call` context injection
 
-This is the only hook whose return value matters. When a `pre_llm_call` callback returns a dict with a `"context"` key (or a plain string), Hermes injects that text into the **current turn's user message**. This is the mechanism for memory plugins, RAG integrations, guardrails, and any plugin that needs to provide the model with additional context.
+This is the only hook whose return value matters. When a `pre_llm_call` callback returns a dict with a `"context"` key (or a plain string), Fulilian injects that text into the **current turn's user message**. This is the mechanism for memory plugins, RAG integrations, guardrails, and any plugin that needs to provide the model with additional context.
 
 #### Return format
 
 ```python
 # Dict with context key
-return {"context": "Recalled memories:\n- User prefers dark mode\n- Last project: hermes-agent"}
+return {"context": "Recalled memories:\n- User prefers dark mode\n- Last project: fulilian-agent"}
 
 # Plain string (equivalent to the dict form above)
 return "Recalled memories:\n- User prefers dark mode"
@@ -970,7 +970,7 @@ Any non-None, non-empty return with a `"context"` key (or a plain non-empty stri
 
 #### Oversized-context spill
 
-Per-hook context is capped at `10,000` characters by default. Anything above the cap is written to `$HERMES_HOME/hook_outputs/<session_id>/<uuid>.txt` and replaced with a head/tail preview plus the saved path. The model can read the full content via `read_file` or `terminal` if it genuinely needs it. This keeps a runaway plugin from inflating every subsequent turn's prompt and blowing out the prompt cache prefix. Tune in `config.yaml`:
+Per-hook context is capped at `10,000` characters by default. Anything above the cap is written to `$FULILIAN_HOME/hook_outputs/<session_id>/<uuid>.txt` and replaced with a head/tail preview plus the saved path. The model can read the full content via `read_file` or `terminal` if it genuinely needs it. This keeps a runaway plugin from inflating every subsequent turn's prompt and blowing out the prompt cache prefix. Tune in `config.yaml`:
 
 ```yaml
 hooks:
@@ -979,7 +979,7 @@ hooks:
     max_chars: 10000       # default; set higher to opt out of spilling
     preview_head: 500      # chars shown at the top of the preview
     preview_tail: 500      # chars shown at the bottom of the preview
-    # directory: null      # default: $HERMES_HOME/hook_outputs
+    # directory: null      # default: $FULILIAN_HOME/hook_outputs
 ```
 
 #### How injection works
@@ -988,7 +988,7 @@ Injected context is appended to the **user message**, not the system prompt. Thi
 
 - **Prompt cache preservation** — the system prompt stays identical across turns. Anthropic and OpenRouter cache the system prompt prefix, so keeping it stable saves 75%+ on input tokens in multi-turn conversations. If plugins modified the system prompt, every turn would be a cache miss.
 - **Ephemeral** — the injection happens at API call time only. The original user message in the conversation history is never mutated, and nothing is persisted to the session database.
-- **The system prompt is Hermes's territory** — it contains model-specific guidance, tool enforcement rules, personality instructions, and cached skill content. Plugins contribute context alongside the user's input, not by altering the agent's core instructions.
+- **The system prompt is Fulilian's territory** — it contains model-specific guidance, tool enforcement rules, personality instructions, and cached skill content. Plugins contribute context alongside the user's input, not by altering the agent's core instructions.
 
 #### Example: Memory recall plugin
 
@@ -1080,12 +1080,12 @@ def register(ctx):
     ctx.register_middleware("tool_request", cap_find_output)
 ```
 
-The canonical list of kinds is `VALID_MIDDLEWARE` in `hermes_cli/middleware.py`:
+The canonical list of kinds is `VALID_MIDDLEWARE` in `fulilian_cli/middleware.py`:
 
 | Kind | Receives | Return contract |
 |------|----------|-----------------|
 | `tool_request` | `tool_name`, `args`, `original_args`, context kwargs | Return `{"args": {...}}` to replace the effective tool arguments before hooks, guardrails, approvals, and execution see them. Return `None` to leave the call unchanged. |
-| `llm_request` | `request`, `original_request`, context kwargs | Return `{"request": {...}}` to replace the effective provider kwargs before Hermes sends them. |
+| `llm_request` | `request`, `original_request`, context kwargs | Return `{"request": {...}}` to replace the effective provider kwargs before Fulilian sends them. |
 | `tool_execution` | the payload plus `next_call` | Wraps tool execution. Call `next_call(payload)` exactly once to run the downstream chain (or skip it to short-circuit) and return the result. |
 | `llm_execution` | the payload plus `next_call` | Same shape, wrapping the provider call. |
 
@@ -1095,26 +1095,26 @@ The canonical list of kinds is `VALID_MIDDLEWARE` in `hermes_cli/middleware.py`:
 - You can include `source`, `reason`, and `name` strings in the returned dict. They land in the middleware trace, which downstream observer hooks receive as the `middleware_trace` kwarg.
 - `next_call` in execution middleware is **single-use**. Calling it twice raises, because it would re-run the provider or tool.
 - A middleware callback that raises is logged and skipped; the chain continues. A downstream failure raised after your `next_call` propagates as itself. Middleware can never break the base runtime path.
-- Middleware payloads carry `middleware_schema_version` (`hermes.middleware.v1`) alongside the observer telemetry fields.
-- Unknown kinds register with a warning instead of failing, so a plugin written against a newer Hermes still loads on an older one.
+- Middleware payloads carry `middleware_schema_version` (`fulilian.middleware.v1`) alongside the observer telemetry fields.
+- Unknown kinds register with a warning instead of failing, so a plugin written against a newer Fulilian still loads on an older one.
 
 ### Register CLI commands
 
-Plugins can add their own `hermes <plugin>` subcommand tree:
+Plugins can add their own `fulilian <plugin>` subcommand tree:
 
 ```python
 def _my_command(args):
-    """Handler for hermes my-plugin <subcommand>."""
+    """Handler for fulilian my-plugin <subcommand>."""
     sub = getattr(args, "my_command", None)
     if sub == "status":
         print("All good!")
     elif sub == "config":
         print("Current config: ...")
     else:
-        print("Usage: hermes my-plugin <status|config>")
+        print("Usage: fulilian my-plugin <status|config>")
 
 def _setup_argparse(subparser):
-    """Build the argparse tree for hermes my-plugin."""
+    """Build the argparse tree for fulilian my-plugin."""
     subs = subparser.add_subparsers(dest="my_command")
     subs.add_parser("status", help="Show plugin status")
     subs.add_parser("config", help="Show plugin config")
@@ -1130,7 +1130,7 @@ def register(ctx):
     )
 ```
 
-After registration, users can run `hermes my-plugin status`, `hermes my-plugin config`, etc.
+After registration, users can run `fulilian my-plugin status`, `fulilian my-plugin config`, etc.
 
 **Memory provider plugins** use a convention-based approach instead: add a `register_cli(subparser)` function to your plugin's `cli.py` file. The memory plugin discovery system finds it automatically — no `ctx.register_cli_command()` call needed. See the [Memory Provider Plugin guide](/developer-guide/memory-provider-plugin#adding-cli-commands) for details.
 
@@ -1169,7 +1169,7 @@ After registration, users can type `/mystatus` in any session. The command appea
 
 | | `register_command()` | `register_cli_command()` |
 |---|---|---|
-| Invoked as | `/name` in a session | `hermes name` in a terminal |
+| Invoked as | `/name` in a session | `fulilian name` in a terminal |
 | Where it works | CLI sessions, Telegram, Discord, etc. | Terminal only |
 | Handler receives | Raw args string | argparse `Namespace` |
 | Use case | Diagnostics, status, quick actions | Complex subcommand trees, setup wizards |
@@ -1228,9 +1228,9 @@ This is the public, stable interface for tool dispatch from plugin commands. Plu
 
 ### Act from inside a hook (profile + tools)
 
-`ctx._cli_ref` is only populated in an **interactive CLI** session. It is `None` in the gateway, in non-interactive `hermes chat -q` runs, and in **kanban-spawned worker sessions** — so any plugin logic that reaches through `_cli_ref` silently no-ops in exactly those contexts. Two stable, session-agnostic APIs cover what hooks actually need:
+`ctx._cli_ref` is only populated in an **interactive CLI** session. It is `None` in the gateway, in non-interactive `fulilian chat -q` runs, and in **kanban-spawned worker sessions** — so any plugin logic that reaches through `_cli_ref` silently no-ops in exactly those contexts. Two stable, session-agnostic APIs cover what hooks actually need:
 
-- **`ctx.profile_name`** — the active profile name (e.g. `"default"`, or the assignee profile in a kanban worker). Derived from `HERMES_HOME`, so it works everywhere with no `_cli_ref` dependency.
+- **`ctx.profile_name`** — the active profile name (e.g. `"default"`, or the assignee profile in a kanban worker). Derived from `FULILIAN_HOME`, so it works everywhere with no `_cli_ref` dependency.
 - **`ctx.dispatch_tool(name, args)`** — invoke any registered tool (built-in or plugin), including the `kanban_*` tools, `delegate_task`, `terminal`, `read_file`, etc. Works from hook callbacks regardless of which process the hook fires in.
 
 Together these let a kanban lifecycle hook observe a transition and act on the board without touching framework internals:
@@ -1246,7 +1246,7 @@ def register(ctx):
     ctx.register_hook("kanban_task_blocked", on_blocked)
 ```
 
-For running a full `hermes <subcommand>` (e.g. `hermes kanban show`), shell out with the `terminal` tool via `ctx.dispatch_tool("terminal", {"command": "hermes kanban show ..."})` — there is no in-process slash-command bridge for headless worker sessions, and tools are the supported way to drive Hermes from a hook.
+For running a full `fulilian <subcommand>` (e.g. `fulilian kanban show`), shell out with the `terminal` tool via `ctx.dispatch_tool("terminal", {"command": "fulilian kanban show ..."})` — there is no in-process slash-command bridge for headless worker sessions, and tools are the supported way to drive Fulilian from a hook.
 
 ### Handle Slack Block Kit button clicks
 
@@ -1365,7 +1365,7 @@ This guide covers **general plugins** (tools, hooks, slash commands, CLI command
 
 ## Specialized plugin types
 
-Hermes has five specialized plugin types beyond the general surface. Each ships as a directory under `plugins/<category>/<name>/` (bundled) or `~/.hermes/plugins/<category>/<name>/` (user). The contract differs by category — pick the one you need, then read its full guide.
+Fulilian has five specialized plugin types beyond the general surface. Each ships as a directory under `plugins/<category>/<name>/` (bundled) or `~/.fulilian/plugins/<category>/<name>/` (user). The contract differs by category — pick the one you need, then read its full guide.
 
 ### Model provider plugins — add an LLM backend
 
@@ -1432,7 +1432,7 @@ def register(ctx):
         check_fn=check_requirements,
         required_env=["MYPLATFORM_TOKEN"],
         # Auto-populate PlatformConfig.extra from env so env-only setups
-        # show up in `hermes gateway status` without SDK instantiation.
+        # show up in `fulilian gateway status` without SDK instantiation.
         env_enablement_fn=_env_enablement,
         # Opt in to cron delivery: `deliver=myplatform` routes to this var.
         cron_deliver_env_var="MYPLATFORM_HOME_CHANNEL",
@@ -1558,11 +1558,11 @@ description: Custom image generation backend
 
 ## Non-Python extension surfaces
 
-Hermes also accepts extensions that aren't Python plugins at all. These are shown in the [Pluggable interfaces table](/user-guide/features/plugins#pluggable-interfaces--where-to-go-for-each); the sections below sketch each authoring style briefly.
+Fulilian also accepts extensions that aren't Python plugins at all. These are shown in the [Pluggable interfaces table](/user-guide/features/plugins#pluggable-interfaces--where-to-go-for-each); the sections below sketch each authoring style briefly.
 
 ### MCP servers — register external tools
 
-Model Context Protocol (MCP) servers register their own tools into Hermes without any Python plugin. Declare them in `~/.hermes/config.yaml`:
+Model Context Protocol (MCP) servers register their own tools into Fulilian without any Python plugin. Declare them in `~/.fulilian/config.yaml`:
 
 ```yaml
 mcp_servers:
@@ -1577,14 +1577,14 @@ mcp_servers:
       type: "oauth"
 ```
 
-Hermes connects to each server at startup, lists its tools, and registers them alongside built-ins. The LLM sees them exactly like any other tool. **Full guide:** [MCP](/user-guide/features/mcp).
+Fulilian connects to each server at startup, lists its tools, and registers them alongside built-ins. The LLM sees them exactly like any other tool. **Full guide:** [MCP](/user-guide/features/mcp).
 
 ### Gateway event hooks — fire on lifecycle events
 
-Drop a manifest + handler into `~/.hermes/hooks/<name>/`:
+Drop a manifest + handler into `~/.fulilian/hooks/<name>/`:
 
 ```yaml
-# ~/.hermes/hooks/long-task-alert/HOOK.yaml
+# ~/.fulilian/hooks/long-task-alert/HOOK.yaml
 name: long-task-alert
 description: Send a push notification when a long task finishes
 events:
@@ -1592,7 +1592,7 @@ events:
 ```
 
 ```python
-# ~/.hermes/hooks/long-task-alert/handler.py
+# ~/.fulilian/hooks/long-task-alert/handler.py
 async def handle(event_type: str, context: dict) -> None:
     if context.get("duration_seconds", 0) > 120:
         # send notification …
@@ -1624,9 +1624,9 @@ Supports all the same events as Python plugin hooks (`pre_tool_call`, `post_tool
 If you maintain a GitHub repo of skills (or want to pull from a community index beyond the built-in sources), add it as a **tap**:
 
 ```bash
-hermes skills tap add myorg/skills-repo
-hermes skills search my-workflow --source myorg/skills-repo
-hermes skills install myorg/skills-repo/my-workflow
+fulilian skills tap add myorg/skills-repo
+fulilian skills search my-workflow --source myorg/skills-repo
+fulilian skills install myorg/skills-repo/my-workflow
 ```
 
 Publishing your own tap is just a GitHub repo with `skills/<skill-name>/SKILL.md` directories — no server or registry signup needed.
@@ -1648,7 +1648,7 @@ tts:
       voice_compatible: true
 ```
 
-For STT, point `HERMES_LOCAL_STT_COMMAND` at an argv-tokenized template. It runs without implicit shell interpretation; wrap it in `sh -c`, `cmd /c`, or PowerShell explicitly if the trusted local command requires shell syntax. Supported placeholders: `{input_path}`, `{output_path}`, `{format}`, `{voice}`, `{model}`, `{speed}` (TTS); `{input_path}`, `{output_dir}`, `{language}`, `{model}` (STT). Any path-interacting CLI is automatically a plugin.
+For STT, point `FULILIAN_LOCAL_STT_COMMAND` at an argv-tokenized template. It runs without implicit shell interpretation; wrap it in `sh -c`, `cmd /c`, or PowerShell explicitly if the trusted local command requires shell syntax. Supported placeholders: `{input_path}`, `{output_path}`, `{format}`, `{voice}`, `{model}`, `{speed}` (TTS); `{input_path}`, `{output_dir}`, `{language}`, `{model}` (STT). Any path-interacting CLI is automatically a plugin.
 
 **Full guides:** [TTS custom command providers](/user-guide/features/tts#custom-command-providers) · [STT](/user-guide/features/tts#voice-message-transcription-stt).
 
@@ -1658,13 +1658,13 @@ For sharing plugins publicly, add an entry point to your Python package:
 
 ```toml
 # pyproject.toml
-[project.entry-points."hermes_agent.plugins"]
+[project.entry-points."fulilian_agent.plugins"]
 my-plugin = "my_plugin_package"
 ```
 
 ```bash
-pip install hermes-plugin-calculator
-# Plugin auto-discovered on next hermes startup
+pip install fulilian-plugin-calculator
+# Plugin auto-discovered on next fulilian startup
 ```
 
 ## Distribute for NixOS
@@ -1678,13 +1678,13 @@ NixOS users can install your plugin declaratively if you provide a `pyproject.to
 **Entry-point plugins** (recommended for distribution):
 ```nix
 # User's configuration.nix
-services.hermes-agent.extraPythonPackages = [
+services.fulilian-agent.extraPythonPackages = [
   (pkgs.python312Packages.buildPythonPackage {
     pname = "my-plugin";
     version = "1.0.0";
     src = pkgs.fetchFromGitHub {
       owner = "you";
-      repo = "hermes-my-plugin";
+      repo = "fulilian-my-plugin";
       rev = "v1.0.0";
       hash = "sha256-...";  # nix-prefetch-url --unpack
     };
@@ -1696,10 +1696,10 @@ services.hermes-agent.extraPythonPackages = [
 
 **Directory plugins** (no `pyproject.toml` needed):
 ```nix
-services.hermes-agent.extraPlugins = [
+services.fulilian-agent.extraPlugins = [
   (pkgs.fetchFromGitHub {
     owner = "you";
-    repo = "hermes-my-plugin";
+    repo = "fulilian-my-plugin";
     rev = "v1.0.0";
     hash = "sha256-...";
   })
@@ -1723,7 +1723,7 @@ def handler(args, **kwargs):
 
 **Missing `**kwargs` in handler signature:**
 ```python
-# Wrong — will break if Hermes passes extra context
+# Wrong — will break if Fulilian passes extra context
 def handler(args):
     ...
 

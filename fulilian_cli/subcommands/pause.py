@@ -1,8 +1,8 @@
-"""``hermes pause`` / ``hermes resume`` — the global emergency stop.
+"""``fulilian pause`` / ``fulilian resume`` — the global emergency stop.
 
-``hermes pause`` writes the ESTOP sentinel at ``$HERMES_HOME/ESTOP``, which
+``fulilian pause`` writes the ESTOP sentinel at ``$FULILIAN_HOME/ESTOP``, which
 halts cron dispatch, kanban dispatch, and new gateway turns on their next
-check. In-flight work is never killed. ``hermes resume`` removes the
+check. In-flight work is never killed. ``fulilian resume`` removes the
 sentinel and normal operation resumes on the next tick — no restart needed.
 
 Ported from: gastownhall/gastown estop.go (MIT); related prior art:
@@ -22,13 +22,13 @@ def cmd_pause(args: argparse.Namespace) -> int:
     already = is_engaged()
     path = engage(reason=reason)
     state = get_state() or {}
-    verb = "Still paused" if already else "Hermes paused"
+    verb = "Still paused" if already else "Fulilian paused"
     detail = f" — reason: {state['reason']}" if state.get("reason") else ""
     print(f"⏸️  {verb}{detail}")
     print(f"    sentinel: {path}")
     print(
         "    Cron dispatch, kanban dispatch, and new gateway turns are on hold.\n"
-        "    In-flight work keeps running. Run `hermes resume` to lift the pause."
+        "    In-flight work keeps running. Run `fulilian resume` to lift the pause."
     )
     return 0
 
@@ -38,9 +38,9 @@ def cmd_resume(args: argparse.Namespace) -> int:
     from agent.estop import disengage, sentinel_path
 
     if disengage():
-        print("▶️  Hermes resumed — dispatch picks up on the next tick.")
+        print("▶️  Fulilian resumed — dispatch picks up on the next tick.")
     else:
-        print(f"Hermes is not paused (no sentinel at {sentinel_path()}).")
+        print(f"Fulilian is not paused (no sentinel at {sentinel_path()}).")
     return 0
 
 
@@ -52,7 +52,7 @@ def build_pause_parser(subparsers) -> None:
         description=(
             "Engage the global emergency stop. Halts NEW work only — cron "
             "dispatch, kanban dispatch, and new gateway turns — until "
-            "`hermes resume`. In-flight work is never killed."
+            "`fulilian resume`. In-flight work is never killed."
         ),
     )
     pause_parser.add_argument(
@@ -64,7 +64,7 @@ def build_pause_parser(subparsers) -> None:
 
     resume_parser = subparsers.add_parser(
         "resume",
-        help="Lift the emergency stop set by `hermes pause`",
+        help="Lift the emergency stop set by `fulilian pause`",
         description="Remove the ESTOP sentinel; dispatch resumes on the next tick.",
     )
     resume_parser.set_defaults(func=cmd_resume)

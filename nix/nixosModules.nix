@@ -1,4 +1,4 @@
-# nix/nixosModules.nix — the NixOS module for hermes-agent
+# nix/nixosModules.nix — the NixOS module for fulilian-agent
 #
 # This module shares its options, its renderers for config.yaml, .env and
 # documents, and its state setup with the Home Manager module
@@ -10,23 +10,23 @@
 #   container.enable = false (default) → native systemd service
 #   container.enable = true            → OCI container (persistent writable layer)
 #
-# Container mode: hermes runs from /nix/store bind-mounted read-only into a
+# Container mode: fulilian runs from /nix/store bind-mounted read-only into a
 # plain Ubuntu container. The writable layer (apt/pip/npm installs) persists
 # across restarts and agent updates. Only image/volume/options changes trigger
-# container recreation. Environment variables are written to $HERMES_HOME/.env
-# and read by hermes at startup — no container recreation needed for env changes.
+# container recreation. Environment variables are written to $FULILIAN_HOME/.env
+# and read by fulilian at startup — no container recreation needed for env changes.
 #
-# Tool resolution: the hermes wrapper uses --suffix PATH for nix store tools,
+# Tool resolution: the fulilian wrapper uses --suffix PATH for nix store tools,
 # so apt/uv-installed versions take priority. The container entrypoint provisions
 # extensible tools on first boot: nodejs/npm via apt, uv via curl, and a Python
 # 3.11 venv (bootstrapped entirely by uv) at ~/.venv with pip seeded. Agents get
 # writable tool prefixes for npm i -g, pip install, uv tool install, etc.
 #
 # Usage:
-#   services.hermes-agent = {
+#   services.fulilian-agent = {
 #     enable = true;
 #     settings.model.default = "anthropic/claude-sonnet-4";
-#     environmentFiles = [ config.sops.secrets."hermes/env".path ];
+#     environmentFiles = [ config.sops.secrets."fulilian/env".path ];
 #   };
 #
 { inputs, ... }:
@@ -41,26 +41,26 @@
     }:
 
     let
-      cfg = config.services.hermes-agent;
+      cfg = config.services.fulilian-agent;
       common = import ./moduleCommon.nix { inherit lib; };
 
       effectivePackage = common.effectivePackage cfg;
-      hermes-agent = inputs.self.packages.${pkgs.stdenv.hostPlatform.system}.default;
+      fulilian-agent = inputs.self.packages.${pkgs.stdenv.hostPlatform.system}.default;
 
-      hermesHome = "${cfg.stateDir}/.hermes";
+      fulilianHome = "${cfg.stateDir}/.fulilian";
 
       # In container mode, the agent uses the mount path in the container.
       effectiveWorkDir = if cfg.container.enable then containerWorkDir else cfg.workingDirectory;
 
       # config.yaml mode: group-writable (0660) when interactive users share this
-      # HERMES_HOME via addToSystemPackages, so they can save settings through the
+      # FULILIAN_HOME via addToSystemPackages, so they can save settings through the
       # CLI/TUI without hitting EACCES; otherwise group-read-only (0640). Secrets
       # (.env) stay 0640 regardless.
       configYamlMode = if cfg.addToSystemPackages then "0660" else "0640";
 
-      containerName = "hermes-agent";
+      containerName = "fulilian-agent";
       containerDataDir = "/data"; # stateDir mount point inside container
-      containerHomeDir = "/home/hermes";
+      containerHomeDir = "/home/fulilian";
 
       # ── Container mode helpers ──────────────────────────────────────────
       containerBin =
@@ -70,54 +70,54 @@
           "${pkgs.podman}/bin/podman";
 
       # Runs as root inside the container on every start. Provisions the
-      # hermes user + sudo on first boot (writable layer persists), then
+      # fulilian user + sudo on first boot (writable layer persists), then
       # drops privileges. Supports arbitrary base images (Debian, Alpine, etc).
-      containerEntrypoint = pkgs.writeShellScript "hermes-container-entrypoint" ''
+      containerEntrypoint = pkgs.writeShellScript "fulilian-container-entrypoint" ''
         set -eu
 
-        HERMES_UID="''${HERMES_UID:?HERMES_UID must be set}"
-        HERMES_GID="''${HERMES_GID:?HERMES_GID must be set}"
+        FULILIAN_UID="''${FULILIAN_UID:?FULILIAN_UID must be set}"
+        FULILIAN_GID="''${FULILIAN_GID:?FULILIAN_GID must be set}"
 
-        # ── Group: ensure a group with GID=$HERMES_GID exists ──
+        # ── Group: ensure a group with GID=$FULILIAN_GID exists ──
         # Check by GID (not name) to avoid collisions with pre-existing groups
         # (e.g. GID 100 = "users" on Ubuntu)
-        EXISTING_GROUP=$(getent group "$HERMES_GID" 2>/dev/null | cut -d: -f1 || true)
+        EXISTING_GROUP=$(getent group "$FULILIAN_GID" 2>/dev/null | cut -d: -f1 || true)
         if [ -n "$EXISTING_GROUP" ]; then
           GROUP_NAME="$EXISTING_GROUP"
         else
-          GROUP_NAME="hermes"
+          GROUP_NAME="fulilian"
           if command -v groupadd >/dev/null 2>&1; then
-            groupadd -g "$HERMES_GID" "$GROUP_NAME"
+            groupadd -g "$FULILIAN_GID" "$GROUP_NAME"
           elif command -v addgroup >/dev/null 2>&1; then
-            addgroup -g "$HERMES_GID" "$GROUP_NAME" 2>/dev/null || true
+            addgroup -g "$FULILIAN_GID" "$GROUP_NAME" 2>/dev/null || true
           fi
         fi
 
-        # ── User: ensure a user with UID=$HERMES_UID exists ──
-        PASSWD_ENTRY=$(getent passwd "$HERMES_UID" 2>/dev/null || true)
+        # ── User: ensure a user with UID=$FULILIAN_UID exists ──
+        PASSWD_ENTRY=$(getent passwd "$FULILIAN_UID" 2>/dev/null || true)
         if [ -n "$PASSWD_ENTRY" ]; then
           TARGET_USER=$(echo "$PASSWD_ENTRY" | cut -d: -f1)
           TARGET_HOME=$(echo "$PASSWD_ENTRY" | cut -d: -f6)
         else
-          TARGET_USER="hermes"
-          TARGET_HOME="/home/hermes"
+          TARGET_USER="fulilian"
+          TARGET_HOME="/home/fulilian"
           if command -v useradd >/dev/null 2>&1; then
-            useradd -u "$HERMES_UID" -g "$HERMES_GID" -m -d "$TARGET_HOME" -s /bin/bash "$TARGET_USER"
+            useradd -u "$FULILIAN_UID" -g "$FULILIAN_GID" -m -d "$TARGET_HOME" -s /bin/bash "$TARGET_USER"
           elif command -v adduser >/dev/null 2>&1; then
-            adduser -u "$HERMES_UID" -D -h "$TARGET_HOME" -s /bin/sh -G "$GROUP_NAME" "$TARGET_USER" 2>/dev/null || true
+            adduser -u "$FULILIAN_UID" -D -h "$TARGET_HOME" -s /bin/sh -G "$GROUP_NAME" "$TARGET_USER" 2>/dev/null || true
           fi
         fi
         mkdir -p "$TARGET_HOME"
-        chown "$HERMES_UID:$HERMES_GID" "$TARGET_HOME"
+        chown "$FULILIAN_UID:$FULILIAN_GID" "$TARGET_HOME"
         chmod 0750 "$TARGET_HOME"
 
-        # Ensure HERMES_HOME is owned by the target user.
+        # Ensure FULILIAN_HOME is owned by the target user.
         # Use find instead of chown -R: chown strips the setgid bit (kernel
         # behavior), destroying the 2770 permissions the NixOS activation
         # script sets for group access by hostUsers.  Only touch files with
         # wrong ownership so correctly-owned dirs keep their permission bits.
-        if [ -n "''${HERMES_HOME:-}" ] && [ -d "$HERMES_HOME" ]; then
-          find "$HERMES_HOME" \! -user "$HERMES_UID" -exec chown "$HERMES_UID:$HERMES_GID" {} +
+        if [ -n "''${FULILIAN_HOME:-}" ] && [ -d "$FULILIAN_HOME" ]; then
+          find "$FULILIAN_HOME" \! -user "$FULILIAN_UID" -exec chown "$FULILIAN_UID:$FULILIAN_GID" {} +
         fi
 
         # ── Provision apt packages (first boot only, cached in writable layer) ──
@@ -125,7 +125,7 @@
         # nodejs/npm: writable node so npm i -g works (nix store copies are read-only)
         #   Node 22 via NodeSource — Ubuntu 24.04 ships Node 18 which is EOL.
         # curl: needed for uv installer + NodeSource setup
-        if [ ! -f /var/lib/hermes-tools-provisioned ] && command -v apt-get >/dev/null 2>&1; then
+        if [ ! -f /var/lib/fulilian-tools-provisioned ] && command -v apt-get >/dev/null 2>&1; then
           echo "First boot: provisioning agent tools..."
           apt-get update -qq
           apt-get install -y -qq sudo curl ca-certificates gnupg
@@ -136,13 +136,13 @@
             > /etc/apt/sources.list.d/nodesource.list
           apt-get update -qq
           apt-get install -y -qq nodejs
-          touch /var/lib/hermes-tools-provisioned
+          touch /var/lib/fulilian-tools-provisioned
         fi
 
-        if command -v sudo >/dev/null 2>&1 && [ ! -f /etc/sudoers.d/hermes ]; then
+        if command -v sudo >/dev/null 2>&1 && [ ! -f /etc/sudoers.d/fulilian ]; then
           mkdir -p /etc/sudoers.d
-          echo "$TARGET_USER ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/hermes
-          chmod 0440 /etc/sudoers.d/hermes
+          echo "$TARGET_USER ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/fulilian
+          chmod 0440 /etc/sudoers.d/fulilian
         fi
 
         # uv (Python manager) — not in Ubuntu repos, retry-safe outside the sentinel
@@ -167,7 +167,7 @@
         fi
 
         if command -v setpriv >/dev/null 2>&1; then
-          exec setpriv --reuid="$HERMES_UID" --regid="$HERMES_GID" --init-groups "$@"
+          exec setpriv --reuid="$FULILIAN_UID" --regid="$FULILIAN_GID" --init-groups "$@"
         elif command -v su >/dev/null 2>&1; then
           exec su -s /bin/sh "$TARGET_USER" -c 'exec "$0" "$@"' -- "$@"
         else
@@ -178,7 +178,7 @@
 
       # Identity hash — only recreate container when structural config changes.
       # Package and entrypoint use stable symlinks (current-package, current-entrypoint)
-      # so they can update without recreation. Env vars go through $HERMES_HOME/.env.
+      # so they can update without recreation. Env vars go through $FULILIAN_HOME/.env.
       containerIdentity = builtins.hashString "sha256" (
         builtins.toJSON {
           schema = 4; # bump when identity inputs change (4: Node 18→22 via NodeSource)
@@ -192,15 +192,15 @@
 
       # The CLI on the host reads this file, in get_container_exec_info. The
       # file tells the CLI to run in the container and not on the host.
-      containerModeFile = pkgs.writeText "hermes-container-mode" ''
+      containerModeFile = pkgs.writeText "fulilian-container-mode" ''
         # Written by the NixOS activation script. Do not edit manually.
         backend=${cfg.container.backend}
         container_name=${containerName}
         exec_user=${cfg.user}
-        hermes_bin=${containerDataDir}/current-package/bin/hermes
+        fulilian_bin=${containerDataDir}/current-package/bin/fulilian
       '';
 
-      # Default: /var/lib/hermes/workspace → /data/workspace.
+      # Default: /var/lib/fulilian/workspace → /data/workspace.
       # Custom paths outside stateDir pass through unchanged (user must add extraVolumes).
       containerWorkDir =
         if lib.hasPrefix "${cfg.stateDir}/" cfg.workingDirectory then
@@ -219,7 +219,7 @@
         RestartSec = cfg.restartSec;
 
         # Shared-state: files created by the service should be group-writable
-        # so interactive users in the hermes group can read/write them.
+        # so interactive users in the fulilian group can read/write them.
         UMask = "0007";
 
         # Hardening
@@ -236,16 +236,16 @@
       commonUnitEnvironment = {
         HOME = cfg.stateDir;
       }
-      // common.processEnvironment { inherit hermesHome; };
+      // common.processEnvironment { inherit fulilianHome; };
 
       unitPath = common.processPath { inherit pkgs cfg; };
 
     in
     {
-      options.services.hermes-agent =
+      options.services.fulilian-agent =
         common.sharedOptions {
-          defaultPackage = hermes-agent;
-          defaultPackageText = lib.literalExpression "hermes-agent.packages.\${system}.default";
+          defaultPackage = fulilian-agent;
+          defaultPackageText = lib.literalExpression "fulilian-agent.packages.\${system}.default";
           defaultWorkingDirectory = "${cfg.stateDir}/workspace";
           defaultWorkingDirectoryText = lib.literalExpression ''"''${cfg.stateDir}/workspace"'';
         }
@@ -255,13 +255,13 @@
             # ── Service identity ───────────────────────────────────────────
             user = mkOption {
               type = types.str;
-              default = "hermes";
+              default = "fulilian";
               description = "System user running the gateway.";
             };
 
             group = mkOption {
               type = types.str;
-              default = "hermes";
+              default = "fulilian";
               description = "System group running the gateway.";
             };
 
@@ -274,16 +274,16 @@
             # ── Directories ────────────────────────────────────────────────
             stateDir = mkOption {
               type = types.str;
-              default = "/var/lib/hermes";
-              description = "State directory. Contains .hermes/ subdir (HERMES_HOME).";
+              default = "/var/lib/fulilian";
+              description = "State directory. Contains .fulilian/ subdir (FULILIAN_HOME).";
             };
 
             addToSystemPackages = mkOption {
               type = types.bool;
               default = false;
               description = ''
-                Add the hermes CLI to environment.systemPackages and export
-                HERMES_HOME system-wide (via environment.variables) so interactive
+                Add the fulilian CLI to environment.systemPackages and export
+                FULILIAN_HOME system-wide (via environment.variables) so interactive
                 shells share state with the gateway service.
               '';
             };
@@ -324,8 +324,8 @@
                 type = types.listOf types.str;
                 default = [ ];
                 description = ''
-                  Interactive users who get a ~/.hermes symlink to the service
-                  stateDir. These users are automatically added to the hermes group.
+                  Interactive users who get a ~/.fulilian symlink to the service
+                  stateDir. These users are automatically added to the fulilian group.
                 '';
                 example = [ "sidbin" ];
               };
@@ -338,7 +338,7 @@
 
           # ── Merge MCP servers into settings ────────────────────────────────
           (lib.mkIf (cfg.mcpServers != { }) {
-            services.hermes-agent.settings.mcp_servers = common.mcpServersToConfig cfg.mcpServers;
+            services.fulilian-agent.settings.mcp_servers = common.mcpServersToConfig cfg.mcpServers;
           })
 
           # ── User / group ──────────────────────────────────────────────────
@@ -354,12 +354,12 @@
           })
 
           # ── Host CLI ──────────────────────────────────────────────────────
-          # Add the hermes CLI to system PATH and export HERMES_HOME system-wide
+          # Add the fulilian CLI to system PATH and export FULILIAN_HOME system-wide
           # so interactive shells share state (sessions, skills, cron) with the
-          # gateway service instead of creating a separate ~/.hermes/.
+          # gateway service instead of creating a separate ~/.fulilian/.
           (lib.mkIf cfg.addToSystemPackages {
             environment.systemPackages = [ effectivePackage ];
-            environment.variables.HERMES_HOME = hermesHome;
+            environment.variables.FULILIAN_HOME = fulilianHome;
           })
 
           # ── Host user group membership ─────────────────────────────────────
@@ -374,16 +374,16 @@
             assertions =
               common.pluginNameAssertions {
                 inherit cfg;
-                optionPath = "services.hermes-agent";
+                optionPath = "services.fulilian-agent";
               }
               ++ common.workspaceFilesAssertions {
                 inherit cfg;
-                opt = options.services.hermes-agent.workingDirectory;
-                optionPath = "services.hermes-agent";
+                opt = options.services.fulilian-agent.workingDirectory;
+                optionPath = "services.fulilian-agent";
               }
               ++ common.backendBindAssertions {
                 inherit cfg;
-                optionPath = "services.hermes-agent";
+                optionPath = "services.fulilian-agent";
               }
               ++ [
                 {
@@ -391,13 +391,13 @@
                   # process needs its own container and its own ports. This
                   # module does not do that.
                   assertion = !(cfg.container.enable && cfg.backend.mode != "none");
-                  message = "services.hermes-agent: backend.mode is not supported together with container.enable — the container runs the gateway only.";
+                  message = "services.fulilian-agent: backend.mode is not supported together with container.enable — the container runs the gateway only.";
                 }
               ];
           }
 
           # ── Per-user profile for extraPackages ───────────────────────────
-          # Wire extraPackages into the hermes user's per-user profile so the
+          # Wire extraPackages into the fulilian user's per-user profile so the
           # login-shell snapshot (which rebuilds PATH from NixOS profiles) sees
           # them.  The systemd service PATH also includes them for direct access.
           (lib.mkIf (cfg.extraPackages != [ ]) {
@@ -413,10 +413,10 @@
             {
               warnings = [
                 ''
-                  services.hermes-agent: container.enable is true and container.hostUsers
-                  is set, but addToSystemPackages is false. Without a host-installed hermes
+                  services.fulilian-agent: container.enable is true and container.hostUsers
+                  is set, but addToSystemPackages is false. Without a host-installed fulilian
                   binary, container routing will not work for interactive users.
-                  Set addToSystemPackages = true or ensure hermes is on PATH.
+                  Set addToSystemPackages = true or ensure fulilian is on PATH.
                 ''
               ];
             }
@@ -426,45 +426,45 @@
           {
             systemd.tmpfiles.rules = [
               "d ${cfg.stateDir}                2770 ${cfg.user} ${cfg.group} - -"
-              "d ${hermesHome}                  2770 ${cfg.user} ${cfg.group} - -"
+              "d ${fulilianHome}                  2770 ${cfg.user} ${cfg.group} - -"
               "d ${cfg.stateDir}/home           0750 ${cfg.user} ${cfg.group} - -"
               "d ${cfg.workingDirectory}        2770 ${cfg.user} ${cfg.group} - -"
             ]
-            ++ map (d: "d ${hermesHome}/${d} 2770 ${cfg.user} ${cfg.group} - -") common.stateSubdirs;
+            ++ map (d: "d ${fulilianHome}/${d} 2770 ${cfg.user} ${cfg.group} - -") common.stateSubdirs;
           }
 
           # ── Activation: link config + auth + documents ────────────────────
           {
-            system.activationScripts."hermes-agent-setup" =
+            system.activationScripts."fulilian-agent-setup" =
               lib.stringAfter
                 (
                   [ "users" ] ++ lib.optional (config.system.activationScripts ? setupSecrets) "setupSecrets"
                 )
                 ''
                   # Ensure directories exist (activation runs before tmpfiles)
-                  mkdir -p ${hermesHome}
+                  mkdir -p ${fulilianHome}
                   mkdir -p ${cfg.stateDir}/home
                   mkdir -p ${cfg.workingDirectory}
-                  chown ${cfg.user}:${cfg.group} ${cfg.stateDir} ${hermesHome} ${cfg.stateDir}/home ${cfg.workingDirectory}
-                  chmod 2770 ${cfg.stateDir} ${hermesHome} ${cfg.workingDirectory}
+                  chown ${cfg.user}:${cfg.group} ${cfg.stateDir} ${fulilianHome} ${cfg.stateDir}/home ${cfg.workingDirectory}
+                  chmod 2770 ${cfg.stateDir} ${fulilianHome} ${cfg.workingDirectory}
                   chmod 0750 ${cfg.stateDir}/home
 
                   # Create subdirs, set setgid + group-writable, migrate existing files.
                   # Nix-managed .env/.managed stay 0640/0644; config.yaml uses
                   # configYamlMode (0660 under addToSystemPackages, else 0640).
-                  find ${hermesHome} -maxdepth 1 \
+                  find ${fulilianHome} -maxdepth 1 \
                     \( -name "*.db" -o -name "*.db-wal" -o -name "*.db-shm" -o -name "SOUL.md" \) \
                     -exec chmod g+rw {} + 2>/dev/null || true
                   for _subdir in ${lib.concatStringsSep " " common.stateSubdirs}; do
-                    mkdir -p "${hermesHome}/$_subdir"
-                    chown ${cfg.user}:${cfg.group} "${hermesHome}/$_subdir"
-                    chmod 2770 "${hermesHome}/$_subdir"
-                    find "${hermesHome}/$_subdir" -type f \
+                    mkdir -p "${fulilianHome}/$_subdir"
+                    chown ${cfg.user}:${cfg.group} "${fulilianHome}/$_subdir"
+                    chmod 2770 "${fulilianHome}/$_subdir"
+                    find "${fulilianHome}/$_subdir" -type f \
                       -exec chmod g+rw {} + 2>/dev/null || true
                   done
 
                   ${common.mkStateScript {
-                    inherit pkgs cfg hermesHome;
+                    inherit pkgs cfg fulilianHome;
                     workingDirectory = cfg.workingDirectory;
                     configWorkingDirectory = effectiveWorkDir;
                     owner = "${cfg.user}:${cfg.group}";
@@ -478,7 +478,7 @@
                     };
                   }}
 
-                  chown -h ${cfg.user}:${cfg.group} ${hermesHome}/plugins/nix-managed-* 2>/dev/null || true
+                  chown -h ${cfg.user}:${cfg.group} ${fulilianHome}/plugins/nix-managed-* 2>/dev/null || true
 
                   # Container mode metadata — tells the host CLI to exec into the
                   # container instead of running locally. Removed when container mode
@@ -486,11 +486,11 @@
                   ${
                     if cfg.container.enable then
                       ''
-                        install -o ${cfg.user} -g ${cfg.group} -m 0644 ${containerModeFile} ${hermesHome}/.container-mode
+                        install -o ${cfg.user} -g ${cfg.group} -m 0644 ${containerModeFile} ${fulilianHome}/.container-mode
                       ''
                     else
                       ''
-                        rm -f ${hermesHome}/.container-mode
+                        rm -f ${fulilianHome}/.container-mode
 
                         # Remove symlink bridge for hostUsers
                         ${lib.concatStringsSep "\n" (
@@ -498,12 +498,12 @@
                             user:
                             let
                               userHome = config.users.users.${user}.home;
-                              symlinkPath = "${userHome}/.hermes";
+                              symlinkPath = "${userHome}/.fulilian";
                             in
                             ''
-                              if [ -L "${symlinkPath}" ] && [ "$(readlink "${symlinkPath}")" = "${hermesHome}" ]; then
+                              if [ -L "${symlinkPath}" ] && [ "$(readlink "${symlinkPath}")" = "${fulilianHome}" ]; then
                                 rm -f "${symlinkPath}"
-                                echo "hermes-agent: removed symlink ${symlinkPath}"
+                                echo "fulilian-agent: removed symlink ${symlinkPath}"
                               fi
                             ''
                           ) cfg.container.hostUsers
@@ -512,7 +512,7 @@
                   }
 
                   # ── Symlink bridge for interactive users ───────────────────────
-                  # Create ~/.hermes -> stateDir/.hermes for each hostUser so the
+                  # Create ~/.fulilian -> stateDir/.fulilian for each hostUser so the
                   # host CLI shares state with the container service.
                   # Only runs when container mode is enabled.
                   ${lib.optionalString cfg.container.enable (
@@ -521,19 +521,19 @@
                         user:
                         let
                           userHome = config.users.users.${user}.home;
-                          symlinkPath = "${userHome}/.hermes";
+                          symlinkPath = "${userHome}/.fulilian";
                         in
                         ''
                           if [ -d "${symlinkPath}" ] && [ ! -L "${symlinkPath}" ]; then
                             # Real directory — back it up, then create symlink.
                             # (ln -sfn cannot atomically replace a directory.)
                             _backup="${symlinkPath}.bak.$(date +%s)"
-                            echo "hermes-agent: backing up existing ${symlinkPath} to $_backup"
+                            echo "fulilian-agent: backing up existing ${symlinkPath} to $_backup"
                             mv "${symlinkPath}" "$_backup"
                           fi
                           # For everything else (existing symlink, doesn't exist, etc.)
                           # ln -sfn handles it: replaces symlinks, creates new ones.
-                          ln -sfn "${hermesHome}" "${symlinkPath}"
+                          ln -sfn "${fulilianHome}" "${symlinkPath}"
                           chown -h ${user}:${cfg.group} "${symlinkPath}"
                         ''
                       ) cfg.container.hostUsers
@@ -546,14 +546,14 @@
           # MODE A: Native systemd service (default)
           # ══════════════════════════════════════════════════════════════════
           (lib.mkIf (!cfg.container.enable) {
-            systemd.services.hermes-agent = {
-              description = "Hermes Agent Gateway";
+            systemd.services.fulilian-agent = {
+              description = "Fulilian Agent Gateway";
               wantedBy = [ "multi-user.target" ];
               after = [ "network-online.target" ];
               wants = [ "network-online.target" ];
 
               # cfg.environment and cfg.environmentFiles are written to
-              # $HERMES_HOME/.env by the activation script. load_hermes_dotenv()
+              # $FULILIAN_HOME/.env by the activation script. load_fulilian_dotenv()
               # reads them at Python startup — no systemd EnvironmentFile needed.
               environment = commonUnitEnvironment;
 
@@ -565,11 +565,11 @@
             };
           })
 
-          # ── The backend: hermes serve or hermes dashboard ─────────────────
+          # ── The backend: fulilian serve or fulilian dashboard ─────────────────
           # This is a different process from the gateway. Both use one
-          # HERMES_HOME.
+          # FULILIAN_HOME.
           (lib.mkIf (!cfg.container.enable && cfg.backend.mode != "none") {
-            systemd.services.hermes-backend = {
+            systemd.services.fulilian-backend = {
               description = common.backendDescription cfg;
               wantedBy = [ "multi-user.target" ];
               after = [ "network-online.target" ];
@@ -592,8 +592,8 @@
             # Ensure the container runtime is available
             virtualisation.docker.enable = lib.mkDefault (cfg.container.backend == "docker");
 
-            systemd.services.hermes-agent = {
-              description = "Hermes Agent Gateway (container)";
+            systemd.services.fulilian-agent = {
+              description = "Fulilian Agent Gateway (container)";
               wantedBy = [ "multi-user.target" ];
               after = [
                 "network-online.target"
@@ -623,8 +623,8 @@
 
                 if [ "$NEED_CREATE" = "true" ]; then
                   # Resolve numeric UID/GID — passed to entrypoint for in-container user setup
-                  HERMES_UID=$(${pkgs.coreutils}/bin/id -u ${cfg.user})
-                  HERMES_GID=$(${pkgs.coreutils}/bin/id -g ${cfg.user})
+                  FULILIAN_UID=$(${pkgs.coreutils}/bin/id -u ${cfg.user})
+                  FULILIAN_GID=$(${pkgs.coreutils}/bin/id -g ${cfg.user})
 
                   echo "Creating container..."
                   ${containerBin} create \
@@ -635,14 +635,14 @@
                     --volume ${cfg.stateDir}:${containerDataDir} \
                     --volume ${cfg.stateDir}/home:${containerHomeDir} \
                     ${lib.concatStringsSep " " (map (v: "--volume ${v}") cfg.container.extraVolumes)} \
-                    --env HERMES_UID="$HERMES_UID" \
-                    --env HERMES_GID="$HERMES_GID" \
-                    --env HERMES_HOME=${containerDataDir}/.hermes \
-                    --env HERMES_MANAGED=true \
+                    --env FULILIAN_UID="$FULILIAN_UID" \
+                    --env FULILIAN_GID="$FULILIAN_GID" \
+                    --env FULILIAN_HOME=${containerDataDir}/.fulilian \
+                    --env FULILIAN_MANAGED=true \
                     --env HOME=${containerHomeDir} \
                     ${lib.concatStringsSep " " cfg.container.extraOptions} \
                     ${cfg.container.image} \
-                    ${containerDataDir}/current-package/bin/hermes gateway run --replace ${lib.concatStringsSep " " cfg.extraArgs}
+                    ${containerDataDir}/current-package/bin/fulilian gateway run --replace ${lib.concatStringsSep " " cfg.extraArgs}
 
                   echo "${containerIdentity}" > ${identityFile}
                 fi

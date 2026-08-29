@@ -315,7 +315,7 @@ def _resolve_tts_client_config() -> Dict[str, Any]:
 def resolve_client_voice_config() -> Dict[str, Any]:
     """Resolve both directions for the CURRENT profile scope.
 
-    Callers scope the profile via ``hermes_constants.set_hermes_home_override``
+    Callers scope the profile via ``fulilian_constants.set_fulilian_home_override``
     (the web server's ``_config_profile_scope``) before calling — identical to
     how ``/api/audio/transcribe`` scopes ``transcribe_recording``.
     """

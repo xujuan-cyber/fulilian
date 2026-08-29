@@ -197,7 +197,7 @@ def handle_solve_command(args: argparse.Namespace) -> None:
     os.environ.setdefault(ENV_SANDBOX_MODE, "workspace-write")
 
     # F4-003/F4-004：进程内注册 CTF 危险命令拦截 + flag 检测 hooks
-    # （不写 ~/.hermes 任何配置/白名单；HERMES_SAFE_MODE=1 时自动跳过）
+    # （不写 ~/.fulilian 任何配置/白名单；FULILIAN_SAFE_MODE=1 时自动跳过）
     try:
         from fulilian_ctf.hooks import register_ctf_tool_hooks
 

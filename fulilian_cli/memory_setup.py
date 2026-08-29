@@ -1,4 +1,4 @@
-"""hermes memory setup|status — configure memory provider plugins.
+"""fulilian memory setup|status — configure memory provider plugins.
 
 Auto-detects installed memory providers via the plugin system.
 Interactive curses-based UI for provider selection, then walks through
@@ -12,7 +12,7 @@ import re
 import sys
 import shlex
 
-from fulilian_constants import get_hermes_home
+from fulilian_constants import get_fulilian_home
 from fulilian_cli.secret_prompt import masked_secret_prompt
 
 _CANCELLED = -1
@@ -25,7 +25,7 @@ def _provider_pip_dependencies(provider_name: str, declared: list) -> list:
     some providers install mode-dependent extras at setup time that the
     manifest can't express. Hindsight's ``local_embedded`` mode installs
     ``hindsight-all`` (daemon + embedder + client) during
-    ``hermes memory setup`` — if the update-time refresh only reinstalled
+    ``fulilian memory setup`` — if the update-time refresh only reinstalled
     the declared ``hindsight-client``, the embedded daemon would stay
     broken after a venv rebuild stripped ``hindsight-embed`` (#70636).
     """
@@ -33,7 +33,7 @@ def _provider_pip_dependencies(provider_name: str, declared: list) -> list:
     if provider_name == "hindsight":
         try:
             import json
-            cfg_path = get_hermes_home() / "hindsight" / "config.json"
+            cfg_path = get_fulilian_home() / "hindsight" / "config.json"
             cfg = json.loads(cfg_path.read_text(encoding="utf-8")) if cfg_path.exists() else {}
             mode = cfg.get("mode", "")
             # "local" is a legacy alias for "local_embedded"
@@ -45,7 +45,7 @@ def _provider_pip_dependencies(provider_name: str, declared: list) -> list:
 
 
 # ---------------------------------------------------------------------------
-# Curses-based interactive picker (same pattern as hermes tools)
+# Curses-based interactive picker (same pattern as fulilian tools)
 # ---------------------------------------------------------------------------
 
 def _curses_select(
@@ -109,7 +109,7 @@ def _install_dependencies(provider_name: str, *, force: bool = False) -> None:
     When ``force`` is true, every declared dependency is handed to the
     installer even if its import currently succeeds — the resolver then
     reinstalls anything missing or version-drifted and no-ops on satisfied
-    ranges. This is how ``hermes update`` heals the active memory provider
+    ranges. This is how ``fulilian update`` heals the active memory provider
     after a venv rebuild/sync removed or downgraded its bridge packages
     (#53272, #70636).
     """
@@ -163,7 +163,7 @@ def _install_dependencies(provider_name: str, *, force: bool = False) -> None:
 
     # Environment-aware install: on immutable hosted images the agent venv
     # is sealed read-only and installs must go to the durable target on the
-    # data volume (HERMES_LAZY_INSTALL_TARGET). install_specs handles the
+    # data volume (FULILIAN_LAZY_INSTALL_TARGET). install_specs handles the
     # routing/gating; on normal installs it is venv-scoped as before (NS-605).
     from tools.lazy_deps import install_specs
 
@@ -254,7 +254,7 @@ def cmd_setup_provider(provider_name: str) -> None:
 
     if not match:
         print(f"\n  Memory provider '{provider_name}' not found.")
-        print("  Run 'hermes memory setup' to see available providers.\n")
+        print("  Run 'fulilian memory setup' to see available providers.\n")
         return
 
     name, _, provider = match
@@ -268,8 +268,8 @@ def cmd_setup_provider(provider_name: str) -> None:
         config["memory"] = {}
 
     if hasattr(provider, "post_setup"):
-        hermes_home = str(get_hermes_home())
-        provider.post_setup(hermes_home, config)
+        fulilian_home = str(get_fulilian_home())
+        provider.post_setup(fulilian_home, config)
         return
 
     # Fallback: generic schema-based setup (same as cmd_setup)
@@ -287,7 +287,7 @@ def cmd_setup(args) -> None:
 
     if not providers:
         print("\n  No memory provider plugins detected.")
-        print("  Install a plugin to ~/.hermes/plugins/ and try again.\n")
+        print("  Install a plugin to ~/.fulilian/plugins/ and try again.\n")
         return
 
     # Build picker items
@@ -324,8 +324,8 @@ def cmd_setup(args) -> None:
     # If the provider has a post_setup hook, delegate entirely to it.
     # The hook handles its own config, connection test, and activation.
     if hasattr(provider, "post_setup"):
-        hermes_home = str(get_hermes_home())
-        provider.post_setup(hermes_home, config)
+        fulilian_home = str(get_fulilian_home())
+        provider.post_setup(fulilian_home, config)
         return
 
     schema = provider.get_config_schema() if hasattr(provider, "get_config_schema") else []
@@ -403,10 +403,10 @@ def cmd_setup(args) -> None:
     save_config(config)
 
     # Write non-secret config to provider's native location
-    hermes_home = str(get_hermes_home())
+    fulilian_home = str(get_fulilian_home())
     if provider_config and hasattr(provider, "save_config"):
         try:
-            provider.save_config(provider_config, hermes_home)
+            provider.save_config(provider_config, fulilian_home)
         except Exception as e:
             print(f"  Failed to write provider config: {e}")
 
@@ -425,20 +425,20 @@ def cmd_setup(args) -> None:
 
 def _write_env_vars(
     env_writes: dict,
-    hermes_home: str | os.PathLike[str] | None = None,
+    fulilian_home: str | os.PathLike[str] | None = None,
 ) -> None:
     """Persist memory-provider env vars through the canonical ``.env`` writer.
 
-    Delegates to ``hermes_cli.config.save_env_value`` so every key flows
+    Delegates to ``fulilian_cli.config.save_env_value`` so every key flows
     through the same input-validation gate as every other ``.env`` writer:
     the ``_ENV_VAR_NAME_RE`` regex (no malformed identifiers), the
     ``_ENV_VAR_NAME_DENYLIST`` (no ``LD_PRELOAD`` / ``PYTHONPATH`` /
-    ``HERMES_HOME`` / etc.), CR/LF stripping on the value, and the atomic
+    ``FULILIAN_HOME`` / etc.), CR/LF stripping on the value, and the atomic
     0o600-from-creation write (no TOCTOU permission window). This function
     previously wrote via ``Path.write_text`` directly, bypassing all of
     that: a memory-provider plugin schema declaring ``env_var: "LD_PRELOAD"``
     would land in ``.env`` verbatim and load via the ``env_loader.py``
-    ``.env`` -> ``os.environ`` chain on the next Hermes startup, and the
+    ``.env`` -> ``os.environ`` chain on the next Fulilian startup, and the
     file existed at the default umask between the write and the later
     ``chmod`` regardless of key legitimacy.
 
@@ -450,16 +450,16 @@ def _write_env_vars(
     intentionally NOT caught — those indicate the wizard cannot safely
     persist any subsequent key either and should propagate.
 
-    ``hermes_home`` may be supplied by plugin ``post_setup`` hooks that
+    ``fulilian_home`` may be supplied by plugin ``post_setup`` hooks that
     already received an explicit home directory (e.g. a non-default
-    profile). It is applied through the context-local Hermes home override
+    profile). It is applied through the context-local Fulilian home override
     so ``save_env_value`` still owns the validation, sanitization, and
     atomic-write path without mutating global ``os.environ``.
     """
     from fulilian_cli.config import save_env_value
-    from fulilian_constants import reset_hermes_home_override, set_hermes_home_override
+    from fulilian_constants import reset_fulilian_home_override, set_fulilian_home_override
 
-    token = set_hermes_home_override(hermes_home) if hermes_home is not None else None
+    token = set_fulilian_home_override(fulilian_home) if fulilian_home is not None else None
     try:
         for key, val in env_writes.items():
             try:
@@ -468,7 +468,7 @@ def _write_env_vars(
                 print(f"  Skipping {key}: {exc}")
     finally:
         if token is not None:
-            reset_hermes_home_override(token)
+            reset_fulilian_home_override(token)
 
 
 # ---------------------------------------------------------------------------
@@ -548,14 +548,14 @@ def cmd_status(args) -> None:
                             line += f"  → {url}"
                         print(line)
                 print(
-                    "  Note: systemd/gateway services do not inherit ~/.hermes/.env —"
+                    "  Note: systemd/gateway services do not inherit ~/.fulilian/.env —"
                 )
                 print(
                     "        set any variables above in the service environment."
                 )
         else:
             print("\n  Plugin:    NOT installed ✗")
-            print(f"  Install the '{provider_name}' memory plugin to ~/.hermes/plugins/")
+            print(f"  Install the '{provider_name}' memory plugin to ~/.fulilian/plugins/")
 
     if providers:
         print("\n  Installed plugins:")

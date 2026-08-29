@@ -4,7 +4,7 @@ A multiplexed gateway serves every profile from one process.  ``SessionStore``
 used to bind a single ``SessionDB`` during ``__init__``, freezing it to the
 process's own root home, so a named profile's sessions were physically written
 to the root ``state.db`` even though ``_profile_runtime_scope`` had already
-redirected ``get_hermes_home()`` for that turn.  The rows carried the correct
+redirected ``get_fulilian_home()`` for that turn.  The rows carried the correct
 ``profile_name``, which is why the only visible symptom was the desktop listing
 a profile's session under the default bot: the desktop reads
 ``profiles/<name>/state.db``, which never received the write.
@@ -26,39 +26,39 @@ from gateway.config import GatewayConfig
 from gateway.platforms.base import MessageEvent, Platform, SessionSource
 from gateway.session import SessionStore
 from fulilian_constants import (
-    get_hermes_home,
-    reset_hermes_home_override,
-    set_hermes_home_override,
+    get_fulilian_home,
+    reset_fulilian_home_override,
+    set_fulilian_home_override,
 )
 
 
 @pytest.fixture
 def multiplex_homes(tmp_path, monkeypatch):
-    """A root home plus a named profile home, with HERMES_HOME on the root.
+    """A root home plus a named profile home, with FULILIAN_HOME on the root.
 
     Mirrors the reported layout: one gateway process launched under the root
     home, serving a ``fitness`` profile whose store lives under
     ``profiles/fitness``.
     """
-    import hermes_state
+    import fulilian_state
 
-    root = tmp_path / "hermes"
+    root = tmp_path / "fulilian"
     profile = root / "profiles" / "fitness"
     root.mkdir(parents=True)
     profile.mkdir(parents=True)
-    monkeypatch.setenv("HERMES_HOME", str(root))
+    monkeypatch.setenv("FULILIAN_HOME", str(root))
 
-    # The suite-wide fixture in conftest re-points ``hermes_state.DEFAULT_DB_PATH``
+    # The suite-wide fixture in conftest re-points ``fulilian_state.DEFAULT_DB_PATH``
     # at a fake home, which trips the deliberate escape hatch in
     # ``_default_db_path()``: a re-pointed constant wins over everything,
     # including the context-local override.  That is correct for tests that
     # want one fixed DB, but it would pin every lookup here to a single path
     # and make these assertions vacuous.  Restore the import-time snapshot so
-    # the hatch is closed and resolution goes through ``get_hermes_home()``,
-    # which is what production does.  ``HERMES_HOME`` above still keeps that
+    # the hatch is closed and resolution goes through ``get_fulilian_home()``,
+    # which is what production does.  ``FULILIAN_HOME`` above still keeps that
     # resolution inside ``tmp_path``, so no real store is ever opened.
     monkeypatch.setattr(
-        hermes_state, "DEFAULT_DB_PATH", hermes_state._IMPORT_DEFAULT_DB_PATH
+        fulilian_state, "DEFAULT_DB_PATH", fulilian_state._IMPORT_DEFAULT_DB_PATH
     )
     return root, profile
 
@@ -110,7 +110,7 @@ def test_primary_handler_enters_routed_profile_scope_before_dispatch(multiplex_h
     seen = []
 
     async def capture_scope(event):
-        seen.append(Path(get_hermes_home()))
+        seen.append(Path(get_fulilian_home()))
 
     runner._handle_message = capture_scope
     event = MessageEvent(
@@ -126,7 +126,7 @@ def test_primary_handler_enters_routed_profile_scope_before_dispatch(multiplex_h
     asyncio.run(runner._primary_message_handler()(event))
 
     assert seen == [profile]
-    assert Path(get_hermes_home()) == root
+    assert Path(get_fulilian_home()) == root
 
 
 def test_primary_handler_rejected_route_falls_back_and_marks_sentinel(multiplex_homes):
@@ -154,7 +154,7 @@ def test_primary_handler_rejected_route_falls_back_and_marks_sentinel(multiplex_
     seen = []
 
     async def capture_scope(event):
-        seen.append((Path(get_hermes_home()), event.source.profile_route_rejected))
+        seen.append((Path(get_fulilian_home()), event.source.profile_route_rejected))
 
     runner._handle_message = capture_scope
     source = SessionSource(
@@ -203,7 +203,7 @@ def test_primary_route_keeps_transport_authorization_scope(multiplex_homes):
     async def capture_scope_and_auth(event):
         seen.append(
             (
-                Path(get_hermes_home()),
+                Path(get_fulilian_home()),
                 runner._is_user_authorized_for_source(event.source),
             )
         )
@@ -228,14 +228,14 @@ def test_primary_route_keeps_transport_authorization_scope(multiplex_homes):
         set_multiplex_active(previous_multiplex)
 
     assert seen == [(profile, True)]
-    assert Path(get_hermes_home()) == root
+    assert Path(get_fulilian_home()) == root
 
 
 def test_two_primary_routed_turns_reload_profile_transcript(multiplex_homes):
     """A second routed turn sees the first turn in the profile database."""
     from gateway.profile_routing import ProfileRoute
     from gateway.run import GatewayRunner
-    from hermes_state import SessionDB
+    from fulilian_state import SessionDB
 
     root, profile = multiplex_homes
     (profile / "config.yaml").write_text("{}\n", encoding="utf-8")
@@ -301,11 +301,11 @@ def test_db_handle_follows_the_active_profile_scope(multiplex_homes):
     # Constructed outside any scope, exactly as the gateway constructs it.
     assert Path(store._db.db_path) == root / "state.db"
 
-    token = set_hermes_home_override(str(profile))
+    token = set_fulilian_home_override(str(profile))
     try:
         assert Path(store._db.db_path) == profile / "state.db"
     finally:
-        reset_hermes_home_override(token)
+        reset_fulilian_home_override(token)
 
     # And the scope is restored once the turn's scope exits.
     assert Path(store._db.db_path) == root / "state.db"
@@ -321,11 +321,11 @@ def test_write_under_profile_scope_lands_in_profile_store(multiplex_homes):
     root, profile = multiplex_homes
     store = _make_store(root)
 
-    token = set_hermes_home_override(str(profile))
+    token = set_fulilian_home_override(str(profile))
     try:
         store._db.create_session("20260817_233028_542fda58", "feishu")
     finally:
-        reset_hermes_home_override(token)
+        reset_fulilian_home_override(token)
 
     assert _session_ids(profile / "state.db") == {"20260817_233028_542fda58"}
     assert _session_ids(root / "state.db") == set()
@@ -340,12 +340,12 @@ def test_handles_are_cached_per_path(multiplex_homes):
     root_second = store._db
     assert root_first is root_second
 
-    token = set_hermes_home_override(str(profile))
+    token = set_fulilian_home_override(str(profile))
     try:
         profile_first = store._db
         profile_second = store._db
     finally:
-        reset_hermes_home_override(token)
+        reset_fulilian_home_override(token)
 
     assert profile_first is profile_second
     assert profile_first is not root_first
@@ -363,19 +363,19 @@ def test_explicitly_pinned_handle_still_wins(multiplex_homes):
 
     sentinel = object()
     store._db = sentinel
-    token = set_hermes_home_override(str(profile))
+    token = set_fulilian_home_override(str(profile))
     try:
         assert store._db is sentinel
     finally:
-        reset_hermes_home_override(token)
+        reset_fulilian_home_override(token)
 
     # Disabling the DB (the JSONL-fallback path) must survive scope changes.
     store._db = None
-    token = set_hermes_home_override(str(profile))
+    token = set_fulilian_home_override(str(profile))
     try:
         assert store._db is None
     finally:
-        reset_hermes_home_override(token)
+        reset_fulilian_home_override(token)
 
 
 def test_close_all_db_handles_sweeps_every_profile_handle(multiplex_homes):
@@ -391,11 +391,11 @@ def test_close_all_db_handles_sweeps_every_profile_handle(multiplex_homes):
     store = _make_store(root)
 
     root_db = store._db
-    token = set_hermes_home_override(str(profile))
+    token = set_fulilian_home_override(str(profile))
     try:
         profile_db = store._db
     finally:
-        reset_hermes_home_override(token)
+        reset_fulilian_home_override(token)
     assert root_db is not profile_db
 
     store.close_all_db_handles()
@@ -433,24 +433,24 @@ def test_runner_session_db_follows_the_active_profile_scope(multiplex_homes):
     root_db = runner._session_db
     assert Path(root_db._db.db_path) == root / "state.db"
 
-    token = set_hermes_home_override(str(profile))
+    token = set_fulilian_home_override(str(profile))
     try:
         profile_db = runner._session_db
         assert Path(profile_db._db.db_path) == profile / "state.db"
         # Cached per path: same wrapper identity on re-access.
         assert runner._session_db is profile_db
     finally:
-        reset_hermes_home_override(token)
+        reset_fulilian_home_override(token)
 
     assert runner._session_db is root_db
 
     # Pinning (how suites install fakes / disable the DB) wins across scopes.
     runner._session_db = None
-    token = set_hermes_home_override(str(profile))
+    token = set_fulilian_home_override(str(profile))
     try:
         assert runner._session_db is None
     finally:
-        reset_hermes_home_override(token)
+        reset_fulilian_home_override(token)
     runner._session_db_pinned = _SESSION_DB_UNPINNED
 
     runner.close_all_session_db_handles()

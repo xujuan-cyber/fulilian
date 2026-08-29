@@ -5,13 +5,13 @@ KEYLESS: the relay serves free-tier models anonymously and rejects any
 Authorization bearer it doesn't recognize with 401 — so this provider
 never sends a credential at all (the runtime resolver pins the keyless
 placeholder and an empty Authorization header; see
-hermes_cli.models.opencode_zen_free_runtime). No OpenCode account needed.
-Select via ``hermes model`` or ``/model free``.
+fulilian_cli.models.opencode_zen_free_runtime). No OpenCode account needed.
+Select via ``fulilian model`` or ``/model free``.
 """
 
 from typing import Any
 
-from fulilian_cli import __version__ as _HERMES_VERSION
+from fulilian_cli import __version__ as _FULILIAN_VERSION
 from providers import register_provider
 from providers.base import ProviderProfile
 
@@ -21,8 +21,8 @@ from providers.base import ProviderProfile
 _KEYLESS_HEADERS = {
     "Authorization": "",
     "HTTP-Referer": "https://hermes-agent.nousresearch.com",
-    "X-Title": "Hermes Agent",
-    "User-Agent": f"HermesAgent/{_HERMES_VERSION}",
+    "X-Title": "FuLiLian",
+    "User-Agent": f"FulilianAgent/{_FULILIAN_VERSION}",
 }
 
 

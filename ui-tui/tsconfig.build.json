@@ -2,7 +2,7 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "paths": {
-      "@hermes/ink": ["src/types/hermes-ink.d.ts"]
+      "@fulilian/ink": ["src/types/fulilian-ink.d.ts"]
     }
   }
 }

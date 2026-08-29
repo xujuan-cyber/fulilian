@@ -1,4 +1,4 @@
-import { authMcpServer, cancelMcpOAuthFlow, getMcpOAuthFlow, listMcpServers } from '@/hermes'
+import { authMcpServer, cancelMcpOAuthFlow, getMcpOAuthFlow, listMcpServers } from '@/fulilian'
 import { translateNow } from '@/i18n'
 import { completeMcpDesktopOAuth, McpOAuthCancelled } from '@/lib/mcp-dashboard-oauth'
 import { prettyName } from '@/lib/text'
@@ -44,7 +44,7 @@ async function reconnect(server: string, sessionId: string | null, cancelled: ()
       status: getMcpOAuthFlow,
       cancelled,
       cancel: cancelMcpOAuthFlow,
-      openExternal: url => window.hermesDesktop.openExternal(url)
+      openExternal: url => window.fulilianDesktop.openExternal(url)
     })
 
     // Fresh tokens reach the live session before the pill claims success.

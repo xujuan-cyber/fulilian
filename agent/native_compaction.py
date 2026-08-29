@@ -9,7 +9,7 @@ as an input item on later requests stands in for the pruned history, so the
 model keeps long-horizon recall without the client ever seeing a summary.
 Docs: https://developers.openai.com/api/docs/guides/compaction
 
-Hermes' support is deliberately narrow (live verification, Aug 2026):
+Fulilian' support is deliberately narrow (live verification, Aug 2026):
 
 * **gpt-5.6 family only.** gpt-5.6 and its variants compact correctly.
   Sending the field to gpt-5.1 / gpt-5.2 reliably fails server-side —
@@ -23,7 +23,7 @@ Hermes' support is deliberately narrow (live verification, Aug 2026):
   most would 400 on the unknown parameter, and none can mint or decrypt
   the compaction blob.
 
-Ownership model: Hermes' local compression stays fully armed as the
+Ownership model: Fulilian' local compression stays fully armed as the
 fallback owner. The native threshold is clamped safely below the local
 compressor's trigger so the server compacts first; if it doesn't (native
 disabled mid-session, provider hiccup, non-eligible route), the local
@@ -132,7 +132,7 @@ def _warn_native_compaction_suppressed_by_checkpoint_gate() -> None:
     logger.warning(
         "compression.checkpoint_required is enabled: server-side native "
         "compaction (context_management) is disabled for this agent so the "
-        "checkpoint-aware Hermes compressor stays authoritative."
+        "checkpoint-aware Fulilian compressor stays authoritative."
     )
 
 
@@ -159,7 +159,7 @@ def native_compaction_context_management(
         return None
     # compression.checkpoint_required: server-side compaction is a lossy
     # boundary the provider owns — no pre-compress checkpoint can run before
-    # the server replaces older context. Keep the checkpoint-aware Hermes
+    # the server replaces older context. Keep the checkpoint-aware Fulilian
     # compressor authoritative instead of silently letting the server
     # compact. Explicit-True check matches the compress_context() gate.
     if getattr(agent, "compression_checkpoint_required", False) is True:
@@ -234,7 +234,7 @@ def _extract_item_text(item: Any) -> Optional[str]:
 
 
 def _is_summary_item(item: Any) -> bool:
-    """True when *item* is a canonical Hermes compression-summary message.
+    """True when *item* is a canonical Fulilian compression-summary message.
 
     Delegates entirely to
     ``agent.context_compressor.is_compaction_summary_message`` — the single
@@ -281,7 +281,7 @@ def prune_pre_checkpoint_items(
     - Compression summary messages (``_is_summary_item``, the canonical
       ``agent.context_compressor`` provenance check) are retained whole
       within ``retained_summary_token_budget``. A summary is never
-      byte/character-sliced: Hermes summaries carry structural framing
+      byte/character-sliced: Fulilian summaries carry structural framing
       (handoff prefix, end marker, merge-into-tail delimiters) that a blind
       slice can corrupt, so one that doesn't fit whole is dropped instead.
       A summary already retained once (identical text) is never duplicated,

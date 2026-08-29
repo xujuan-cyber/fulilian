@@ -1,5 +1,5 @@
 """
-Cron job management tools for Hermes Agent.
+Cron job management tools for FuLiLian.
 
 Expose a single compressed action-oriented tool to avoid schema/context bloat.
 Compatibility wrappers remain for direct Python callers and legacy tests.
@@ -14,7 +14,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
-from fulilian_constants import display_hermes_home
+from fulilian_constants import display_fulilian_home
 
 logger = logging.getLogger(__name__)
 
@@ -22,12 +22,12 @@ logger = logging.getLogger(__name__)
 # at bay while a manual `cronjob(action="run")` executes the job synchronously
 # in-process (#76502). Mirrors the 10s cadence of
 # tools/environments/base.py::touch_activity_if_due (delegate_task's heartbeat
-# uses 30s) — comfortably below the 1800s default HERMES_AGENT_TIMEOUT.
+# uses 30s) — comfortably below the 1800s default FULILIAN_AGENT_TIMEOUT.
 _CRON_RUN_HEARTBEAT_INTERVAL = 10.0
 
 # Hard ceiling on how long the heartbeat keeps the parent watchdog at bay.
-# The child cron run has its own inactivity watchdog (HERMES_CRON_TIMEOUT,
-# default 600s) that bounds a wedged job, but with HERMES_CRON_TIMEOUT=0
+# The child cron run has its own inactivity watchdog (FULILIAN_CRON_TIMEOUT,
+# default 600s) that bounds a wedged job, but with FULILIAN_CRON_TIMEOUT=0
 # (explicit "unlimited") a truly hung run_one_job would otherwise mask the
 # gateway watchdog forever — pre-#76502 the parent was at least reaped at
 # ~1800s. After this ceiling the heartbeat stops and the gateway watchdog
@@ -72,15 +72,15 @@ def _notify_provider_jobs_changed_safe() -> None:
 #
 #   1. User-supplied cron prompt (small, written as a directive).
 #      Strict scanning is appropriate — a legit cron prompt has no business
-#      saying "cat ~/.hermes/.env" or "rm -rf /". `_scan_cron_prompt()` runs
+#      saying "cat ~/.fulilian/.env" or "rm -rf /". `_scan_cron_prompt()` runs
 #      against this at create/update time and as a runtime defense-in-depth.
 #
 #   2. Assembled prompt that includes loaded skill content (large markdown
 #      bodies, often security docs, postmortems, runbooks discussing attack
 #      patterns in PROSE). Reusing the strict patterns here false-positives
 #      every time a skill *describes* a command — see #3968 follow-up: the
-#      `hermes-agent-dev` skill contains a security postmortem mentioning
-#      `cat ~/.hermes/.env`, which tripped `read_secrets` and silently
+#      `fulilian-agent-dev` skill contains a security postmortem mentioning
+#      `cat ~/.fulilian/.env`, which tripped `read_secrets` and silently
 #      killed all PR-scout jobs.
 #
 #      Skill bodies are user-curated and scanned at install time by
@@ -315,10 +315,10 @@ def _scan_cron_skill_assembled(assembled: str) -> tuple[str, str]:
 
 def _origin_from_env() -> Optional[Dict[str, str]]:
     from gateway.session_context import get_session_env
-    origin_platform = get_session_env("HERMES_SESSION_PLATFORM")
-    origin_chat_id = get_session_env("HERMES_SESSION_CHAT_ID")
+    origin_platform = get_session_env("FULILIAN_SESSION_PLATFORM")
+    origin_chat_id = get_session_env("FULILIAN_SESSION_CHAT_ID")
     if origin_platform and origin_chat_id:
-        thread_id = get_session_env("HERMES_SESSION_THREAD_ID") or None
+        thread_id = get_session_env("FULILIAN_SESSION_THREAD_ID") or None
         # Slack thread-per-message session keying (native parity: thread_ts =
         # event.thread_ts or ts) stamps every TOP-LEVEL message's own id as
         # the session thread. That stamp is a per-message session KEY, not a
@@ -329,7 +329,7 @@ def _origin_from_env() -> Optional[Dict[str, str]]:
         # A genuine in-thread creation (thread == the parent's id != this
         # message's id) keeps its thread.
         if thread_id and origin_platform == "slack":
-            message_id = get_session_env("HERMES_SESSION_MESSAGE_ID") or None
+            message_id = get_session_env("FULILIAN_SESSION_MESSAGE_ID") or None
             if message_id and str(thread_id) == str(message_id):
                 logger.debug(
                     "Cron origin: dropping synthetic per-message Slack "
@@ -344,14 +344,14 @@ def _origin_from_env() -> Optional[Dict[str, str]]:
         return {
             "platform": origin_platform,
             "chat_id": origin_chat_id,
-            "chat_name": get_session_env("HERMES_SESSION_CHAT_NAME") or None,
+            "chat_name": get_session_env("FULILIAN_SESSION_CHAT_NAME") or None,
             "thread_id": thread_id,
             # Captured so an opt-in delivery mirror (cron.mirror_delivery /
             # attach_to_session) can resolve the exact participant's session in
             # per-user-isolated group chats — parity with interactive
-            # send_message, which passes HERMES_SESSION_USER_ID to
+            # send_message, which passes FULILIAN_SESSION_USER_ID to
             # gateway.mirror.mirror_to_session. Harmless for DMs/shared sessions.
-            "user_id": get_session_env("HERMES_SESSION_USER_ID") or None,
+            "user_id": get_session_env("FULILIAN_SESSION_USER_ID") or None,
             # Workspace/server scope (Slack team, Discord guild, Matrix
             # server). build_session_key embeds it in every Slack session key
             # (dm/group/thread alike), so a continuable cron seed built
@@ -361,7 +361,7 @@ def _origin_from_env() -> Optional[Dict[str, str]]:
             # here so the scheduler's seed helpers can reproduce the reply's
             # exact key. Same session-context var async_delegation already
             # snapshots; None for platforms without scope.
-            "scope_id": get_session_env("HERMES_SESSION_SCOPE_ID") or None,
+            "scope_id": get_session_env("FULILIAN_SESSION_SCOPE_ID") or None,
         }
     return None
 
@@ -370,7 +370,7 @@ def _local_delivery_notice(job: Dict[str, Any], user_deliver: Optional[str]) -> 
     """Return an informational notice when a created job won't deliver anywhere.
 
     TUI/CLI sessions cannot be captured as a cron ``origin`` (no
-    ``HERMES_SESSION_PLATFORM``/``CHAT_ID`` is set for them), so a
+    ``FULILIAN_SESSION_PLATFORM``/``CHAT_ID`` is set for them), so a
     ``deliver="origin"`` request — or an omitted ``deliver`` that defaults to
     origin-or-local — produces a job that runs and saves output to
     ``last_output`` but is never delivered back into the session. This is by
@@ -577,7 +577,7 @@ def _validate_bot_chat_deliver(deliver: Optional[str]) -> Optional[str]:
             return (
                 f"bot-chat delivery profile '{profile_arg}' not found on this "
                 "gateway's machine. Bot Chat delivery is machine-local — use a "
-                "profile that exists here (hermes profile list), or omit the "
+                "profile that exists here (fulilian profile list), or omit the "
                 "name (deliver='bot-chat') for the job's own profile."
             )
     return None
@@ -590,7 +590,7 @@ def _resolve_cron_context_deliver(deliver: Optional[str]) -> Optional[str]:
     the creating session is ephemeral, so by fire time there is no origin to
     resolve and the scheduler would fall back to guessing a home channel.
     Resolve at create time instead, using the creating run's own concrete
-    delivery target — the ``HERMES_CRON_AUTO_DELIVER_*`` contextvars that
+    delivery target — the ``FULILIAN_CRON_AUTO_DELIVER_*`` contextvars that
     ``run_job`` publishes per run (already per-job-safe under the parallel
     pool). Rules:
 
@@ -606,15 +606,15 @@ def _resolve_cron_context_deliver(deliver: Optional[str]) -> Optional[str]:
     from gateway.session_context import get_session_env
     from utils import is_truthy_value
 
-    if not is_truthy_value(get_session_env("HERMES_CRON_SESSION", "")):
+    if not is_truthy_value(get_session_env("FULILIAN_CRON_SESSION", "")):
         return deliver
 
     def _creator_target() -> str:
-        platform = get_session_env("HERMES_CRON_AUTO_DELIVER_PLATFORM", "").strip()
-        chat_id = get_session_env("HERMES_CRON_AUTO_DELIVER_CHAT_ID", "").strip()
+        platform = get_session_env("FULILIAN_CRON_AUTO_DELIVER_PLATFORM", "").strip()
+        chat_id = get_session_env("FULILIAN_CRON_AUTO_DELIVER_CHAT_ID", "").strip()
         if not platform or not chat_id:
             return "local"
-        thread_id = get_session_env("HERMES_CRON_AUTO_DELIVER_THREAD_ID", "").strip()
+        thread_id = get_session_env("FULILIAN_CRON_AUTO_DELIVER_THREAD_ID", "").strip()
         if thread_id:
             return f"{platform}:{chat_id}:{thread_id}"
         return f"{platform}:{chat_id}"
@@ -713,7 +713,7 @@ def _validate_cron_base_url(
 def _validate_cron_script_path(script: Optional[str]) -> Optional[str]:
     """Validate a cron job script path at the API boundary.
 
-    Scripts must be relative paths that resolve within HERMES_HOME/scripts/.
+    Scripts must be relative paths that resolve within FULILIAN_HOME/scripts/.
     Absolute paths and ~ expansion are rejected to prevent arbitrary script
     execution via prompt injection.
 
@@ -722,23 +722,23 @@ def _validate_cron_script_path(script: Optional[str]) -> Optional[str]:
     if not script or not script.strip():
         return None  # empty/None = clearing the field, always OK
 
-    from fulilian_constants import get_hermes_home
+    from fulilian_constants import get_fulilian_home
 
     raw = script.strip()
 
     # Reject absolute paths and ~ expansion at the API boundary.
-    # Only relative paths within ~/.hermes/scripts/ are allowed.
+    # Only relative paths within ~/.fulilian/scripts/ are allowed.
     if raw.startswith(("/", "~")) or (len(raw) >= 2 and raw[1] == ":"):
         return (
-            f"Script path must be relative to ~/.hermes/scripts/. "
+            f"Script path must be relative to ~/.fulilian/scripts/. "
             f"Got absolute or home-relative path: {raw!r}. "
-            f"Place scripts in ~/.hermes/scripts/ and use just the filename."
+            f"Place scripts in ~/.fulilian/scripts/ and use just the filename."
         )
 
     # Validate containment after resolution
     from tools.path_security import validate_within_dir
 
-    scripts_dir = get_hermes_home() / "scripts"
+    scripts_dir = get_fulilian_home() / "scripts"
     scripts_dir.mkdir(parents=True, exist_ok=True)
     containment_error = validate_within_dir(scripts_dir / raw, scripts_dir)
     if containment_error:
@@ -1141,7 +1141,7 @@ def _latest_job_output_excerpt(job_id: str, max_chars: int = 2000) -> Optional[s
 
     Included in the background-run completion block so the parent agent sees
     what the job actually produced without having to dig through
-    ``~/.hermes/cron/output/``. Never raises.
+    ``~/.fulilian/cron/output/``. Never raises.
     """
     try:
         from cron.jobs import get_cron_output_dir
@@ -1187,7 +1187,7 @@ def _try_dispatch_background_run(
     -------
     None
         Background delivery unavailable on this session runtime (one-shot
-        ``hermes -z``, stateless HTTP, Kanban worker, nested cron run).
+        ``fulilian -z``, stateless HTTP, Kanban worker, nested cron run).
         Caller falls back to the synchronous path unchanged.
     dict
         ``{"claimed": False, "success": False, "error": ...}`` — claim lost;
@@ -1213,7 +1213,7 @@ def _try_dispatch_background_run(
     job_name = str(job.get("name") or job_id)
 
     # Reap any execution row this job (or any job) left stranded 'claimed'/
-    # 'running' by a dead owner process -- e.g. a PRIOR one-shot `hermes
+    # 'running' by a dead owner process -- e.g. a PRIOR one-shot `fulilian
     # cron run` invocation whose dispatched runner died with the exiting
     # process before writing a terminal status (issue #86721). The
     # long-lived scheduler ticker already does this once at its own
@@ -1256,7 +1256,7 @@ def _try_dispatch_background_run(
         # fail closed and the completion could never be claimed.
         session_key = str(session_id)
     if not session_key:
-        # Direct Python callers (`hermes cron run`, tests) have no agent
+        # Direct Python callers (`fulilian cron run`, tests) have no agent
         # session to deliver a completion to — the process exits right after
         # the tool returns. Run synchronously.
         return None
@@ -1306,7 +1306,7 @@ def _try_dispatch_background_run(
     try:
         from gateway.session_context import get_session_env
 
-        origin_ui_session_id = get_session_env("HERMES_UI_SESSION_ID", "") or ""
+        origin_ui_session_id = get_session_env("FULILIAN_UI_SESSION_ID", "") or ""
     except Exception:
         pass
 
@@ -1427,7 +1427,7 @@ def _apply_continuity(
 def _gateway_liveness_notice(plural: bool = False) -> dict:
     """Build the ``gateway_running``/``warning`` payload for tool results.
 
-    Thin adapter over the shared CLI helper ``hermes_cli.cron._builtin_gateway_liveness``
+    Thin adapter over the shared CLI helper ``fulilian_cli.cron._builtin_gateway_liveness``
     (#87033) so the CLI and this tool can never disagree about what "scheduler
     active" means. Returns ``{"gateway_running": False, "warning": ...}`` when
     the builtin ticker has no gateway process to run it, ``{"gateway_running":
@@ -1446,9 +1446,9 @@ def _gateway_liveness_notice(plural: bool = False) -> dict:
         return {
             "gateway_running": False,
             "warning": (
-                f"The Hermes gateway is not running — {subject} "
+                f"The Fulilian gateway is not running — {subject} "
                 "but will NOT fire until the gateway is started "
-                "(hermes gateway install / hermes gateway start). "
+                "(fulilian gateway install / fulilian gateway start). "
                 "Tell the user the task is scheduled but not active yet."
             ),
         }
@@ -1593,7 +1593,7 @@ def cronjob(
                     monitor_script=_normalize_optional_job_value(monitor_script),
                     monitor_url=_normalize_optional_job_value(monitor_url),
                     # reasoning_effort reaches here from the CLI
-                    # (hermes cron create --reasoning-effort) ONLY — it is
+                    # (fulilian cron create --reasoning-effort) ONLY — it is
                     # deliberately absent from CRONJOB_SCHEMA and the model
                     # dispatch below: models do not make model-config
                     # decisions (standing policy).
@@ -1991,7 +1991,7 @@ Jobs run in a fresh session with no current-chat context, so prompts must be sel
             },
             "script": {
                 "type": "string",
-                "description": f"Optional script run each tick; stdout is injected into the agent's prompt as context (with no_agent=True the script IS the job). Relative paths resolve under {display_hermes_home()}/scripts/; .sh/.bash via bash, else Python. On update, '' clears."
+                "description": f"Optional script run each tick; stdout is injected into the agent's prompt as context (with no_agent=True the script IS the job). Relative paths resolve under {display_fulilian_home()}/scripts/; .sh/.bash via bash, else Python. On update, '' clears."
             },
             "monitor": {
                 "type": "string",
@@ -2046,9 +2046,9 @@ def check_cronjob_requirements() -> bool:
     from utils import env_var_enabled
 
     return (
-        env_var_enabled("HERMES_INTERACTIVE")
-        or env_var_enabled("HERMES_GATEWAY_SESSION")
-        or env_var_enabled("HERMES_EXEC_ASK")
+        env_var_enabled("FULILIAN_INTERACTIVE")
+        or env_var_enabled("FULILIAN_GATEWAY_SESSION")
+        or env_var_enabled("FULILIAN_EXEC_ASK")
     )
 
 
@@ -2079,7 +2079,7 @@ def _cronjob_handler(args, **kw):
         skills=args.get("skills"),
         # model / provider / base_url are intentionally NOT read from the
         # agent's arguments: per-job inference pins are user-owned (dashboard,
-        # `hermes cron create/edit --model`, or hand-edited jobs). The agent
+        # `fulilian cron create/edit --model`, or hand-edited jobs). The agent
         # must not be able to point unattended spend at a different model.
         # Programmatic callers of cronjob() itself retain the parameters.
         reason=args.get("reason"),

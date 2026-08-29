@@ -1,4 +1,4 @@
-import type { HermesConnection } from '@/global'
+import type { FulilianConnection } from '@/global'
 
 export const TITLEBAR_HEIGHT = 34
 export const MACOS_TRAFFIC_LIGHTS_HEIGHT = 14
@@ -33,7 +33,7 @@ export const TITLEBAR_MAC_TRAFFIC_LIGHTS_Y_NUDGE = 'calc(var(--spacing) * 0.9)'
 export interface TitlebarChromeContext {
   darwinMajor?: number
   isFullscreen?: boolean
-  windowButtonPosition?: HermesConnection['windowButtonPosition']
+  windowButtonPosition?: FulilianConnection['windowButtonPosition']
 }
 
 export function titlebarControlsYNudge({
@@ -89,7 +89,7 @@ export const titlebarHeaderShadowClass =
   "after:pointer-events-none after:absolute after:left-0 after:right-0 after:top-full after:h-4 after:bg-linear-to-b after:from-(--ui-chat-surface-background) after:to-transparent after:content-['']"
 
 export function titlebarControlsPosition(
-  windowButtonPosition: HermesConnection['windowButtonPosition'] | undefined,
+  windowButtonPosition: FulilianConnection['windowButtonPosition'] | undefined,
   isFullscreen = false
 ) {
   const top = Math.max(0, TITLEBAR_CONTROLS_TOP)

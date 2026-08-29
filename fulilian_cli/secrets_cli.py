@@ -1,4 +1,4 @@
-"""CLI handlers for ``hermes secrets bitwarden ...``.
+"""CLI handlers for ``fulilian secrets bitwarden ...``.
 
 Subcommands:
     setup    — interactive wizard: install bws, prompt for token + project, test fetch
@@ -26,9 +26,9 @@ from rich.table import Table
 # NOTE: the Bitwarden backend (``agent.secret_sources.bitwarden``) pulls in
 # ``cryptography`` at module-import time.  On Windows the resulting
 # ``cryptography._rust.pyd`` is mapped into the running process — and when
-# that process is ``hermes update``, the self-lock preflight detects the
+# that process is ``fulilian update``, the self-lock preflight detects the
 # loaded native module and defers (#86781).  Keep the backend import lazy:
-# this module is registered parse-time from ``hermes_cli.main`` and must not
+# this module is registered parse-time from ``fulilian_cli.main`` and must not
 # touch ``bw`` until a handler actually runs.
 #
 # ``_BWS_VERSION`` is duplicated here (as a plain string) so ``register_cli``
@@ -57,7 +57,7 @@ def __getattr__(name: str):
     """PEP 562 module-level lazy resolver.
 
     Existing callers (and upstream tests) monkeypatch attributes on
-    ``hermes_cli.secrets_cli.bw`` directly.  Resolving that attribute at
+    ``fulilian_cli.secrets_cli.bw`` directly.  Resolving that attribute at
     module-import time would re-import ``cryptography`` eagerly — the very
     self-lock we are preventing (#86781).  Defer the backend import until
     the first actual attribute access, so ``import fulilian_cli.secrets_cli``
@@ -76,8 +76,8 @@ def __getattr__(name: str):
 def register_cli(parent_parser: argparse.ArgumentParser) -> None:
     """Attach the ``bitwarden`` subcommand tree to a parent parser.
 
-    Called from ``hermes_cli.main`` as part of building the top-level
-    ``hermes secrets`` parser.
+    Called from ``fulilian_cli.main`` as part of building the top-level
+    ``fulilian secrets`` parser.
     """
     sub = parent_parser.add_subparsers(dest="secrets_bw_command")
 
@@ -201,7 +201,7 @@ def cmd_setup(args: argparse.Namespace) -> int:
                 f"  [red]Non-interactive mode (no TTY) requires all setup flags.[/red]\n"
                 f"  Missing: {', '.join(missing)}\n\n"
                 "  Usage:\n"
-                "    hermes secrets bitwarden setup \\\n"
+                "    fulilian secrets bitwarden setup \\\n"
                 "      --access-token '0.xxx' \\\n"
                 "      --server-url 'https://vault.bitwarden.com' \\\n"
                 "      --project-id 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'"
@@ -333,12 +333,12 @@ def cmd_setup(args: argparse.Namespace) -> int:
     console.print()
     console.print(
         "[green]✓ Bitwarden Secrets Manager is enabled.[/green]  "
-        "Secrets will be pulled at the start of every Hermes process."
+        "Secrets will be pulled at the start of every Fulilian process."
     )
     console.print(
-        "  Status:  [cyan]hermes secrets bitwarden status[/cyan]\n"
-        "  Refresh: [cyan]hermes secrets bitwarden sync[/cyan]\n"
-        "  Disable: [cyan]hermes secrets bitwarden disable[/cyan]"
+        "  Status:  [cyan]fulilian secrets bitwarden status[/cyan]\n"
+        "  Refresh: [cyan]fulilian secrets bitwarden sync[/cyan]\n"
+        "  Disable: [cyan]fulilian secrets bitwarden disable[/cyan]"
     )
     return 0
 
@@ -389,11 +389,11 @@ def cmd_status(args: argparse.Namespace) -> int:
         console.print(message)
 
     if not enabled:
-        console.print("\n  Run [cyan]hermes secrets bitwarden setup[/cyan] to enable.")
+        console.print("\n  Run [cyan]fulilian secrets bitwarden setup[/cyan] to enable.")
         return 0
     if not token_set:
         console.print(
-            f"\n  [yellow]Enabled but {token_env} is not set — Hermes will skip BSM "
+            f"\n  [yellow]Enabled but {token_env} is not set — Fulilian will skip BSM "
             "and warn on next startup.[/yellow]"
         )
     if not project_id:
@@ -463,7 +463,7 @@ def cmd_token(args: argparse.Namespace) -> int:
             console.print(
                 f"[yellow]Warning: configured project {project_id} is not visible "
                 "to this machine account.  Grant it access in the Bitwarden web "
-                "app or re-run `hermes secrets bitwarden setup` to pick a "
+                "app or re-run `fulilian secrets bitwarden setup` to pick a "
                 "different project.[/yellow]"
             )
 
@@ -474,12 +474,12 @@ def cmd_token(args: argparse.Namespace) -> int:
     bw.clear_caches()
     console.print(
         f"[green]✓[/green] stored in {get_env_path()} as {token_env}.  "
-        "Takes effect on the next Hermes invocation."
+        "Takes effect on the next Fulilian invocation."
     )
     if not bw_cfg.get("enabled"):
         console.print(
             "[yellow]Note: the Bitwarden integration is currently disabled — "
-            "run `hermes secrets bitwarden setup` (or set "
+            "run `fulilian secrets bitwarden setup` (or set "
             "secrets.bitwarden.enabled: true) to turn it on.[/yellow]"
         )
     return 0
@@ -493,7 +493,7 @@ def cmd_sync(args: argparse.Namespace) -> int:
     if not bw_cfg.get("enabled"):
         console.print(
             "[yellow]Bitwarden integration is disabled.  Run "
-            "`hermes secrets bitwarden setup` first.[/yellow]"
+            "`fulilian secrets bitwarden setup` first.[/yellow]"
         )
         return 1
 
@@ -552,7 +552,7 @@ def cmd_sync(args: argparse.Namespace) -> int:
     if not args.apply:
         console.print(
             "\n  This was a dry-run — secrets are picked up automatically on the "
-            "next [cyan]hermes[/cyan] invocation.  Re-run with [cyan]--apply[/cyan] "
+            "next [cyan]fulilian[/cyan] invocation.  Re-run with [cyan]--apply[/cyan] "
             "to export into the current shell instead."
         )
     else:
@@ -569,7 +569,7 @@ def cmd_disable(args: argparse.Namespace) -> int:
     save_config(cfg)
     console.print(
         "[green]Disabled.[/green]  Bitwarden secrets will NOT be pulled on the next "
-        "Hermes invocation.\n"
+        "Fulilian invocation.\n"
         "  Your access token is left in .env — remove it manually if you also want "
         "to revoke the credential."
     )
@@ -676,7 +676,7 @@ def _list_projects(
             console.print(
                 "  [yellow]'invalid_client' from the US identity endpoint usually "
                 "means the token is for a different Bitwarden region.  Re-run "
-                "[cyan]hermes secrets bitwarden setup[/cyan] and pick EU or "
+                "[cyan]fulilian secrets bitwarden setup[/cyan] and pick EU or "
                 "self-hosted at the region prompt, or set [cyan]secrets.bitwarden."
                 "server_url[/cyan] in config.yaml.[/yellow]"
             )

@@ -2,7 +2,7 @@
 
 A memory provider configured via ``memory.provider`` but reporting
 ``is_available() == False`` (e.g. missing credentials, or a systemd/gateway
-service that didn't inherit ``~/.hermes/.env``) used to be dropped silently.
+service that didn't inherit ``~/.fulilian/.env``) used to be dropped silently.
 ``agent_init`` now emits a one-time, deduped warning instead.
 """
 
@@ -21,7 +21,7 @@ def test_warns_once_and_dedupes(caplog):
     assert len(warnings) == 1, "should warn exactly once per provider (gateway dedup)"
     msg = warnings[0].getMessage()
     assert "hindsight" in msg
-    assert "hermes memory status" in msg
+    assert "fulilian memory status" in msg
     assert ".env" in msg  # surfaces the systemd/gateway root cause
 
 

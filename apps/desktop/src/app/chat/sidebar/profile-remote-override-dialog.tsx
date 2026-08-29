@@ -79,7 +79,7 @@ export function ProfileRemoteOverrideDialog({ profileNames }: { profileNames: st
     setError(null)
     setCollision(null)
 
-    window.hermesDesktop
+    window.fulilianDesktop
       ?.getConnectionConfig?.(profile)
       .then(config => {
         if (cancelled) {
@@ -100,7 +100,7 @@ export function ProfileRemoteOverrideDialog({ profileNames }: { profileNames: st
       })
       .catch(err => !cancelled && setError(err instanceof Error ? err.message : String(err)))
 
-    window.hermesDesktop?.connections
+    window.fulilianDesktop?.connections
       ?.list()
       .then(registry => {
         if (cancelled) {
@@ -143,7 +143,7 @@ export function ProfileRemoteOverrideDialog({ profileNames }: { profileNames: st
     setError(null)
 
     try {
-      await window.hermesDesktop.applyConnectionConfig({
+      await window.fulilianDesktop.applyConnectionConfig({
         mode: 'remote',
         profile,
         remoteAuthMode: 'token',
@@ -192,7 +192,7 @@ export function ProfileRemoteOverrideDialog({ profileNames }: { profileNames: st
     setError(null)
 
     try {
-      await window.hermesDesktop.applyConnectionConfig({ mode: 'local', profile })
+      await window.fulilianDesktop.applyConnectionConfig({ mode: 'local', profile })
       notify({ kind: 'success', title: p.removedTitle, message: p.removedMessage(profile) })
       await refreshProfileRemoteOverrides(profileNames)
       closeRemoteOverrideDialog()

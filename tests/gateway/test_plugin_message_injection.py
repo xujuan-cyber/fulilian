@@ -79,14 +79,14 @@ async def test_plugin_context_routes_through_live_gateway_to_existing_session(
     tmp_path,
     monkeypatch,
 ):
-    hermes_home = tmp_path / "hermes"
-    hermes_home.mkdir()
-    (hermes_home / "config.yaml").write_text(
+    fulilian_home = tmp_path / "fulilian"
+    fulilian_home.mkdir()
+    (fulilian_home / "config.yaml").write_text(
         yaml.safe_dump({
             "plugins": {"entries": {"notify-plugin": {"allow_gateway_injection": True}}}
         })
     )
-    monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+    monkeypatch.setenv("FULILIAN_HOME", str(fulilian_home))
 
     store = SessionStore(sessions_dir=tmp_path / "sessions", config=GatewayConfig())
     source = _entry().origin
@@ -121,7 +121,7 @@ async def test_plugin_context_routes_through_live_gateway_to_existing_session(
         manager,
     )
 
-    with patch("hermes_cli.plugins.get_plugin_manager", return_value=manager):
+    with patch("fulilian_cli.plugins.get_plugin_manager", return_value=manager):
         runner._install_plugin_message_injector()
         assert (
             context.inject_message(
@@ -174,8 +174,8 @@ async def test_dispatch_uses_stored_origin_and_adapter_message_path():
         allow_adapter_delegation=False,
     )
     assert event.metadata == {
-        "hermes_plugin_id": "notify-plugin",
-        "hermes_plugin_injection": True,
+        "fulilian_plugin_id": "notify-plugin",
+        "fulilian_plugin_injection": True,
         "gateway_session_key": entry.session_key,
         "gateway_session_id": entry.session_id,
         "gateway_session_strict": True,
@@ -543,7 +543,7 @@ def test_install_and_clear_gateway_injector_preserves_newer_owner():
     runner = _runner(_entry())
     manager = PluginManager()
 
-    with patch("hermes_cli.plugins.get_plugin_manager", return_value=manager):
+    with patch("fulilian_cli.plugins.get_plugin_manager", return_value=manager):
         runner._install_plugin_message_injector()
         assert manager.has_gateway_message_injector is True
 

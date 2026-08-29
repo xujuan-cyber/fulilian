@@ -1,5 +1,5 @@
 // The embedded terminal's PTY host: shell resolution, env scrubbing, session
-// registry, and the hermes:terminal:* IPC surface. Extracted from main.ts; the
+// registry, and the fulilian:terminal:* IPC surface. Extracted from main.ts; the
 // factory owns the session map and returns the dispose helpers main.ts needs
 // for SSH teardown. findOnPath / logging / connection routing stay injected.
 import { execFile } from 'node:child_process'
@@ -100,11 +100,11 @@ export function registerTerminalIpc({
   // Resolve the interactive shell for the embedded terminal: an explicit user
   // override wins, otherwise auto-detect the best one installed for the platform.
   function terminalShellCommand() {
-    // HERMES_DESKTOP_SHELL is the cross-platform escape hatch (a path or a bare
+    // FULILIAN_DESKTOP_SHELL is the cross-platform escape hatch (a path or a bare
     // name on PATH); $SHELL is honored on POSIX, where it's the user's canonical
     // choice, but ignored on Windows, where it's usually a stray MSYS/Git path
     // node-pty can't spawn natively.
-    const override = (process.env.HERMES_DESKTOP_SHELL || (isWindows ? '' : process.env.SHELL) || '').trim()
+    const override = (process.env.FULILIAN_DESKTOP_SHELL || (isWindows ? '' : process.env.SHELL) || '').trim()
 
     if (override) {
       const resolved = isExecutableFile(override) ? override : findOnPath(override)
@@ -148,7 +148,7 @@ export function registerTerminalIpc({
 
     // Strip color/theme-detection vars that ride along when Electron is launched
     // from a non-tty agent shell (Cursor's runner sets NO_COLOR/FORCE_COLOR=0
-    // /TERM=dumb; some terminals set COLORFGBG which would flip Hermes' TUI into
+    // /TERM=dumb; some terminals set COLORFGBG which would flip Fulilian' TUI into
     // light-mode). Our PTY is a real xterm-compat terminal — force truecolor.
     delete env.NO_COLOR
     delete env.FORCE_COLOR
@@ -157,19 +157,19 @@ export function registerTerminalIpc({
     env.COLORTERM = 'truecolor'
     env.LC_CTYPE = env.LC_CTYPE || 'UTF-8'
     env.TERM = 'xterm-256color'
-    env.TERM_PROGRAM = 'Hermes'
+    env.TERM_PROGRAM = 'Fulilian'
     env.TERM_PROGRAM_VERSION = app.getVersion()
 
-    // Let a hermes/--tui launched in this pane know it's embedded in the desktop
-    // GUI (build_environment_hints surfaces this). Distinct from HERMES_DESKTOP,
+    // Let a fulilian/--tui launched in this pane know it's embedded in the desktop
+    // GUI (build_environment_hints surfaces this). Distinct from FULILIAN_DESKTOP,
     // which marks the agent *backend* and gates cron/gateway behavior.
-    env.HERMES_DESKTOP_TERMINAL = '1'
+    env.FULILIAN_DESKTOP_TERMINAL = '1'
 
     return env
   }
 
   function terminalChannel(id, suffix) {
-    return `hermes:terminal:${id}:${suffix}`
+    return `fulilian:terminal:${id}:${suffix}`
   }
 
   // Best-effort read of a live PTY child's current working directory so a
@@ -283,7 +283,7 @@ export function registerTerminalIpc({
     }
   }
 
-  ipcMain.handle('hermes:terminal:start', async (event, payload = {}) => {
+  ipcMain.handle('fulilian:terminal:start', async (event, payload = {}) => {
     ensureNodePtySpawnHelper()
 
     const id = crypto.randomUUID()
@@ -336,7 +336,7 @@ export function registerTerminalIpc({
     return { cwd: remote ? null : cwd, id, shell: remote ? 'ssh' : name }
   })
 
-  ipcMain.handle('hermes:terminal:write', (_event, id, data) => {
+  ipcMain.handle('fulilian:terminal:write', (_event, id, data) => {
     const sessionInfo = terminalSessions.get(String(id || ''))
 
     if (!sessionInfo) {
@@ -348,7 +348,7 @@ export function registerTerminalIpc({
     return true
   })
 
-  ipcMain.handle('hermes:terminal:resize', (_event, id, size = {}) => {
+  ipcMain.handle('fulilian:terminal:resize', (_event, id, size = {}) => {
     const sessionInfo = terminalSessions.get(String(id || ''))
 
     if (!sessionInfo) {
@@ -362,7 +362,7 @@ export function registerTerminalIpc({
 
     return true
   })
-  ipcMain.handle('hermes:terminal:cwd', async (_event, id) => {
+  ipcMain.handle('fulilian:terminal:cwd', async (_event, id) => {
     const sessionInfo = terminalSessions.get(String(id || ''))
 
     if (!sessionInfo) {
@@ -372,7 +372,7 @@ export function registerTerminalIpc({
     return sessionInfo.sshScope !== undefined ? null : readProcessCwd(sessionInfo.pty.pid)
   })
 
-  ipcMain.handle('hermes:terminal:dispose', (_event, id) => disposeTerminalSession(String(id || '')))
+  ipcMain.handle('fulilian:terminal:dispose', (_event, id) => disposeTerminalSession(String(id || '')))
 
   return { disposeTerminalSession, disposeTerminalSessionsForSshScope, disposeAllTerminalSessions }
 }

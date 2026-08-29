@@ -66,7 +66,7 @@ def _make_backend(session: _FakeSession):
 
     backend = CuaDriverBackend.__new__(CuaDriverBackend)
     backend._session = session
-    backend._session_id = "hermes-session"
+    backend._session_id = "fulilian-session"
     backend._snapshot_tokens = {}
     backend._active_pid = 42
     backend._active_window_id = 7
@@ -220,7 +220,7 @@ def test_action_verdict_precedence(result_kwargs, decision):
     assert _classify_action_result(result)["decision"] == decision
 
 
-def test_backends_are_isolated_by_hermes_session_and_reused_within_it():
+def test_backends_are_isolated_by_fulilian_session_and_reused_within_it():
     from tools.computer_use import tool as computer_use
 
     created = []
@@ -319,7 +319,7 @@ def test_release_seam_waits_for_in_flight_action_before_stopping_backend():
     backend.stop.assert_called_once_with()
 
 
-def test_concurrent_hermes_sessions_do_not_share_backend_state():
+def test_concurrent_fulilian_sessions_do_not_share_backend_state():
     from tools.computer_use import tool as computer_use
 
     created = []

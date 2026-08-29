@@ -134,16 +134,16 @@ describe('buildToolView web-search query', () => {
   it('keeps the query separate from structured search results', () => {
     const view = buildToolView(
       part({
-        args: { query: 'Hermes Agent Desktop tool calls' },
-        result: { web: [{ snippet: 'Desktop docs', title: 'Hermes docs', url: 'https://example.com/docs' }] },
+        args: { query: 'FuLiLian Desktop tool calls' },
+        result: { web: [{ snippet: 'Desktop docs', title: 'Fulilian docs', url: 'https://example.com/docs' }] },
         toolName: 'web_search'
       }),
       ''
     )
 
-    expect(view.searchQuery).toBe('Hermes Agent Desktop tool calls')
+    expect(view.searchQuery).toBe('FuLiLian Desktop tool calls')
     expect(view.searchHits).toEqual([
-      { snippet: 'Desktop docs', title: 'Hermes docs', url: 'https://example.com/docs' }
+      { snippet: 'Desktop docs', title: 'Fulilian docs', url: 'https://example.com/docs' }
     ])
   })
 })
@@ -160,7 +160,7 @@ describe('buildToolView browser_navigate title', () => {
     )
 
     expect(view.status).toBe('error')
-    expect(view.title).toBe('Failed to open hermes-agent.nousresearch.com/docs')
+    expect(view.title).toBe('Failed to open fulilian-agent.nousresearch.com/docs')
   })
 
   it('shows opened title on success', () => {
@@ -174,7 +174,7 @@ describe('buildToolView browser_navigate title', () => {
     )
 
     expect(view.status).toBe('success')
-    expect(view.title).toBe('Opened hermes-agent.nousresearch.com/docs')
+    expect(view.title).toBe('Opened fulilian-agent.nousresearch.com/docs')
   })
 })
 

@@ -14,7 +14,7 @@ High-throughput LLM inference on NVIDIA GPUs.
 
 | | |
 |---|---|
-| Source | Optional — install with `hermes skills install official/mlops/tensorrt-llm` |
+| Source | Optional — install with `fulilian skills install official/mlops/tensorrt-llm` |
 | Path | `optional-skills/mlops/tensorrt-llm` |
 | Version | `1.0.1` |
 | Author | Orchestra Research |
@@ -26,7 +26,7 @@ High-throughput LLM inference on NVIDIA GPUs.
 ## Reference: full SKILL.md
 
 :::info
-The following is the complete skill definition that Hermes loads when this skill is triggered. This is what the agent sees as instructions when the skill is active.
+The following is the complete skill definition that Fulilian loads when this skill is triggered. This is what the agent sees as instructions when the skill is active.
 :::
 
 # TensorRT-LLM

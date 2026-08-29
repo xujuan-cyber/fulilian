@@ -15,7 +15,7 @@ Security features (based on OWASP + NIST SP 800-63-4 guidance):
   - File permissions: chmod 0600 on all data files
   - Codes are never logged to stdout
 
-Storage: ~/.hermes/pairing/
+Storage: ~/.fulilian/pairing/
 """
 
 import hashlib
@@ -34,9 +34,9 @@ from gateway.whatsapp_identity import (
     normalize_whatsapp_identifier,
 )
 from fulilian_constants import (
-    get_default_hermes_root,
-    get_hermes_dir,
-    get_hermes_home,
+    get_default_fulilian_root,
+    get_fulilian_dir,
+    get_fulilian_home,
 )
 from utils import atomic_replace
 
@@ -59,11 +59,11 @@ MAX_FAILED_ATTEMPTS = 5             # Failed approvals before lockout
 # Default (non-profile-scoped) pairing directory. Left unresolved (``None``)
 # here rather than computed eagerly: this module is imported once by the
 # long-lived gateway process at container/process boot, and computing the
-# path eagerly freezes it to whatever HERMES_HOME/profile context existed
+# path eagerly freezes it to whatever FULILIAN_HOME/profile context existed
 # at that exact import moment for the rest of the process's lifetime --
-# even if a context-local override (see hermes_constants.set_hermes_home_override)
+# even if a context-local override (see fulilian_constants.set_fulilian_home_override)
 # is established afterward. A freshly-started, short-lived process (e.g. the
-# ``hermes pairing`` CLI) re-imports this module later with the final
+# ``fulilian pairing`` CLI) re-imports this module later with the final
 # environment already in place, so it never observes the stale value -- the
 # resulting asymmetry is what made pending pairing codes issued by the
 # gateway unrecoverable while CLI-side writes to the same directory kept
@@ -86,7 +86,7 @@ def _default_pairing_dir() -> Path:
     """
     if PAIRING_DIR is not None:
         return PAIRING_DIR
-    return get_hermes_dir("platforms/pairing", "pairing")
+    return get_fulilian_dir("platforms/pairing", "pairing")
 
 
 # Platform value -> its per-platform allowlist env var. When an operator has
@@ -186,7 +186,7 @@ def _read_allowlist_env(env_var: str) -> str:
     admin endpoints) keep the legacy ``os.getenv`` read.
 
     TODO(profile-secrets): the grant mirror below still WRITES through
-    ``hermes_cli.config.save_env_value`` / ``remove_env_value``, which target
+    ``fulilian_cli.config.save_env_value`` / ``remove_env_value``, which target
     the root ``.env`` — those writes need a profile-aware counterpart before
     pairing grants can be mirrored correctly under multiplexing.
     """
@@ -370,8 +370,8 @@ def _load_json_file(path: Path) -> dict:
 def _merge_pairing_dir(active_dir: Path, alternate_dir: Path) -> None:
     """Merge split legacy/new pairing data into the active PairingStore dir.
 
-    Older installs use ``{HERMES_HOME}/pairing`` while newer code/docs may
-    write ``{HERMES_HOME}/platforms/pairing``. If both directories exist, the
+    Older installs use ``{FULILIAN_HOME}/pairing`` while newer code/docs may
+    write ``{FULILIAN_HOME}/platforms/pairing``. If both directories exist, the
     gateway must not silently ignore approved users sitting in the inactive
     location; otherwise already-paired Feishu users get asked for a fresh code.
     """
@@ -398,7 +398,7 @@ def _migrate_split_pairing_dirs(
     home: Optional[Path] = None,
     active: Optional[Path] = None,
 ) -> None:
-    home = home or get_hermes_home()
+    home = home or get_fulilian_home()
     old_dir = home / "pairing"
     new_dir = home / "platforms" / "pairing"
     active = active if active is not None else _default_pairing_dir()
@@ -442,23 +442,23 @@ class PairingStore:
       - _rate_limits.json         : rate limit tracking
 
     When constructed with ``profile="<name>"``, storage resolves from that
-    profile's own HERMES_HOME using the same legacy/consolidated layout rules
-    as ``hermes -p <name> pairing ...``. This keeps multiplex gateways and
+    profile's own FULILIAN_HOME using the same legacy/consolidated layout rules
+    as ``fulilian -p <name> pairing ...``. This keeps multiplex gateways and
     profile-scoped CLI approvals on one whitelist. Without a profile, storage
-    is the global pairing directory for the current HERMES_HOME.
+    is the global pairing directory for the current FULILIAN_HOME.
     """
 
     def __init__(self, profile: Optional[str] = None):
-        # Resolve storage directory lazily — tests use a temp HERMES_HOME
+        # Resolve storage directory lazily — tests use a temp FULILIAN_HOME
         # and PairingStore may be constructed before the env is set.
         if profile:
-            root = get_default_hermes_root()
+            root = get_default_fulilian_root()
             profile_home = (
                 root
                 if profile == "default"
                 else root / "profiles" / profile
             )
-            self._dir = get_hermes_dir(
+            self._dir = get_fulilian_dir(
                 "platforms/pairing",
                 "pairing",
                 home=profile_home,
@@ -468,7 +468,7 @@ class PairingStore:
         self._dir.mkdir(parents=True, exist_ok=True)
         if profile:
             # Explicit stores must resolve exactly as a standalone
-            # ``hermes -p <profile> pairing ...`` process does. Merge the
+            # ``fulilian -p <profile> pairing ...`` process does. Merge the
             # alternate old/new layout so upgrades cannot split approvals.
             _migrate_split_pairing_dirs(home=profile_home, active=self._dir)
         else:
@@ -501,7 +501,7 @@ class PairingStore:
             except PermissionError as e:
                 # Surface this loudly: a 0600 file owned by a different user
                 # (classic Docker symptom: `docker exec` runs as root and writes
-                # the file, then the gateway process — running as `hermes` after
+                # the file, then the gateway process — running as `fulilian` after
                 # gosu drop — can't read it) would otherwise be swallowed by
                 # the generic OSError branch below, silently leaving the user
                 # marked unauthorized. See issue #10270.
@@ -515,9 +515,9 @@ class PairingStore:
                 euid = os.geteuid() if hasattr(os, "geteuid") else "n/a"
                 logger.warning(
                     "Pairing file %s exists but is not readable as uid=%s (%s; %s). "
-                    "If you ran `docker exec <container> hermes pairing approve ...` as root, "
-                    "re-run with `docker exec -u hermes <container> ...` and "
-                    "chown the existing file to the hermes user, or restart the "
+                    "If you ran `docker exec <container> fulilian pairing approve ...` as root, "
+                    "re-run with `docker exec -u fulilian <container> ...` and "
+                    "chown the existing file to the fulilian user, or restart the "
                     "container so the entrypoint can fix ownership.",
                     path, euid, owner_info, e,
                 )
@@ -766,7 +766,7 @@ class PairingStore:
         """
         Approve a pending pairing request by its server-side request id.
 
-        This is the grant path for authenticated admin surfaces (``hermes
+        This is the grant path for authenticated admin surfaces (``fulilian
         pairing list``, the dashboard/desktop approve buttons), which show
         pending requests but must never reveal the one-time code DM'd to the
         user. Returns ``{user_id, user_name}`` on success, ``None`` for an

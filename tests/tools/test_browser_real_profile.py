@@ -1,8 +1,8 @@
 """Tests for real-profile browsing: resolvers, snapshot, launch routing, consent.
 
 The consent path never drives the live default profile: it snapshots into
-``~/.hermes/browser-profile/<browser>/`` and launches the user's real binary
-on the copy with a devtools port (see hermes_cli.browser_connect). These tests
+``~/.fulilian/browser-profile/<browser>/`` and launches the user's real binary
+on the copy with a devtools port (see fulilian_cli.browser_connect). These tests
 exercise the real functions with real file I/O wherever possible — the mocks
 are limited to OS detection and process launch.
 """
@@ -73,8 +73,8 @@ class TestSnapshotRealProfile:
     def test_fresh_snapshot_copies_auth_and_skips_caches(self, tmp_path, monkeypatch):
         import fulilian_cli.browser_connect as bc
         src = self._make_profile(tmp_path / "real")
-        home = tmp_path / "hermes-home"
-        monkeypatch.setattr(bc, "get_hermes_home", lambda: home)
+        home = tmp_path / "fulilian-home"
+        monkeypatch.setattr(bc, "get_fulilian_home", lambda: home)
 
         dst, err = bc.snapshot_real_profile("chrome", src=str(src))
         assert err is None
@@ -93,8 +93,8 @@ class TestSnapshotRealProfile:
     def test_existing_snapshot_refreshes_auth_files_only(self, tmp_path, monkeypatch):
         import fulilian_cli.browser_connect as bc
         src = self._make_profile(tmp_path / "real")
-        home = tmp_path / "hermes-home"
-        monkeypatch.setattr(bc, "get_hermes_home", lambda: home)
+        home = tmp_path / "fulilian-home"
+        monkeypatch.setattr(bc, "get_fulilian_home", lambda: home)
 
         dst, err = bc.snapshot_real_profile("chrome", src=str(src))
         assert err is None
@@ -111,7 +111,7 @@ class TestSnapshotRealProfile:
 
     def test_missing_source_fails_closed(self, tmp_path, monkeypatch):
         import fulilian_cli.browser_connect as bc
-        monkeypatch.setattr(bc, "get_hermes_home", lambda: tmp_path / "hh")
+        monkeypatch.setattr(bc, "get_fulilian_home", lambda: tmp_path / "hh")
         dst, err = bc.snapshot_real_profile("chrome", src=str(tmp_path / "nope"))
         assert dst is None
         assert err and "was not found" in err
@@ -135,7 +135,7 @@ class TestRealProfileCdpLaunch:
         import tools.browser_tool as bt
         self._reset()
         with patch.object(bt, "_use_real_profile", return_value=True), \
-             patch("hermes_cli.browser_connect.detect_default_chromium", return_value=None):
+             patch("fulilian_cli.browser_connect.detect_default_chromium", return_value=None):
             cdp, err = bt._real_profile_cdp()
         assert cdp is None
         assert err and "not a supported Chromium" in err
@@ -144,8 +144,8 @@ class TestRealProfileCdpLaunch:
         import tools.browser_tool as bt
         self._reset()
         with patch.object(bt, "_use_real_profile", return_value=True), \
-             patch("hermes_cli.browser_connect.detect_default_chromium", return_value="chrome"), \
-             patch("hermes_cli.browser_connect.snapshot_real_profile", return_value=(None, "boom")):
+             patch("fulilian_cli.browser_connect.detect_default_chromium", return_value="chrome"), \
+             patch("fulilian_cli.browser_connect.snapshot_real_profile", return_value=(None, "boom")):
             cdp, err = bt._real_profile_cdp()
         assert cdp is None
         assert err and "boom" in err
@@ -155,8 +155,8 @@ class TestRealProfileCdpLaunch:
         self._reset()
         proc = Mock(returncode=0, stdout="", stderr="")
         with patch.object(bt, "_use_real_profile", return_value=True), \
-             patch("hermes_cli.browser_connect.detect_default_chromium", return_value="chrome"), \
-             patch("hermes_cli.browser_connect.snapshot_real_profile", return_value=(str(tmp_path), None)), \
+             patch("fulilian_cli.browser_connect.detect_default_chromium", return_value="chrome"), \
+             patch("fulilian_cli.browser_connect.snapshot_real_profile", return_value=(str(tmp_path), None)), \
              patch.object(bt, "_agent_browser_get_cdp",
                           side_effect=[None, "http://127.0.0.1:41000"]), \
              patch.object(bt, "_find_agent_browser", return_value="/usr/bin/agent-browser"), \
@@ -179,8 +179,8 @@ class TestRealProfileCdpLaunch:
             return proc
 
         with patch.object(bt, "_use_real_profile", return_value=True), \
-             patch("hermes_cli.browser_connect.detect_default_chromium", return_value="chrome"), \
-             patch("hermes_cli.browser_connect.snapshot_real_profile", return_value=(str(tmp_path), None)), \
+             patch("fulilian_cli.browser_connect.detect_default_chromium", return_value="chrome"), \
+             patch("fulilian_cli.browser_connect.snapshot_real_profile", return_value=(str(tmp_path), None)), \
              patch.object(bt, "_agent_browser_get_cdp",
                           side_effect=[None, "http://127.0.0.1:41000"]), \
              patch.object(bt, "_find_agent_browser", return_value="/usr/bin/agent-browser"), \
@@ -199,8 +199,8 @@ class TestRealProfileCdpLaunch:
         proc = Mock(returncode=0, stdout="", stderr="")
         closed = {"n": 0}
         with patch.object(bt, "_use_real_profile", return_value=True), \
-             patch("hermes_cli.browser_connect.detect_default_chromium", return_value="chrome"), \
-             patch("hermes_cli.browser_connect.snapshot_real_profile", return_value=(str(tmp_path), None)), \
+             patch("fulilian_cli.browser_connect.detect_default_chromium", return_value="chrome"), \
+             patch("fulilian_cli.browser_connect.snapshot_real_profile", return_value=(str(tmp_path), None)), \
              patch.object(bt, "_agent_browser_get_cdp",
                           side_effect=["http://127.0.0.1:5000", "http://127.0.0.1:41000"]), \
              patch.object(bt, "_cdp_http_ready", return_value=True), \
@@ -229,22 +229,22 @@ class TestConsentConfigRead:
         import tools.browser_tool as bt
         cfg = tmp_path / "config.yaml"
         cfg.write_text("browser:\n  use_real_profile: true\n")
-        with patch("hermes_cli.config.read_raw_config",
+        with patch("fulilian_cli.config.read_raw_config",
                    return_value={"browser": {"use_real_profile": True}}):
             assert bt._use_real_profile() is True
 
     def test_consent_default_off(self):
         import tools.browser_tool as bt
-        with patch("hermes_cli.config.read_raw_config", return_value={}):
+        with patch("fulilian_cli.config.read_raw_config", return_value={}):
             assert bt._use_real_profile() is False
 
     def test_consent_revocation_takes_effect_immediately(self):
         """No process-lifetime caching: consent is a per-use read."""
         import tools.browser_tool as bt
-        with patch("hermes_cli.config.read_raw_config",
+        with patch("fulilian_cli.config.read_raw_config",
                    return_value={"browser": {"use_real_profile": True}}):
             assert bt._use_real_profile() is True
-        with patch("hermes_cli.config.read_raw_config",
+        with patch("fulilian_cli.config.read_raw_config",
                    return_value={"browser": {"use_real_profile": False}}):
             assert bt._use_real_profile() is False
 
@@ -449,9 +449,9 @@ class TestChannelIdentity:
         import fulilian_cli.browser_connect as bc
         bt._real_profile_cdp_cache.clear()
         with patch.object(bt, "_use_real_profile", return_value=True), \
-             patch("hermes_cli.browser_connect.detect_default_chromium",
+             patch("fulilian_cli.browser_connect.detect_default_chromium",
                    return_value=bc.UNSUPPORTED_CHANNEL), \
-             patch("hermes_cli.browser_connect.snapshot_real_profile") as snap:
+             patch("fulilian_cli.browser_connect.snapshot_real_profile") as snap:
             cdp, err = bt._real_profile_cdp()
         assert cdp is None
         assert err and "pre-release" in err.lower()
@@ -465,7 +465,7 @@ class TestChannelIdentity:
 
 
 class TestSnapshotIsCredentialStore:
-    """The copied Cookies/Login Data must live inside Hermes' secret lifecycle."""
+    """The copied Cookies/Login Data must live inside Fulilian' secret lifecycle."""
 
     def test_excluded_from_backup(self):
         import fulilian_cli.backup as bk
@@ -477,19 +477,19 @@ class TestSnapshotIsCredentialStore:
 
     def test_read_guard_blocks_snapshot(self, tmp_path, monkeypatch):
         import agent.file_safety as fs
-        home = tmp_path / ".hermes"
+        home = tmp_path / ".fulilian"
         (home / "browser-profile" / "chrome" / "Default").mkdir(parents=True)
         cookies = home / "browser-profile" / "chrome" / "Default" / "Cookies"
         cookies.write_text("secret-cookie-db")
-        monkeypatch.setenv("HERMES_HOME", str(home))
+        monkeypatch.setenv("FULILIAN_HOME", str(home))
         err = fs.get_read_block_error(str(cookies))
         assert err and "snapshot" in err.lower()
 
     def test_read_guard_allows_normal_file(self, tmp_path, monkeypatch):
         import agent.file_safety as fs
-        home = tmp_path / ".hermes"
+        home = tmp_path / ".fulilian"
         home.mkdir(parents=True)
-        monkeypatch.setenv("HERMES_HOME", str(home))
+        monkeypatch.setenv("FULILIAN_HOME", str(home))
         normal = tmp_path / "notes.txt"
         normal.write_text("hello")
         assert fs.get_read_block_error(str(normal)) is None
@@ -501,9 +501,9 @@ class TestSnapshotIsCredentialStore:
         src.mkdir(parents=True)
         (tmp_path / "real" / "Local State").write_text("{}")
         (src / "Cookies").write_text("db")
-        monkeypatch.setattr(bc, "get_hermes_home", lambda: tmp_path / "hh")
+        monkeypatch.setattr(bc, "get_fulilian_home", lambda: tmp_path / "hh")
         called = {}
-        with patch("hermes_cli.config._secure_dir",
+        with patch("fulilian_cli.config._secure_dir",
                    side_effect=lambda p: called.__setitem__("p", p)):
             dst, err = bc.snapshot_real_profile("chrome", src=str(tmp_path / "real"))
         assert err is None
@@ -532,7 +532,7 @@ class TestReviewBugFixes:
         import fulilian_cli.browser_connect as bc
         src = self._multi_profile(tmp_path / "real")
         home = tmp_path / "hh"
-        monkeypatch.setattr(bc, "get_hermes_home", lambda: home)
+        monkeypatch.setattr(bc, "get_fulilian_home", lambda: home)
         dst, err = bc.snapshot_real_profile("chrome", src=str(src))
         assert err is None
         # The copy's Default must carry PROFILE 6's session, not Default's.
@@ -558,7 +558,7 @@ class TestReviewBugFixes:
         import fulilian_cli.browser_connect as bc
         src = self._multi_profile(tmp_path / "real")
         home = tmp_path / "hh"
-        monkeypatch.setattr(bc, "get_hermes_home", lambda: home)
+        monkeypatch.setattr(bc, "get_fulilian_home", lambda: home)
         bc.snapshot_real_profile("chrome", src=str(src))          # fresh
         (src / "Profile 6" / "Cookies").write_text("PROFILE6-REFRESHED")
         dst, err = bc.snapshot_real_profile("chrome", src=str(src))  # refresh
@@ -616,10 +616,10 @@ class TestReviewBugFixes:
         import fulilian_cli.browser_connect as bc
         src = self._multi_profile(tmp_path / "real")
         home = tmp_path / "hh"
-        monkeypatch.setattr(bc, "get_hermes_home", lambda: home)
+        monkeypatch.setattr(bc, "get_fulilian_home", lambda: home)
         bc.snapshot_real_profile("chrome", src=str(src))  # fresh
         secured = []
-        with patch("hermes_cli.config._secure_dir", side_effect=secured.append):
+        with patch("fulilian_cli.config._secure_dir", side_effect=secured.append):
             bc.snapshot_real_profile("chrome", src=str(src))  # refresh
         # Refresh still secures BOTH the snapshot dir and its browser-profile parent.
         assert str(home / "browser-profile" / "chrome") in secured
@@ -631,7 +631,7 @@ class TestReviewBugFixes:
         bt._real_profile_cdp_cache.clear()
         with patch.object(bt, "_use_real_profile", return_value=True), \
              patch.object(bt, "_using_lightpanda_engine", return_value=True), \
-             patch("hermes_cli.browser_connect.detect_default_chromium") as det:
+             patch("fulilian_cli.browser_connect.detect_default_chromium") as det:
             cdp, err = bt._real_profile_cdp()
         assert cdp is None
         assert err and "lightpanda" in err.lower() and "browser.engine" in err.lower()
@@ -656,7 +656,7 @@ class TestReviewRound3:
         import fulilian_cli.browser_connect as bc
         src = self._multi(tmp_path / "real")
         home = tmp_path / "hh"
-        monkeypatch.setattr(bc, "get_hermes_home", lambda: home)
+        monkeypatch.setattr(bc, "get_fulilian_home", lambda: home)
         dst, err = bc.snapshot_real_profile("chrome", src=str(src))
         assert err is None
         assert os.path.isfile(os.path.join(dst, bc._SNAPSHOT_DONE_MARKER))
@@ -665,7 +665,7 @@ class TestReviewRound3:
         import fulilian_cli.browser_connect as bc
         src = self._multi(tmp_path / "real")
         home = tmp_path / "hh"
-        monkeypatch.setattr(bc, "get_hermes_home", lambda: home)
+        monkeypatch.setattr(bc, "get_fulilian_home", lambda: home)
         dst = bc.real_profile_copy_dir("chrome")
         # Simulate a torn first copy: Default exists but NO done marker.
         os.makedirs(os.path.join(dst, "Default"))
@@ -684,7 +684,7 @@ class TestReviewRound3:
         (src / "Profile 3").mkdir()
         (src / "Profile 3" / "Cookies").write_text("PROFILE3-SHOULD-NOT-COPY")
         home = tmp_path / "hh"
-        monkeypatch.setattr(bc, "get_hermes_home", lambda: home)
+        monkeypatch.setattr(bc, "get_fulilian_home", lambda: home)
         dst, err = bc.snapshot_real_profile("chrome", src=str(src))
         assert err is None
         copy = home / "browser-profile" / "chrome"
@@ -697,7 +697,7 @@ class TestReviewRound3:
     def test_cleanup_removes_store(self, tmp_path, monkeypatch):
         import fulilian_cli.browser_connect as bc
         home = tmp_path / "hh"
-        monkeypatch.setattr(bc, "get_hermes_home", lambda: home)
+        monkeypatch.setattr(bc, "get_fulilian_home", lambda: home)
         store = home / "browser-profile" / "chrome" / "Default"
         store.mkdir(parents=True)
         (store / "Cookies").write_text("secret")
@@ -706,7 +706,7 @@ class TestReviewRound3:
 
     def test_cleanup_idempotent_when_absent(self, tmp_path, monkeypatch):
         import fulilian_cli.browser_connect as bc
-        monkeypatch.setattr(bc, "get_hermes_home", lambda: tmp_path / "hh")
+        monkeypatch.setattr(bc, "get_fulilian_home", lambda: tmp_path / "hh")
         bc.cleanup_real_profile_snapshots()  # no raise
 
     # ── Windows lock probe (unit; the live share-lock is proven in the
@@ -743,7 +743,7 @@ class TestReviewRound3:
         import fulilian_cli.browser_connect as bc
         src = self._multi(tmp_path / "real")
         home = tmp_path / "hh"
-        monkeypatch.setattr(bc, "get_hermes_home", lambda: home)
+        monkeypatch.setattr(bc, "get_fulilian_home", lambda: home)
         monkeypatch.setattr(bc, "_profile_is_locked", lambda s, p: True)
         monkeypatch.setattr(bc, "_real_profile_autoclose", lambda: False)
         called = {"copytree": 0}
@@ -760,11 +760,11 @@ class TestReviewRound3:
     def test_snapshot_blocks_when_locked_even_with_autoclose(self, tmp_path, monkeypatch):
         """Even with autoclose armed, snapshot_real_profile does NOT kill — it
         blocks and defers the close to the explicit, user-approved step. The
-        message offers the close (mentions Hermes can close it)."""
+        message offers the close (mentions Fulilian can close it)."""
         import fulilian_cli.browser_connect as bc
         src = self._multi(tmp_path / "real")
         home = tmp_path / "hh"
-        monkeypatch.setattr(bc, "get_hermes_home", lambda: home)
+        monkeypatch.setattr(bc, "get_fulilian_home", lambda: home)
         monkeypatch.setattr(bc, "_profile_is_locked", lambda s, p: True)
         monkeypatch.setattr(bc, "_real_profile_autoclose", lambda: True)
         killed = {"n": 0}
@@ -810,7 +810,7 @@ class TestReviewRound3:
         import tools.browser_tool as bt
         called = {"n": 0}
         with patch.object(bt, "_use_real_profile", return_value=False), \
-             patch("hermes_cli.browser_connect.cleanup_real_profile_snapshots",
+             patch("fulilian_cli.browser_connect.cleanup_real_profile_snapshots",
                    side_effect=lambda: called.__setitem__("n", called["n"] + 1)):
             cdp, err = bt._real_profile_cdp()
         assert cdp is None and err is None
@@ -825,12 +825,12 @@ class TestReviewRound3:
         bt._real_profile_cdp_cache.clear()
         with patch.object(bt, "_use_real_profile", return_value=True), \
              patch.object(bt, "_using_lightpanda_engine", return_value=False), \
-             patch("hermes_cli.browser_connect.detect_default_chromium", return_value="chrome"), \
-             patch("hermes_cli.browser_connect.real_profile_copy_dir", return_value=str(tmp_path)), \
+             patch("fulilian_cli.browser_connect.detect_default_chromium", return_value="chrome"), \
+             patch("fulilian_cli.browser_connect.real_profile_copy_dir", return_value=str(tmp_path)), \
              patch.object(bt, "_agent_browser_get_cdp", return_value="http://127.0.0.1:9251"), \
              patch.object(bt, "_cdp_http_ready", return_value=True), \
              patch.object(bt, "_cdp_on_data_dir", return_value=True), \
-             patch("hermes_cli.browser_connect.snapshot_real_profile") as snap:
+             patch("fulilian_cli.browser_connect.snapshot_real_profile") as snap:
             cdp, err = bt._real_profile_cdp()
         assert cdp == "http://127.0.0.1:9251" and err is None
         snap.assert_not_called()  # ← the fix: no overlay while a live browser owns the dir
@@ -843,9 +843,9 @@ class TestReviewRound3:
         proc = Mock(returncode=0, stdout="", stderr="")
         with patch.object(bt, "_use_real_profile", return_value=True), \
              patch.object(bt, "_using_lightpanda_engine", return_value=False), \
-             patch("hermes_cli.browser_connect.detect_default_chromium", return_value="chrome"), \
-             patch("hermes_cli.browser_connect.real_profile_copy_dir", return_value=str(tmp_path)), \
-             patch("hermes_cli.browser_connect.snapshot_real_profile",
+             patch("fulilian_cli.browser_connect.detect_default_chromium", return_value="chrome"), \
+             patch("fulilian_cli.browser_connect.real_profile_copy_dir", return_value=str(tmp_path)), \
+             patch("fulilian_cli.browser_connect.snapshot_real_profile",
                    return_value=(str(tmp_path), None)) as snap, \
              patch.object(bt, "_agent_browser_get_cdp",
                           side_effect=[None, "http://127.0.0.1:9251"]), \
@@ -882,7 +882,7 @@ class TestWindowsLockedProfileCopy:
         src, con = self._locked_src(tmp_path / "real")
         con.execute("BEGIN"); con.execute("insert into cookies values('u','uncommitted')")
         home = tmp_path / "hh"
-        monkeypatch.setattr(bc, "get_hermes_home", lambda: home)
+        monkeypatch.setattr(bc, "get_fulilian_home", lambda: home)
         try:
             dst, err = bc.snapshot_real_profile("chrome", src=str(src))
         finally:
@@ -922,7 +922,7 @@ class TestWindowsLockedProfileCopy:
         (root / "Default" / "Cookies").write_text("not-a-db")
         (root / "Default" / "Preferences").write_text("{}")
         home = tmp_path / "hh"
-        monkeypatch.setattr(bc, "get_hermes_home", lambda: home)
+        monkeypatch.setattr(bc, "get_fulilian_home", lambda: home)
         # Force both sqlite-backup and raw copy to fail for the DB.
         monkeypatch.setattr(bc, "_copy_auth_file",
                             lambda s, d: False if os.path.basename(s) in bc._SQLITE_AUTH_DBS else True)

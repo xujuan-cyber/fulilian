@@ -1,9 +1,9 @@
-"""OpenAI-shape bridge shared by Hermes' ACP clients.
+"""OpenAI-shape bridge shared by Fulilian' ACP clients.
 
-An ACP agent (``copilot --acp``, and the ACP CLIs that reach Hermes as
+An ACP agent (``copilot --acp``, and the ACP CLIs that reach Fulilian as
 providers) speaks the Agent Client Protocol, which has no OpenAI-style
 ``tools``/``tool_calls`` channel: a prompt is text, and a response is text plus
-the agent's *own* tool notifications. Hermes' agentic surface — ``memory``,
+the agent's *own* tool notifications. Fulilian' agentic surface — ``memory``,
 ``todo``, ``skill_manage`` and friends — is dispatched from OpenAI-shaped
 ``tool_calls``, so on an ACP provider it can only work if the schemas travel
 *into* the prompt as text and the calls are parsed back *out* of the response
@@ -20,13 +20,13 @@ shares it instead of re-deriving the wire contract:
   the blocks stripped.
 * :func:`completion_to_stream_chunks` — re-shape a one-shot ACP response as
   OpenAI stream chunks for callers that asked for ``stream=True`` (an ACP turn
-  is inherently one-shot from Hermes' perspective).
+  is inherently one-shot from Fulilian' perspective).
 
 The one axis clients differ on is *which* tools they forward, so
 ``render_tool_bridge_sections`` takes an optional allowlist. A CLI with no tools
-of its own (Copilot) forwards everything Hermes offers; a CLI that is an
-autonomous agent with its own read/edit/execute tools must forward only Hermes'
-agent-level tools, because re-offering the overlapping ones makes Hermes re-run
+of its own (Copilot) forwards everything Fulilian offers; a CLI that is an
+autonomous agent with its own read/edit/execute tools must forward only Fulilian'
+agent-level tools, because re-offering the overlapping ones makes Fulilian re-run
 work the agent already finished.
 """
 
@@ -71,8 +71,8 @@ __all__ = [
 class StreamChunks(list):
     """Stream chunks that can still carry response-level attributes.
 
-    Hermes reads provider-level extras off the object returned by
-    ``chat.completions.create`` (e.g. ``hermes_projected_messages``, consumed by
+    Fulilian reads provider-level extras off the object returned by
+    ``chat.completions.create`` (e.g. ``fulilian_projected_messages``, consumed by
     ``agent/provider_projection.py``). A plain list of chunks would silently drop
     them on the ``stream=True`` path, so ACP clients return this instead and copy
     the extras onto it.
@@ -158,7 +158,7 @@ def tool_specs_from_openai_tools(
     """Flatten OpenAI ``tools`` into ``{name, description, parameters}`` specs.
 
     Malformed entries are skipped. When ``allowlist`` is given, only tools whose
-    name is in it survive — that is how a client forwards just Hermes'
+    name is in it survive — that is how a client forwards just Fulilian'
     agent-level tools instead of the whole toolset.
     """
     allowed = {str(n).strip() for n in allowlist} if allowlist is not None else None

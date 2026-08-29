@@ -7,7 +7,7 @@ import {
   normalizeQuestions,
   setClarifyRequest
 } from '@/store/clarify'
-import type { SessionResumeResponse } from '@/types/hermes'
+import type { SessionResumeResponse } from '@/types/fulilian'
 
 export interface PendingClarifyResumeState {
   authoritativeAbsent: boolean

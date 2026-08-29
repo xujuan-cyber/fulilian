@@ -36,7 +36,7 @@ from agent.image_gen_provider import (
 )
 from tools.xai_http import (
     build_xai_storage_options,
-    hermes_xai_user_agent,
+    fulilian_xai_user_agent,
     maybe_mark_xai_storage_notice_seen,
     read_xai_imagine_storage_config,
     resolve_xai_http_credentials,
@@ -94,7 +94,7 @@ def _fetch_live_models() -> Dict[str, Dict[str, Any]]:
         f"{base_url}/image-generation-models",
         headers={
             "Authorization": f"Bearer {api_key}",
-            "User-Agent": hermes_xai_user_agent(),
+            "User-Agent": fulilian_xai_user_agent(),
         },
         timeout=_LIVE_TIMEOUT,
     )
@@ -199,7 +199,7 @@ def _resolve_model(caller_model: Optional[str] = None) -> Tuple[str, Dict[str, A
 
     Priority:
     1. Caller-supplied ``caller_model`` — the dispatcher forwards top-level
-       ``image_gen.model`` (what ``hermes tools`` writes) as the ``model``
+       ``image_gen.model`` (what ``fulilian tools`` writes) as the ``model``
        kwarg, mirroring the openrouter provider.
     2. ``XAI_IMAGE_MODEL`` env override.
     3. Scoped ``image_gen.xai.model`` in config.yaml.
@@ -313,7 +313,7 @@ class XAIImageGenProvider(ImageGenProvider):
 
     def get_setup_schema(self) -> Dict[str, Any]:
         # Auth resolution is delegated to the shared ``xai_grok`` post_setup
-        # hook (``hermes_cli/tools_config.py``); identical to the TTS / video
+        # hook (``fulilian_cli/tools_config.py``); identical to the TTS / video
         # gen entries so users see the same OAuth-or-API-key choice for every
         # xAI service.
         storage_notice = xai_storage_notice_text("image_gen")
@@ -362,7 +362,7 @@ class XAIImageGenProvider(ImageGenProvider):
         provider_name = str(creds.get("provider") or "xai").strip() or "xai"
         if not api_key:
             return error_response(
-                error="No xAI credentials found. Configure xAI OAuth in `hermes model` or set XAI_API_KEY.",
+                error="No xAI credentials found. Configure xAI OAuth in `fulilian model` or set XAI_API_KEY.",
                 error_type="missing_api_key",
                 provider=provider_name,
                 aspect_ratio=aspect_ratio,
@@ -412,13 +412,13 @@ class XAIImageGenProvider(ImageGenProvider):
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
-            "User-Agent": hermes_xai_user_agent(),
+            "User-Agent": fulilian_xai_user_agent(),
         }
 
         base_url = str(creds.get("base_url") or "https://api.x.ai/v1").strip().rstrip("/")
         storage_options = build_xai_storage_options(
             "image_gen",
-            filename_prefix="hermes-xai-image",
+            filename_prefix="fulilian-xai-image",
             extension="png",
         )
         storage_notice = maybe_mark_xai_storage_notice_seen("image_gen")

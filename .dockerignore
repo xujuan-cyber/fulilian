@@ -30,9 +30,9 @@ node_modules
 
 # Built artifacts that are regenerated inside the image.  Excluded so local
 # rebuilds on the developer's machine don't invalidate the npm-install layer
-# that now depends on the full ui-tui/packages/hermes-ink/ tree being present.
+# that now depends on the full ui-tui/packages/fulilian-ink/ tree being present.
 ui-tui/dist/
-ui-tui/packages/hermes-ink/dist/
+ui-tui/packages/fulilian-ink/dist/
 
 # CI/CD
 .github
@@ -40,8 +40,8 @@ ui-tui/packages/hermes-ink/dist/
 # Environment files
 .env
 .env.*
-# ...but keep the template: docker/stage2-hook.sh seeds $HERMES_HOME/.env from
-# /opt/hermes/.env.example on first boot (OOF-285 — excluding it silently broke
+# ...but keep the template: docker/stage2-hook.sh seeds $FULILIAN_HOME/.env from
+# /opt/fulilian/.env.example on first boot (OOF-285 — excluding it silently broke
 # first-boot .env seeding and the API_SERVER_KEY generation that depends on it).
 !.env.example
 
@@ -61,11 +61,11 @@ htmlcov/
 
 # Runtime data (bind-mounted at /opt/data; must not leak into build context)
 data/
-.hermes-docker/
+.fulilian-docker/
 .notebooklm-home/
 
 # Compose/profile runtime state (bind-mounted; avoid ownership/secret issues)
-hermes-config/
+fulilian-config/
 runtime/
 
 # ---------- Not needed inside the Docker image ----------
@@ -88,8 +88,8 @@ docs/
 assets/
 infographic/
 
-# Plugin-level docs (hermes-achievements ships docs/ but the runtime doesn't read them)
-plugins/hermes-achievements/docs/
+# Plugin-level docs (fulilian-achievements ships docs/ but the runtime doesn't read them)
+plugins/fulilian-achievements/docs/
 
 # Nix / Homebrew / AUR packaging metadata — irrelevant to Docker
 nix/

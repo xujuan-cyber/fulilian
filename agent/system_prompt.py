@@ -2,7 +2,7 @@
 
 The agent's system prompt is built once per session and reused across all
 turns — only context compression triggers a rebuild.  This keeps the
-upstream prefix cache warm.  See ``hermes-agent-dev``'s
+upstream prefix cache warm.  See ``fulilian-agent-dev``'s
 ``references/system-prompt-invariant.md`` for the invariants and
 ``references/self-improvement-loop.md`` for how the background-review
 fork inherits the cached prompt verbatim.
@@ -35,8 +35,8 @@ from agent.prompt_builder import (
     DEFAULT_AGENT_IDENTITY,
     EXECUTION_GUIDANCE_MODELS,
     GOOGLE_MODEL_OPERATIONAL_GUIDANCE,
-    HERMES_AGENT_HELP_GUIDANCE,
-    HERMES_AGENT_HELP_GUIDANCE_NO_SKILLS,
+    FULILIAN_AGENT_HELP_GUIDANCE,
+    FULILIAN_AGENT_HELP_GUIDANCE_NO_SKILLS,
     KANBAN_GUIDANCE,
     MEMORY_GUIDANCE,
     USER_PROFILE_GUIDANCE,
@@ -53,14 +53,14 @@ from agent.prompt_builder import (
     drain_truncation_warnings,
 )
 from agent.runtime_cwd import resolve_context_cwd
-from fulilian_constants import get_default_hermes_root, get_hermes_home
+from fulilian_constants import get_default_fulilian_root, get_fulilian_home
 from pathlib import Path
 from utils import is_truthy_value
 
 logger = logging.getLogger(__name__)
 _PLUGIN_SECTION_FRAME_RE = re.compile(
     r"^## Plugin Context: (?P<id>[a-z0-9][a-z0-9._-]{0,127})\n"
-    r"<!-- hermes-plugin-section-chars:(?P<chars>[0-9]{1,4}) -->\n\n",
+    r"<!-- fulilian-plugin-section-chars:(?P<chars>[0-9]{1,4}) -->\n\n",
     re.MULTILINE,
 )
 
@@ -139,7 +139,7 @@ _TUI_EMBEDDED_PANE_CLARIFIER = (
 def _tui_embedded_pane_clarifier(hint: str) -> str:
     """Append the desktop-embedded-terminal-pane clarifier to a tui hint.
 
-    Triggered by ``HERMES_DESKTOP_TERMINAL=1`` (set by ``main.cjs`` only on the
+    Triggered by ``FULILIAN_DESKTOP_TERMINAL=1`` (set by ``main.cjs`` only on the
     shell env of the desktop's embedded TUI PTY — never on the chat backend).
     This is a runtime-surface qualifier, not a config override, so it lives at
     the resolution site rather than inside ``_resolve_platform_hint`` (which
@@ -154,7 +154,7 @@ def _tui_embedded_pane_clarifier(hint: str) -> str:
         return hint
     if _TUI_EMBEDDED_PANE_CLARIFIER in hint:
         return hint
-    if not is_truthy_value(os.getenv("HERMES_DESKTOP_TERMINAL")):
+    if not is_truthy_value(os.getenv("FULILIAN_DESKTOP_TERMINAL")):
         return hint
     return hint + _TUI_EMBEDDED_PANE_CLARIFIER
 
@@ -168,7 +168,7 @@ def _plugin_session_info(agent: Any) -> Dict[str, str]:
     try:
         # Prefer the agent's own home (override-aware, session_db fallback) —
         # ambient get_active_profile_name() misreports on threads that lost
-        # the HERMES_HOME ContextVar (#86313 class; plugin half per @helix4u).
+        # the FULILIAN_HOME ContextVar (#86313 class; plugin half per @helix4u).
         _home = _agent_home(agent)
         if _home is not None:
             profile_name = _profile_name_for_home(_home)
@@ -278,7 +278,7 @@ def _agent_home(agent: Any) -> Optional[Path]:
 
     Resolution order:
 
-    1. A bound HERMES_HOME ContextVar override wins. Surfaces that multiplex
+    1. A bound FULILIAN_HOME ContextVar override wins. Surfaces that multiplex
        several profiles over ONE shared session DB (the messaging gateway:
        ``gateway/run.py`` hands every agent the launch-home ``state.db`` and
        binds the profile home per turn via ``_profile_runtime_scope`` +
@@ -294,9 +294,9 @@ def _agent_home(agent: Any) -> Optional[Path]:
     Returns None when neither resolves so callers fall back to ambient.
     """
     try:
-        from fulilian_constants import get_hermes_home_override
+        from fulilian_constants import get_fulilian_home_override
 
-        override = get_hermes_home_override()
+        override = get_fulilian_home_override()
         if override:
             return Path(override)
     except Exception:
@@ -322,15 +322,15 @@ def _profile_name_for_home(home: Path) -> str:
 
     ``<root>/profiles/X`` -> ``"X"``; anything else -> ``"default"``.
 
-    Uses :func:`get_default_hermes_root` (NOT ``get_hermes_home()``): on a
+    Uses :func:`get_default_fulilian_root` (NOT ``get_fulilian_home()``): on a
     correctly bound profile session the ambient home IS the profile dir, so
-    ``get_hermes_home()/profiles`` would never contain ``home`` and every
+    ``get_fulilian_home()/profiles`` would never contain ``home`` and every
     profile would misreport as "default".
     """
     try:
-        from fulilian_constants import get_default_hermes_root
+        from fulilian_constants import get_default_fulilian_root
 
-        root = get_default_hermes_root()
+        root = get_default_fulilian_root()
         rel = home.resolve().relative_to((root / "profiles").resolve())
         return rel.parts[0] if rel.parts else "default"
     except (ValueError, OSError):
@@ -352,7 +352,7 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
 
     Joined into a single string by :func:`build_system_prompt` and
     cached on ``agent._cached_system_prompt`` for the lifetime of the
-    AIAgent.  Hermes never re-renders parts of this string mid-
+    AIAgent.  Fulilian never re-renders parts of this string mid-
     session — that's the only way to keep upstream prompt caches
     warm across turns.
     """
@@ -376,12 +376,12 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
     stable_parts: List[str] = []
 
     # Try SOUL.md as primary identity unless the caller explicitly skipped it.
-    # Some execution modes (cron) still want HERMES_HOME persona while keeping
+    # Some execution modes (cron) still want FULILIAN_HOME persona while keeping
     # cwd project instructions disabled.
     _soul_loaded = False
     if agent.load_soul_identity or not agent.skip_context_files:
         # Scope the SOUL.md read to the agent's OWN home (see _agent_home) —
-        # ambient resolution on a thread that lost the HERMES_HOME ContextVar
+        # ambient resolution on a thread that lost the FULILIAN_HOME ContextVar
         # reads the launch profile's SOUL.md instead (#50233).
         _soul_content = _r.load_soul_md(_ctx_len, home_override=_agent_home(agent))
         if _soul_content:
@@ -392,14 +392,14 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
         # Fallback to hardcoded identity
         stable_parts.append(DEFAULT_AGENT_IDENTITY)
 
-    # Pointer to the hermes-agent skill + docs for user questions about Hermes
+    # Pointer to the fulilian-agent skill + docs for user questions about Fulilian
     # itself. When the session has no skill tools (Blank Slate with the skills
     # toolset off), skill_view() would be a dangling reference — inject the
     # docs-only variant instead. Toolset is fixed per-session, so cache-safe.
     _has_skill_view = "skill_view" in (agent.valid_tool_names or set())
     stable_parts.append(
-        HERMES_AGENT_HELP_GUIDANCE if _has_skill_view
-        else HERMES_AGENT_HELP_GUIDANCE_NO_SKILLS
+        FULILIAN_AGENT_HELP_GUIDANCE if _has_skill_view
+        else FULILIAN_AGENT_HELP_GUIDANCE_NO_SKILLS
     )
 
     # Universal task-completion / no-fabrication guidance.  Applied to ALL
@@ -445,7 +445,7 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
         tool_guidance.append(SKILLS_GUIDANCE)
     # Kanban worker/orchestrator lifecycle — only present when the
     # dispatcher spawned this process (kanban_show check_fn gates on
-    # HERMES_KANBAN_TASK env var). Normal chat sessions never see
+    # FULILIAN_KANBAN_TASK env var). Normal chat sessions never see
     # this block. Resolved once at __init__ (see _kanban_worker_guidance).
     _kanban_guidance = getattr(agent, "_kanban_worker_guidance", None)
     if _kanban_guidance:
@@ -573,7 +573,7 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
     if _env_hints:
         stable_parts.append(_env_hints)
 
-    # Coding posture (base Hermes, any interactive coding surface in a code
+    # Coding posture (base Fulilian, any interactive coding surface in a code
     # workspace — see agent/coding_context.py). Keep the operating brief in
     # the cross-session-stable prefix, while placing the live git/workspace
     # snapshot behind its own cache boundary. The post-snapshot blocks must
@@ -623,8 +623,8 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
 
     # Bot Mode teammate protocol — injected ONLY into a bot's canonical
     # "Bot Chat" session (the conversation teammate bots message into via
-    # `hermes -p <bot> chat --in ~ -c "Bot Chat"` and the desktop pins), on
-    # installs where Bot Mode manages profiles (ui_meta['hermes-bots']).
+    # `fulilian -p <bot> chat --in ~ -c "Bot Chat"` and the desktop pins), on
+    # installs where Bot Mode manages profiles (ui_meta['fulilian-bots']).
     # Regular sessions never carry it — the desktop's composer middleware
     # owns the @mention send path. Title is read once at first build and the
     # rendered prompt is cached + DB-restored, so this is cache-safe.
@@ -658,16 +658,16 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
         except Exception:
             pass
 
-    # Active-profile hint — names the Hermes profile the agent is running
-    # under so it doesn't conflate ~/.hermes/skills/ (default profile) with
-    # ~/.hermes/profiles/<active>/skills/ (this profile's). Deterministic
+    # Active-profile hint — names the Fulilian profile the agent is running
+    # under so it doesn't conflate ~/.fulilian/skills/ (default profile) with
+    # ~/.fulilian/profiles/<active>/skills/ (this profile's). Deterministic
     # for the lifetime of the agent — profile name doesn't change
     # mid-session, so this doesn't break the prompt cache.
     # See file_safety._resolve_active_profile_name + classify_cross_profile_target
     # for the matching tool-side guard.
     #
     # Resolve from the agent's OWN home first (its session_db path), not the
-    # ambient HERMES_HOME: on a build thread that lost the ContextVar this
+    # ambient FULILIAN_HOME: on a build thread that lost the ContextVar this
     # line would otherwise print "default" for a bot profile — the same
     # thread-fallback bug that leaked default's skills index.
     _agent_home_path = _agent_home(agent)
@@ -683,18 +683,18 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
     # Home string for the message text: prefer the agent's own home so the
     # paths named match the profile just resolved. When we have an explicit
     # agent home, the root (where the default profile's data lives) comes
-    # from get_default_hermes_root(): get_hermes_home() on a bound profile
+    # from get_default_fulilian_root(): get_fulilian_home() on a bound profile
     # session is the PROFILE dir, which would misname the default profile's
     # paths. Without an agent home, keep the ambient resolution byte-identical
-    # to the legacy behavior (and patchable via this module's get_hermes_home).
+    # to the legacy behavior (and patchable via this module's get_fulilian_home).
     if _agent_home_path is not None:
         _home_str = str(_agent_home_path)
-        _root_str = str(get_default_hermes_root())
+        _root_str = str(get_default_fulilian_root())
     else:
-        _home_str = _root_str = str(get_hermes_home())
+        _home_str = _root_str = str(get_fulilian_home())
     if active_profile == "default":
         post_workspace_parts.append(
-            "Active Hermes profile: default. Other profiles (if any) live "
+            "Active Fulilian profile: default. Other profiles (if any) live "
             "under " + _root_str + "/profiles/<name>/. Each profile has its own "
             "skills/, plugins/, cron/, and memories/ that affect a different "
             "session than this one. Do not modify another profile's "
@@ -707,12 +707,12 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
         # _profile_name_for_home() and _resolve_active_profile_name() derive
         # it. So the profile home is the session home itself; appending
         # /profiles/<name> again doubled it (#72894). The default profile's
-        # data sits at the ROOT (get_default_hermes_root()), which in ambient
-        # profile mode is NOT get_hermes_home().
+        # data sits at the ROOT (get_default_fulilian_root()), which in ambient
+        # profile mode is NOT get_fulilian_home().
         profile_home = _home_str
-        default_root = get_default_hermes_root()
+        default_root = get_default_fulilian_root()
         post_workspace_parts.append(
-            f"Active Hermes profile: {active_profile}. This session reads "
+            f"Active Fulilian profile: {active_profile}. This session reads "
             f"and writes {profile_home}/. The default "
             f"profile's data lives at {default_root}/skills/, {default_root}/plugins/, "
             f"{default_root}/cron/, {default_root}/memories/ — those belong to a "
@@ -788,7 +788,7 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
         #
         # allow_install_tree_fallback: for cli/tui the launch dir IS the
         # user's shell cwd, so an in-tree fallback is a deliberate choice
-        # (developing Hermes). Every other surface (desktop chat panel,
+        # (developing Fulilian). Every other surface (desktop chat panel,
         # gateway daemons) self-spawns into the install tree, where the
         # fallback would inject this repo's contributor AGENTS.md (#64590).
         context_files_prompt = _r.build_context_files_prompt(
@@ -851,8 +851,8 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
         _plugin_section_blocks(_frozen_plugin_prompt_sections(agent), "after_memory")
     )
 
-    from hermes_time import get_timezone as _hermes_tz, now as _hermes_now
-    now = _hermes_now()
+    from fulilian_time import get_timezone as _fulilian_tz, now as _fulilian_now
+    now = _fulilian_now()
     # Date-only (not minute-precision) so the system prompt is byte-stable
     # for the full day.  Minute-precision changes invalidate prefix-cache KV
     # on every rebuild path (compression boundary, fresh-agent gateway turns,
@@ -869,7 +869,7 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
     # ``get_timezone()`` returns None when no timezone is configured, in which
     # case we fall back to the abbreviation of the server-local (still tz-aware)
     # time.
-    _tz = _hermes_tz()
+    _tz = _fulilian_tz()
     _zone_bits = []
     _iana = getattr(_tz, "key", None)
     if _iana:

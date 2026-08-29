@@ -2,7 +2,7 @@
 """
 Skills Sync -- Manifest-based seeding and updating of bundled skills.
 
-Copies bundled skills from the repo's skills/ directory into ~/.hermes/skills/
+Copies bundled skills from the repo's skills/ directory into ~/.fulilian/skills/
 and uses a manifest to track which skills have been synced and their origin hash.
 
 Manifest format (v2): each line is "skill_name:origin_hash" where origin_hash
@@ -19,7 +19,7 @@ Update logic:
   - DELETED by user (in manifest, absent from user dir): respected, not re-added.
   - REMOVED from bundled (in manifest, gone from repo): cleaned from manifest.
 
-The manifest lives at ~/.hermes/skills/.bundled_manifest.
+The manifest lives at ~/.fulilian/skills/.bundled_manifest.
 """
 
 import hashlib
@@ -45,7 +45,7 @@ for _stream in (sys.stdout, sys.stderr):
             _stream.reconfigure(encoding="utf-8", errors="replace")
         except (ValueError, TypeError):
             pass
-from fulilian_constants import get_bundled_skills_dir, get_hermes_home, get_optional_skills_dir
+from fulilian_constants import get_bundled_skills_dir, get_fulilian_home, get_optional_skills_dir
 from agent.skill_utils import is_excluded_skill_path
 from typing import Dict, List, Optional, Set, Tuple
 from utils import atomic_replace, atomic_write_text
@@ -53,31 +53,31 @@ from utils import atomic_replace, atomic_write_text
 logger = logging.getLogger(__name__)
 
 
-HERMES_HOME = get_hermes_home()
-SKILLS_DIR = HERMES_HOME / "skills"
+FULILIAN_HOME = get_fulilian_home()
+SKILLS_DIR = FULILIAN_HOME / "skills"
 MANIFEST_FILE = SKILLS_DIR / ".bundled_manifest"
 
 # Import-time snapshots backing the call-time accessors below. Same bug class
 # and same fix as skills_tool (f8723c478) and skill_manager_tool (c6a3d412d):
 # long-lived multi-profile runtimes (Dashboard console, TUI/Desktop backend,
-# cron, kanban workers) import this module once under the launch HERMES_HOME
+# cron, kanban workers) import this module once under the launch FULILIAN_HOME
 # and later scope requests to a different profile via
-# set_hermes_home_override(). Frozen module constants would then resolve —
+# set_fulilian_home_override(). Frozen module constants would then resolve —
 # and for reset_bundled_skill() DELETE — against the wrong profile's skills
 # root (#65828). The accessors honor an explicitly patched module global
 # (tests, and web_server's _profile_scope retargeting) and otherwise
-# re-resolve from the live profile-scoped HERMES_HOME on every call.
-_HERMES_HOME_AT_IMPORT = HERMES_HOME
+# re-resolve from the live profile-scoped FULILIAN_HOME on every call.
+_FULILIAN_HOME_AT_IMPORT = FULILIAN_HOME
 _SKILLS_DIR_AT_IMPORT = SKILLS_DIR
 _MANIFEST_FILE_AT_IMPORT = MANIFEST_FILE
 
 
-def _hermes_home() -> Path:
-    """Return the active profile's HERMES_HOME at call time."""
-    configured = Path(HERMES_HOME)
-    if configured != _HERMES_HOME_AT_IMPORT:
+def _fulilian_home() -> Path:
+    """Return the active profile's FULILIAN_HOME at call time."""
+    configured = Path(FULILIAN_HOME)
+    if configured != _FULILIAN_HOME_AT_IMPORT:
         return configured
-    return get_hermes_home()
+    return get_fulilian_home()
 
 
 def _skills_dir() -> Path:
@@ -85,7 +85,7 @@ def _skills_dir() -> Path:
     configured = Path(SKILLS_DIR)
     if configured != _SKILLS_DIR_AT_IMPORT:
         return configured
-    return _hermes_home() / "skills"
+    return _fulilian_home() / "skills"
 
 
 def _manifest_file() -> Path:
@@ -95,12 +95,12 @@ def _manifest_file() -> Path:
         return configured
     return _skills_dir() / ".bundled_manifest"
 
-# Marker file written by `hermes profile create --no-skills` (named profiles)
-# and by the installer's `--no-skills` flag (the default ~/.hermes profile).
-# When present in HERMES_HOME, sync_skills() is a no-op so neither the
-# installer, `hermes update`, nor a direct sync re-injects bundled skills.
+# Marker file written by `fulilian profile create --no-skills` (named profiles)
+# and by the installer's `--no-skills` flag (the default ~/.fulilian profile).
+# When present in FULILIAN_HOME, sync_skills() is a no-op so neither the
+# installer, `fulilian update`, nor a direct sync re-injects bundled skills.
 # Delete the file to opt back in. Mirrors
-# hermes_cli.profiles.NO_BUNDLED_SKILLS_MARKER (kept as a literal here to
+# fulilian_cli.profiles.NO_BUNDLED_SKILLS_MARKER (kept as a literal here to
 # avoid importing the CLI layer into this low-level sync module).
 NO_BUNDLED_SKILLS_MARKER = ".no-bundled-skills"
 
@@ -111,13 +111,13 @@ def _essential_names() -> frozenset:
         from agent.skill_utils import ESSENTIAL_SKILLS
         return ESSENTIAL_SKILLS
     except Exception:
-        return frozenset({"hermes-agent"})
+        return frozenset({"fulilian-agent"})
 
 
 def _get_bundled_dir() -> Path:
     """Locate the bundled skills/ directory.
 
-    Checks HERMES_BUNDLED_SKILLS env var first (set by Nix wrapper),
+    Checks FULILIAN_BUNDLED_SKILLS env var first (set by Nix wrapper),
     then falls back to the relative path from this source file.
     """
     return get_bundled_skills_dir(Path(__file__).parent.parent / "skills")
@@ -188,7 +188,7 @@ def _read_suppressed_names() -> set:
     """Built-in skills the curator pruned — must NOT be re-seeded on sync.
 
     Delegates to ``tools.skill_usage`` (single source of truth) and falls back
-    to reading ``~/.hermes/skills/.curator_suppressed`` directly if that import
+    to reading ``~/.fulilian/skills/.curator_suppressed`` directly if that import
     is unavailable in a packaged/update context.
     """
     try:
@@ -281,7 +281,7 @@ def _discover_bundled_skills(bundled_dir: Path) -> List[Tuple[str, Path]]:
 def _compute_relative_dest(skill_dir: Path, bundled_dir: Path) -> Path:
     """
     Compute the destination path in the skills dir preserving the category structure.
-    e.g., bundled/skills/mlops/axolotl -> ~/.hermes/skills/mlops/axolotl
+    e.g., bundled/skills/mlops/axolotl -> ~/.fulilian/skills/mlops/axolotl
     """
     rel = skill_dir.relative_to(bundled_dir)
     return _skills_dir() / rel
@@ -603,7 +603,7 @@ def _backfill_optional_provenance(quiet: bool = False) -> List[str]:
 def _read_hub_install_paths() -> Set[str]:
     """Return install paths recorded in the skills-hub lock, as POSIX strings.
 
-    Hub-installed skills are owned by the hub (``hermes skills uninstall``),
+    Hub-installed skills are owned by the hub (``fulilian skills uninstall``),
     never by bundled sync. Rename recovery must not move them even when their
     content happens to match a bundled origin hash, or the lock's
     ``install_path`` would point at a directory that no longer exists.
@@ -688,7 +688,7 @@ def _recover_renamed_skill(
                     f"  ⚠ {skill_name}: upstream moved this skill to "
                     f"{dest.relative_to(_skills_dir()).as_posix()}, but your "
                     f"modified copy at {rel} was kept — it will not receive "
-                    f"updates. Run `hermes skills reset {skill_name} --restore` "
+                    f"updates. Run `fulilian skills reset {skill_name} --restore` "
                     f"to move to the new location."
                 )
             continue
@@ -710,22 +710,22 @@ def _recover_renamed_skill(
 
 def sync_skills(quiet: bool = False) -> dict:
     """
-    Sync bundled skills into ~/.hermes/skills/ using the manifest.
+    Sync bundled skills into ~/.fulilian/skills/ using the manifest.
 
     Returns:
         dict with keys: copied (list), updated (list), skipped (int),
                         user_modified (list), cleaned (list), total_bundled (int)
     """
-    # Opt-out: a profile (named or the default ~/.hermes) that wrote the
+    # Opt-out: a profile (named or the default ~/.fulilian) that wrote the
     # .no-bundled-skills marker gets zero bundled-skill seeding — EXCEPT the
     # essential skills (agent/skill_utils.ESSENTIAL_SKILLS). The
-    # ``hermes-agent`` skill is the agent's own operating manual and the
+    # ``fulilian-agent`` skill is the agent's own operating manual and the
     # system prompt always points at it, so even a Blank Slate / --no-skills
     # profile keeps that one skill. Returning the empty-result shape with
     # skipped_opt_out lets callers report "opted out" instead of
     # "synced 0 / failed". This is the default-profile counterpart to
     # seed_profile_skills()'s marker check for named profiles.
-    essential_only = (_hermes_home() / NO_BUNDLED_SKILLS_MARKER).exists()
+    essential_only = (_fulilian_home() / NO_BUNDLED_SKILLS_MARKER).exists()
     if essential_only and not quiet:
         print(
             "  (profile opted out of bundled skills via .no-bundled-skills — "
@@ -768,9 +768,9 @@ def sync_skills(quiet: bool = False) -> dict:
 
     for skill_name, skill_src in bundled_skills:
         # Curator-pruned built-ins: do not re-seed. The suppression list
-        # (~/.hermes/skills/.curator_suppressed) is written when the curator
+        # (~/.fulilian/skills/.curator_suppressed) is written when the curator
         # archives a bundled skill with curator.prune_builtins enabled. Without
-        # this skip, every `hermes update` would resurrect a skill the user
+        # this skip, every `fulilian update` would resurrect a skill the user
         # deliberately pruned. Restoring the skill clears its suppression entry.
         # Essential skills are exempt — they must always come back.
         if skill_name in suppressed and skill_name not in _essential_names():
@@ -863,7 +863,7 @@ def sync_skills(quiet: bool = False) -> dict:
                         print(
                             f"  ⚠ {skill_name}: bundled version shipped but you "
                             f"already have a local skill by this name — yours "
-                            f"was kept. Run `hermes skills reset {skill_name}` "
+                            f"was kept. Run `fulilian skills reset {skill_name}` "
                             f"to replace it with the bundled version."
                         )
                 else:
@@ -1020,15 +1020,15 @@ def _rmtree_writable(path: Path) -> None:
     parent** writable before re-attempting.  See #34860, #34972.
     """
     # Defense in depth (#48200): refuse to rmtree anything outside
-    # ``HERMES_HOME/skills/`` to prevent the catastrophic wipe of
-    # ``~/.hermes/`` (``.env``, ``MEMORY.md``, ``kanban.db``, custom
+    # ``FULILIAN_HOME/skills/`` to prevent the catastrophic wipe of
+    # ``~/.fulilian/`` (``.env``, ``MEMORY.md``, ``kanban.db``, custom
     # skills, scripts, …) that an earlier incident observed. Five call
     # sites in this file invoke this helper; if any one of them ever
     # computes a destination outside the skills root — through a bad
-    # path join, a missing ``HERMES_HOME`` default, a malicious
+    # path join, a missing ``FULILIAN_HOME`` default, a malicious
     # bundled-manifest entry, or a mid-flight exception that leaves a
     # stale path in scope — this guard turns the resulting
-    # ``shutil.rmtree(~/.hermes)`` into a loud, recoverable ``ValueError``
+    # ``shutil.rmtree(~/.fulilian)`` into a loud, recoverable ``ValueError``
     # instead of silently destroying the user's install.
     target = Path(path).resolve()
     skills_root = _skills_dir().resolve()
@@ -1037,7 +1037,7 @@ def _rmtree_writable(path: Path) -> None:
     # itself must never be removed: a ``dest`` that collapses to
     # ``SKILLS_DIR`` (e.g. a relative path resolving to ``.``) would wipe
     # every installed skill, and its ``.bak`` sibling lands one level up in
-    # ``HERMES_HOME``. Require a strict-child relationship so both escape
+    # ``FULILIAN_HOME``. Require a strict-child relationship so both escape
     # into the skills root and out of it are refused.
     if skills_root not in target.parents:
         raise ValueError(
@@ -1097,7 +1097,7 @@ def reset_bundled_skill(name: str, restore: bool = False) -> dict:
             "action": "not_in_manifest",
             "message": (
                 f"'{name}' is not a tracked bundled skill. Nothing to reset. "
-                f"(Hub-installed skills use `hermes skills uninstall`.)"
+                f"(Hub-installed skills use `fulilian skills uninstall`.)"
             ),
             "synced": None,
         }
@@ -1151,7 +1151,7 @@ def reset_bundled_skill(name: str, restore: bool = False) -> dict:
     else:
         action = "manifest_cleared"
         message = (
-            f"Cleared manifest entry for '{name}'. Future `hermes update` runs "
+            f"Cleared manifest entry for '{name}'. Future `fulilian update` runs "
             f"will re-baseline against your current copy and accept upstream changes."
         )
 
@@ -1159,7 +1159,7 @@ def reset_bundled_skill(name: str, restore: bool = False) -> dict:
 
 
 def _is_tracked_user_modification(origin_hash: str, user_hash: str) -> bool:
-    """Whether an on-disk skill counts as a user modification ``hermes update`` keeps.
+    """Whether an on-disk skill counts as a user modification ``fulilian update`` keeps.
 
     Shared by the sync loop (which decides what to skip) and
     ``list_user_modified_bundled_skills`` (which surfaces the names) so the two
@@ -1171,7 +1171,7 @@ def _is_tracked_user_modification(origin_hash: str, user_hash: str) -> bool:
 
 
 def list_user_modified_bundled_skills() -> List[dict]:
-    """Return the bundled skills that ``hermes update`` keeps because the user
+    """Return the bundled skills that ``fulilian update`` keeps because the user
     edited them locally.
 
     A skill counts as user-modified when its on-disk copy no longer matches the
@@ -1230,7 +1230,7 @@ def diff_bundled_skill(name: str) -> dict:
     """Diff a user's copy of a bundled skill against the current stock version.
 
     Lets a user see exactly what diverged before deciding whether to keep their
-    edits or ``hermes skills reset`` back to upstream.
+    edits or ``fulilian skills reset`` back to upstream.
 
     Returns a dict:
         ``ok`` (bool), ``name`` (str), ``found`` (bool — bundled source exists),
@@ -1253,7 +1253,7 @@ def diff_bundled_skill(name: str) -> dict:
             "diffs": [],
             "message": (
                 f"'{name}' is not a tracked bundled skill (no stock version to "
-                f"diff against). Hub-installed skills use `hermes skills inspect`."
+                f"diff against). Hub-installed skills use `fulilian skills inspect`."
             ),
         }
     dest = _compute_relative_dest(bundled_src, bundled_dir)
@@ -1328,10 +1328,10 @@ def diff_bundled_skill(name: str) -> dict:
 def set_bundled_skills_opt_out(enabled: bool) -> dict:
     """Toggle the .no-bundled-skills opt-out marker for the active profile.
 
-    When ``enabled`` is True, writes HERMES_HOME/.no-bundled-skills so the
-    installer, ``hermes update``, and any direct sync stop seeding bundled
+    When ``enabled`` is True, writes FULILIAN_HOME/.no-bundled-skills so the
+    installer, ``fulilian update``, and any direct sync stop seeding bundled
     skills. When False, removes the marker so seeding resumes on the next
-    sync. This is the on-disk-state half of ``hermes skills opt-out`` /
+    sync. This is the on-disk-state half of ``fulilian skills opt-out`` /
     ``opt-in``; removal of already-present skills is a separate, explicit
     step (see ``remove_pristine_bundled_skills``).
 
@@ -1339,15 +1339,15 @@ def set_bundled_skills_opt_out(enabled: bool) -> dict:
         dict with keys: ok (bool), changed (bool), marker (str path),
                         message (str).
     """
-    marker = _hermes_home() / NO_BUNDLED_SKILLS_MARKER
+    marker = _fulilian_home() / NO_BUNDLED_SKILLS_MARKER
     existed = marker.exists()
     try:
         if enabled:
-            _hermes_home().mkdir(parents=True, exist_ok=True)
+            _fulilian_home().mkdir(parents=True, exist_ok=True)
             marker.write_text(
                 "This profile opted out of bundled-skill seeding "
-                "(`hermes skills opt-out`).\n"
-                "Delete this file to re-enable sync on the next `hermes update`.\n",
+                "(`fulilian skills opt-out`).\n"
+                "Delete this file to re-enable sync on the next `fulilian update`.\n",
                 encoding="utf-8",
             )
             changed = not existed
@@ -1362,7 +1362,7 @@ def set_bundled_skills_opt_out(enabled: bool) -> dict:
                 marker.unlink()
             changed = existed
             message = (
-                "Opted back in. The next `hermes update` (or `hermes skills "
+                "Opted back in. The next `fulilian update` (or `fulilian skills "
                 "opt-in --sync`) will re-seed bundled skills."
                 if changed
                 else "Not opted out — no marker to remove."
@@ -1377,7 +1377,7 @@ def set_bundled_skills_opt_out(enabled: bool) -> dict:
 
 def is_bundled_skills_opt_out() -> bool:
     """Return True if the active profile carries the opt-out marker."""
-    return (_hermes_home() / NO_BUNDLED_SKILLS_MARKER).exists()
+    return (_fulilian_home() / NO_BUNDLED_SKILLS_MARKER).exists()
 
 
 def remove_pristine_bundled_skills(dry_run: bool = False) -> dict:
@@ -1451,7 +1451,7 @@ def remove_pristine_bundled_skills(dry_run: bool = False) -> dict:
 
 
 if __name__ == "__main__":
-    print("Syncing bundled skills into ~/.hermes/skills/ ...")
+    print("Syncing bundled skills into ~/.fulilian/skills/ ...")
     result = sync_skills(quiet=False)
     parts = [
         f"{len(result['copied'])} new",

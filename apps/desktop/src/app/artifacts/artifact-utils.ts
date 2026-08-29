@@ -1,5 +1,5 @@
 import { mediaExternalUrl, resolveMediaDisplaySrc } from '@/lib/media'
-import type { SessionInfo, SessionMessage } from '@/types/hermes'
+import type { SessionInfo, SessionMessage } from '@/types/fulilian'
 
 export type ArtifactKind = 'image' | 'file' | 'link'
 export type ArtifactFilter = 'all' | ArtifactKind

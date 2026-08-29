@@ -26,8 +26,8 @@ class TestMiniMaxModelValidation:
             "suggested_base_url": None,
             "used_fallback": False,
         }
-        with patch("hermes_cli.models.fetch_api_models", return_value=None), \
-             patch("hermes_cli.models.probe_api_models", return_value=probe_payload):
+        with patch("fulilian_cli.models.fetch_api_models", return_value=None), \
+             patch("fulilian_cli.models.probe_api_models", return_value=probe_payload):
             yield
 
     # -------------------------------------------------------------------------

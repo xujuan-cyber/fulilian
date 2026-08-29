@@ -20,7 +20,7 @@ def _reset(monkeypatch):
 
 
 class TestRuntimeProviderUsesScope:
-    """hermes_cli.runtime_provider._getenv resolves through the secret scope."""
+    """fulilian_cli.runtime_provider._getenv resolves through the secret scope."""
 
 
     def test_getenv_two_profiles_isolated(self, monkeypatch):

@@ -6,7 +6,7 @@ import {
   type ProfileScope,
   uninstallSkillFromHub,
   updateSkillsFromHub
-} from '@/hermes'
+} from '@/fulilian'
 import { queryClient } from '@/lib/query-client'
 import { invalidateSlashCompletions } from '@/lib/slash-completion-cache'
 import { upsertDesktopActionTask } from '@/store/activity'

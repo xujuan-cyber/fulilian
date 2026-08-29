@@ -26,7 +26,7 @@ Stop conditions (any of):
 - ``/loop stop`` / ``/loop clear`` — user control.
 - ``loops.max_ticks`` config backstop (default 100, 0 = unlimited).
 
-Design notes / invariants (same contract as ``hermes_cli/goals.py``):
+Design notes / invariants (same contract as ``fulilian_cli/goals.py``):
 
 - A wakeup is just a normal user-role message appended via the surface's
   ordinary input path. No system-prompt mutation, no toolset swap —
@@ -39,7 +39,7 @@ Design notes / invariants (same contract as ``hermes_cli/goals.py``):
   continuation queued (or the goal judge is mid-flight), the /loop tick
   defers to the next interval instead of racing a second synthetic turn.
   Goal-continuation turns never count as loop ticks and vice versa.
-- This module has zero hard dependency on ``cli.HermesCLI``, the gateway
+- This module has zero hard dependency on ``cli.FulilianCLI``, the gateway
   runner, or the TUI gateway — all three drive the same ``LoopManager``.
 """
 
@@ -370,11 +370,11 @@ def _meta_key(session_id: str) -> str:
 
 
 def _get_session_db() -> Optional[Any]:
-    """One SessionDB per HERMES_HOME.
+    """One SessionDB per FULILIAN_HOME.
 
     Delegates to the goals module's cached SessionDB so goals, loops,
     and heartbeats share one connection (same pattern as
-    ``hermes_cli/heartbeat.py``). The delegation also inherits the
+    ``fulilian_cli/heartbeat.py``). The delegation also inherits the
     off-loop bootstrap and the window logic: a cold cache on the loop
     thread never runs ``SessionDB()`` inline. The previous copy here
     did, which froze the loop for the init duration and dropped the

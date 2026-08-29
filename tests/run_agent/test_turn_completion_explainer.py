@@ -38,7 +38,7 @@ def _make_agent(max_iterations: int = 10, config: dict | None = None) -> AIAgent
     with (
         patch("run_agent.get_tool_definitions", return_value=[]),
         patch("run_agent.check_toolset_requirements", return_value={}),
-        patch("hermes_cli.config.load_config", return_value=config or {}),
+        patch("fulilian_cli.config.load_config", return_value=config or {}),
         patch("run_agent.OpenAI"),
     ):
         agent = AIAgent(
@@ -128,7 +128,7 @@ def test_explanation_persistence_turn_lease_cause_is_specific():
     assert "not saved" in lower
     assert "disk" not in lower
     assert "compression" not in lower
-    assert "hermes doctor" not in lower
+    assert "fulilian doctor" not in lower
 
 
 def test_explanation_persistence_disk_cause_keeps_disk_wording():
@@ -149,7 +149,7 @@ def test_explanation_persistence_corrupt_cause_never_says_free_space():
     )
     lower = out.lower()
     assert "corrupt" in lower
-    assert "hermes doctor" in lower
+    assert "fulilian doctor" in lower
     assert "free some space" not in lower
     assert "full disk" not in lower
 
@@ -164,7 +164,7 @@ def test_explanation_persistence_unknown_cause_is_neutral():
         assert out.strip() != ""
         assert "disk space" not in lower
         assert "full disk" not in lower
-        assert "hermes doctor" in lower
+        assert "fulilian doctor" in lower
         assert "again" in lower
 
 
@@ -195,7 +195,7 @@ def test_explanation_cause_ignored_for_other_reasons():
 def test_classify_persistence_error_categories():
     import sqlite3
 
-    from hermes_state import classify_persistence_error
+    from fulilian_state import classify_persistence_error
 
     assert classify_persistence_error(
         sqlite3.OperationalError("database is locked")
@@ -220,7 +220,7 @@ def test_classify_persistence_error_corruption_beats_disk_bucket():
     comment thread, v0.20.0 malformed-DB incident)."""
     import sqlite3
 
-    from hermes_state import classify_persistence_error
+    from fulilian_state import classify_persistence_error
 
     assert classify_persistence_error(
         sqlite3.DatabaseError("database disk image is malformed")
@@ -238,12 +238,12 @@ def test_classify_persistence_error_corruption_beats_disk_bucket():
 
 
 def test_classify_persistence_error_reuses_disk_full_markers():
-    """The disk bucket delegates to hermes_state.is_disk_full_error, so
+    """The disk bucket delegates to fulilian_state.is_disk_full_error, so
     every marker that helper recognizes (ENOSPC, 'not enough space', ...)
     must classify as 'disk' — the two classifiers can never drift apart."""
     import errno
 
-    from hermes_state import classify_persistence_error
+    from fulilian_state import classify_persistence_error
 
     assert classify_persistence_error("ENOSPC writing state.db") == "disk"
     assert classify_persistence_error(
@@ -259,11 +259,11 @@ def test_classify_persistence_error_compression_busy_is_distinct():
     storage damage — but its message contains neither 'locked' nor 'busy',
     so it must classify by exception type (and by phrase for RPC-wrapped
     strings). This is the exact failure mode of issue #81227."""
-    from hermes_state import (
+    from fulilian_state import (
         CompressionSessionBusyError,
         SessionCompressionInProgressError,
     )
-    from hermes_state import classify_persistence_error
+    from fulilian_state import classify_persistence_error
 
     assert classify_persistence_error(
         SessionCompressionInProgressError(
@@ -283,7 +283,7 @@ def test_classify_persistence_error_compression_busy_is_distinct():
 
 
 def test_classify_persistence_error_turn_lease_lost_is_distinct():
-    from hermes_state import SessionTurnLeaseLostError, classify_persistence_error
+    from fulilian_state import SessionTurnLeaseLostError, classify_persistence_error
 
     assert classify_persistence_error(
         SessionTurnLeaseLostError(
@@ -298,7 +298,7 @@ def test_classify_persistence_error_turn_lease_lost_is_distinct():
 def test_persistence_error_causes_tuple_matches_classifier():
     """PERSISTENCE_ERROR_CAUSES must cover every value the classifier can
     return (consumers like cron suppression iterate it)."""
-    from hermes_state import PERSISTENCE_ERROR_CAUSES, classify_persistence_error
+    from fulilian_state import PERSISTENCE_ERROR_CAUSES, classify_persistence_error
 
     probes = (
         "database is locked",
@@ -319,15 +319,15 @@ def test_persistence_error_causes_tuple_matches_classifier():
 def test_explainer_enabled_by_default():
     agent = _make_agent()
     with patch.dict(os.environ, {}, clear=False):
-        os.environ.pop("HERMES_TURN_COMPLETION_EXPLAINER", None)
-        with patch("hermes_cli.config.load_config", return_value={}):
+        os.environ.pop("FULILIAN_TURN_COMPLETION_EXPLAINER", None)
+        with patch("fulilian_cli.config.load_config", return_value={}):
             assert agent._turn_completion_explainer_enabled() is True
 
 
 def test_explainer_disabled_via_env():
     agent = _make_agent()
     with patch.dict(
-        os.environ, {"HERMES_TURN_COMPLETION_EXPLAINER": "0"}, clear=False
+        os.environ, {"FULILIAN_TURN_COMPLETION_EXPLAINER": "0"}, clear=False
     ):
         assert agent._turn_completion_explainer_enabled() is False
 
@@ -350,8 +350,8 @@ def test_explainer_config_read_once_then_cached():
         return {"display": {"turn_completion_explainer": True}}
 
     with patch.dict(os.environ, {}, clear=False):
-        os.environ.pop("HERMES_TURN_COMPLETION_EXPLAINER", None)
-        with patch("hermes_cli.config.load_config", counting_load):
+        os.environ.pop("FULILIAN_TURN_COMPLETION_EXPLAINER", None)
+        with patch("fulilian_cli.config.load_config", counting_load):
             # First call reads config and caches the result.
             assert agent._turn_completion_explainer_enabled() is True
             assert calls["n"] == 1
@@ -361,7 +361,7 @@ def test_explainer_config_read_once_then_cached():
             assert calls["n"] == 1
             # Env override stays authoritative even after the cache is warm.
             with patch.dict(
-                os.environ, {"HERMES_TURN_COMPLETION_EXPLAINER": "0"}, clear=False
+                os.environ, {"FULILIAN_TURN_COMPLETION_EXPLAINER": "0"}, clear=False
             ):
                 assert agent._turn_completion_explainer_enabled() is False
             assert calls["n"] == 1  # env path never touches config

@@ -10,7 +10,7 @@ import { Switch } from '@/components/ui/switch'
 import { Tip } from '@/components/ui/tooltip'
 import { $pluginRecords, type PluginRecord, setPluginEnabled } from '@/contrib/plugins-store'
 import { discoverRuntimePlugins } from '@/contrib/runtime-loader'
-import { getProfiles } from '@/hermes'
+import { getProfiles } from '@/fulilian'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
 import { FolderOpen, Monitor, Package, RefreshCw } from '@/lib/icons'
@@ -35,7 +35,7 @@ import { useDeepLinkHighlight } from './use-deep-link-highlight'
 
 const KIND_ORDER: Record<PluginRecord['kind'], number> = { disk: 0, runtime: 1, bundled: 2 }
 
-// User-installed plugins first — mirrors `hermes plugins list --user`.
+// User-installed plugins first — mirrors `fulilian plugins list --user`.
 const SOURCE_ORDER: Record<string, number> = { user: 0, git: 0, project: 1, entrypoint: 2 }
 
 const agentPluginRowKey = (row: AgentPluginRow) =>
@@ -45,14 +45,14 @@ const agentPluginRowKey = (row: AgentPluginRow) =>
 export const pluginElementId = (target: string) => `plugin-${target}`
 
 function reveal(file: string) {
-  void window.hermesDesktop?.revealPath?.(file)?.catch(() => undefined)
+  void window.fulilianDesktop?.revealPath?.(file)?.catch(() => undefined)
 }
 
 async function revealPluginsDir() {
   try {
     // Electron owns the local plugin root — deriving it from the backend's
-    // hermes_home breaks against a remote backend (#66899).
-    const dir = await window.hermesDesktop?.desktopPluginsRoot?.()
+    // fulilian_home breaks against a remote backend (#66899).
+    const dir = await window.fulilianDesktop?.desktopPluginsRoot?.()
 
     if (!dir) {
       notifyError('Desktop plugins are unavailable', 'Could not resolve the plugins folder')
@@ -62,7 +62,7 @@ async function revealPluginsDir() {
 
     // openDir (not reveal): the door often doesn't exist on first use, and
     // showItemInFolder on a missing path silently no-ops (esp. Windows).
-    const result = await window.hermesDesktop?.openDir?.(dir)
+    const result = await window.fulilianDesktop?.openDir?.(dir)
 
     if (result && !result.ok) {
       notifyError(result.error ?? 'unknown error', 'Could not open the plugins folder')
@@ -72,8 +72,8 @@ async function revealPluginsDir() {
   }
 }
 
-// Agent plugins live under the BACKEND's hermes home (profile-aware), so the
-// path comes from the gateway — not from the renderer's local HERMES_HOME.
+// Agent plugins live under the BACKEND's fulilian home (profile-aware), so the
+// path comes from the gateway — not from the renderer's local FULILIAN_HOME.
 // Callers gate on a local connection: openDir mkdir-creates the path, which
 // must never happen for a directory that belongs to a remote box.
 async function revealAgentPluginsDir(request: GatewayRequest) {
@@ -87,7 +87,7 @@ async function revealAgentPluginsDir(request: GatewayRequest) {
       return
     }
 
-    const opened = await window.hermesDesktop?.openDir?.(`${home}/plugins`)
+    const opened = await window.fulilianDesktop?.openDir?.(`${home}/plugins`)
 
     if (opened && !opened.ok) {
       notifyError(opened.error ?? 'unknown error', 'Could not open the plugins folder')
@@ -253,7 +253,7 @@ function AgentPluginsSection() {
             <SelectContent>
               {profiles.map(profile => (
                 <SelectItem key={profile.name} value={profile.name}>
-                  {profile.is_default ? 'Hermes (default)' : profile.name}
+                  {profile.is_default ? 'Fulilian (default)' : profile.name}
                 </SelectItem>
               ))}
             </SelectContent>

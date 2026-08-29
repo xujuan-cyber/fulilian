@@ -55,7 +55,7 @@ class TestApiModeRouting:
 
     def test_determine_api_mode_honors_the_model_for_nous(self):
         """Callers that skip resolve_runtime_provider (fallback, switch_model
-        empty-mode path) must still land Claude on Messages — the Hermes
+        empty-mode path) must still land Claude on Messages — the Fulilian
         overlay alone advertises openai_chat for every Nous model."""
         from fulilian_cli.providers import determine_api_mode
 
@@ -197,7 +197,7 @@ class TestClientShape:
         self, monkeypatch
     ):
         """The Anthropic SDK fills api_key from ANTHROPIC_API_KEY when the
-        constructor omits it. Hermes loads that env from ~/.hermes/.env, so
+        constructor omits it. Fulilian loads that env from ~/.fulilian/.env, so
         without an explicit clear every Portal request would dual-auth as
         X-Api-Key: sk-ant-… + Authorization: Bearer portal.jwt."""
         from agent.anthropic_adapter import build_anthropic_client
@@ -293,8 +293,8 @@ class TestPortalBodyFields:
 
         tags = self._build()["extra_body"]["tags"]
 
-        assert "product=hermes-agent" in tags
-        assert hermes_client_tag() in tags
+        assert "product=fulilian-agent" in tags
+        assert fulilian_client_tag() in tags
         assert all(isinstance(tag, str) for tag in tags), (
             "Portal skips non-string tag entries unpredictably"
         )

@@ -13,7 +13,7 @@ import {
   setSelectedStoredSessionId,
   workspaceCwdBelongsToSelectedSession
 } from '@/store/session'
-import type { SessionInfo, SessionResumeResponse } from '@/types/hermes'
+import type { SessionInfo, SessionResumeResponse } from '@/types/fulilian'
 
 import {
   appendLiveSessionProjection,

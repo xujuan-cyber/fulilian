@@ -6,8 +6,8 @@ pre/post_tool_call 钩子直接挂到 plugin manager 上，与
 pre_tool_call 的 block 语义（``{"action": "block", "message": ...}``）与
 post_tool_call 的 ``{"context": ...}`` 上下文注入。
 
-不写 ~/.hermes 的任何文件：不走 shell-hook 的 consent/allowlist 通道
-（那条路即使 accept_hooks=True 也会往用户 Hermes home 写白名单），
+不写 ~/.fulilian 的任何文件：不走 shell-hook 的 consent/allowlist 通道
+（那条路即使 accept_hooks=True 也会往用户 Fulilian home 写白名单），
 改动范围自包含在 FuLiLian 项目内。
 
 同时提供独立可执行的脚本（``check_dangerous.py`` / ``detect_flag.py``），
@@ -118,14 +118,14 @@ def register_ctf_tool_hooks() -> list:
 
     - 幂等（同一回调对象只挂一次）
     - 不写任何用户配置/白名单文件
-    - HERMES_SAFE_MODE=1 时跳过（与 shell-hook 注册语义一致）
+    - FULILIAN_SAFE_MODE=1 时跳过（与 shell-hook 注册语义一致）
 
     Returns:
         实际注册的事件名列表（如 ["pre_tool_call", "post_tool_call"]）。
     """
     from utils import env_var_enabled
 
-    if env_var_enabled("HERMES_SAFE_MODE"):
+    if env_var_enabled("FULILIAN_SAFE_MODE"):
         return []
 
     from fulilian_cli.plugins import get_plugin_manager

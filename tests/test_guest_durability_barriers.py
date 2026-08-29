@@ -11,8 +11,8 @@ import sqlite3
 
 import pytest
 
-import hermes_state
-from hermes_state import apply_durability_barriers
+import fulilian_state
+from fulilian_state import apply_durability_barriers
 
 
 def _config(monkeypatch, database_section):

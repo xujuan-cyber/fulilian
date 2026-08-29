@@ -1,6 +1,6 @@
 """Regression test: /config must show the LIVE agent credential.
 
-HermesCLI.__init__ seeds ``self.api_key`` from OPENAI_API_KEY /
+FulilianCLI.__init__ seeds ``self.api_key`` from OPENAI_API_KEY /
 OPENROUTER_API_KEY env vars before provider resolution runs. On any
 non-OpenAI provider (Nous, Anthropic, ...) the constructor value is a
 different vendor's key than the one actually used for requests, so
@@ -12,11 +12,11 @@ agent exists.
 from datetime import datetime
 from types import SimpleNamespace
 
-from cli import HermesCLI
+from cli import FulilianCLI
 
 
 def _run_show_config(stand_in, capsys):
-    HermesCLI.show_config(stand_in)
+    FulilianCLI.show_config(stand_in)
     return capsys.readouterr().out
 
 

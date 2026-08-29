@@ -8,7 +8,7 @@ OpenAI function-calling so every tool-capable model can drive it.
 Linux is the most recent runtime (X11 + Wayland, via cua-driver-rs's
 AT-SPI tree path); it is enabled here alongside macOS and Windows. When a
 host's display server or accessibility stack isn't reachable, cua-driver's
-`health_report` (surfaced by `hermes computer-use doctor`) reports the
+`health_report` (surfaced by `fulilian computer-use doctor`) reports the
 exact blocked check rather than the toolset silently failing.
 
 Return contract
@@ -89,7 +89,7 @@ _DESTRUCTIVE_ACTIONS = frozenset({
 })
 
 # Hard-blocked key combinations. Mirrored from #4562 — these are destructive
-# regardless of approval level (e.g. logout kills the session Hermes runs in).
+# regardless of approval level (e.g. logout kills the session Fulilian runs in).
 _BLOCKED_KEY_COMBOS = {
     frozenset({"cmd", "shift", "backspace"}),   # empty trash
     frozenset({"cmd", "option", "backspace"}),   # force delete
@@ -171,7 +171,7 @@ def _is_blocked_type(text: str) -> Optional[str]:
 # Backend selection — env-swappable for tests
 # ---------------------------------------------------------------------------
 
-# Per-Hermes-session cached backends. Each backend owns its own cua-driver
+# Per-Fulilian-session cached backends. Each backend owns its own cua-driver
 # session, native target, typed-browser binding, refs, and grant namespace.
 _backend_lock = threading.Lock()
 # Backward-compatible empty-session injection hook used by older tests.
@@ -235,9 +235,9 @@ def _warn_bypass_escalation(session_id: str) -> None:
 
 
 def _cua_permission_mode(session_id: str) -> str:
-    """Map Hermes's explicit approval bypass onto Cua's immutable mode.
+    """Map Fulilian's explicit approval bypass onto Cua's immutable mode.
 
-    Hermes has TWO session-identity namespaces: the tool-dispatch path passes
+    Fulilian has TWO session-identity namespaces: the tool-dispatch path passes
     the DB ``session_id`` (``agent.session_id``), while gateway ``/yolo``
     keys approval state off the gateway ``session_key`` (set per turn via the
     ``set_current_session_key`` contextvar in tools/approval.py). CLI and TUI
@@ -305,7 +305,7 @@ def _get_backend(session_id: str = "") -> ComputerUseBackend:
                     _backend = None
             else:
                 backend_name = os.environ.get(
-                    "HERMES_COMPUTER_USE_BACKEND", "cua"
+                    "FULILIAN_COMPUTER_USE_BACKEND", "cua"
                 ).lower()
                 if backend_name in {"cua", "cua-driver", ""}:
                     from tools.computer_use.cua_backend import CuaDriverBackend
@@ -315,7 +315,7 @@ def _get_backend(session_id: str = "") -> ComputerUseBackend:
                     backend = _NoopBackend()
                 else:
                     raise RuntimeError(
-                        f"Unknown HERMES_COMPUTER_USE_BACKEND={backend_name!r}"
+                        f"Unknown FULILIAN_COMPUTER_USE_BACKEND={backend_name!r}"
                     )
                 # Starting under the cache lock preserves the existing
                 # one-backend-per-session invariant. A concurrent mode toggle
@@ -348,7 +348,7 @@ def release_computer_use_session(session_id: str) -> bool:
     removes the exact session backend, its call lock, and its recorded
     permission mode before stopping the backend, so new lookups cannot retain
     the stale target/ref namespace — and stops a private embedded daemon when
-    Hermes YOLO selected unrestricted mode. Approval state is cleared even
+    Fulilian YOLO selected unrestricted mode. Approval state is cleared even
     when no backend was started.
 
     Returns ``True`` when a backend was found and released, ``False`` when the
@@ -376,7 +376,7 @@ def release_computer_use_session(session_id: str) -> bool:
     try:
         # Let an in-flight action finish before ending the driver session and
         # dropping its target/ref state. Do not hold the global cache lock
-        # while waiting: unrelated Hermes sessions remain independent.
+        # while waiting: unrelated Fulilian sessions remain independent.
         if call_lock is not None:
             with call_lock:
                 backend.stop()
@@ -395,7 +395,7 @@ def _shutdown_backend_atexit() -> None:
     """Stop all cached backends so cua-driver children don't outlive us.
 
     Each session backend holds a long-lived ``cua-driver`` subprocess, so
-    without this a driver can survive the Hermes process that spawned it
+    without this a driver can survive the Fulilian process that spawned it
     (#28152 item 3). #69903 kept the orphan from burning a core by disabling
     the cursor overlay; the process itself still lingered.
 
@@ -574,7 +574,7 @@ def handle_computer_use(args: Dict[str, Any], **kwargs) -> Any:
     except Exception as e:
         return json.dumps({
             "error": f"computer_use backend unavailable: {e}",
-            "hint": "If the cua-driver binary is missing, run `hermes computer-use install`. "
+            "hint": "If the cua-driver binary is missing, run `fulilian computer-use install`. "
                     "If a Python dependency is missing, the error above shows the exact install command.",
         })
 
@@ -1267,7 +1267,7 @@ def _route_capture_through_aux_vision(
 ) -> Optional[str]:
     """Pre-analyse the captured PNG via ``vision_analyze`` and return a text result.
 
-    The captured base64 PNG is materialised to ``$HERMES_HOME/cache/vision/``
+    The captured base64 PNG is materialised to ``$FULILIAN_HOME/cache/vision/``
     and handed to ``vision_analyze_tool`` with a generic describe prompt.
     The resulting text description is merged into the existing AX/SOM
     summary so the main model receives a single text payload that mentions
@@ -1285,7 +1285,7 @@ def _route_capture_through_aux_vision(
         import os as _os
         import uuid as _uuid
 
-        from fulilian_constants import get_hermes_dir
+        from fulilian_constants import get_fulilian_dir
         from model_tools import _run_async
         from tools.vision_tools import vision_analyze_tool
     except Exception as exc:  # pragma: no cover - defensive
@@ -1308,7 +1308,7 @@ def _route_capture_through_aux_vision(
             ext = ".jpg"
         else:
             ext = ".png"
-        cache_dir = get_hermes_dir("cache/vision", "temp_vision_images")
+        cache_dir = get_fulilian_dir("cache/vision", "temp_vision_images")
         cache_dir.mkdir(parents=True, exist_ok=True)
         temp_image_path = cache_dir / f"computer_use_{_uuid.uuid4().hex}{ext}"
         raw, scale_note = _shrink_capture_for_vision(raw, ext)
@@ -1475,7 +1475,7 @@ _MAX_CAPTURE_FILES = 20
 
 
 def _persist_capture_image(cap: CaptureResult) -> Optional[str]:
-    """Save a capture in Hermes' media cache and return its absolute path.
+    """Save a capture in Fulilian' media cache and return its absolute path.
 
     Captures are normally embedded only in the model's tool context. Persisting
     a bounded copy gives attachment-capable surfaces a real file to deliver
@@ -1487,7 +1487,7 @@ def _persist_capture_image(cap: CaptureResult) -> Optional[str]:
     try:
         import uuid as _uuid
 
-        from fulilian_constants import get_hermes_dir
+        from fulilian_constants import get_fulilian_dir
 
         raw = base64.b64decode(cap.png_b64, validate=False)
         mime = str(cap.image_mime_type or "").lower()
@@ -1495,7 +1495,7 @@ def _persist_capture_image(cap: CaptureResult) -> Optional[str]:
             not mime and cap.png_b64[:8].startswith("/9j/")
         ) else ".png"
 
-        cache_dir = get_hermes_dir("cache/images", "image_cache")
+        cache_dir = get_fulilian_dir("cache/images", "image_cache")
         cache_dir.mkdir(parents=True, exist_ok=True)
         try:
             captures = sorted(
@@ -1534,9 +1534,9 @@ def _spill_elements_to_file(cap: CaptureResult) -> Optional[str]:
     try:
         import uuid as _uuid
 
-        from fulilian_constants import get_hermes_dir
+        from fulilian_constants import get_fulilian_dir
 
-        cache_dir = get_hermes_dir("cache/computer_use", "computer_use_cache")
+        cache_dir = get_fulilian_dir("cache/computer_use", "computer_use_cache")
         cache_dir.mkdir(parents=True, exist_ok=True)
         # Prune oldest spills beyond the cap (best-effort).
         try:
@@ -1682,7 +1682,7 @@ def check_computer_use_requirements() -> bool:
     override via env). cua-driver runs on all three; the Linux path is
     headed/X11 today (Wayland via XWayland), pure-Wayland progress tracked
     upstream. Linux users see specific blocked checks via
-    `hermes computer-use doctor` if their session is incomplete (e.g. no
+    `fulilian computer-use doctor` if their session is incomplete (e.g. no
     DISPLAY set).
     """
     if sys.platform not in ("darwin", "win32", "linux"):

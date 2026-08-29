@@ -51,9 +51,9 @@ describe('media protocol helpers', () => {
   })
 
   it('preserves a configured gateway path prefix', () => {
-    const endpoint = new URL(remoteMediaEndpoint('https://gateway.test/hermes/', '/tmp/a b.mp4'))
+    const endpoint = new URL(remoteMediaEndpoint('https://gateway.test/fulilian/', '/tmp/a b.mp4'))
 
-    expect(endpoint.pathname).toBe('/hermes/api/files/stream')
+    expect(endpoint.pathname).toBe('/fulilian/api/files/stream')
     expect(endpoint.searchParams.get('path')).toBe('/tmp/a b.mp4')
   })
 })
@@ -63,7 +63,7 @@ describe('createMediaProtocolHandler', () => {
     const deps = dependencies()
 
     const response = await createMediaProtocolHandler(deps)(
-      request('hermes-media://stream/%2Ftmp%2Fclip.mp4', {
+      request('fulilian-media://stream/%2Ftmp%2Fclip.mp4', {
         Authorization: 'Bearer renderer-secret',
         Range: 'bytes=1-3'
       })
@@ -85,7 +85,7 @@ describe('createMediaProtocolHandler', () => {
     })
 
     const response = await createMediaProtocolHandler(deps)(
-      request('hermes-media://stream/%2Ftmp%2Fclip.mp4', {}, 'HEAD')
+      request('fulilian-media://stream/%2Ftmp%2Fclip.mp4', {}, 'HEAD')
     )
 
     expect(response.status).toBe(200)
@@ -98,14 +98,14 @@ describe('createMediaProtocolHandler', () => {
     const deps = dependencies({
       resolveRemoteConnection: vi.fn(async () => ({
         authMode: 'token' as const,
-        baseUrl: 'https://gateway.test/hermes',
+        baseUrl: 'https://gateway.test/fulilian',
         mode: 'remote' as const,
         token: 's e/cret'
       }))
     })
 
     const response = await createMediaProtocolHandler(deps)(
-      request('hermes-media://remote/%2Froot%2Foutputs%2Frender.mp4?connectionId=work-ssh&profile=reviewer', {
+      request('fulilian-media://remote/%2Froot%2Foutputs%2Frender.mp4?connectionId=work-ssh&profile=reviewer', {
         Range: 'bytes=0-1023'
       })
     )
@@ -115,10 +115,10 @@ describe('createMediaProtocolHandler', () => {
     expect(deps.fetchRemote).toHaveBeenCalledOnce()
     const [rawUrl, headers] = vi.mocked(deps.fetchRemote).mock.calls[0]
     const url = new URL(rawUrl)
-    expect(url.pathname).toBe('/hermes/api/files/stream')
+    expect(url.pathname).toBe('/fulilian/api/files/stream')
     expect(url.searchParams.get('path')).toBe('/root/outputs/render.mp4')
     expect(url.searchParams.has('token')).toBe(false)
-    expect(headers.get('x-hermes-session-token')).toBe('s e/cret')
+    expect(headers.get('x-fulilian-session-token')).toBe('s e/cret')
     expect(headers.get('range')).toBe('bytes=0-1023')
   })
 
@@ -134,7 +134,7 @@ describe('createMediaProtocolHandler', () => {
     })
 
     await createMediaProtocolHandler(deps)(
-      request('hermes-media://remote/%2Froot%2Foutputs%2Frender.mp4?connectionId=cloud&profile=research')
+      request('fulilian-media://remote/%2Froot%2Foutputs%2Frender.mp4?connectionId=cloud&profile=research')
     )
 
     const [rawUrl] = vi.mocked(deps.fetchRemote).mock.calls[0]
@@ -152,7 +152,7 @@ describe('createMediaProtocolHandler', () => {
     })
 
     const response = await createMediaProtocolHandler(deps)(
-      request('hermes-media://remote/%2Froot%2Foutputs%2Frender.mp4', {}, 'HEAD')
+      request('fulilian-media://remote/%2Froot%2Foutputs%2Frender.mp4', {}, 'HEAD')
     )
 
     expect(response.status).toBe(200)
@@ -164,7 +164,7 @@ describe('createMediaProtocolHandler', () => {
     const deps = dependencies()
 
     const response = await createMediaProtocolHandler(deps)(
-      request('hermes-media://remote/%2Froot%2Foutputs%2Frender.mp4', {}, 'POST')
+      request('fulilian-media://remote/%2Froot%2Foutputs%2Frender.mp4', {}, 'POST')
     )
 
     expect(response.status).toBe(405)
@@ -184,7 +184,7 @@ describe('createMediaProtocolHandler', () => {
       }))
     })
 
-    const response = await createMediaProtocolHandler(deps)(request('hermes-media://remote/%2Ftmp%2Fclip.mp4'))
+    const response = await createMediaProtocolHandler(deps)(request('fulilian-media://remote/%2Ftmp%2Fclip.mp4'))
 
     expect(response.status).toBe(206)
     expect(deps.fetchRemote).toHaveBeenCalledOnce()
@@ -208,7 +208,7 @@ describe('createMediaProtocolHandler', () => {
     })
 
     const response = await createMediaProtocolHandler(deps)(
-      request('hermes-media://remote/%2Ftmp%2Fclip.mp4', {}, 'HEAD')
+      request('fulilian-media://remote/%2Ftmp%2Fclip.mp4', {}, 'HEAD')
     )
 
     expect(response.status).toBe(200)
@@ -228,7 +228,7 @@ describe('createMediaProtocolHandler', () => {
       }))
     })
 
-    const response = await createMediaProtocolHandler(deps)(request('hermes-media://remote/%2Ftmp%2Fclip.mp4'))
+    const response = await createMediaProtocolHandler(deps)(request('fulilian-media://remote/%2Ftmp%2Fclip.mp4'))
 
     expect(response.status).toBe(206)
     expect(deps.fetchRemote).not.toHaveBeenCalled()
@@ -251,7 +251,7 @@ describe('createMediaProtocolHandler', () => {
     })
 
     const response = await createMediaProtocolHandler(deps)(
-      request('hermes-media://remote/%2Ftmp%2Fclip.mp4', {}, 'HEAD')
+      request('fulilian-media://remote/%2Ftmp%2Fclip.mp4', {}, 'HEAD')
     )
 
     expect(response.status).toBe(200)
@@ -273,8 +273,8 @@ describe('createMediaProtocolHandler', () => {
 
     const handler = createMediaProtocolHandler(deps)
 
-    expect((await handler(request('hermes-media://remote/%2Ftmp%2Fsecret.txt'))).status).toBe(415)
-    expect((await handler(request('hermes-media://remote/%2Ftmp%2Fclip.mp4'))).status).toBe(401)
+    expect((await handler(request('fulilian-media://remote/%2Ftmp%2Fsecret.txt'))).status).toBe(415)
+    expect((await handler(request('fulilian-media://remote/%2Ftmp%2Fclip.mp4'))).status).toBe(401)
     expect(deps.fetchRemote).not.toHaveBeenCalled()
   })
 })

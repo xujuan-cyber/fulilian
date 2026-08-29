@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fulilian_cli import __version__ as _HERMES_VERSION
+from fulilian_cli import __version__ as _FULILIAN_VERSION
 from providers import register_provider
 from providers.base import ProviderProfile
 
@@ -19,11 +19,11 @@ from providers.base import ProviderProfile
 # to OpenRouter, Vercel AI Gateway, and Fireworks. Going through
 # profile.default_headers means they survive model switches and credential
 # rotation. Without them OpenCode only sees the OpenAI SDK's generic
-# "OpenAI/Python x.y.z" User-Agent and can't tell the traffic is Hermes Agent.
+# "OpenAI/Python x.y.z" User-Agent and can't tell the traffic is FuLiLian.
 _ATTRIBUTION_HEADERS = {
     "HTTP-Referer": "https://hermes-agent.nousresearch.com",
-    "X-Title": "Hermes Agent",
-    "User-Agent": f"HermesAgent/{_HERMES_VERSION}",
+    "X-Title": "FuLiLian",
+    "User-Agent": f"FulilianAgent/{_FULILIAN_VERSION}",
 }
 
 

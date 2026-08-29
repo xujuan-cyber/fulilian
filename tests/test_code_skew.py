@@ -5,7 +5,7 @@ crash; these prove the guard that turns it into a clear "restart the gateway"
 message before a model switch can hit it.  The dashboard mirror (#86207) lives
 here too: ``web_server._dashboard_code_skew_guard`` and the
 ``/api/model/options`` 503 guard, which protect the Models page from the same
-stale-module ImportError after ``hermes update``.
+stale-module ImportError after ``fulilian update``.
 """
 
 import asyncio
@@ -66,7 +66,7 @@ class TestModelSwitchSkewGuard:
         assert msg is not None
         assert "abc1234567" in msg
         assert "def4567890" in msg
-        assert "hermes gateway restart" in msg
+        assert "fulilian gateway restart" in msg
 
 
 class TestDashboardCodeSkewGuard:
@@ -92,7 +92,7 @@ class TestDashboardCodeSkewGuard:
 class TestModelOptionsSkewGuard:
     """/api/model/options must refuse with a clear 503 when the dashboard is stale.
 
-    Regression for #86207: a dashboard kept alive across ``hermes update``
+    Regression for #86207: a dashboard kept alive across ``fulilian update``
     serves stale modules, so the picker's lazy import of names the update added
     (``agent.model_metadata.is_grok_46_family``) raised ImportError and the
     handler collapsed it into a generic 500.  With the guard, the stale process
@@ -107,7 +107,7 @@ class TestModelOptionsSkewGuard:
 
         payload_calls: list = []
         monkeypatch.setattr(
-            "hermes_cli.inventory.build_model_options_payload",
+            "fulilian_cli.inventory.build_model_options_payload",
             lambda *a, **k: payload_calls.append(1) or {"providers": []},
         )
 
@@ -131,12 +131,12 @@ class TestModelOptionsSkewGuard:
         monkeypatch.setattr(
             web_server, "_profile_scope", lambda profile: contextlib.nullcontext()
         )
-        monkeypatch.setattr("hermes_cli.inventory.load_picker_context", lambda: {})
+        monkeypatch.setattr("fulilian_cli.inventory.load_picker_context", lambda: {})
 
         payload_calls: list = []
         expected = {"providers": [], "model": {}, "provider": None}
         monkeypatch.setattr(
-            "hermes_cli.inventory.build_model_options_payload",
+            "fulilian_cli.inventory.build_model_options_payload",
             lambda *a, **k: payload_calls.append(1) or expected,
         )
 

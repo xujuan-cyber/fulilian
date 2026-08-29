@@ -83,7 +83,7 @@ def _unseen_terminal_events(tid):
 
 def test_kanban_notifier_replays_telegram_dm_topic_delivery_metadata(tmp_path, monkeypatch):
     db_path = tmp_path / "dm-topic-metadata.db"
-    monkeypatch.setenv("HERMES_KANBAN_DB", str(db_path))
+    monkeypatch.setenv("FULILIAN_KANBAN_DB", str(db_path))
     kb.init_db()
 
     conn = kb.connect()
@@ -139,7 +139,7 @@ def test_active_named_profile_subscription_is_delivered(tmp_path, monkeypatch):
     rewind the claim forever — silent zero-delivery.
     """
     db_path = tmp_path / "actionable-block.db"
-    monkeypatch.setenv("HERMES_KANBAN_DB", str(db_path))
+    monkeypatch.setenv("FULILIAN_KANBAN_DB", str(db_path))
     kb.init_db()
     reason = "AGE-39 — https://linear.example/AGE-39 — publishing verified."
     conn = kb.connect()
@@ -173,7 +173,7 @@ def test_non_dispatch_gateway_claims_only_its_profile_subscriptions(
 ):
     """A profile gateway delivers its events while another gateway dispatches."""
     db_path = tmp_path / "cross-profile-notifier.db"
-    monkeypatch.setenv("HERMES_KANBAN_DB", str(db_path))
+    monkeypatch.setenv("FULILIAN_KANBAN_DB", str(db_path))
     kb.init_db()
     conn = kb.connect()
     try:
@@ -220,7 +220,7 @@ def test_legacy_subscription_requires_confirmed_dispatcher_lock_owner(
 ):
     """Startup and lock-losing gateways cannot claim legacy notifications."""
     db_path = tmp_path / "legacy-lock-owner.db"
-    monkeypatch.setenv("HERMES_KANBAN_DB", str(db_path))
+    monkeypatch.setenv("FULILIAN_KANBAN_DB", str(db_path))
     kb.init_db()
     conn = kb.connect()
     try:
@@ -305,7 +305,7 @@ def test_notifier_redelivers_same_kind_on_dispatch_cycle(tmp_path, monkeypatch):
     the adapter.
     """
     db_path = tmp_path / "redeliver-cycle.db"
-    monkeypatch.setenv("HERMES_KANBAN_DB", str(db_path))
+    monkeypatch.setenv("FULILIAN_KANBAN_DB", str(db_path))
     kb.init_db()
 
     conn = kb.connect()
@@ -359,7 +359,7 @@ def test_notifier_subscription_survives_done_reopen_until_archive(
 ):
     """Done is reversible; archive alone ends notification ownership."""
     db_path = tmp_path / "done-reopen-archive.db"
-    monkeypatch.setenv("HERMES_KANBAN_DB", str(db_path))
+    monkeypatch.setenv("FULILIAN_KANBAN_DB", str(db_path))
     kb.init_db()
 
     conn = kb.connect()
@@ -460,7 +460,7 @@ def test_notifier_subscription_survives_done_reopen_until_archive(
 
 def test_notifier_wakeup_uses_subscription_chat_type(tmp_path, monkeypatch):
     db_path = tmp_path / "chat-type-wakeup.db"
-    monkeypatch.setenv("HERMES_KANBAN_DB", str(db_path))
+    monkeypatch.setenv("FULILIAN_KANBAN_DB", str(db_path))
     kb.init_db()
 
     conn = kb.connect()
@@ -524,7 +524,7 @@ def test_kanban_notifier_isolates_per_subscription_failure(tmp_path, monkeypatch
     delivery for every other subscription.
     """
     db_path = tmp_path / "isolation.db"
-    monkeypatch.setenv("HERMES_KANBAN_DB", str(db_path))
+    monkeypatch.setenv("FULILIAN_KANBAN_DB", str(db_path))
     kb.init_db()
 
     # Create two tasks with subscriptions and complete both. The BAD task is
@@ -587,7 +587,7 @@ def test_notifier_delivers_block_loop_detected_triage_ping(tmp_path, monkeypatch
     silently.
     """
     db_path = tmp_path / "block-loop.db"
-    monkeypatch.setenv("HERMES_KANBAN_DB", str(db_path))
+    monkeypatch.setenv("FULILIAN_KANBAN_DB", str(db_path))
     kb.init_db()
 
     conn = kb.connect()
@@ -673,7 +673,7 @@ def _review_handoff_task(
 
 def test_review_requested_wakes_the_origin_session(tmp_path, monkeypatch):
     """A review handoff wakes the origin and carries the worker's summary."""
-    monkeypatch.setenv("HERMES_KANBAN_DB", str(tmp_path / "review-wake.db"))
+    monkeypatch.setenv("FULILIAN_KANBAN_DB", str(tmp_path / "review-wake.db"))
     kb.init_db()
     tid = _review_handoff_task()
 
@@ -694,7 +694,7 @@ def test_review_requested_wakes_the_origin_session(tmp_path, monkeypatch):
 
 def test_block_loop_detected_wakes_the_origin_session(tmp_path, monkeypatch):
     """A triage escalation wakes the origin so a decision gets made."""
-    monkeypatch.setenv("HERMES_KANBAN_DB", str(tmp_path / "triage-wake.db"))
+    monkeypatch.setenv("FULILIAN_KANBAN_DB", str(tmp_path / "triage-wake.db"))
     kb.init_db()
 
     conn = kb.connect()
@@ -733,7 +733,7 @@ def test_review_requested_does_not_wake_a_notify_only_subscription(
     tmp_path, monkeypatch,
 ):
     """delivery_mode still decides whether a wake-worthy kind wakes at all."""
-    monkeypatch.setenv("HERMES_KANBAN_DB", str(tmp_path / "review-notify.db"))
+    monkeypatch.setenv("FULILIAN_KANBAN_DB", str(tmp_path / "review-notify.db"))
     kb.init_db()
     _review_handoff_task(delivery_mode="notify")
 

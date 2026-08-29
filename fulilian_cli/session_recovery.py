@@ -1,4 +1,4 @@
-"""Offline, non-destructive recovery for a damaged Hermes session database.
+"""Offline, non-destructive recovery for a damaged Fulilian session database.
 
 The recovery path deliberately avoids in-place repair:
 
@@ -20,7 +20,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from hermes_state import (
+from fulilian_state import (
     FTS_STORAGE_VERSION,
     SCHEMA_VERSION,
     SessionDB,
@@ -244,13 +244,13 @@ def _copy_source_bundle(source: Path, snapshot_dir: Path) -> tuple[Path, list[st
     connection-lifecycle lock for its duration. Checking for a live connection
     and *then* copying would be a check/use race: a connection could open in
     that window, and the copy's ``close()`` would cancel its POSIX advisory
-    locks -- the failure class ``hermes_cli.sqlite_safe_read`` exists to
+    locks -- the failure class ``fulilian_cli.sqlite_safe_read`` exists to
     prevent (see #71724). Holding the lock means no connection can appear
     mid-copy, across the main file and every sidecar.
 
     Recovery normally runs as its own short-lived CLI process against an
     offline/quarantined file, so the refusal should never fire; the guard
-    keeps this path consistent with ``hermes_state._backup_db_file``.
+    keeps this path consistent with ``fulilian_state._backup_db_file``.
     """
     from fulilian_cli.sqlite_safe_read import LiveConnectionError, offline_file_access
 
@@ -324,7 +324,7 @@ def _snapshot_and_inspect(
 ) -> tuple[tempfile.TemporaryDirectory[str], Path, dict[str, Any]]:
     before = _source_fingerprint(source)
     temp_dir = tempfile.TemporaryDirectory(
-        prefix="hermes-session-recovery-",
+        prefix="fulilian-session-recovery-",
         dir=str(work_root),
     )
     snapshot_dir = Path(temp_dir.name)
@@ -334,13 +334,13 @@ def _snapshot_and_inspect(
         if before != after:
             raise SessionRecoverySafetyError(
                 "The source database bundle changed while it was being copied. "
-                "Stop every Hermes process using this profile and retry. "
-                "This includes the interactive `hermes` CLI session this "
+                "Stop every Fulilian process using this profile and retry. "
+                "This includes the interactive `fulilian` CLI session this "
                 "command may have been launched from: a running parent CLI "
                 "writes session bookkeeping (compression ticks, context "
                 "tracking) to state.db in the background and counts as a "
-                "Hermes process even after the gateway is stopped. Run the "
-                "recovery from a fresh shell with no `hermes` session open, "
+                "Fulilian process even after the gateway is stopped. Run the "
+                "recovery from a fresh shell with no `fulilian` session open, "
                 "or point --source at an immutable snapshot copy of the "
                 "database."
             )

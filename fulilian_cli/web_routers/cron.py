@@ -2,7 +2,7 @@
 
 Handler bodies are byte-identical.  The ``*_sync`` workers, profile resolution
 and the threadpool wrapper (``_run_cron_dashboard_io``) still live in
-web_server — reached via the late-binding seam in :mod:`hermes_cli.web_deps`
+web_server — reached via the late-binding seam in :mod:`fulilian_cli.web_deps`
 so ``monkeypatch.setattr(web_server, ...)`` keeps working (several cron tests
 rely on exactly that).
 """
@@ -23,7 +23,7 @@ from fulilian_cli.web_models import (
 )
 
 # Same logger the handlers used before extraction (identical logger object).
-_log = logging.getLogger("hermes_cli.web_server")
+_log = logging.getLogger("fulilian_cli.web_server")
 
 router = APIRouter()
 

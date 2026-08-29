@@ -22,7 +22,7 @@ Env vars::
 
 Auth is header-based. A key uses ``Authorization: Bearer``; without a key
 the request is keyless (``X-Tavily-Access-Mode: keyless``). Both paths
-send ``X-Client-Name: hermes-agent``.
+send ``X-Client-Name: fulilian-agent``.
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ from agent.web_search_provider import WebSearchProvider
 
 logger = logging.getLogger(__name__)
 
-_CLIENT_NAME = "hermes-agent"
+_CLIENT_NAME = "fulilian-agent"
 
 
 def _tavily_headers(api_key: str) -> Dict[str, str]:

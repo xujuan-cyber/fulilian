@@ -1,4 +1,4 @@
-"""Tests for hermes_cli.partial_compress — the pure split/parse helpers
+"""Tests for fulilian_cli.partial_compress — the pure split/parse helpers
 behind ``/compress here [N]`` (boundary-aware "summarize up to here").
 
 Inspired by Claude Code's Rewind "Summarize up to here" action.

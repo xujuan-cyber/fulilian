@@ -14,7 +14,7 @@ Fast BPE/WordPiece tokenization and custom vocab training.
 
 | | |
 |---|---|
-| Source | Optional — install with `hermes skills install official/mlops/huggingface-tokenizers` |
+| Source | Optional — install with `fulilian skills install official/mlops/huggingface-tokenizers` |
 | Path | `optional-skills/mlops/huggingface-tokenizers` |
 | Version | `1.0.0` |
 | Author | Orchestra Research |
@@ -26,7 +26,7 @@ Fast BPE/WordPiece tokenization and custom vocab training.
 ## Reference: full SKILL.md
 
 :::info
-The following is the complete skill definition that Hermes loads when this skill is triggered. This is what the agent sees as instructions when the skill is active.
+The following is the complete skill definition that Fulilian loads when this skill is triggered. This is what the agent sees as instructions when the skill is active.
 :::
 
 # HuggingFace Tokenizers - Fast Tokenization for NLP

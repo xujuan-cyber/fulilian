@@ -2,7 +2,7 @@
 
 The /indicator command is registered in COMMAND_REGISTRY (and advertised by
 /help, tab-completion and the tips system) but used to have no dispatch branch
-in HermesCLI.process_command — so typing it printed "Unknown command:
+in FulilianCLI.process_command — so typing it printed "Unknown command:
 /indicator". These tests lock in the dispatch wiring and the handler behavior.
 """
 
@@ -10,7 +10,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from cli import HermesCLI
+from cli import FulilianCLI
 
 
 def _import_cli():
@@ -29,7 +29,7 @@ def _import_cli():
 
 
 def _make_cli():
-    cli_obj = HermesCLI.__new__(HermesCLI)
+    cli_obj = FulilianCLI.__new__(FulilianCLI)
     cli_obj.config = {}
     cli_obj.console = MagicMock()
     cli_obj.agent = None
@@ -77,7 +77,7 @@ class TestHandleIndicatorCommand(unittest.TestCase):
             patch.object(cli_mod, "_cprint") as mock_cprint,
             patch.object(cli_mod, "save_config_value") as mock_save,
         ):
-            cli_mod.HermesCLI._handle_indicator_command(stub, "/indicator")
+            cli_mod.FulilianCLI._handle_indicator_command(stub, "/indicator")
 
         mock_save.assert_not_called()
         printed = " ".join(str(c) for c in mock_cprint.call_args_list)
@@ -90,7 +90,7 @@ class TestHandleIndicatorCommand(unittest.TestCase):
             patch.object(cli_mod, "_cprint") as mock_cprint,
             patch.object(cli_mod, "save_config_value") as mock_save,
         ):
-            cli_mod.HermesCLI._handle_indicator_command(stub, "/indicator status")
+            cli_mod.FulilianCLI._handle_indicator_command(stub, "/indicator status")
 
         mock_save.assert_not_called()
         printed = " ".join(str(c) for c in mock_cprint.call_args_list)
@@ -103,7 +103,7 @@ class TestHandleIndicatorCommand(unittest.TestCase):
             patch.object(cli_mod, "_cprint"),
             patch.object(cli_mod, "save_config_value", return_value=True) as mock_save,
         ):
-            cli_mod.HermesCLI._handle_indicator_command(stub, "/indicator unicode")
+            cli_mod.FulilianCLI._handle_indicator_command(stub, "/indicator unicode")
 
         # Persists to the SAME key the TUI reads, and mirrors it in memory.
         mock_save.assert_called_once_with("display.tui_status_indicator", "unicode")
@@ -116,7 +116,7 @@ class TestHandleIndicatorCommand(unittest.TestCase):
             patch.object(cli_mod, "_cprint") as mock_cprint,
             patch.object(cli_mod, "save_config_value") as mock_save,
         ):
-            cli_mod.HermesCLI._handle_indicator_command(stub, "/indicator rainbow")
+            cli_mod.FulilianCLI._handle_indicator_command(stub, "/indicator rainbow")
 
         mock_save.assert_not_called()
         # The stored value must be untouched.

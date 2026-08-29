@@ -1,20 +1,20 @@
-# Hermes Observer Hooks
+# Fulilian Observer Hooks
 
-Hermes observer hooks are the read-only telemetry contract for plugins that
+Fulilian observer hooks are the read-only telemetry contract for plugins that
 need to reconstruct agent execution without changing runtime behavior. This
 contract supports trace, metrics, audit, replay, and export integrations such
 as Langfuse, OpenTelemetry-style collectors, and NeMo Relay.
 
 Observer hooks are intentionally backend-neutral. They expose stable lifecycle
 events, correlation IDs, sanitized payloads, timing, status, and error fields.
-They do not replace Hermes' planner, model providers, memory, tool registry,
+They do not replace Fulilian' planner, model providers, memory, tool registry,
 approval UX, CLI, gateway behavior, or execution semantics.
 
 Behavior-changing request or execution wrappers are outside this observer
 contract. Observer hooks should report what happened; they should not replace
 provider requests, tool arguments, or execution callbacks.
 
-Hermes also has a first-party NeMo Relay shared-metrics path. It uses these
+Fulilian also has a first-party NeMo Relay shared-metrics path. It uses these
 lifecycle boundaries directly and does not require enabling an observability
 plugin. See [Relay shared metrics](relay-shared-metrics.md).
 
@@ -43,10 +43,10 @@ def on_post_tool_call(**kwargs):
 The plugin manager injects this field into every hook payload:
 
 ```text
-telemetry_schema_version = "hermes.observer.v1"
+telemetry_schema_version = "fulilian.observer.v1"
 ```
 
-Hook callbacks are fail-open. Hermes catches callback exceptions, logs a
+Hook callbacks are fail-open. Fulilian catches callback exceptions, logs a
 warning, and keeps the agent loop running.
 
 Most observer hook return values are ignored. The exceptions are older
@@ -251,7 +251,7 @@ observability consumers should prefer the sanitized payloads.
 ## Performance
 
 The default uninstrumented path should stay cheap. Expensive request/response
-payload construction is gated behind `has_hook(...)`, so Hermes only builds
+payload construction is gated behind `has_hook(...)`, so Fulilian only builds
 sanitized API telemetry payloads when at least one plugin registered the
 relevant hook.
 
@@ -318,7 +318,7 @@ nested agent work or security lifecycle events.
 The bundled Langfuse plugin demonstrates direct hook-based observability for
 turns, provider requests, and tool calls.
 
-The native NeMo Relay SDK integration maps Hermes session, turn, LLM, and tool
+The native NeMo Relay SDK integration maps Fulilian session, turn, LLM, and tool
 lifecycles to Relay. Explicit Relay plugin configuration can add
 [ATOF, ATIF, or OTEL](https://docs.nvidia.com/nemo/relay/configure-plugins/observability/about)
 exporters and execution middleware; see

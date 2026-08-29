@@ -9,7 +9,7 @@ finally block, so len() reflects truly-running tasks.
 import threading
 from datetime import datetime
 
-from cli import HermesCLI
+from cli import FulilianCLI
 
 
 def _stub_thread() -> threading.Thread:
@@ -18,8 +18,8 @@ def _stub_thread() -> threading.Thread:
 
 
 def _make_cli():
-    """Bare-metal HermesCLI for snapshot/build tests (no __init__ side effects)."""
-    cli_obj = HermesCLI.__new__(HermesCLI)
+    """Bare-metal FulilianCLI for snapshot/build tests (no __init__ side effects)."""
+    cli_obj = FulilianCLI.__new__(FulilianCLI)
     cli_obj.model = "anthropic/claude-opus-4.6"
     cli_obj.agent = None
     cli_obj._background_tasks = {}

@@ -21,9 +21,9 @@ const gatewayMocks = vi.hoisted(() => {
   }
 })
 
-vi.mock('@/hermes', () => ({
+vi.mock('@/fulilian', () => ({
   setApiRequestConnection: vi.fn(),
-  HermesGateway: class {
+  FulilianGateway: class {
     connectionState = 'closed'
     close = vi.fn(() => {
       this.connectionState = 'closed'
@@ -56,7 +56,7 @@ const {
 } = await import('./gateway')
 
 function installDesktop(stub: Record<string, unknown>): void {
-  ;(window as unknown as { hermesDesktop: unknown }).hermesDesktop = stub
+  ;(window as unknown as { fulilianDesktop: unknown }).fulilianDesktop = stub
 }
 
 beforeEach(() => {
@@ -69,7 +69,7 @@ afterEach(() => {
   gatewayMocks.instances.length = 0
   vi.clearAllMocks()
   vi.useRealTimers()
-  delete (window as unknown as { hermesDesktop?: unknown }).hermesDesktop
+  delete (window as unknown as { fulilianDesktop?: unknown }).fulilianDesktop
 })
 
 describe('ensureGatewayForProfile — secondary connect failure surfaces (#81094)', () => {

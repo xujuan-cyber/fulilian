@@ -76,7 +76,7 @@ function previewSelectionLabel(): string {
   return source.split(/[\\/]/).filter(Boolean).pop() || target?.label?.trim() || ''
 }
 
-const HERMES_PATHS_MIME = 'application/x-hermes-paths'
+const FULILIAN_PATHS_MIME = 'application/x-fulilian-paths'
 
 function readEscapeSequence(data: string, index: number) {
   if (data.charCodeAt(index) !== 0x1b || index + 1 >= data.length) {
@@ -292,7 +292,7 @@ function withSurface(theme: ReturnType<typeof terminalTheme>) {
 }
 
 function transferHasDropCandidates(t: DataTransfer): boolean {
-  if (t.types?.includes(HERMES_PATHS_MIME)) {
+  if (t.types?.includes(FULILIAN_PATHS_MIME)) {
     return true
   }
 
@@ -325,7 +325,7 @@ function collectDroppedPaths(t: DataTransfer): string[] {
   }
 
   try {
-    const raw = t.getData(HERMES_PATHS_MIME)
+    const raw = t.getData(FULILIAN_PATHS_MIME)
 
     if (raw) {
       for (const entry of JSON.parse(raw) as { path?: unknown }[]) {
@@ -336,7 +336,7 @@ function collectDroppedPaths(t: DataTransfer): string[] {
     // Malformed in-app drag payload — fall through to OS files.
   }
 
-  const getPath = window.hermesDesktop?.getPathForFile
+  const getPath = window.fulilianDesktop?.getPathForFile
 
   const addFile = (file: File | null) => {
     if (!file || !getPath) {
@@ -493,7 +493,7 @@ export function useTerminalSession({
   // eslint-disable-next-line no-restricted-syntax -- legitimate non-atom ref write (see eslint rule comment)
   useEffect(() => {
     const host = hostRef.current
-    const terminalApi = window.hermesDesktop?.terminal
+    const terminalApi = window.fulilianDesktop?.terminal
 
     if (!host || !terminalApi) {
       setStatus('closed')
@@ -531,7 +531,7 @@ export function useTerminalSession({
       // handler; without it xterm shows a raw confirm() and then a window.open
       // Electron denies.
       linkHandler: terminalLinkHandler,
-      // Full-screen TUIs (hermes --tui, vim) grab the mouse, so a plain drag
+      // Full-screen TUIs (fulilian --tui, vim) grab the mouse, so a plain drag
       // can't select — ⌥-drag (macOS) / Shift-drag (else) forces a native
       // selection over mouse-mode apps, which ⌘/Ctrl+L then sends to chat.
       macOptionClickForcesSelection: true,
@@ -837,7 +837,7 @@ export function useTerminalSession({
         return false
       }
       void (async () => {
-        const text = (await window.hermesDesktop?.readClipboard?.()) ?? ''
+        const text = (await window.fulilianDesktop?.readClipboard?.()) ?? ''
 
         if (text) {
           hasSessionActivityRef.current = true
@@ -925,7 +925,7 @@ export function useTerminalSession({
         term.loadAddon(webgl)
         webglRef.current = webgl
       } catch (err) {
-        console.warn('[hermes-terminal] WebGL unavailable; falling back to DOM', err)
+        console.warn('[fulilian-terminal] WebGL unavailable; falling back to DOM', err)
       }
 
       fitAndResize(initialActiveRef.current)
@@ -1058,7 +1058,7 @@ export function useTerminalSession({
       }
 
       hasSessionActivityRef.current = true
-      void window.hermesDesktop?.terminal?.write(sessionId, `${command}\r`)
+      void window.fulilianDesktop?.terminal?.write(sessionId, `${command}\r`)
       $terminalInjection.set(null)
       termRef.current?.focus()
     })

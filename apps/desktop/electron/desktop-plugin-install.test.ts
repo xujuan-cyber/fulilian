@@ -61,7 +61,7 @@ describe('desktopPluginFolderName', () => {
 
 describe('resolveSubdirWithin', () => {
   it('rejects path traversal', () => {
-    const root = mkdtemp('hermes-plugin-root-')
+    const root = mkdtemp('fulilian-plugin-root-')
 
     expect(() => resolveSubdirWithin(root, '../escape')).toThrow(/escapes/)
   })
@@ -69,7 +69,7 @@ describe('resolveSubdirWithin', () => {
 
 describe('findDesktopEntry', () => {
   it('finds root plugin.js', () => {
-    const root = mkdtemp('hermes-plugin-detect-')
+    const root = mkdtemp('fulilian-plugin-detect-')
     fs.mkdirSync(path.join(root, 'desktop'), { recursive: true })
     fs.writeFileSync(path.join(root, 'plugin.js'), 'export default {}')
 
@@ -77,7 +77,7 @@ describe('findDesktopEntry', () => {
   })
 
   it('finds desktop/plugin.js', () => {
-    const root = mkdtemp('hermes-plugin-detect-')
+    const root = mkdtemp('fulilian-plugin-detect-')
     fs.mkdirSync(path.join(root, 'desktop'), { recursive: true })
     fs.writeFileSync(path.join(root, 'desktop', 'plugin.js'), 'export default {}')
 
@@ -98,7 +98,7 @@ describe('detectPluginComponents', () => {
   })
 
   it('detects agent-only layout', async () => {
-    const root = mkdtemp('hermes-plugin-agent-')
+    const root = mkdtemp('fulilian-plugin-agent-')
     roots.push(root)
     fs.writeFileSync(path.join(root, 'plugin.yaml'), 'name: hello-agent\n')
     fs.writeFileSync(path.join(root, '__init__.py'), 'def register(ctx): pass\n')
@@ -111,7 +111,7 @@ describe('detectPluginComponents', () => {
   })
 
   it('detects dual layout', async () => {
-    const root = mkdtemp('hermes-plugin-dual-')
+    const root = mkdtemp('fulilian-plugin-dual-')
     roots.push(root)
     fs.mkdirSync(path.join(root, 'desktop'), { recursive: true })
     fs.writeFileSync(path.join(root, 'plugin.yaml'), 'name: dual\n')

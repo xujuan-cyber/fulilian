@@ -1,6 +1,6 @@
 """Tests for /personality none — clearing personality overlay.
 
-Updated for the single-owner unification (hermes_cli.personality): built-ins
+Updated for the single-owner unification (fulilian_cli.personality): built-ins
 always exist, resolution reads config (agent.personalities overlays), and
 persistence flows exclusively through persist_personality().
 """
@@ -15,10 +15,10 @@ import yaml
 class TestCLIPersonalityNone:
 
     def _make_cli(self, personalities=None):
-        from cli import HermesCLI
+        from cli import FulilianCLI
         from fulilian_cli.personality import available_personalities
 
-        cli = HermesCLI.__new__(HermesCLI)
+        cli = FulilianCLI.__new__(FulilianCLI)
         user = personalities or {
             "helpful": "You are helpful.",
             "concise": "You are concise.",
@@ -38,7 +38,7 @@ class TestCLIPersonalityNone:
             saves.append(("display.personality", name))
             return True
 
-        with patch("hermes_cli.personality.persist_personality", side_effect=_persist):
+        with patch("fulilian_cli.personality.persist_personality", side_effect=_persist):
             cli._handle_personality_command("/personality helpful")
 
         assert cli.system_prompt == "You are helpful."
@@ -54,9 +54,9 @@ class TestCLIPersonalityNone:
             return True
 
         with (
-            patch("hermes_cli.personality.persist_personality", side_effect=_persist),
+            patch("fulilian_cli.personality.persist_personality", side_effect=_persist),
             patch(
-                "hermes_cli.config.read_raw_config",
+                "fulilian_cli.config.read_raw_config",
                 return_value={"agent": {"system_prompt": "manual forever"}},
             ),
         ):
@@ -69,7 +69,7 @@ class TestCLIPersonalityNone:
     def test_builtin_personality_works_without_config_entry(self):
         # Built-ins come from fulilian_cli.personality, not from config.
         cli = self._make_cli(personalities={})
-        with patch("hermes_cli.personality.persist_personality", return_value=True):
+        with patch("fulilian_cli.personality.persist_personality", return_value=True):
             cli._handle_personality_command("/personality kawaii")
         assert "kawaii" in cli.system_prompt.lower()
 
@@ -97,11 +97,11 @@ class TestGatewayPersonalityNone:
 
     def _gateway_env(self, tmp_path):
         # The gateway reads via _load_gateway_config (rooted at
-        # gateway.run._hermes_home) and persists via persist_personality
-        # (rooted at HERMES_HOME) — point both at the same tmp dir.
+        # gateway.run._fulilian_home) and persists via persist_personality
+        # (rooted at FULILIAN_HOME) — point both at the same tmp dir.
         return (
-            patch("gateway.run._hermes_home", tmp_path),
-            patch.dict(os.environ, {"HERMES_HOME": str(tmp_path)}),
+            patch("gateway.run._fulilian_home", tmp_path),
+            patch.dict(os.environ, {"FULILIAN_HOME": str(tmp_path)}),
         )
 
     @pytest.mark.asyncio
@@ -184,10 +184,10 @@ class TestPersonalityDictFormat:
     """Test dict-format custom personalities with description, tone, style."""
 
     def _make_cli(self, personalities):
-        from cli import HermesCLI
+        from cli import FulilianCLI
         from fulilian_cli.personality import available_personalities
 
-        cli = HermesCLI.__new__(HermesCLI)
+        cli = FulilianCLI.__new__(FulilianCLI)
         cli.config = {"agent": {"personalities": personalities}}
         cli.personalities = available_personalities(cli.config)
         cli.system_prompt = ""
@@ -204,7 +204,7 @@ class TestPersonalityDictFormat:
                 "style": "concise",
             }
         })
-        with patch("hermes_cli.personality.persist_personality", return_value=True):
+        with patch("fulilian_cli.personality.persist_personality", return_value=True):
             cli._handle_personality_command("/personality coder")
         assert "You are an expert programmer." in cli.system_prompt
 
@@ -215,25 +215,25 @@ class TestPersonalityDictFormat:
                 "style": "use code examples",
             }
         })
-        with patch("hermes_cli.personality.persist_personality", return_value=True):
+        with patch("fulilian_cli.personality.persist_personality", return_value=True):
             cli._handle_personality_command("/personality coder")
         assert "Style: use code examples" in cli.system_prompt
 
     def test_string_personality_still_works(self):
         cli = self._make_cli({"helper": "You are helpful."})
-        with patch("hermes_cli.personality.persist_personality", return_value=True):
+        with patch("fulilian_cli.personality.persist_personality", return_value=True):
             cli._handle_personality_command("/personality helper")
         assert cli.system_prompt == "You are helpful."
 
     def test_resolve_prompt_dict_no_tone_no_style(self):
-        from cli import HermesCLI
-        result = HermesCLI._resolve_personality_prompt({
+        from cli import FulilianCLI
+        result = FulilianCLI._resolve_personality_prompt({
             "description": "A helper",
             "system_prompt": "You are helpful.",
         })
         assert result == "You are helpful."
 
     def test_resolve_prompt_string(self):
-        from cli import HermesCLI
-        result = HermesCLI._resolve_personality_prompt("You are helpful.")
+        from cli import FulilianCLI
+        result = FulilianCLI._resolve_personality_prompt("You are helpful.")
         assert result == "You are helpful."

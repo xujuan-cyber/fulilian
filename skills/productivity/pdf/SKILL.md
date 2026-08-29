@@ -6,7 +6,7 @@ author: Nous Research
 license: MIT
 platforms: [linux, macos, windows]
 metadata:
-  hermes:
+  fulilian:
     tags: [pdf, documents, forms, reportlab, pypdf, pdfplumber]
     category: productivity
     related_skills: [docx, xlsx, powerpoint, ocr-and-documents]

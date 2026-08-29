@@ -2,7 +2,7 @@
 Gateway control socket — the gateway-owned local coordination surface.
 
 Migration step 1 of the #92091 design: every other process on the machine
-(the updater, `hermes serve`/dashboard, the Desktop app) currently discovers
+(the updater, `fulilian serve`/dashboard, the Desktop app) currently discovers
 gateway identity/state by scanning the process table and string-matching argv
 or by reading ``gateway_state.json`` (which can outlive its writer). This
 module gives the gateway an OWNED contract instead: a local-only socket the
@@ -12,7 +12,7 @@ answer IS liveness — no PID-reuse heuristics.
 
 v1 verbs (observation only — no behavior change for the gateway):
 
-- ``identify`` → pid, profile label, hermes_home, code_sha/code_version
+- ``identify`` → pid, profile label, fulilian_home, code_sha/code_version
   (the #91283 stamps, now queryable live), supervisor kind, served profiles,
   start_time, protocol version.
 - ``status``   → the live runtime-status payload (what ``gateway_state.json``
@@ -20,12 +20,12 @@ v1 verbs (observation only — no behavior change for the gateway):
 
 Transport:
 
-- POSIX: Unix domain socket at ``$HERMES_HOME/gateway.sock``. When the home
+- POSIX: Unix domain socket at ``$FULILIAN_HOME/gateway.sock``. When the home
   path is too long for ``sun_path`` (~104 bytes on macOS/BSD), the socket is
   bound in the system temp dir and a pointer file
-  ``$HERMES_HOME/gateway.sock.path`` records the real location; clients
+  ``$FULILIAN_HOME/gateway.sock.path`` records the real location; clients
   follow the pointer transparently.
-- Windows: named pipe ``\\\\.\\pipe\\hermes-gateway-<home-hash>`` served via
+- Windows: named pipe ``\\\\.\\pipe\\fulilian-gateway-<home-hash>`` served via
   the proactor event loop. Same trust model (per-user namespace).
 
 Never a TCP port. Filesystem/pipe ACLs are the auth boundary — the same
@@ -36,7 +36,7 @@ single JSON line out, then the server closes. Clients must not rely on
 keep-alive or pipelining. Verb handlers may touch disk (they run in an
 executor server-side) but must stay fast; the client budget is small.
 
-Consumers (``hermes update --plan`` inventory, the post-update fleet version
+Consumers (``fulilian update --plan`` inventory, the post-update fleet version
 matrix) PREFER the socket when it answers and fall back to the existing
 state-file/scan layer when it doesn't — old gateways mid-upgrade and crashed
 processes keep working exactly as before. The scan layer is demoted, not
@@ -88,8 +88,8 @@ def _home_hash(home: Path) -> str:
 
 
 def windows_pipe_name(home: Path) -> str:
-    """Per-HERMES_HOME named pipe path (Windows transport)."""
-    return rf"\\.\pipe\hermes-gateway-{_home_hash(home)}"
+    """Per-FULILIAN_HOME named pipe path (Windows transport)."""
+    return rf"\\.\pipe\fulilian-gateway-{_home_hash(home)}"
 
 
 def _pointer_path(home: Path) -> Path:
@@ -108,7 +108,7 @@ def _fallback_socket_path(home: Path) -> Path:
     tempdir candidate is returned anyway — bind will fail non-fatally and
     consumers use the scan layer.
     """
-    name = f"hermes-gw-{_home_hash(home)}.sock"
+    name = f"fulilian-gw-{_home_hash(home)}.sock"
     candidates = [Path(tempfile.gettempdir()) / name]
     if not _IS_WINDOWS:
         candidates.append(Path("/tmp") / name)
@@ -164,11 +164,11 @@ def _detect_supervisor() -> str:
     if env.get("INVOCATION_ID"):
         return "systemd"
     if sys.platform == "darwin" and (
-        env.get("XPC_SERVICE_NAME", "").startswith("ai.hermes")
+        env.get("XPC_SERVICE_NAME", "").startswith("ai.fulilian")
         or env.get("LAUNCHD_SOCKET")
     ):
         return "launchd"
-    if env.get("HERMES_DESKTOP_MANAGED"):
+    if env.get("FULILIAN_DESKTOP_MANAGED"):
         return "desktop"
     if "--external-supervisor" in sys.argv:
         return "external"
@@ -190,8 +190,8 @@ def build_identify_payload() -> dict[str, Any]:
         "kind": record.get("kind"),
         "pid": record.get("pid"),
         "start_time": record.get("start_time"),
-        "hermes_home": record.get("hermes_home"),
-        "profile": _profile_label_for_home(record.get("hermes_home") or ""),
+        "fulilian_home": record.get("fulilian_home"),
+        "profile": _profile_label_for_home(record.get("fulilian_home") or ""),
         "supervisor": _detect_supervisor(),
     }
     payload.update(_get_code_identity_fields())
@@ -228,7 +228,7 @@ class GatewayControlServer:
 
     Lifecycle is owned by the gateway process: ``start()`` after the PID-file
     claim (the point where this process becomes the authoritative gateway for
-    its HERMES_HOME), ``stop()`` on shutdown. All failures are non-fatal —
+    its FULILIAN_HOME), ``stop()`` on shutdown. All failures are non-fatal —
     the gateway never refuses to serve messaging because its control socket
     couldn't bind; consumers simply fall back to the scan layer.
     """
@@ -240,9 +240,9 @@ class GatewayControlServer:
         verb_handlers: Optional[dict[str, Callable[[], dict[str, Any]]]] = None,
     ) -> None:
         if home is None:
-            from gateway.status import _get_process_hermes_home
+            from gateway.status import _get_process_fulilian_home
 
-            home = _get_process_hermes_home()
+            home = _get_process_fulilian_home()
         self._home = Path(home)
         self._server: Optional[asyncio.AbstractServer] = None
         self._pipe_server: Any = None  # Windows proactor pipe server
@@ -272,7 +272,7 @@ class GatewayControlServer:
         # Clear a stale socket left by a crashed predecessor. We only get
         # here after winning the PID-file O_EXCL race, so any existing file
         # is either stale or a plain collision — never a live sibling for
-        # this HERMES_HOME.
+        # this FULILIAN_HOME.
         with contextlib.suppress(OSError):
             if bind_path.exists():
                 bind_path.unlink()

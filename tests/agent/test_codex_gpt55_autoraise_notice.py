@@ -7,7 +7,7 @@ Covers two layers:
 2. The per-profile dedupe marker (#54432) — the notice must show at most once
    per profile/config state. Before the fix it re-fired on every agent init,
    and because the gateway rebuilds the agent per inbound message it spammed
-   Discord etc. The gate persists a marker under ``$HERMES_HOME``
+   Discord etc. The gate persists a marker under ``$FULILIAN_HOME``
    (profile-scoped, isolated to a tempdir by the conftest autouse fixture)
    keyed on the model slug + displayed from→to percentages, so an unchanged
    threshold stays silent across restarts while a changed threshold (or a
@@ -22,8 +22,8 @@ from pathlib import Path
 
 import pytest
 
-from fulilian_constants import get_hermes_home
-from hermes_state import SessionDB
+from fulilian_constants import get_fulilian_home
+from fulilian_state import SessionDB
 from run_agent import AIAgent
 
 from agent.agent_init import (
@@ -110,9 +110,9 @@ def test_codex_gpt55_autoraise_notice_deduped_across_agent_inits(monkeypatch, tm
 # ── per-profile dedupe marker (#54432) ───────────────────────────────────────
 
 
-def test_marker_lives_under_hermes_home() -> None:
+def test_marker_lives_under_fulilian_home() -> None:
     marker = _codex_gpt55_autoraise_notice_marker()
-    assert marker.parent == get_hermes_home()
+    assert marker.parent == get_fulilian_home()
     assert marker.name == ".codex_gpt55_autoraise_notice"
 
 

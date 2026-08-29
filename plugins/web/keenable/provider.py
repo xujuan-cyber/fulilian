@@ -42,7 +42,7 @@ def _keenable_headers(api_key: str) -> Dict[str, str]:
     Their keyless tier structurally requires an app-identifier header
     (X-Keenable-Title); no user identifiers are sent.
     """
-    headers = {"X-Keenable-Title": "hermes-agent"}
+    headers = {"X-Keenable-Title": "fulilian-agent"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
     return headers

@@ -15,7 +15,7 @@
  * drift on the next page.
  */
 
-import { getOlderSessionMessages } from '@/hermes'
+import { getOlderSessionMessages } from '@/fulilian'
 import { type ChatMessage, toChatMessages } from '@/lib/chat-messages'
 import { recordTranscriptBackfillPage, type TranscriptProfileScope, transcriptTailState } from '@/store/transcript-tail'
 

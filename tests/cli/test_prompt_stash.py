@@ -1,4 +1,4 @@
-"""Tests for the Ctrl+S prompt stash state machine (hermes_cli.prompt_stash).
+"""Tests for the Ctrl+S prompt stash state machine (fulilian_cli.prompt_stash).
 
 Covers the pure state machine directly — no prompt_toolkit, no TUI:
   - stashing an empty/whitespace buffer is a no-op

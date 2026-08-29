@@ -7,7 +7,7 @@ sidebar_position: 5
 
 # Browser Automation
 
-Hermes Agent includes a full browser automation toolset with multiple backend options:
+FuLiLian includes a full browser automation toolset with multiple backend options:
 
 - **Browser Use cloud mode** via [Browser Use](https://browser-use.com) for managed Chromium with stealth, residential proxies, CAPTCHA solving, and reusable browser profiles
 - **Browserbase cloud mode** via [Browserbase](https://browserbase.com) as an alternative cloud browser provider with anti-bot tooling
@@ -37,7 +37,7 @@ Key capabilities:
 ## Setup
 
 :::tip Nous Subscribers
-If you have a paid [Nous Portal](https://portal.nousresearch.com) subscription, you can use browser automation through the **[Tool Gateway](tool-gateway.md)** without any separate API keys. New installs can run `hermes setup --portal` to log in and turn on every gateway tool at once; existing installs can pick **Nous Subscription** as the browser provider via `hermes model` or `hermes tools`.
+If you have a paid [Nous Portal](https://portal.nousresearch.com) subscription, you can use browser automation through the **[Tool Gateway](tool-gateway.md)** without any separate API keys. New installs can run `fulilian setup --portal` to log in and turn on every gateway tool at once; existing installs can pick **Nous Subscription** as the browser provider via `fulilian model` or `fulilian tools`.
 :::
 
 ### Browser Use cloud mode
@@ -45,7 +45,7 @@ If you have a paid [Nous Portal](https://portal.nousresearch.com) subscription, 
 To use Browser Use as your cloud browser provider, add:
 
 ```bash
-# Add to ~/.hermes/.env
+# Add to ~/.fulilian/.env
 BROWSER_USE_API_KEY=***
 ```
 
@@ -58,7 +58,7 @@ Browser Use Cloud runs managed Chromium with [stealth](https://docs.browser-use.
 To use Browserbase-managed cloud browsers, add:
 
 ```bash
-# Add to ~/.hermes/.env
+# Add to ~/.fulilian/.env
 BROWSERBASE_API_KEY=***
 BROWSERBASE_PROJECT_ID=your-project-id-here
 ```
@@ -66,23 +66,23 @@ BROWSERBASE_PROJECT_ID=your-project-id-here
 Get your credentials at [browserbase.com](https://browserbase.com).
 
 :::note Selecting the provider
-The `.env` keys above supply **credentials only**. The active cloud browser is chosen by the `browser.cloud_provider` selection written by `hermes tools` → Browser Automation (`browserbase`, `browser-use`, `camofox`, or `nous` for the Nous Subscription). Once a selection exists, adding or removing a key does not switch providers — and a selected provider with a missing key errors with guidance to run `hermes tools` instead of silently rerouting. Never-configured setups still autodetect from available credentials.
+The `.env` keys above supply **credentials only**. The active cloud browser is chosen by the `browser.cloud_provider` selection written by `fulilian tools` → Browser Automation (`browserbase`, `browser-use`, `camofox`, or `nous` for the Nous Subscription). Once a selection exists, adding or removing a key does not switch providers — and a selected provider with a missing key errors with guidance to run `fulilian tools` instead of silently rerouting. Never-configured setups still autodetect from available credentials.
 :::
 
 ### Browser Use mode (default)
 
 Browser Use mode uses the [Browser Use CLI 3.0](https://github.com/browser-use/browser-use) instead of the built-in browser tools. The agent writes and executes Python in the browser to click, type, drag, scrape, and interact with webpages.
 
-**This is the default browser mode**: when `browser.backend` is unset and the `browser-use` CLI is runnable (installed, or available through `uvx`), the agent gets the single `browser_exec` tool. If the CLI can't run, Hermes falls back to the built-in browser tools automatically.
+**This is the default browser mode**: when `browser.backend` is unset and the `browser-use` CLI is runnable (installed, or available through `uvx`), the agent gets the single `browser_exec` tool. If the CLI can't run, Fulilian falls back to the built-in browser tools automatically.
 
-The mode is a **driver** that composes with your configured browser backend: it drives your local Chrome, a Nous-subscription cloud browser, Browserbase, Firecrawl, or Browser Use cloud browsers — whichever browser source is selected in `hermes tools` → Browser Automation. The one exception is Camofox, which has no CDP endpoint for the harness to attach to; Camofox setups automatically keep the built-in browser tools.
+The mode is a **driver** that composes with your configured browser backend: it drives your local Chrome, a Nous-subscription cloud browser, Browserbase, Firecrawl, or Browser Use cloud browsers — whichever browser source is selected in `fulilian tools` → Browser Automation. The one exception is Camofox, which has no CDP endpoint for the harness to attach to; Camofox setups automatically keep the built-in browser tools.
 
 **Concurrent sessions:** `browser_exec` accepts a `session=<name>` argument that isolates browser work per name on every backend. Each name gets its own harness daemon (its own IPC socket, log, and state), and on cloud backends its own browser — so parallel subagents or simultaneous chats no longer clobber a single shared connection. Omitting `session` uses the shared default daemon, which is fine for one-at-a-time browsing.
 
 To opt out and force the built-in browser tools, use `/browser use off`, or:
 
 ```yaml
-# Add to ~/.hermes/config.yaml
+# Add to ~/.fulilian/config.yaml
 browser:
   backend: "off"
 ```
@@ -103,14 +103,14 @@ messaging surface) keep the default browser tools instead.
 To use Firecrawl as your cloud browser provider, add:
 
 ```bash
-# Add to ~/.hermes/.env
+# Add to ~/.fulilian/.env
 FIRECRAWL_API_KEY=fc-***
 ```
 
 Get your API key at [firecrawl.dev](https://firecrawl.dev). Then select Firecrawl as your browser provider:
 
 ```bash
-hermes setup tools
+fulilian setup tools
 # → Browser Automation → Firecrawl
 ```
 
@@ -126,7 +126,7 @@ FIRECRAWL_BROWSER_TTL=600
 
 ### Hybrid routing: cloud for public URLs, local for LAN/localhost
 
-When a cloud provider is configured, Hermes auto-spawns a **local Chromium sidecar**
+When a cloud provider is configured, Fulilian auto-spawns a **local Chromium sidecar**
 for URLs that resolve to a private/loopback/LAN address (`localhost`, `127.0.0.1`,
 `192.168.x.x`, `10.x.x.x`, `172.16-31.x.x`, `*.local`, `*.lan`, `*.internal`,
 IPv6 loopback `::1`, link-local `169.254.x.x`). Public URLs continue to use the
@@ -141,7 +141,7 @@ The feature is **on by default**. To disable it (all URLs go to the configured
 cloud provider, as before):
 
 ```yaml
-# ~/.hermes/config.yaml
+# ~/.fulilian/config.yaml
 browser:
   cloud_provider: browserbase
   auto_local_for_private_urls: false
@@ -153,7 +153,7 @@ With auto-routing disabled, private URLs are rejected with
 usually won't work since Browserbase etc. can't reach your LAN).
 
 Requirements: the local sidecar uses the same `agent-browser` CLI as pure local
-mode, so you need it installed (`hermes setup tools → Browser Automation`
+mode, so you need it installed (`fulilian setup tools → Browser Automation`
 auto-installs it). Post-navigation redirects from a public URL onto a private
 address are still blocked (you can't use a redirect-to-internal trick to reach
 your LAN through the public path).
@@ -165,15 +165,15 @@ logged into nothing. Turn on **real profile browsing** to let the agent browse
 as *you*, with your existing logins and cookies:
 
 ```yaml
-# ~/.hermes/config.yaml
+# ~/.fulilian/config.yaml
 browser:
   use_real_profile: true
 ```
 
-When enabled, Hermes copies your default browser's **active** profile — the one
+When enabled, Fulilian copies your default browser's **active** profile — the one
 you actually browse (`Local State → profile.last_used`), with its cookies, saved
 logins, and preferences — into a managed snapshot under
-`~/.hermes/browser-profile/<browser>/`, then drives that snapshot with its
+`~/.fulilian/browser-profile/<browser>/`, then drives that snapshot with its
 packaged Chromium. Your live browser profile is **never opened directly**: the
 snapshot is a separate directory, so it doesn't fight your running browser for
 the profile lock and it sidesteps Chrome 136+'s block on remote-debugging the
@@ -182,13 +182,13 @@ re-synced from your real profile whenever a fresh session is launched, so logins
 you do in your own browser show up in the agent's session. Only the active
 profile is copied — other Chrome profiles are never snapshotted.
 
-When you turn the toggle back off, Hermes deletes the snapshot store
-(`~/.hermes/browser-profile/`) on the next browser use, so the copied
+When you turn the toggle back off, Fulilian deletes the snapshot store
+(`~/.fulilian/browser-profile/`) on the next browser use, so the copied
 credentials don't linger after you revoke consent.
 
 :::note Windows: the browser must be fully closed
 On Windows a running Chrome/Edge/Brave holds its cookie and login databases with
-an exclusive (deny-all) lock, so Hermes cannot copy them while the browser is
+an exclusive (deny-all) lock, so Fulilian cannot copy them while the browser is
 open — it fails fast with a "fully quit the browser and retry" message rather
 than hang or produce a signed-out session. Real-profile browsing on Windows
 therefore requires the browser **fully quit**, including any background/tray
@@ -196,13 +196,13 @@ instance (Chrome's "continue running background apps when closed" keeps a
 `chrome.exe` alive after you close the window). macOS and Linux can copy the
 profile while the browser is running.
 
-Set `browser.real_profile_autoclose: true` to let Hermes **offer to close the
-browser for you** when it's holding the profile. Even with this on, Hermes never
+Set `browser.real_profile_autoclose: true` to let Fulilian **offer to close the
+browser for you** when it's holding the profile. Even with this on, Fulilian never
 closes it automatically — when the profile is locked it always stops and the
-agent asks you first; only on your approval does it run `hermes browser
+agent asks you first; only on your approval does it run `fulilian browser
 close-profile` (terminates the browser process tree bound to that profile,
 losing unsaved tabs), then retries. If the profile is still locked after that
-(e.g. a background/tray instance relaunched), Hermes stays blocked and tells you
+(e.g. a background/tray instance relaunched), Fulilian stays blocked and tells you
 to fully quit the browser — it won't loop or kill again on its own.
 :::
 
@@ -278,7 +278,7 @@ make down
 # then run the custom docker run command above
 ```
 
-Then set in `~/.hermes/.env`:
+Then set in `~/.fulilian/.env`:
 
 ```bash
 CAMOFOX_URL=http://localhost:9377
@@ -287,7 +287,7 @@ CAMOFOX_URL=http://localhost:9377
 If Camofox is running in Docker and you want it to open web apps served from the host machine, enable loopback rewriting. `CAMOFOX_URL` should still point at the host-published control API, but page URLs such as `http://127.0.0.1:3000` must be opened from inside the container as `http://host.docker.internal:3000`:
 
 ```yaml
-# ~/.hermes/config.yaml
+# ~/.fulilian/config.yaml
 browser:
   camofox:
     rewrite_loopback_urls: true
@@ -303,13 +303,13 @@ CAMOFOX_LOOPBACK_HOST_ALIAS=host.docker.internal
 
 The rewrite only applies to page navigation URLs with loopback hosts (`localhost`, `127.0.0.1`, `::1`). It does not change `CAMOFOX_URL`. Leave it disabled for non-Docker Camofox installs, where the browser already runs on the host and loopback URLs are correct.
 
-Or configure via `hermes tools` → Browser Automation → Camofox.
+Or configure via `fulilian tools` → Browser Automation → Camofox.
 
-Camofox is selected like any other browser backend: pick **Camofox** in `hermes tools` → Browser Automation, which writes `browser.cloud_provider: camofox` to `config.yaml`. `CAMOFOX_URL` is only the server address — setting it no longer selects the backend by itself once a browser selection exists (never-configured setups still autodetect it).
+Camofox is selected like any other browser backend: pick **Camofox** in `fulilian tools` → Browser Automation, which writes `browser.cloud_provider: camofox` to `config.yaml`. `CAMOFOX_URL` is only the server address — setting it no longer selects the backend by itself once a browser selection exists (never-configured setups still autodetect it).
 
 #### Persistent browser sessions
 
-By default, each Camofox session gets a random identity — cookies and logins don't survive across agent restarts. To enable persistent browser sessions, add the following to `~/.hermes/config.yaml`:
+By default, each Camofox session gets a random identity — cookies and logins don't survive across agent restarts. To enable persistent browser sessions, add the following to `~/.fulilian/config.yaml`:
 
 ```yaml
 browser:
@@ -317,53 +317,53 @@ browser:
     managed_persistence: true
 ```
 
-Then fully restart Hermes so the new config is picked up.
+Then fully restart Fulilian so the new config is picked up.
 
 :::warning Nested path matters
-Hermes reads `browser.camofox.managed_persistence`, **not** a top-level `managed_persistence`. A common mistake is writing:
+Fulilian reads `browser.camofox.managed_persistence`, **not** a top-level `managed_persistence`. A common mistake is writing:
 
 ```yaml
-# ❌ Wrong — Hermes ignores this
+# ❌ Wrong — Fulilian ignores this
 managed_persistence: true
 ```
 
-If the flag is placed at the wrong path, Hermes silently falls back to a random ephemeral `userId` and your login state will be lost on every session.
+If the flag is placed at the wrong path, Fulilian silently falls back to a random ephemeral `userId` and your login state will be lost on every session.
 :::
 
-##### What Hermes does
+##### What Fulilian does
 - Sends a deterministic profile-scoped `userId` to Camofox so the server can reuse the same Firefox profile across sessions.
 - Skips server-side context destruction on cleanup, so cookies and logins survive between agent tasks.
-- Scopes the `userId` to the active Hermes profile, so different Hermes profiles get different browser profiles (profile isolation).
+- Scopes the `userId` to the active Fulilian profile, so different Fulilian profiles get different browser profiles (profile isolation).
 
-##### What Hermes does not do
-- It does not force persistence on the Camofox server. Hermes only sends a stable `userId`; the server must honor it by mapping that `userId` to a persistent Firefox profile directory.
-- If your Camofox server build treats every request as ephemeral (e.g. always calls `browser.newContext()` without loading a stored profile), Hermes cannot make those sessions persist. Make sure you are running a Camofox build that implements userId-based profile persistence.
+##### What Fulilian does not do
+- It does not force persistence on the Camofox server. Fulilian only sends a stable `userId`; the server must honor it by mapping that `userId` to a persistent Firefox profile directory.
+- If your Camofox server build treats every request as ephemeral (e.g. always calls `browser.newContext()` without loading a stored profile), Fulilian cannot make those sessions persist. Make sure you are running a Camofox build that implements userId-based profile persistence.
 
 ##### Verify it's working
 
-1. Start Hermes and your Camofox server.
+1. Start Fulilian and your Camofox server.
 2. Open Google (or any login site) in a browser task and sign in manually.
 3. End the browser task normally.
 4. Start a new browser task.
 5. Open the same site again — you should still be signed in.
 
-If step 5 logs you out, the Camofox server isn't honoring the stable `userId`. Double-check your config path, confirm you fully restarted Hermes after editing `config.yaml`, and verify your Camofox server version supports persistent per-user profiles.
+If step 5 logs you out, the Camofox server isn't honoring the stable `userId`. Double-check your config path, confirm you fully restarted Fulilian after editing `config.yaml`, and verify your Camofox server version supports persistent per-user profiles.
 
 ##### Where state lives
 
-Hermes derives the stable `userId` from the profile-scoped directory `~/.hermes/browser_auth/camofox/` (or the equivalent under `$HERMES_HOME` for non-default profiles). The actual browser profile data lives on the Camofox server side, keyed by that `userId`. To fully reset a persistent profile, clear it on the Camofox server and remove the corresponding Hermes profile's state directory.
+Fulilian derives the stable `userId` from the profile-scoped directory `~/.fulilian/browser_auth/camofox/` (or the equivalent under `$FULILIAN_HOME` for non-default profiles). The actual browser profile data lives on the Camofox server side, keyed by that `userId`. To fully reset a persistent profile, clear it on the Camofox server and remove the corresponding Fulilian profile's state directory.
 
 #### Externally managed Camofox sessions
 
-When another app drives the visible Camofox browser (a desktop assistant, a custom integration, another agent), configure Hermes to operate inside that same identity instead of spawning its own isolated profile.
+When another app drives the visible Camofox browser (a desktop assistant, a custom integration, another agent), configure Fulilian to operate inside that same identity instead of spawning its own isolated profile.
 
 Three knobs control the behavior:
 
 | Setting | Env var | Effect |
 |---------|---------|--------|
-| `browser.camofox.user_id` | `CAMOFOX_USER_ID` | Camofox `userId` Hermes uses when creating tabs. Setting this opts the session into "externally managed" mode. |
+| `browser.camofox.user_id` | `CAMOFOX_USER_ID` | Camofox `userId` Fulilian uses when creating tabs. Setting this opts the session into "externally managed" mode. |
 | `browser.camofox.session_key` | `CAMOFOX_SESSION_KEY` | `sessionKey` (a.k.a. `listItemId`) sent on tab creation. Used to match an existing tab during adoption. Defaults to a per-task value if unset. |
-| `browser.camofox.adopt_existing_tab` | `CAMOFOX_ADOPT_EXISTING_TAB` | When true, Hermes calls `GET /tabs?userId=<user_id>` on first use and reuses an existing tab before creating a new one. |
+| `browser.camofox.adopt_existing_tab` | `CAMOFOX_ADOPT_EXISTING_TAB` | When true, Fulilian calls `GET /tabs?userId=<user_id>` on first use and reuses an existing tab before creating a new one. |
 
 Env vars take precedence over `config.yaml`. Either form works:
 
@@ -383,25 +383,25 @@ CAMOFOX_ADOPT_EXISTING_TAB=true
 
 **What changes when `user_id` is set:**
 
-- Hermes skips destructive cleanup at task end (same as `managed_persistence: true`). The other app's tab/cookies/profile survive.
-- Hermes does **not** call `DELETE /sessions/<user_id>` — that endpoint wipes all user data, so it would nuke the external app's session if it fired.
+- Fulilian skips destructive cleanup at task end (same as `managed_persistence: true`). The other app's tab/cookies/profile survive.
+- Fulilian does **not** call `DELETE /sessions/<user_id>` — that endpoint wipes all user data, so it would nuke the external app's session if it fired.
 
 **How tab adoption works (when `adopt_existing_tab: true`):**
 
-1. On the first browser tool call after a process start, Hermes issues `GET /tabs?userId=<user_id>` (5-second timeout).
-2. If any tab in the response has `listItemId == session_key`, Hermes adopts the most recently created one in that group.
-3. Otherwise, Hermes adopts the most recently created tab for the user (any `listItemId`).
-4. If no tabs exist or the request fails, Hermes falls back to creating a new tab on the next operation.
+1. On the first browser tool call after a process start, Fulilian issues `GET /tabs?userId=<user_id>` (5-second timeout).
+2. If any tab in the response has `listItemId == session_key`, Fulilian adopts the most recently created one in that group.
+3. Otherwise, Fulilian adopts the most recently created tab for the user (any `listItemId`).
+4. If no tabs exist or the request fails, Fulilian falls back to creating a new tab on the next operation.
 
-Adoption only fires until `tab_id` is populated for the session. If the external app closes the adopted tab mid-run, the next browser tool call will surface a Camofox error — Hermes does not re-poll for a fresh tab on every call.
+Adoption only fires until `tab_id` is populated for the session. If the external app closes the adopted tab mid-run, the next browser tool call will surface a Camofox error — Fulilian does not re-poll for a fresh tab on every call.
 
-**Picking `session_key`:** if you want Hermes to reliably attach to a *specific* existing tab, set `session_key` to the `listItemId` the external app used when creating it. If you leave `session_key` unset and only set `user_id`, Hermes generates a per-task `session_key` (`task_<id>`) — Hermes will share cookies and the profile with the external app, but will open its own tab alongside instead of reusing one.
+**Picking `session_key`:** if you want Fulilian to reliably attach to a *specific* existing tab, set `session_key` to the `listItemId` the external app used when creating it. If you leave `session_key` unset and only set `user_id`, Fulilian generates a per-task `session_key` (`task_<id>`) — Fulilian will share cookies and the profile with the external app, but will open its own tab alongside instead of reusing one.
 
-**Concurrency note:** the external app and Hermes can drive the same Camofox `userId` simultaneously, but Camofox does not coordinate per-tab focus between clients. Coordinate ownership at the application layer (e.g. the external app pauses while Hermes runs).
+**Concurrency note:** the external app and Fulilian can drive the same Camofox `userId` simultaneously, but Camofox does not coordinate per-tab focus between clients. Coordinate ownership at the application layer (e.g. the external app pauses while Fulilian runs).
 
 #### VNC live view
 
-When Camofox runs in headed mode (with a visible browser window), it exposes a VNC port in its health check response. Hermes automatically discovers this and includes the VNC URL in navigation responses, so the agent can share a link for you to watch the browser live.
+When Camofox runs in headed mode (with a visible browser window), it exposes a VNC port in its health check response. Fulilian automatically discovers this and includes the VNC URL in navigation responses, so the agent can share a link for you to watch the browser live.
 
 ### Lightpanda local engine
 
@@ -410,7 +410,7 @@ When Camofox runs in headed mode (with a visible browser window), it exposes a V
 Lightpanda is a **local engine**, selected under the local `agent-browser` path (not a cloud provider). Install the binary and put it on your `PATH` (see the [Lightpanda installation guide](https://lightpanda.io/docs)), then set:
 
 ```yaml
-# Add to ~/.hermes/config.yaml
+# Add to ~/.fulilian/config.yaml
 browser:
   engine: lightpanda
 ```
@@ -421,16 +421,16 @@ Or via environment variable:
 AGENT_BROWSER_ENGINE=lightpanda
 ```
 
-Hermes drives Lightpanda through `agent-browser` over CDP, the same way it drives local Chrome.
+Fulilian drives Lightpanda through `agent-browser` over CDP, the same way it drives local Chrome.
 
-**Automatic Chrome fallback.** Lightpanda doesn't yet cover everything Chrome does, so the integration is non-disruptive: Lightpanda handles the actions it supports, and Hermes transparently retries on Chrome for anything it doesn't. The supported set covers the core agent workflow — navigate, snapshot, click, type, scroll, back, press, and eval. Screenshots also fall back to Chrome because Lightpanda has no graphical renderer; `browser_vision` is pre-routed straight to Chrome for the same reason.
+**Automatic Chrome fallback.** Lightpanda doesn't yet cover everything Chrome does, so the integration is non-disruptive: Lightpanda handles the actions it supports, and Fulilian transparently retries on Chrome for anything it doesn't. The supported set covers the core agent workflow — navigate, snapshot, click, type, scroll, back, press, and eval. Screenshots also fall back to Chrome because Lightpanda has no graphical renderer; `browser_vision` is pre-routed straight to Chrome for the same reason.
 
 ### Local Chromium-family browser via CDP (`/browser connect`)
 
-Instead of a cloud provider, you can attach Hermes browser tools to your own running Chrome, Brave, Chromium, or Edge instance via the Chrome DevTools Protocol (CDP). This is useful when you want to see what the agent is doing in real-time, interact with pages that require your own cookies/sessions, or avoid cloud browser costs.
+Instead of a cloud provider, you can attach Fulilian browser tools to your own running Chrome, Brave, Chromium, or Edge instance via the Chrome DevTools Protocol (CDP). This is useful when you want to see what the agent is doing in real-time, interact with pages that require your own cookies/sessions, or avoid cloud browser costs.
 
 :::note
-`/browser connect` is an **interactive-CLI slash command** — it is not dispatched by the gateway. If you try to run it inside a WebUI, Telegram, Discord, or other gateway chat, the message will be sent to the agent as plain text and the command will not execute. Start Hermes from the terminal (`hermes` or `hermes chat`) and issue `/browser connect` there.
+`/browser connect` is an **interactive-CLI slash command** — it is not dispatched by the gateway. If you try to run it inside a WebUI, Telegram, Discord, or other gateway chat, the message will be sent to the agent as plain text and the command will not execute. Start Fulilian from the terminal (`fulilian` or `fulilian chat`) and issue `/browser connect` there.
 :::
 
 In the CLI, use:
@@ -442,7 +442,7 @@ In the CLI, use:
 /browser disconnect              # Detach and return to cloud/local mode
 ```
 
-If a browser isn't already running with remote debugging, Hermes will attempt to auto-launch a supported Chromium-family browser with `--remote-debugging-port=9222`. Detection includes Brave, Google Chrome, Chromium, and Microsoft Edge, with common Linux install paths such as `/opt/brave-bin/brave` and `/snap/bin/brave`.
+If a browser isn't already running with remote debugging, Fulilian will attempt to auto-launch a supported Chromium-family browser with `--remote-debugging-port=9222`. Detection includes Brave, Google Chrome, Chromium, and Microsoft Edge, with common Linux install paths such as `/opt/brave-bin/brave` and `/snap/bin/brave`.
 
 :::tip
 To start a Chromium-family browser manually with CDP enabled, use a dedicated user-data-dir so the debug port actually comes up even if the browser is already running with your normal profile:
@@ -451,60 +451,60 @@ To start a Chromium-family browser manually with CDP enabled, use a dedicated us
 # Linux — Brave
 brave-browser \
   --remote-debugging-port=9222 \
-  --user-data-dir=$HOME/.hermes/chrome-debug \
+  --user-data-dir=$HOME/.fulilian/chrome-debug \
   --no-first-run \
   --no-default-browser-check &
 
 # Linux — Google Chrome
 google-chrome \
   --remote-debugging-port=9222 \
-  --user-data-dir=$HOME/.hermes/chrome-debug \
+  --user-data-dir=$HOME/.fulilian/chrome-debug \
   --no-first-run \
   --no-default-browser-check &
 
 # macOS — Brave
 "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser" \
   --remote-debugging-port=9222 \
-  --user-data-dir="$HOME/.hermes/chrome-debug" \
+  --user-data-dir="$HOME/.fulilian/chrome-debug" \
   --no-first-run \
   --no-default-browser-check &
 
 # macOS — Google Chrome
 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
   --remote-debugging-port=9222 \
-  --user-data-dir="$HOME/.hermes/chrome-debug" \
+  --user-data-dir="$HOME/.fulilian/chrome-debug" \
   --no-first-run \
   --no-default-browser-check &
 ```
 
-Then launch the Hermes CLI and run `/browser connect`.
+Then launch the Fulilian CLI and run `/browser connect`.
 
 **Why `--user-data-dir`?** Without it, launching a Chromium-family browser while a regular instance is already running typically opens a new window on the existing process — and that existing process was not started with `--remote-debugging-port`, so port 9222 never opens. A dedicated user-data-dir forces a fresh browser process where the debug port actually listens. `--no-first-run --no-default-browser-check` skips the first-launch wizard for the fresh profile.
 
-**Chrome 136+ makes the dedicated profile mandatory.** As a security hardening change, Chrome 136 and later silently refuse to open the remote debugging port when `--remote-debugging-port` is combined with the *default* user-data-dir — even from a cold start with no other Chrome running. The browser launches normally but nothing ever listens on 9222, so `/browser connect` (and any manual `curl http://127.0.0.1:9222/json/version`) fails with connection refused. There is no error message. The fix is exactly the commands above: always pass a `--user-data-dir` pointing somewhere other than your default profile directory (e.g. `$HOME/.hermes/chrome-debug`). This applies to Chrome, Chromium, Edge, and Brave builds that have picked up the change.
+**Chrome 136+ makes the dedicated profile mandatory.** As a security hardening change, Chrome 136 and later silently refuse to open the remote debugging port when `--remote-debugging-port` is combined with the *default* user-data-dir — even from a cold start with no other Chrome running. The browser launches normally but nothing ever listens on 9222, so `/browser connect` (and any manual `curl http://127.0.0.1:9222/json/version`) fails with connection refused. There is no error message. The fix is exactly the commands above: always pass a `--user-data-dir` pointing somewhere other than your default profile directory (e.g. `$HOME/.fulilian/chrome-debug`). This applies to Chrome, Chromium, Edge, and Brave builds that have picked up the change.
 :::
 
 When connected via CDP, all browser tools (`browser_navigate`, `browser_click`, etc.) operate on your live browser instance instead of spinning up a cloud session.
 
 ### WSL2 + Windows Chrome: prefer MCP over `/browser connect`
 
-If Hermes runs inside WSL2 but the Chrome window you want to control runs on the Windows host, `/browser connect` is often not the best path.
+If Fulilian runs inside WSL2 but the Chrome window you want to control runs on the Windows host, `/browser connect` is often not the best path.
 
 Why:
 
-- `/browser connect` expects Hermes itself to reach a usable CDP endpoint
+- `/browser connect` expects Fulilian itself to reach a usable CDP endpoint
 - modern Chrome live-debugging sessions often expose a host-local endpoint that is not directly reachable from WSL the same way a classic `9222` port is
-- even when Windows Chrome is debuggable, the cleanest integration is often to let a Windows-side browser MCP server attach to Chrome and let Hermes talk to that MCP server
+- even when Windows Chrome is debuggable, the cleanest integration is often to let a Windows-side browser MCP server attach to Chrome and let Fulilian talk to that MCP server
 
-For that setup, prefer `chrome-devtools-mcp` through Hermes MCP support.
+For that setup, prefer `chrome-devtools-mcp` through Fulilian MCP support.
 
 See the MCP guide for the practical setup:
 
-- [Use MCP with Hermes](../../guides/use-mcp-with-hermes.md#wsl2-bridge-hermes-in-wsl-to-windows-chrome)
+- [Use MCP with Fulilian](../../guides/use-mcp-with-fulilian.md#wsl2-bridge-fulilian-in-wsl-to-windows-chrome)
 
 ### Local browser mode
 
-If you do **not** set any cloud credentials and don't use `/browser connect`, Hermes can still use the browser tools through a local Chromium install driven by `agent-browser`.
+If you do **not** set any cloud credentials and don't use `/browser connect`, Fulilian can still use the browser tools through a local Chromium install driven by `agent-browser`.
 
 ### Optional Environment Variables
 
@@ -532,11 +532,11 @@ BROWSER_INACTIVITY_TIMEOUT=120
 #   chrome     — force Chrome explicitly
 AGENT_BROWSER_ENGINE=auto
 
-# Extra Chromium launch flags (comma- or newline-separated). Hermes auto-injects
+# Extra Chromium launch flags (comma- or newline-separated). Fulilian auto-injects
 # `--no-sandbox,--disable-dev-shm-usage` when it detects root or AppArmor-restricted
 # unprivileged user namespaces (Ubuntu 23.10+, DGX Spark, many container images),
 # so most users don't need to set this. Set it manually only if you need a flag
-# Hermes doesn't add automatically; setting it disables the auto-injection.
+# Fulilian doesn't add automatically; setting it disables the auto-injection.
 AGENT_BROWSER_ARGS=--no-sandbox
 ```
 
@@ -551,7 +551,7 @@ npm install -g agent-browser
 ```
 
 :::info
-The `browser` toolset must be included in your config's `toolsets` list or enabled via `hermes config set toolsets '["hermes-cli", "browser"]'`.
+The `browser` toolset must be included in your config's `toolsets` list or enabled via `fulilian config set toolsets '["fulilian-cli", "browser"]'`.
 :::
 
 ## Available Tools
@@ -575,17 +575,17 @@ Get a text-based snapshot of the current page's accessibility tree. Returns inte
 - **`full=false`** (default): Compact view showing only interactive elements
 - **`full=true`**: Complete page content
 
-Snapshots larger than `browser.snapshot_threshold` (default 15,000 characters — the same per-page budget as `web_extract`) are automatically truncated at line boundaries; no LLM summarization is involved. When that happens, the complete snapshot is saved to `~/.hermes/cache/web/` and the tool output includes the file path plus a ready-to-use `read_file` call, so the agent can page through the full accessibility tree — including element refs beyond the cut — without re-snapshotting.
+Snapshots larger than `browser.snapshot_threshold` (default 15,000 characters — the same per-page budget as `web_extract`) are automatically truncated at line boundaries; no LLM summarization is involved. When that happens, the complete snapshot is saved to `~/.fulilian/cache/web/` and the tool output includes the file path plus a ready-to-use `read_file` call, so the agent can page through the full accessibility tree — including element refs beyond the cut — without re-snapshotting.
 
 Increase the threshold for long pages where more source content should reach the agent inline:
 
 ```yaml
-# ~/.hermes/config.yaml
+# ~/.fulilian/config.yaml
 browser:
   snapshot_threshold: 30000
 ```
 
-You can also run `hermes config set browser.snapshot_threshold 30000`. The setting applies to both explicit `browser_snapshot` calls and the automatic snapshot returned after navigation, including the Camofox backend (minimum 1000). Restart the current Hermes session after changing it so the browser config cache reloads.
+You can also run `fulilian config set browser.snapshot_threshold 30000`. The setting applies to both explicit `browser_snapshot` calls and the automatic snapshot returned after navigation, including the Camofox backend (minimum 1000). Restart the current Fulilian session after changing it so the browser config cache reloads.
 
 ### `browser_click`
 
@@ -600,7 +600,7 @@ Click @e5 to press the "Sign In" button
 Type text into an input field. Clears the field first, then types the new text.
 
 ```
-Type "hermes agent" into the search field @e3
+Type "fulilian agent" into the search field @e3
 ```
 
 ### `browser_scroll`
@@ -639,7 +639,7 @@ The screenshot is saved persistently and the file path is returned alongside the
 What does the chart on this page show?
 ```
 
-Screenshots are stored in `~/.hermes/cache/screenshots/` and automatically cleaned up after 24 hours.
+Screenshots are stored in `~/.fulilian/cache/screenshots/` and automatically cleaned up after 24 hours.
 
 ### `browser_console`
 
@@ -771,7 +771,7 @@ browser:
   record_sessions: true  # default: false
 ```
 
-When enabled, recording starts automatically on the first `browser_navigate` and saves to `~/.hermes/browser_recordings/` when the session closes. Works in both local and cloud (Browserbase) modes. Recordings older than 72 hours are automatically cleaned up.
+When enabled, recording starts automatically on the first `browser_navigate` and saves to `~/.fulilian/browser_recordings/` when the session closes. Works in both local and cloud (Browserbase) modes. Recordings older than 72 hours are automatically cleaned up.
 
 ## Headed Mode (Visible Browser Window)
 
@@ -803,7 +803,7 @@ Browserbase provides automatic stealth capabilities:
 | Keep Alive | On | Session reconnection after network hiccups |
 
 :::note
-If paid features aren't available on your plan, Hermes automatically falls back — first disabling `keepAlive`, then proxies — so browsing still works on free plans.
+If paid features aren't available on your plan, Fulilian automatically falls back — first disabling `keepAlive`, then proxies — so browsing still works on free plans.
 :::
 
 ## Session Management
@@ -817,7 +817,7 @@ If paid features aren't available on your plan, Hermes automatically falls back 
 ## Limitations
 
 - **Text-based interaction** — relies on accessibility tree, not pixel coordinates
-- **Snapshot size** — large pages are truncated at `browser.snapshot_threshold` (default 15,000 characters, matching `web_extract`; no LLM summarization); the complete snapshot is saved to `~/.hermes/cache/web/` and the output points at it for `read_file` paging
+- **Snapshot size** — large pages are truncated at `browser.snapshot_threshold` (default 15,000 characters, matching `web_extract`; no LLM summarization); the complete snapshot is saved to `~/.fulilian/cache/web/` and the output points at it for `read_file` paging
 - **Session timeout** — cloud sessions expire based on your provider's plan settings
 - **Cost** — cloud sessions consume provider credits; sessions are automatically cleaned up when the conversation ends or after inactivity. Use `/browser connect` for free local browsing.
 - **No file downloads** — cannot download files from the browser

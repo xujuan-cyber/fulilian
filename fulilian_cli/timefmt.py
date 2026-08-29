@@ -1,8 +1,8 @@
 """Small shared time-formatting helpers for CLI output.
 
 Public home for helpers that used to live as private functions on
-``hermes_cli.main`` — importing that module drags in the whole CLI
-surface, which lightweight consumers (``hermes status``, dump tooling)
+``fulilian_cli.main`` — importing that module drags in the whole CLI
+surface, which lightweight consumers (``fulilian status``, dump tooling)
 should not pay for.
 """
 

@@ -59,8 +59,8 @@ _FALLBACK_PATTERNS = re.compile(
 )
 _ACCESS_DENIED_PATTERN = re.compile(r"(access is denied|acceso denegado)", re.IGNORECASE)
 
-_TASK_NAME_DEFAULT = "Hermes_Gateway"
-_TASK_DESCRIPTION = "Hermes Agent Gateway - Messaging Platform Integration"
+_TASK_NAME_DEFAULT = "Fulilian_Gateway"
+_TASK_DESCRIPTION = "FuLiLian Gateway - Messaging Platform Integration"
 _TASK_LOGON_DELAY = "PT30S"
 _TASK_RESTART_INTERVAL = "PT1M"
 _TASK_RESTART_COUNT = 999
@@ -89,19 +89,19 @@ def _assert_windows() -> None:
         raise RuntimeError("gateway_windows is Windows-only")
 
 
-def _preserve_hermes_home_path(path: str | Path) -> str:
-    """Render Hermes-owned paths under the configured HERMES_HOME spelling.
+def _preserve_fulilian_home_path(path: str | Path) -> str:
+    """Render Fulilian-owned paths under the configured FULILIAN_HOME spelling.
 
-    Windows installs may keep ``%LOCALAPPDATA%\\hermes`` as a symlink/junction to
+    Windows installs may keep ``%LOCALAPPDATA%\\fulilian`` as a symlink/junction to
     another drive. Runtime state should still identify itself by the configured
     AppData path, so launcher files must not bake in the resolved target when a
-    path lives under HERMES_HOME.
+    path lives under FULILIAN_HOME.
     """
     candidate = Path(path)
     try:
-        from fulilian_cli.config import get_hermes_home
+        from fulilian_cli.config import get_fulilian_home
 
-        home = Path(get_hermes_home())
+        home = Path(get_fulilian_home())
         resolved_home = home.resolve()
         resolved_candidate = candidate.resolve()
         home_key = os.path.normcase(str(resolved_home))
@@ -202,7 +202,7 @@ def _is_running_as_admin() -> bool:
 
 
 def _current_profile_cli_args() -> list[str]:
-    """Return CLI args that preserve the current Hermes profile."""
+    """Return CLI args that preserve the current Fulilian profile."""
     from fulilian_cli.gateway import _profile_arg
 
     profile_arg = _profile_arg()
@@ -222,7 +222,7 @@ def _launch_elevated_gateway_command(command: str, extra_args: list[str] | None 
     the parent shell before this point.
     """
     _assert_windows()
-    args = ["-m", "hermes_cli.main", *_current_profile_cli_args(), "gateway", command]
+    args = ["-m", "fulilian_cli.main", *_current_profile_cli_args(), "gateway", command]
     if extra_args:
         args.extend(extra_args)
     params = subprocess.list2cmdline(args)
@@ -253,15 +253,15 @@ def _launch_elevated_install(
     start_on_login: bool | None = None,
 ) -> bool:
     """Launch an elevated gateway install via UAC and return True on handoff."""
-    old_start_now = os.environ.get("HERMES_GATEWAY_INSTALL_START_NOW")
-    old_start_on_login = os.environ.get("HERMES_GATEWAY_INSTALL_START_ON_LOGIN")
-    old_handoff = os.environ.get("HERMES_GATEWAY_ELEVATED_HANDOFF")
+    old_start_now = os.environ.get("FULILIAN_GATEWAY_INSTALL_START_NOW")
+    old_start_on_login = os.environ.get("FULILIAN_GATEWAY_INSTALL_START_ON_LOGIN")
+    old_handoff = os.environ.get("FULILIAN_GATEWAY_ELEVATED_HANDOFF")
     try:
         if start_now is not None:
-            os.environ["HERMES_GATEWAY_INSTALL_START_NOW"] = "1" if start_now else "0"
+            os.environ["FULILIAN_GATEWAY_INSTALL_START_NOW"] = "1" if start_now else "0"
         if start_on_login is not None:
-            os.environ["HERMES_GATEWAY_INSTALL_START_ON_LOGIN"] = "1" if start_on_login else "0"
-        os.environ["HERMES_GATEWAY_ELEVATED_HANDOFF"] = "1"
+            os.environ["FULILIAN_GATEWAY_INSTALL_START_ON_LOGIN"] = "1" if start_on_login else "0"
+        os.environ["FULILIAN_GATEWAY_ELEVATED_HANDOFF"] = "1"
         extra_args = ["--elevated-handoff"]
         if force:
             extra_args.append("--force")
@@ -272,9 +272,9 @@ def _launch_elevated_install(
         return _launch_elevated_gateway_command("install", extra_args)
     finally:
         for key, old in (
-            ("HERMES_GATEWAY_INSTALL_START_NOW", old_start_now),
-            ("HERMES_GATEWAY_INSTALL_START_ON_LOGIN", old_start_on_login),
-            ("HERMES_GATEWAY_ELEVATED_HANDOFF", old_handoff),
+            ("FULILIAN_GATEWAY_INSTALL_START_NOW", old_start_now),
+            ("FULILIAN_GATEWAY_INSTALL_START_ON_LOGIN", old_start_on_login),
+            ("FULILIAN_GATEWAY_ELEVATED_HANDOFF", old_handoff),
         ):
             if old is None:
                 os.environ.pop(key, None)
@@ -294,11 +294,11 @@ def _launch_elevated_uninstall() -> bool:
 def get_task_name() -> str:
     """Scheduled Task name, scoped per profile.
 
-    Default profile: ``Hermes_Gateway``
-    Named profile X: ``Hermes_Gateway_<X>``
+    Default profile: ``Fulilian_Gateway``
+    Named profile X: ``Fulilian_Gateway_<X>``
     """
     _assert_windows()
-    # Local import to avoid circular module initialization during hermes_cli boot.
+    # Local import to avoid circular module initialization during fulilian_cli boot.
     from fulilian_cli.gateway import _profile_suffix
 
     suffix = _profile_suffix()
@@ -315,14 +315,14 @@ def _sanitize_filename(value: str) -> str:
 def get_task_script_path() -> Path:
     """The generated ``gateway.cmd`` wrapper kept beside the VBS launcher.
 
-    Lives under ``%LOCALAPPDATA%\\hermes\\gateway-service\\<task_name>.cmd``
-    (or ``<HERMES_HOME>/gateway-service/<task_name>.cmd`` so per-profile
-    Hermes installs stay self-contained).
+    Lives under ``%LOCALAPPDATA%\\fulilian\\gateway-service\\<task_name>.cmd``
+    (or ``<FULILIAN_HOME>/gateway-service/<task_name>.cmd`` so per-profile
+    Fulilian installs stay self-contained).
     """
     _assert_windows()
-    from fulilian_cli.config import get_hermes_home
+    from fulilian_cli.config import get_fulilian_home
 
-    script_dir = Path(get_hermes_home()) / "gateway-service"
+    script_dir = Path(get_fulilian_home()) / "gateway-service"
     script_dir.mkdir(parents=True, exist_ok=True)
     return script_dir / f"{_sanitize_filename(get_task_name())}.cmd"
 
@@ -363,17 +363,17 @@ def _legacy_startup_entry_path() -> Path:
 def _stable_gateway_working_dir(project_root: Path) -> str:
     """Return a stable cwd for detached/startup gateway runs.
 
-    Mirror the POSIX service invariant: anchor at ``HERMES_HOME`` whenever it
+    Mirror the POSIX service invariant: anchor at ``FULILIAN_HOME`` whenever it
     exists so Scheduled Task / Startup launches do not fail at the ``cd`` step
     after a transient checkout or worktree is moved away. Fall back to the
-    source checkout only if ``HERMES_HOME`` cannot be used yet. Preserve the
+    source checkout only if ``FULILIAN_HOME`` cannot be used yet. Preserve the
     configured spelling instead of resolving symlinks so AppData installs backed
     by a junction/symlink still identify themselves as AppData.
     """
-    from fulilian_cli.config import get_hermes_home
+    from fulilian_cli.config import get_fulilian_home
 
     try:
-        home = get_hermes_home()
+        home = get_fulilian_home()
         if home:
             home_path = Path(home)
             if home_path.is_dir():
@@ -390,21 +390,21 @@ def _stable_gateway_working_dir(project_root: Path) -> str:
 def _build_gateway_cmd_script(
     python_path: str,
     working_dir: str,
-    hermes_home: str,
+    fulilian_home: str,
     profile_arg: str,
 ) -> str:
     """Build the ``gateway.cmd`` wrapper content (CRLF-terminated).
 
     The script:
       - cd's into a stable working directory
-      - exports HERMES_HOME, PYTHONIOENCODING, VIRTUAL_ENV
-      - invokes ``python -m hermes_cli.main [--profile X] gateway run``
+      - exports FULILIAN_HOME, PYTHONIOENCODING, VIRTUAL_ENV
+      - invokes ``python -m fulilian_cli.main [--profile X] gateway run``
 
     The .cmd is a compatibility/manual-run artifact: service persistence
     (Scheduled Task, Startup folder) routes through the ``.vbs`` launcher,
     which runs this same command line hidden (window style 0).  Run by hand
     in a real terminal, the console interpreter keeps the gateway attached
-    to that terminal like a normal foreground ``hermes gateway run``.
+    to that terminal like a normal foreground ``fulilian gateway run``.
 
     We intentionally do NOT inline PATH overrides here — cmd.exe inherits
     the per-user PATH the Scheduled Task was created with, and forcibly
@@ -412,20 +412,20 @@ def _build_gateway_cmd_script(
     """
     lines = ["@echo off", f"rem {_TASK_DESCRIPTION}"]
     lines.append(f"cd /d {_quote_cmd_script_arg(working_dir)}")
-    lines.append(f'set "HERMES_HOME={hermes_home}"')
+    lines.append(f'set "FULILIAN_HOME={fulilian_home}"')
     lines.append('set "PYTHONIOENCODING=utf-8"')
-    lines.append('set "HERMES_GATEWAY_DETACHED=1"')
+    lines.append('set "FULILIAN_GATEWAY_DETACHED=1"')
     python_exe_path, venv_dir, extra_pythonpath = _resolve_detached_python(python_path)
     # VIRTUAL_ENV lets the gateway's own python detection find the venv
-    # if someone imports hermes_constants-based logic during startup.
-    lines.append(f'set "VIRTUAL_ENV={_preserve_hermes_home_path(venv_dir)}"')
+    # if someone imports fulilian_constants-based logic during startup.
+    lines.append(f'set "VIRTUAL_ENV={_preserve_fulilian_home_path(venv_dir)}"')
     pythonpath_entries = [
-        _preserve_hermes_home_path(Path(__file__).resolve().parent.parent),
-        *[_preserve_hermes_home_path(entry) for entry in extra_pythonpath],
+        _preserve_fulilian_home_path(Path(__file__).resolve().parent.parent),
+        *[_preserve_fulilian_home_path(entry) for entry in extra_pythonpath],
     ]
     lines.append(f'set "PYTHONPATH={";".join([*pythonpath_entries, "%PYTHONPATH%"])}"')
 
-    prog_args = [python_exe_path, "-m", "hermes_cli.main"]
+    prog_args = [python_exe_path, "-m", "fulilian_cli.main"]
     if profile_arg:
         prog_args.extend(profile_arg.split())
     prog_args.extend(["gateway", "run"])
@@ -452,7 +452,7 @@ def _quote_vbs_string(value: str) -> str:
 def _build_gateway_vbs_script(
     python_path: str,
     working_dir: str,
-    hermes_home: str,
+    fulilian_home: str,
     profile_arg: str,
 ) -> str:
     """Build a hidden-console ``gateway.vbs`` launcher (CRLF-terminated).
@@ -479,16 +479,16 @@ def _build_gateway_vbs_script(
     """
     python_exe_path, venv_dir, extra_pythonpath = _resolve_detached_python(python_path)
 
-    prog_args = [python_exe_path, "-m", "hermes_cli.main"]
+    prog_args = [python_exe_path, "-m", "fulilian_cli.main"]
     if profile_arg:
         prog_args.extend(profile_arg.split())
     prog_args.extend(["gateway", "run"])
     # list2cmdline gives CreateProcess-correct quoting for WScript.Shell.Run.
     command_line = subprocess.list2cmdline(prog_args)
 
-    repo_root = _preserve_hermes_home_path(Path(__file__).resolve().parent.parent)
+    repo_root = _preserve_fulilian_home_path(Path(__file__).resolve().parent.parent)
     static_pythonpath = os.pathsep.join(
-        [repo_root, *[_preserve_hermes_home_path(entry) for entry in extra_pythonpath]]
+        [repo_root, *[_preserve_fulilian_home_path(entry) for entry in extra_pythonpath]]
     )
 
     lines = [
@@ -497,10 +497,10 @@ def _build_gateway_vbs_script(
         "Dim sh, env, existing_pp",
         'Set sh = CreateObject("WScript.Shell")',
         'Set env = sh.Environment("PROCESS")',
-        f"env.Item({_quote_vbs_string('HERMES_HOME')}) = {_quote_vbs_string(hermes_home)}",
+        f"env.Item({_quote_vbs_string('FULILIAN_HOME')}) = {_quote_vbs_string(fulilian_home)}",
         f"env.Item({_quote_vbs_string('PYTHONIOENCODING')}) = {_quote_vbs_string('utf-8')}",
-        f"env.Item({_quote_vbs_string('HERMES_GATEWAY_DETACHED')}) = {_quote_vbs_string('1')}",
-        f"env.Item({_quote_vbs_string('VIRTUAL_ENV')}) = {_quote_vbs_string(_preserve_hermes_home_path(venv_dir))}",
+        f"env.Item({_quote_vbs_string('FULILIAN_GATEWAY_DETACHED')}) = {_quote_vbs_string('1')}",
+        f"env.Item({_quote_vbs_string('VIRTUAL_ENV')}) = {_quote_vbs_string(_preserve_fulilian_home_path(venv_dir))}",
         # Mirror the cmd wrapper's ``PYTHONPATH=<static>;%PYTHONPATH%``: chain onto
         # whatever PYTHONPATH the task environment already carries, at runtime.
         f"existing_pp = env.Item({_quote_vbs_string('PYTHONPATH')})",
@@ -546,19 +546,19 @@ def _write_task_script() -> Path:
     """Generate and write the gateway.cmd wrapper. Return its absolute path."""
     _assert_windows()
     # Local imports to avoid circular-init at module load time.
-    from fulilian_cli.config import get_hermes_home
+    from fulilian_cli.config import get_fulilian_home
     from fulilian_cli.gateway import (
         PROJECT_ROOT,
         _profile_arg,
         get_python_path,
     )
 
-    python_path = _preserve_hermes_home_path(get_python_path())
+    python_path = _preserve_fulilian_home_path(get_python_path())
     working_dir = _stable_gateway_working_dir(PROJECT_ROOT)
-    hermes_home = str(Path(get_hermes_home()))
-    profile_arg = _profile_arg(hermes_home)
+    fulilian_home = str(Path(get_fulilian_home()))
+    profile_arg = _profile_arg(fulilian_home)
 
-    content = _build_gateway_cmd_script(python_path, working_dir, hermes_home, profile_arg)
+    content = _build_gateway_cmd_script(python_path, working_dir, fulilian_home, profile_arg)
     script_path = get_task_script_path()
     tmp = script_path.with_suffix(".tmp")
     tmp.write_text(content, encoding="utf-8", newline="")
@@ -567,7 +567,7 @@ def _write_task_script() -> Path:
     # Also render the console-less .vbs launcher used by Scheduled Task and the
     # Startup-folder fallback via wscript.exe (issue #45599 fix A). The .cmd
     # wrapper stays as a generated helper/compatibility artifact.
-    vbs_content = _build_gateway_vbs_script(python_path, working_dir, hermes_home, profile_arg)
+    vbs_content = _build_gateway_vbs_script(python_path, working_dir, fulilian_home, profile_arg)
     vbs_path = script_path.with_suffix(".vbs")
     vbs_tmp = vbs_path.with_name(vbs_path.name + ".tmp")
     vbs_tmp.write_text(vbs_content, encoding="utf-8", newline="")
@@ -661,7 +661,7 @@ def _write_scheduled_task_xml(task_name: str, launcher_path: Path, user: str | N
 def _install_scheduled_task(task_name: str, script_path: Path) -> tuple[bool, str]:
     """Create or replace the Scheduled Task. Returns (success, detail).
 
-    Always recreate instead of ``/Change``. Older Hermes builds and failed
+    Always recreate instead of ``/Change``. Older Fulilian builds and failed
     experiments may have left repeat/restart settings on the task; ``/Change``
     preserves those stale triggers and can make the gateway relaunch every
     minute. Delete+create gives us a clean ONLOGON task every install.
@@ -790,7 +790,7 @@ def _build_gateway_argv() -> tuple[list[str], str, dict[str, str]]:
     layer in between.
     """
     _assert_windows()
-    from fulilian_cli.config import get_hermes_home
+    from fulilian_cli.config import get_fulilian_home
     from fulilian_cli.gateway import (
         PROJECT_ROOT,
         _profile_arg,
@@ -798,27 +798,27 @@ def _build_gateway_argv() -> tuple[list[str], str, dict[str, str]]:
     )
 
     python_exe, venv_dir, extra_pythonpath = _resolve_detached_python(
-        _preserve_hermes_home_path(get_python_path())
+        _preserve_fulilian_home_path(get_python_path())
     )
-    project_root = _preserve_hermes_home_path(PROJECT_ROOT)
+    project_root = _preserve_fulilian_home_path(PROJECT_ROOT)
     working_dir = _stable_gateway_working_dir(PROJECT_ROOT)
-    hermes_home = str(Path(get_hermes_home()))
-    profile_arg = _profile_arg(hermes_home)
+    fulilian_home = str(Path(get_fulilian_home()))
+    profile_arg = _profile_arg(fulilian_home)
 
-    argv = [python_exe, "-m", "hermes_cli.main"]
+    argv = [python_exe, "-m", "fulilian_cli.main"]
     if profile_arg:
         argv.extend(profile_arg.split())
     argv.extend(["gateway", "run"])
 
     env_overlay = {
-        "HERMES_HOME": hermes_home,
+        "FULILIAN_HOME": fulilian_home,
         "PYTHONIOENCODING": "utf-8",
-        "HERMES_GATEWAY_DETACHED": "1",
-        "VIRTUAL_ENV": _preserve_hermes_home_path(venv_dir),
+        "FULILIAN_GATEWAY_DETACHED": "1",
+        "VIRTUAL_ENV": _preserve_fulilian_home_path(venv_dir),
     }
     _prepend_pythonpath(
         env_overlay,
-        [project_root, *[_preserve_hermes_home_path(entry) for entry in extra_pythonpath]]
+        [project_root, *[_preserve_fulilian_home_path(entry) for entry in extra_pythonpath]]
         if extra_pythonpath
         else [project_root],
     )
@@ -838,12 +838,12 @@ def windowless_gateway_restart_spec(
     pythonw.exe rewrite here produced a console-less gateway whose every
     console-subsystem child allocated a visible conhost).  This helper now
     only normalizes the interpreter via ``_resolve_detached_python`` and
-    supplies the stable cwd + env overlay (HERMES_HOME, VIRTUAL_ENV,
+    supplies the stable cwd + env overlay (FULILIAN_HOME, VIRTUAL_ENV,
     PYTHONPATH) so the respawn doesn't depend on the watcher's transient
     working directory.
 
     Returns ``(new_argv, working_dir, env_overlay)``.  ``new_argv``
-    preserves every argument after the interpreter (``-m hermes_cli.main
+    preserves every argument after the interpreter (``-m fulilian_cli.main
     [--profile X] gateway run [--replace]``) verbatim.  On non-Windows, or
     if ``run_argv`` doesn't start with a resolvable python, the argv is
     returned unchanged with an empty overlay.
@@ -853,7 +853,7 @@ def windowless_gateway_restart_spec(
     if sys.platform != "win32":
         return run_argv, "", {}
 
-    from fulilian_cli.config import get_hermes_home
+    from fulilian_cli.config import get_fulilian_home
     from fulilian_cli.gateway import PROJECT_ROOT
 
     python_exe = run_argv[0]
@@ -874,17 +874,17 @@ def windowless_gateway_restart_spec(
     working_dir = _stable_gateway_working_dir(PROJECT_ROOT)
     project_root = str(PROJECT_ROOT)
     try:
-        hermes_home = str(Path(get_hermes_home()).resolve())
+        fulilian_home = str(Path(get_fulilian_home()).resolve())
     except Exception:
-        hermes_home = ""
+        fulilian_home = ""
 
     env_overlay: dict[str, str] = {
         "PYTHONIOENCODING": "utf-8",
-        "HERMES_GATEWAY_DETACHED": "1",
+        "FULILIAN_GATEWAY_DETACHED": "1",
         "VIRTUAL_ENV": str(venv_dir),
     }
-    if hermes_home:
-        env_overlay["HERMES_HOME"] = hermes_home
+    if fulilian_home:
+        env_overlay["FULILIAN_HOME"] = fulilian_home
     _prepend_pythonpath(
         env_overlay,
         [project_root, *extra_pythonpath] if extra_pythonpath else [project_root],
@@ -895,7 +895,7 @@ def windowless_gateway_restart_spec(
 def _spawn_detached(script_path: Path | None = None) -> int:
     """Launch the gateway as a fully detached background process.
 
-    We spawn ``python.exe -m hermes_cli.main gateway run`` directly — NOT
+    We spawn ``python.exe -m fulilian_cli.main gateway run`` directly — NOT
     through a cmd.exe shim — because on Windows a cmd.exe child inherits the
     parent session's console handle and tends to get reaped when the spawning
     shell exits.  With ``CREATE_NO_WINDOW`` the gateway gets its OWN hidden
@@ -936,9 +936,9 @@ def _spawn_detached(script_path: Path | None = None) -> int:
     # logging module writes to gateway.log through a FileHandler, so the
     # real gateway logs still land there — this just captures anything
     # that goes to print() or native stderr.
-    from fulilian_cli.config import get_hermes_home
+    from fulilian_cli.config import get_fulilian_home
 
-    log_dir = Path(get_hermes_home()) / "logs"
+    log_dir = Path(get_fulilian_home()) / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     stray_log = log_dir / "gateway-stdio.log"
 
@@ -1001,8 +1001,8 @@ def _prompt_install_choices(
     start_on_login: bool | None = None,
 ) -> tuple[bool, bool]:
     """Return (start_now, start_on_login), asking before any UAC escalation."""
-    env_start_now = _install_choice_from_env("HERMES_GATEWAY_INSTALL_START_NOW")
-    env_start_on_login = _install_choice_from_env("HERMES_GATEWAY_INSTALL_START_ON_LOGIN")
+    env_start_now = _install_choice_from_env("FULILIAN_GATEWAY_INSTALL_START_NOW")
+    env_start_on_login = _install_choice_from_env("FULILIAN_GATEWAY_INSTALL_START_ON_LOGIN")
     if start_now is None:
         start_now = env_start_now
     if start_on_login is None:
@@ -1029,7 +1029,7 @@ def _install_startup_fallback(script_path: Path, start_now: bool, detail: str) -
     print(f"✓ Installed Windows login item: {entry}")
     print(f"  Task script: {script_path}")
 
-    # Re-running `hermes -p <profile> gateway install` must be safe.
+    # Re-running `fulilian -p <profile> gateway install` must be safe.
     # Startup-folder fallback only installs login persistence. Starting is
     # controlled by the pre-UAC start_now answer so all user decisions happen
     # before any elevation prompt.
@@ -1043,7 +1043,7 @@ def _install_startup_fallback(script_path: Path, start_now: bool, detail: str) -
         _report_gateway_start(f"direct spawn (PID {pid})")
     else:
         profile_arg = _profile_arg()
-        start_cmd = f"hermes {profile_arg} gateway start" if profile_arg else "hermes gateway start"
+        start_cmd = f"fulilian {profile_arg} gateway start" if profile_arg else "fulilian gateway start"
         print("ℹ Startup fallback installed; gateway not started now.")
         print(f"  Start manually with: {start_cmd}")
     _print_next_steps()
@@ -1076,7 +1076,7 @@ def install(
                 _report_gateway_start(f"direct spawn (PID {pid})")
         else:
             print("ℹ Gateway not started and no auto-start service installed.")
-            print("  Run later with: hermes gateway start")
+            print("  Run later with: fulilian gateway start")
         return
 
     task_name = get_task_name()
@@ -1093,11 +1093,11 @@ def install(
         print("  UAC is Windows' admin approval prompt; it is needed to create/update the Scheduled Task.")
         if prompt_yes_no("  Open the UAC prompt now?", False):
             if _launch_elevated_install(force=force, start_now=start_now, start_on_login=start_on_login):
-                print("✓ Launched elevated Hermes gateway install prompt.")
+                print("✓ Launched elevated Fulilian gateway install prompt.")
                 if start_now:
                     print("  Approve the Windows UAC prompt; the elevated install will start the gateway afterwards.")
                 else:
-                    print("  Approve the Windows UAC prompt, then run: hermes gateway status")
+                    print("  Approve the Windows UAC prompt, then run: fulilian gateway status")
                 return
             print("⚠ Falling back to Startup folder because elevation was unavailable or cancelled.")
         else:
@@ -1119,7 +1119,7 @@ def install(
                 _report_gateway_start(f"direct spawn (PID {pid})")
         else:
             print("ℹ Gateway not started now.")
-            print("  Start manually with: hermes gateway start")
+            print("  Start manually with: fulilian gateway start")
         _print_next_steps()
         return
 
@@ -1134,11 +1134,11 @@ def install(
         print("  UAC is Windows' admin approval prompt; it is needed to create/update the Scheduled Task.")
         if prompt_yes_no("  Open the UAC prompt now?", False):
             if _launch_elevated_install(force=force, start_now=start_now, start_on_login=start_on_login):
-                print("✓ Launched elevated Hermes gateway install prompt.")
+                print("✓ Launched elevated Fulilian gateway install prompt.")
                 if start_now:
                     print("  Approve the Windows UAC prompt; the elevated install will start the gateway afterwards.")
                 else:
-                    print("  Approve the Windows UAC prompt, then run: hermes gateway status")
+                    print("  Approve the Windows UAC prompt, then run: fulilian gateway status")
                 return
             print("⚠ Falling back to Startup folder because elevation was unavailable or cancelled.")
         else:
@@ -1151,7 +1151,7 @@ def install(
         print(f"✓ Installed Windows login item: {entry}")
         print(f"  Task script: {script_path}")
 
-        # Re-running `hermes -p <profile> gateway install` must be safe.
+        # Re-running `fulilian -p <profile> gateway install` must be safe.
         # Startup-folder fallback only installs login persistence. Starting is
         # controlled by the pre-UAC start_now answer so all user decisions happen
         # before any elevation prompt.
@@ -1165,7 +1165,7 @@ def install(
             _report_gateway_start(f"direct spawn (PID {pid})")
         else:
             profile_arg = _profile_arg()
-            start_cmd = f"hermes {profile_arg} gateway start" if profile_arg else "hermes gateway start"
+            start_cmd = f"fulilian {profile_arg} gateway start" if profile_arg else "fulilian gateway start"
             print("ℹ Startup fallback installed; gateway not started now.")
             print(f"  Start manually with: {start_cmd}")
         _print_next_steps()
@@ -1199,19 +1199,19 @@ def _report_gateway_start(via: str) -> None:
     else:
         print(f"⚠ Launched gateway via {via}, but no process detected after 6s.")
         print("  Check the log for startup errors:")
-        from fulilian_cli.config import get_hermes_home
-        print(f"    type {Path(get_hermes_home())}\\logs\\gateway.log")
-        print(f"    type {Path(get_hermes_home())}\\logs\\gateway-stdio.log")
+        from fulilian_cli.config import get_fulilian_home
+        print(f"    type {Path(get_fulilian_home())}\\logs\\gateway.log")
+        print(f"    type {Path(get_fulilian_home())}\\logs\\gateway-stdio.log")
 
 
 def _print_next_steps() -> None:
-    from fulilian_cli.config import get_hermes_home
+    from fulilian_cli.config import get_fulilian_home
 
-    hermes_home = Path(get_hermes_home())
+    fulilian_home = Path(get_fulilian_home())
     print()
     print("Next steps:")
-    print("  hermes gateway status                      # Check status")
-    print(f"  type {hermes_home}\\logs\\gateway.log       # View logs")
+    print("  fulilian gateway status                      # Check status")
+    print(f"  type {fulilian_home}\\logs\\gateway.log       # View logs")
 
 
 def uninstall() -> None:
@@ -1237,8 +1237,8 @@ def uninstall() -> None:
             print("  UAC is Windows' admin approval prompt; it is needed to remove the Scheduled Task.")
             if prompt_yes_no("  Open the UAC prompt now?", False):
                 if _launch_elevated_uninstall():
-                    print("✓ Launched elevated Hermes gateway uninstall prompt.")
-                    print("  Approve the Windows UAC prompt, then run: hermes gateway status")
+                    print("✓ Launched elevated Fulilian gateway uninstall prompt.")
+                    print("  Approve the Windows UAC prompt, then run: fulilian gateway status")
                     return
                 print("⚠ Elevated uninstall prompt was unavailable or cancelled.")
             else:
@@ -1328,9 +1328,9 @@ def _print_deep_probes() -> None:
     import json
     from datetime import datetime, timezone
 
-    from fulilian_cli.config import get_hermes_home
+    from fulilian_cli.config import get_fulilian_home
 
-    home = Path(get_hermes_home())
+    home = Path(get_fulilian_home())
     pid_path = home / "gateway.pid"
     lock_path = home / "gateway.lock"
     state_path = home / "gateway_state.json"
@@ -1482,7 +1482,7 @@ def status(deep: bool = False) -> None:
     if not task_installed and not startup_installed and not pids:
         print()
         print("To install:")
-        print("  hermes gateway install")
+        print("  fulilian gateway install")
 
 
 def start() -> None:
@@ -1501,14 +1501,14 @@ def start() -> None:
 
         print("✗ Gateway service is not installed")
         if not prompt_yes_no("  Install it now so the gateway starts on login?", True):
-            print("  Run: hermes gateway install")
+            print("  Run: fulilian gateway install")
             return
         install(force=False)
         task_installed = is_task_registered()
         startup_installed = is_startup_entry_installed()
         if not task_installed and not startup_installed:
             print("⚠ Gateway install did not complete in this process.")
-            print("  If a UAC prompt opened, approve it, then run: hermes gateway start")
+            print("  If a UAC prompt opened, approve it, then run: fulilian gateway start")
             return
 
     # Manual starts use the same console-less direct spawn path as restart()
@@ -1706,5 +1706,5 @@ def restart() -> None:
     if not _wait_for_gateway_ready(timeout_s=15.0):
         raise RuntimeError(
             "Gateway restart did not produce a running gateway process. "
-            "Check logs/gateway.log and run `hermes gateway status`."
+            "Check logs/gateway.log and run `fulilian gateway status`."
         )

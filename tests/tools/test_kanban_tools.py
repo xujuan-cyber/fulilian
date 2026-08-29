@@ -1,7 +1,7 @@
 """Tests for the Kanban tool surface (tools/kanban_tools.py).
 
 Verifies:
-  - Tools are gated on HERMES_KANBAN_TASK: a normal chat session sees
+  - Tools are gated on FULILIAN_KANBAN_TASK: a normal chat session sees
     zero kanban tools in its schema; a worker session sees the kanban set.
   - Each handler's happy path.
   - Error paths (missing required args, bad metadata type, etc).
@@ -20,19 +20,19 @@ import pytest
 # ---------------------------------------------------------------------------
 
 def test_kanban_tools_hidden_without_env_var(monkeypatch, tmp_path):
-    """Normal `hermes chat` sessions (no HERMES_KANBAN_TASK) must have
+    """Normal `fulilian chat` sessions (no FULILIAN_KANBAN_TASK) must have
     zero kanban_* tools in their schema."""
-    monkeypatch.delenv("HERMES_KANBAN_TASK", raising=False)
-    home = tmp_path / ".hermes"
+    monkeypatch.delenv("FULILIAN_KANBAN_TASK", raising=False)
+    home = tmp_path / ".fulilian"
     home.mkdir()
-    monkeypatch.setenv("HERMES_HOME", str(home))
+    monkeypatch.setenv("FULILIAN_HOME", str(home))
 
     import tools.kanban_tools  # ensure registered
     from tools.registry import invalidate_check_fn_cache, registry
     from toolsets import resolve_toolset
 
     invalidate_check_fn_cache()
-    schema = registry.get_definitions(set(resolve_toolset("hermes-cli")), quiet=True)
+    schema = registry.get_definitions(set(resolve_toolset("fulilian-cli")), quiet=True)
     names = {s["function"].get("name") for s in schema if "function" in s}
     kanban = {n for n in names if n and n.startswith("kanban_")}
     assert kanban == set(), (
@@ -46,13 +46,13 @@ def test_kanban_tools_hidden_without_env_var(monkeypatch, tmp_path):
 
 @pytest.fixture
 def worker_env(monkeypatch, tmp_path):
-    """Simulate being a worker: HERMES_HOME isolated, HERMES_KANBAN_TASK set
+    """Simulate being a worker: FULILIAN_HOME isolated, FULILIAN_KANBAN_TASK set
     after we've created the task."""
-    home = tmp_path / ".hermes"
+    home = tmp_path / ".fulilian"
     home.mkdir()
-    monkeypatch.setenv("HERMES_HOME", str(home))
-    monkeypatch.setenv("HERMES_PROFILE", "test-worker")
-    monkeypatch.delenv("HERMES_SESSION_ID", raising=False)
+    monkeypatch.setenv("FULILIAN_HOME", str(home))
+    monkeypatch.setenv("FULILIAN_PROFILE", "test-worker")
+    monkeypatch.delenv("FULILIAN_SESSION_ID", raising=False)
     from pathlib import Path as _Path
     monkeypatch.setattr(_Path, "home", lambda: tmp_path)
 
@@ -65,7 +65,7 @@ def worker_env(monkeypatch, tmp_path):
         kb.claim_task(conn, tid)
     finally:
         conn.close()
-    monkeypatch.setenv("HERMES_KANBAN_TASK", tid)
+    monkeypatch.setenv("FULILIAN_KANBAN_TASK", tid)
     return tid
 
 
@@ -82,7 +82,7 @@ def test_show_defaults_to_env_task_id(worker_env):
 
 def test_list_filters_tasks(monkeypatch, worker_env):
     """kanban_list gives orchestrators filtered board discovery."""
-    monkeypatch.delenv("HERMES_KANBAN_TASK", raising=False)
+    monkeypatch.delenv("FULILIAN_KANBAN_TASK", raising=False)
     from fulilian_cli import kanban_db as kb
     conn = kb.connect()
     try:
@@ -167,12 +167,12 @@ def test_complete_goal_mode_rejected_by_judge(monkeypatch, tmp_path):
     from fulilian_cli import kanban_db as kb
     from tools import kanban_tools as kt
 
-    # Set up isolated HERMES_HOME
-    home = tmp_path / ".hermes"
+    # Set up isolated FULILIAN_HOME
+    home = tmp_path / ".fulilian"
     home.mkdir()
-    monkeypatch.setenv("HERMES_HOME", str(home))
-    monkeypatch.setenv("HERMES_PROFILE", "test-worker")
-    monkeypatch.delenv("HERMES_SESSION_ID", raising=False)
+    monkeypatch.setenv("FULILIAN_HOME", str(home))
+    monkeypatch.setenv("FULILIAN_PROFILE", "test-worker")
+    monkeypatch.delenv("FULILIAN_SESSION_ID", raising=False)
     monkeypatch.setattr(_Path, "home", lambda: tmp_path)
 
     kb._INITIALIZED_PATHS.clear()
@@ -186,7 +186,7 @@ def test_complete_goal_mode_rejected_by_judge(monkeypatch, tmp_path):
         kb.claim_task(conn, goal_task_id)
     finally:
         conn.close()
-    monkeypatch.setenv("HERMES_KANBAN_TASK", goal_task_id)
+    monkeypatch.setenv("FULILIAN_KANBAN_TASK", goal_task_id)
 
     # Mock the judge to reject the completion. The gate only runs when a
     # judge is reachable, so force the availability probe True as well.
@@ -229,16 +229,16 @@ def test_block_happy_path(worker_env):
 
 
 def _make_goal_mode_worker_env(monkeypatch, tmp_path):
-    """Set up an isolated HERMES_HOME with one claimed goal_mode task,
+    """Set up an isolated FULILIAN_HOME with one claimed goal_mode task,
     matching the pattern used by the kanban_complete judge gate tests."""
     from pathlib import Path as _Path
     from fulilian_cli import kanban_db as kb
 
-    home = tmp_path / ".hermes"
+    home = tmp_path / ".fulilian"
     home.mkdir()
-    monkeypatch.setenv("HERMES_HOME", str(home))
-    monkeypatch.setenv("HERMES_PROFILE", "test-worker")
-    monkeypatch.delenv("HERMES_SESSION_ID", raising=False)
+    monkeypatch.setenv("FULILIAN_HOME", str(home))
+    monkeypatch.setenv("FULILIAN_PROFILE", "test-worker")
+    monkeypatch.delenv("FULILIAN_SESSION_ID", raising=False)
     monkeypatch.setattr(_Path, "home", lambda: tmp_path)
 
     kb._INITIALIZED_PATHS.clear()
@@ -252,7 +252,7 @@ def _make_goal_mode_worker_env(monkeypatch, tmp_path):
         kb.claim_task(conn, goal_task_id)
     finally:
         conn.close()
-    monkeypatch.setenv("HERMES_KANBAN_TASK", goal_task_id)
+    monkeypatch.setenv("FULILIAN_KANBAN_TASK", goal_task_id)
     return goal_task_id
 
 
@@ -364,7 +364,7 @@ def test_comment_happy_path(worker_env):
     try:
         comments = kb.list_comments(conn, worker_env)
         assert len(comments) == 1
-        # Author defaults to HERMES_PROFILE env we set in the fixture
+        # Author defaults to FULILIAN_PROFILE env we set in the fixture
         assert comments[0].author == "test-worker"
         assert comments[0].body == "hello thread"
     finally:
@@ -373,23 +373,23 @@ def test_comment_happy_path(worker_env):
 
 def test_comment_ignores_caller_supplied_author(worker_env):
     """``args["author"]`` is no longer honored — the author is always
-    derived from ``HERMES_PROFILE`` so a worker can't forge a comment
-    under an authoritative-looking name like ``hermes-system`` and
+    derived from ``FULILIAN_PROFILE`` so a worker can't forge a comment
+    under an authoritative-looking name like ``fulilian-system`` and
     poison the next worker's prompt context. Cross-task commenting
     itself remains unrestricted (see #19713); only the author override
     is removed.
     """
     from tools import kanban_tools as kt
     out = kt._handle_comment({
-        "task_id": worker_env, "body": "hi", "author": "hermes-system",
+        "task_id": worker_env, "body": "hi", "author": "fulilian-system",
     })
     assert json.loads(out)["ok"]
     from fulilian_cli import kanban_db as kb
     conn = kb.connect()
     try:
         comments = kb.list_comments(conn, worker_env)
-        # Author comes from HERMES_PROFILE in the fixture, not the
-        # caller-supplied "hermes-system" override.
+        # Author comes from FULILIAN_PROFILE in the fixture, not the
+        # caller-supplied "fulilian-system" override.
         assert comments[0].author == "test-worker"
     finally:
         conn.close()
@@ -431,7 +431,7 @@ def test_link_happy_path(worker_env):
 
 
 def test_unblock_happy_path(monkeypatch, worker_env):
-    monkeypatch.delenv("HERMES_KANBAN_TASK", raising=False)
+    monkeypatch.delenv("FULILIAN_KANBAN_TASK", raising=False)
     from fulilian_cli import kanban_db as kb
     conn = kb.connect()
     try:
@@ -454,11 +454,11 @@ def test_unblock_happy_path(monkeypatch, worker_env):
 
 
 def test_unblock_with_pending_parents_returns_todo(monkeypatch, tmp_path):
-    monkeypatch.delenv("HERMES_KANBAN_TASK", raising=False)
-    home = tmp_path / ".hermes"
+    monkeypatch.delenv("FULILIAN_KANBAN_TASK", raising=False)
+    home = tmp_path / ".fulilian"
     home.mkdir()
-    monkeypatch.setenv("HERMES_HOME", str(home))
-    monkeypatch.setenv("HERMES_PROFILE", "orchestrator")
+    monkeypatch.setenv("FULILIAN_HOME", str(home))
+    monkeypatch.setenv("FULILIAN_PROFILE", "orchestrator")
     from pathlib import Path as _Path
     monkeypatch.setattr(_Path, "home", lambda: tmp_path)
 
@@ -583,7 +583,7 @@ def test_kanban_guidance_orchestrator_decision_ownership():
 # Worker task-ownership enforcement (regression tests for #19534)
 # ---------------------------------------------------------------------------
 #
-# A worker process has HERMES_KANBAN_TASK set to its own task id. The
+# A worker process has FULILIAN_KANBAN_TASK set to its own task id. The
 # destructive tools (kanban_complete, kanban_block, kanban_heartbeat,
 # kanban_unblock) must refuse to operate
 # on any OTHER task id, even if the caller supplies an explicit `task_id`
@@ -591,7 +591,7 @@ def test_kanban_guidance_orchestrator_decision_ownership():
 # kanban_comment / kanban_create / kanban_link on other tasks, so those
 # are unrestricted.
 #
-# Orchestrator profiles (no HERMES_KANBAN_TASK in env) are intentionally
+# Orchestrator profiles (no FULILIAN_KANBAN_TASK in env) are intentionally
 # exempt — their job is routing, and they sometimes close out child
 # tasks on behalf of the child.
 
@@ -646,7 +646,7 @@ def test_worker_can_comment_on_foreign_task(worker_env):
     assert d.get("ok") is True, f"cross-task comment must succeed: {d}"
 
     # The comment lands on the foreign task, attributed to the worker's
-    # HERMES_PROFILE — never to a caller-controlled string.
+    # FULILIAN_PROFILE — never to a caller-controlled string.
     conn = kb.connect()
     try:
         comments = kb.list_comments(conn, other)
@@ -689,12 +689,12 @@ def test_worker_unblock_rejects_foreign_task_id(worker_env):
 
 
 def test_orchestrator_complete_any_task_allowed(monkeypatch, tmp_path):
-    """Orchestrator profiles (no HERMES_KANBAN_TASK) can still complete
+    """Orchestrator profiles (no FULILIAN_KANBAN_TASK) can still complete
     any task via explicit task_id. The check only applies to workers."""
-    monkeypatch.delenv("HERMES_KANBAN_TASK", raising=False)
-    home = tmp_path / ".hermes"
+    monkeypatch.delenv("FULILIAN_KANBAN_TASK", raising=False)
+    home = tmp_path / ".fulilian"
     home.mkdir()
-    monkeypatch.setenv("HERMES_HOME", str(home))
+    monkeypatch.setenv("FULILIAN_HOME", str(home))
     from pathlib import Path as _P
     monkeypatch.setattr(_P, "home", lambda: tmp_path)
 
@@ -719,32 +719,32 @@ def test_orchestrator_complete_any_task_allowed(monkeypatch, tmp_path):
 # Optional ``board`` parameter — per-call DB override
 # ---------------------------------------------------------------------------
 #
-# The dispatcher pins the active board via HERMES_KANBAN_BOARD env var,
+# The dispatcher pins the active board via FULILIAN_KANBAN_BOARD env var,
 # but a Telegram-side orchestrator handling multiple boards needs to be
 # able to route a single tool call to a specific board's DB without
-# restarting Hermes. These tests pin that ``board=<slug>`` argument
+# restarting Fulilian. These tests pin that ``board=<slug>`` argument
 # routes each handler to that board's sqlite file, and that omitting
 # ``board`` preserves the legacy env-driven resolution.
 
 
 @pytest.fixture
 def multi_board_env(monkeypatch, tmp_path):
-    """Isolated Hermes home with two distinct kanban boards seeded.
+    """Isolated Fulilian home with two distinct kanban boards seeded.
 
     Returns ``("default", "alt")`` slugs. The default board has one
     pre-existing task ``seed_default``; ``alt`` has ``seed_alt``. No
-    HERMES_KANBAN_TASK is pinned (orchestrator context) — workers test
+    FULILIAN_KANBAN_TASK is pinned (orchestrator context) — workers test
     the env-task case via the existing ``worker_env`` fixture.
     """
-    home = tmp_path / ".hermes"
+    home = tmp_path / ".fulilian"
     home.mkdir()
-    monkeypatch.setenv("HERMES_HOME", str(home))
-    # Make sure neither HERMES_KANBAN_DB nor HERMES_KANBAN_BOARD pin a
+    monkeypatch.setenv("FULILIAN_HOME", str(home))
+    # Make sure neither FULILIAN_KANBAN_DB nor FULILIAN_KANBAN_BOARD pin a
     # board — the test is specifically about the per-call override.
-    monkeypatch.delenv("HERMES_KANBAN_DB", raising=False)
-    monkeypatch.delenv("HERMES_KANBAN_BOARD", raising=False)
-    monkeypatch.delenv("HERMES_KANBAN_TASK", raising=False)
-    monkeypatch.setenv("HERMES_PROFILE", "test-orchestrator")
+    monkeypatch.delenv("FULILIAN_KANBAN_DB", raising=False)
+    monkeypatch.delenv("FULILIAN_KANBAN_BOARD", raising=False)
+    monkeypatch.delenv("FULILIAN_KANBAN_TASK", raising=False)
+    monkeypatch.setenv("FULILIAN_PROFILE", "test-orchestrator")
     from pathlib import Path as _Path
     monkeypatch.setattr(_Path, "home", lambda: tmp_path)
 
@@ -801,8 +801,8 @@ def test_board_param_none_falls_back_to_env(worker_env):
 # When a worker calls kanban_create from inside a session that has a
 # persistent delivery channel, the originating session should be
 # subscribed to the new task's completion/block events automatically.
-# - Gateway sessions: HERMES_SESSION_PLATFORM + HERMES_SESSION_CHAT_ID set.
-# - TUI sessions: HERMES_SESSION_KEY (or HERMES_SESSION_ID) set, with
+# - Gateway sessions: FULILIAN_SESSION_PLATFORM + FULILIAN_SESSION_CHAT_ID set.
+# - TUI sessions: FULILIAN_SESSION_KEY (or FULILIAN_SESSION_ID) set, with
 #   the platform/chat_id ContextVars intentionally empty.
 # - CLI / cron / test sessions: no delivery channel -> no subscription.
 # - Config gate kanban.auto_subscribe_on_create: false -> no subscription
@@ -843,12 +843,12 @@ def test_create_subscribes_gateway_session(monkeypatch, worker_env):
     to its own kanban_create result, and the response surfaces the
     ``subscribed`` flag so the orchestrator can react."""
     from tools import kanban_tools as kt
-    monkeypatch.setenv("HERMES_SESSION_PLATFORM", "telegram")
-    monkeypatch.setenv("HERMES_SESSION_CHAT_ID", "chat-42")
-    monkeypatch.setenv("HERMES_SESSION_THREAD_ID", "thread-7")
-    monkeypatch.setenv("HERMES_SESSION_USER_ID", "user-9")
-    monkeypatch.setenv("HERMES_SESSION_USER_ID_ALT", "alt-user-9")
-    monkeypatch.setenv("HERMES_SESSION_CHAT_TYPE", "forum")
+    monkeypatch.setenv("FULILIAN_SESSION_PLATFORM", "telegram")
+    monkeypatch.setenv("FULILIAN_SESSION_CHAT_ID", "chat-42")
+    monkeypatch.setenv("FULILIAN_SESSION_THREAD_ID", "thread-7")
+    monkeypatch.setenv("FULILIAN_SESSION_USER_ID", "user-9")
+    monkeypatch.setenv("FULILIAN_SESSION_USER_ID_ALT", "alt-user-9")
+    monkeypatch.setenv("FULILIAN_SESSION_CHAT_TYPE", "forum")
 
     out = kt._handle_create({
         "title": "auto-sub gateway",
@@ -873,16 +873,16 @@ def test_create_subscribes_gateway_session(monkeypatch, worker_env):
 
 def test_create_subscribes_tui_session_via_session_key(monkeypatch, worker_env):
     """TUI / desktop sessions don't have a platform/chat_id (single
-    local channel), but the parent process exports HERMES_SESSION_KEY.
+    local channel), but the parent process exports FULILIAN_SESSION_KEY.
     We should still auto-subscribe, with platform='tui' and
     chat_id=<key>."""
     from tools import kanban_tools as kt
-    monkeypatch.delenv("HERMES_SESSION_PLATFORM", raising=False)
-    monkeypatch.delenv("HERMES_SESSION_CHAT_ID", raising=False)
-    monkeypatch.delenv("HERMES_SESSION_THREAD_ID", raising=False)
-    monkeypatch.delenv("HERMES_SESSION_USER_ID", raising=False)
-    monkeypatch.setenv("HERMES_SESSION_KEY", "tui-session-abc")
-    monkeypatch.delenv("HERMES_SESSION_ID", raising=False)
+    monkeypatch.delenv("FULILIAN_SESSION_PLATFORM", raising=False)
+    monkeypatch.delenv("FULILIAN_SESSION_CHAT_ID", raising=False)
+    monkeypatch.delenv("FULILIAN_SESSION_THREAD_ID", raising=False)
+    monkeypatch.delenv("FULILIAN_SESSION_USER_ID", raising=False)
+    monkeypatch.setenv("FULILIAN_SESSION_KEY", "tui-session-abc")
+    monkeypatch.delenv("FULILIAN_SESSION_ID", raising=False)
 
     out = kt._handle_create({
         "title": "auto-sub tui",
@@ -905,10 +905,10 @@ def test_create_does_not_subscribe_in_cli_session(monkeypatch, worker_env):
     """CLI / cron / test sessions have no persistent delivery channel.
     _maybe_auto_subscribe returns False and no row is written."""
     from tools import kanban_tools as kt
-    monkeypatch.delenv("HERMES_SESSION_PLATFORM", raising=False)
-    monkeypatch.delenv("HERMES_SESSION_CHAT_ID", raising=False)
-    monkeypatch.delenv("HERMES_SESSION_KEY", raising=False)
-    monkeypatch.delenv("HERMES_SESSION_ID", raising=False)
+    monkeypatch.delenv("FULILIAN_SESSION_PLATFORM", raising=False)
+    monkeypatch.delenv("FULILIAN_SESSION_CHAT_ID", raising=False)
+    monkeypatch.delenv("FULILIAN_SESSION_KEY", raising=False)
+    monkeypatch.delenv("FULILIAN_SESSION_ID", raising=False)
 
     out = kt._handle_create({
         "title": "no sub cli",
@@ -927,16 +927,16 @@ def test_create_respects_auto_subscribe_on_create_false(monkeypatch, worker_env,
     channel. This is the knob that addresses the upstream design
     concern from PR #19718 (reverted in #19721) — users who want
     explicit kanban_notify-subscribe calls per task get that."""
-    # worker_env already created <tmp>/.hermes; use a fresh sibling
+    # worker_env already created <tmp>/.fulilian; use a fresh sibling
     # home to avoid mkdir() colliding with the worker's directory.
-    home = tmp_path / "gate-home" / ".hermes"
+    home = tmp_path / "gate-home" / ".fulilian"
     home.mkdir(parents=True)
     (home / "config.yaml").write_text(
         "kanban:\n  auto_subscribe_on_create: false\n"
     )
-    monkeypatch.setenv("HERMES_HOME", str(home))
-    monkeypatch.setenv("HERMES_SESSION_PLATFORM", "discord")
-    monkeypatch.setenv("HERMES_SESSION_CHAT_ID", "channel-1")
+    monkeypatch.setenv("FULILIAN_HOME", str(home))
+    monkeypatch.setenv("FULILIAN_SESSION_PLATFORM", "discord")
+    monkeypatch.setenv("FULILIAN_SESSION_CHAT_ID", "channel-1")
 
     from tools import kanban_tools as kt
     out = kt._handle_create({
@@ -956,8 +956,8 @@ def test_maybe_auto_subscribe_swallows_add_notify_sub_failure(monkeypatch, worke
     kanban_create. The function returns False and the parent create
     still succeeds with subscribed=False."""
     from tools import kanban_tools as kt
-    monkeypatch.setenv("HERMES_SESSION_PLATFORM", "telegram")
-    monkeypatch.setenv("HERMES_SESSION_CHAT_ID", "chat-42")
+    monkeypatch.setenv("FULILIAN_SESSION_PLATFORM", "telegram")
+    monkeypatch.setenv("FULILIAN_SESSION_CHAT_ID", "chat-42")
 
     from fulilian_cli import kanban_db as kb
 
@@ -984,13 +984,13 @@ def test_maybe_auto_subscribe_swallows_add_notify_sub_failure(monkeypatch, worke
 def allow_private_urls(monkeypatch):
     """Opt the SSRF guard into private/loopback targets for local fixtures.
 
-    Mirrors a user setting HERMES_ALLOW_PRIVATE_URLS on a private network.
+    Mirrors a user setting FULILIAN_ALLOW_PRIVATE_URLS on a private network.
     Resets the url_safety process-lifetime cache on both sides so the
     override neither leaks in nor out of the test.
     """
     from tools import url_safety
 
-    monkeypatch.setenv("HERMES_ALLOW_PRIVATE_URLS", "true")
+    monkeypatch.setenv("FULILIAN_ALLOW_PRIVATE_URLS", "true")
     url_safety._reset_allow_private_cache()
     yield
     url_safety._reset_allow_private_cache()
@@ -1014,12 +1014,12 @@ def test_attach_url_rejects_non_http_scheme(worker_env):
 def default_url_guard(monkeypatch):
     """Force the SSRF guard to its secure default for this test.
 
-    Clears HERMES_ALLOW_PRIVATE_URLS and resets url_safety's process-lifetime
+    Clears FULILIAN_ALLOW_PRIVATE_URLS and resets url_safety's process-lifetime
     cache on both sides so a prior test's opt-in can't leak in.
     """
     from tools import url_safety
 
-    monkeypatch.delenv("HERMES_ALLOW_PRIVATE_URLS", raising=False)
+    monkeypatch.delenv("FULILIAN_ALLOW_PRIVATE_URLS", raising=False)
     url_safety._reset_allow_private_cache()
     yield
     url_safety._reset_allow_private_cache()

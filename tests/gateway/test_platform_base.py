@@ -27,11 +27,11 @@ def test_media_delivery_denies_encrypted_bitwarden_cache(tmp_path, monkeypatch):
     """Encrypted Bitwarden cache is covered by the media credential guard."""
     import gateway.platforms.base as base
 
-    hermes_home = tmp_path / ".hermes"
-    hermes_home.mkdir()
-    monkeypatch.setattr(base, "_HERMES_HOME", hermes_home)
-    monkeypatch.setattr(base, "_HERMES_ROOT", hermes_home)
-    path = hermes_home / "cache" / "bws_cache.enc.json"
+    fulilian_home = tmp_path / ".fulilian"
+    fulilian_home.mkdir()
+    monkeypatch.setattr(base, "_FULILIAN_HOME", fulilian_home)
+    monkeypatch.setattr(base, "_FULILIAN_ROOT", fulilian_home)
+    path = fulilian_home / "cache" / "bws_cache.enc.json"
     path.parent.mkdir()
     path.write_text("encrypted-secret-cache")
 
@@ -61,7 +61,7 @@ class TestSecretCaptureGuidance:
     def test_gateway_secret_capture_message_points_to_local_setup(self):
         message = GATEWAY_SECRET_CAPTURE_UNSUPPORTED_MESSAGE
         assert "local cli" in message.lower()
-        assert "~/.hermes/.env" in message
+        assert "~/.fulilian/.env" in message
 
 
 class TestSafeUrlForLog:
@@ -332,7 +332,7 @@ class TestMediaInsideSerializedJson:
     def test_media_in_embedded_serialized_reply_not_extracted(self):
         """A serialized tool result that embeds a prior reply's MEDIA: tag."""
         content = (
-            '{"content":"previous reply MEDIA:/Users/ex/.hermes/media/'
+            '{"content":"previous reply MEDIA:/Users/ex/.fulilian/media/'
             'generated/stale.png and more text"}'
         )
         media, _ = BasePlatformAdapter.extract_media(content)
@@ -406,7 +406,7 @@ class TestExtensionlessMediaDelivery:
             "gateway.platforms.base.MEDIA_DELIVERY_SAFE_ROOTS",
             (str(root),),
         )
-        monkeypatch.delenv("HERMES_MEDIA_DELIVERY_STRICT", raising=False)
+        monkeypatch.delenv("FULILIAN_MEDIA_DELIVERY_STRICT", raising=False)
 
     def test_extensionless_media_extracted_when_file_validates(self, tmp_path, monkeypatch):
         root = tmp_path / "output"
@@ -437,7 +437,7 @@ class TestUniversalMediaEgress:
             "gateway.platforms.base.MEDIA_DELIVERY_SAFE_ROOTS",
             (str(root),),
         )
-        monkeypatch.delenv("HERMES_MEDIA_DELIVERY_STRICT", raising=False)
+        monkeypatch.delenv("FULILIAN_MEDIA_DELIVERY_STRICT", raising=False)
 
     @pytest.mark.parametrize("name", [
         "script.py", "server.log", "notes.weirdext", "app.ts", "run.sh",
@@ -480,11 +480,11 @@ class TestMediaDeliveryPathValidation:
         # recency window + denylist). Force strict on so they keep
         # exercising the legacy path even though the public default
         # flipped to off in 2026-05.
-        monkeypatch.setenv("HERMES_MEDIA_DELIVERY_STRICT", "1")
+        monkeypatch.setenv("FULILIAN_MEDIA_DELIVERY_STRICT", "1")
         # Disable recency-based trust by default so the original allowlist
         # tests continue to exercise the strict-allowlist path. Tests that
         # specifically cover recency trust re-enable it themselves.
-        monkeypatch.setenv("HERMES_MEDIA_TRUST_RECENT_FILES", "0")
+        monkeypatch.setenv("FULILIAN_MEDIA_TRUST_RECENT_FILES", "0")
 
 
     def test_rejects_symlink_escape_from_safe_root(self, tmp_path, monkeypatch):
@@ -523,9 +523,9 @@ class TestMediaDeliveryPathValidation:
     ):
         """Strict mode trusts durable attachments without trusting scratch."""
         self._patch_roots(monkeypatch)
-        monkeypatch.setenv("HERMES_KANBAN_HOME", str(tmp_path / "hermes"))
-        monkeypatch.setenv("HERMES_MEDIA_TRUST_RECENT_FILES", "0")
-        board_root = tmp_path / "hermes" / "kanban" / "boards" / "research"
+        monkeypatch.setenv("FULILIAN_KANBAN_HOME", str(tmp_path / "fulilian"))
+        monkeypatch.setenv("FULILIAN_MEDIA_TRUST_RECENT_FILES", "0")
+        board_root = tmp_path / "fulilian" / "kanban" / "boards" / "research"
         board_root.mkdir(parents=True)
         (board_root / "kanban.db").touch()
         attachment = board_root / "attachments" / "t_12345678" / "report.pdf"
@@ -550,9 +550,9 @@ class TestMediaDeliveryPathValidation:
         ~/.ssh, ~/.aws, etc.
         """
         self._patch_roots(monkeypatch)
-        monkeypatch.delenv("HERMES_MEDIA_ALLOW_DIRS", raising=False)
-        monkeypatch.setenv("HERMES_MEDIA_TRUST_RECENT_FILES", "1")
-        monkeypatch.setenv("HERMES_MEDIA_TRUST_RECENT_SECONDS", "600")
+        monkeypatch.delenv("FULILIAN_MEDIA_ALLOW_DIRS", raising=False)
+        monkeypatch.setenv("FULILIAN_MEDIA_TRUST_RECENT_FILES", "1")
+        monkeypatch.setenv("FULILIAN_MEDIA_TRUST_RECENT_SECONDS", "600")
 
         # Simulate $HOME so ~/.ssh resolves into our tmp dir.
         fake_home = tmp_path / "home"
@@ -584,8 +584,8 @@ class TestMediaDeliveryDefaultMode:
         )
         # Pin strict OFF — the public default. Tests that exercise the
         # strict path live in TestMediaDeliveryPathValidation.
-        monkeypatch.delenv("HERMES_MEDIA_DELIVERY_STRICT", raising=False)
-        monkeypatch.delenv("HERMES_MEDIA_ALLOW_DIRS", raising=False)
+        monkeypatch.delenv("FULILIAN_MEDIA_DELIVERY_STRICT", raising=False)
+        monkeypatch.delenv("FULILIAN_MEDIA_ALLOW_DIRS", raising=False)
 
     def test_accepts_stale_file_outside_allowlist(self, tmp_path, monkeypatch):
         """The motivating case — agent says ``MEDIA:/home/user/notes.md``
@@ -612,32 +612,32 @@ class TestMediaDeliveryDefaultMode:
         ],
     )
     def test_denylist_blocks_mcp_oauth_tokens(self, tmp_path, monkeypatch, rel):
-        """Live MCP OAuth tokens/client creds under ~/.hermes/mcp-tokens/ must
+        """Live MCP OAuth tokens/client creds under ~/.fulilian/mcp-tokens/ must
         never deliver as native media — same exfil class as auth.json/.env.
         Sibling to the pairing/ directory denylist entry.
         """
         self._patch_roots(monkeypatch)
 
         fake_home = tmp_path / "home"
-        hermes_dir = fake_home / ".hermes"
-        (hermes_dir / "mcp-tokens").mkdir(parents=True)
-        secret = hermes_dir / rel
+        fulilian_dir = fake_home / ".fulilian"
+        (fulilian_dir / "mcp-tokens").mkdir(parents=True)
+        secret = fulilian_dir / rel
         secret.write_text('{"access_token": "live-bearer-abc123"}')
         monkeypatch.setenv("HOME", str(fake_home))
         monkeypatch.setattr(
-            "gateway.platforms.base._HERMES_HOME",
-            hermes_dir,
+            "gateway.platforms.base._FULILIAN_HOME",
+            fulilian_dir,
         )
         monkeypatch.setattr(
-            "gateway.platforms.base._HERMES_ROOT",
-            hermes_dir,
+            "gateway.platforms.base._FULILIAN_ROOT",
+            fulilian_dir,
         )
 
         assert BasePlatformAdapter.validate_media_delivery_path(str(secret)) is None
 
 
     def test_denylist_blocks_google_token_default_mode(self, tmp_path, monkeypatch):
-        """Integration credentials at the HERMES_HOME root (google_token.json)
+        """Integration credentials at the FULILIAN_HOME root (google_token.json)
         must never be deliverable, even though they aren't the historically
         enumerated .env/auth.json/config.yaml files. Regression for a
         refreshed google_token.json being auto-attached to a Slack reply
@@ -646,46 +646,46 @@ class TestMediaDeliveryDefaultMode:
         self._patch_roots(monkeypatch)
 
         fake_home = tmp_path / "home"
-        hermes_dir = fake_home / ".hermes"
-        hermes_dir.mkdir(parents=True)
-        token = hermes_dir / "google_token.json"
+        fulilian_dir = fake_home / ".fulilian"
+        fulilian_dir.mkdir(parents=True)
+        token = fulilian_dir / "google_token.json"
         token.write_text('{"access_token": "***", "refresh_token": "***"}')
         monkeypatch.setenv("HOME", str(fake_home))
-        monkeypatch.setattr("gateway.platforms.base._HERMES_HOME", hermes_dir)
-        monkeypatch.setattr("gateway.platforms.base._HERMES_ROOT", hermes_dir)
+        monkeypatch.setattr("gateway.platforms.base._FULILIAN_HOME", fulilian_dir)
+        monkeypatch.setattr("gateway.platforms.base._FULILIAN_ROOT", fulilian_dir)
 
         assert BasePlatformAdapter.validate_media_delivery_path(str(token)) is None
 
 
-    def test_denylist_blocks_non_cache_file_under_hermes_home(self, tmp_path, monkeypatch):
-        """A non-credential file the agent wrote directly under ~/.hermes
+    def test_denylist_blocks_non_cache_file_under_fulilian_home(self, tmp_path, monkeypatch):
+        """A non-credential file the agent wrote directly under ~/.fulilian
         (not in a cache subdir) is still deliverable via recency trust — we
         did NOT blanket-deny the tree (per #32090/#34425). This guards against
         accidentally re-introducing the rejected whole-tree deny.
         """
         self._patch_roots(monkeypatch)  # strict mode on
-        monkeypatch.setenv("HERMES_MEDIA_TRUST_RECENT_FILES", "1")
-        monkeypatch.setenv("HERMES_MEDIA_TRUST_RECENT_SECONDS", "600")
+        monkeypatch.setenv("FULILIAN_MEDIA_TRUST_RECENT_FILES", "1")
+        monkeypatch.setenv("FULILIAN_MEDIA_TRUST_RECENT_SECONDS", "600")
 
         fake_home = tmp_path / "home"
-        hermes_dir = fake_home / ".hermes"
-        hermes_dir.mkdir(parents=True)
-        artifact = hermes_dir / "adhoc_report.pdf"
+        fulilian_dir = fake_home / ".fulilian"
+        fulilian_dir.mkdir(parents=True)
+        artifact = fulilian_dir / "adhoc_report.pdf"
         artifact.write_bytes(b"%PDF-1.4")  # fresh mtime
         monkeypatch.setenv("HOME", str(fake_home))
-        monkeypatch.setattr("gateway.platforms.base._HERMES_HOME", hermes_dir)
-        monkeypatch.setattr("gateway.platforms.base._HERMES_ROOT", hermes_dir)
+        monkeypatch.setattr("gateway.platforms.base._FULILIAN_HOME", fulilian_dir)
+        monkeypatch.setattr("gateway.platforms.base._FULILIAN_ROOT", fulilian_dir)
 
         assert BasePlatformAdapter.validate_media_delivery_path(str(artifact)) == str(artifact.resolve())
 
     def test_strict_mode_envvar_restores_legacy_behavior(self, tmp_path, monkeypatch):
-        """Setting HERMES_MEDIA_DELIVERY_STRICT=1 reactivates the older
+        """Setting FULILIAN_MEDIA_DELIVERY_STRICT=1 reactivates the older
         allowlist+recency logic. A stale file outside the allowlist is
         rejected.
         """
         self._patch_roots(monkeypatch)
-        monkeypatch.setenv("HERMES_MEDIA_DELIVERY_STRICT", "1")
-        monkeypatch.setenv("HERMES_MEDIA_TRUST_RECENT_FILES", "0")
+        monkeypatch.setenv("FULILIAN_MEDIA_DELIVERY_STRICT", "1")
+        monkeypatch.setenv("FULILIAN_MEDIA_TRUST_RECENT_FILES", "0")
 
         stale = tmp_path / "old.pdf"
         stale.write_bytes(b"%PDF-1.4")
@@ -722,8 +722,8 @@ class TestMediaDeliveryDefaultMode:
 
 
     def test_profile_scoped_cache_delivers_under_symlinked_root(self, tmp_path, monkeypatch):
-        """Reopened #31733: a profile gateway whose HERMES_HOME is symlinked
-        under a denied prefix (e.g. /opt/data -> /root/.hermes) emits
+        """Reopened #31733: a profile gateway whose FULILIAN_HOME is symlinked
+        under a denied prefix (e.g. /opt/data -> /root/.fulilian) emits
         profile-scoped paths (``<root>/profiles/<name>/cache/images/x.png``)
         that resolve under ``/root``. ``$HOME`` is NOT that prefix, so the
         root-home exception doesn't fire, and the top-level cache allowlist
@@ -734,8 +734,8 @@ class TestMediaDeliveryDefaultMode:
 
         # Stand-in for the literal /root deny prefix in the deployment.
         denied_root = tmp_path / "root"
-        hermes_root = denied_root / ".hermes"
-        prof_cache = hermes_root / "profiles" / "myprof" / "cache" / "images"
+        fulilian_root = denied_root / ".fulilian"
+        prof_cache = fulilian_root / "profiles" / "myprof" / "cache" / "images"
         prof_cache.mkdir(parents=True)
         image = prof_cache / "gen.png"
         image.write_bytes(b"\x89PNG\r\n\x1a\n")
@@ -749,7 +749,7 @@ class TestMediaDeliveryDefaultMode:
             (str(denied_root),),
         )
         monkeypatch.setattr(
-            "gateway.platforms.base._HERMES_ROOT", hermes_root
+            "gateway.platforms.base._FULILIAN_ROOT", fulilian_root
         )
 
         assert (
@@ -878,42 +878,42 @@ class TestDockerContainerMediaPathTranslation:
         ) == str(media.resolve())
 
     def test_cache_dir_container_path_translates_to_host_cache(self, tmp_path, monkeypatch):
-        """MEDIA:/root/.hermes/cache/images/... (the agent_visible_image path
+        """MEDIA:/root/.fulilian/cache/images/... (the agent_visible_image path
         under docker) must translate to the HOST cache file, not the sandbox
         home copy."""
-        hermes_home = tmp_path / ".hermes"
-        cache = hermes_home / "cache" / "images"
+        fulilian_home = tmp_path / ".fulilian"
+        cache = fulilian_home / "cache" / "images"
         cache.mkdir(parents=True)
         media = cache / "generated.png"
         media.write_bytes(b"\x89PNG\r\n\x1a\n")
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        monkeypatch.setenv("FULILIAN_HOME", str(fulilian_home))
         monkeypatch.setenv("TERMINAL_ENV", "docker")
         monkeypatch.delenv("TERMINAL_DOCKER_VOLUMES", raising=False)
 
         assert BasePlatformAdapter.validate_media_delivery_path(
-            "/root/.hermes/cache/images/generated.png"
+            "/root/.fulilian/cache/images/generated.png"
         ) == str(media.resolve())
 
     def test_container_credential_path_never_translates_through_home(self, tmp_path, monkeypatch):
-        """/root/.hermes/* outside a cache mount (the sandbox's credential
+        """/root/.fulilian/* outside a cache mount (the sandbox's credential
         surface: .env, auth.json) must NOT resolve through the persistent
         home mount — those host-side copies sit outside the credential
         denylist prefixes and would otherwise deliver."""
         sandbox = tmp_path / "sandboxes"
         home = sandbox / "docker" / "default" / "home"
-        secret = home / ".hermes"
+        secret = home / ".fulilian"
         secret.mkdir(parents=True)
         (secret / "auth.json").write_text('{"token": "SECRET"}')
-        hermes_home = tmp_path / ".hermes"
-        hermes_home.mkdir()
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+        fulilian_home = tmp_path / ".fulilian"
+        fulilian_home.mkdir()
+        monkeypatch.setenv("FULILIAN_HOME", str(fulilian_home))
         monkeypatch.setenv("TERMINAL_ENV", "docker")
         monkeypatch.setenv("TERMINAL_CONTAINER_PERSISTENT", "true")
         monkeypatch.setenv("TERMINAL_SANDBOX_DIR", str(sandbox))
         monkeypatch.delenv("TERMINAL_DOCKER_VOLUMES", raising=False)
 
         assert BasePlatformAdapter.validate_media_delivery_path(
-            "/root/.hermes/auth.json"
+            "/root/.fulilian/auth.json"
         ) is None
 
 
@@ -1039,9 +1039,9 @@ class TestGetHumanDelay:
 
     def test_natural_mode_ignores_malformed_custom_env_vars(self):
         env = {
-            "HERMES_HUMAN_DELAY_MODE": "natural",
-            "HERMES_HUMAN_DELAY_MIN_MS": "oops",
-            "HERMES_HUMAN_DELAY_MAX_MS": "still-bad",
+            "FULILIAN_HUMAN_DELAY_MODE": "natural",
+            "FULILIAN_HUMAN_DELAY_MIN_MS": "oops",
+            "FULILIAN_HUMAN_DELAY_MAX_MS": "still-bad",
         }
         with patch.dict(os.environ, env):
             delay = BasePlatformAdapter._get_human_delay()
@@ -1050,9 +1050,9 @@ class TestGetHumanDelay:
 
     def test_custom_mode_tolerates_malformed_env_vars(self):
         env = {
-            "HERMES_HUMAN_DELAY_MODE": "custom",
-            "HERMES_HUMAN_DELAY_MIN_MS": "oops",
-            "HERMES_HUMAN_DELAY_MAX_MS": "still-bad",
+            "FULILIAN_HUMAN_DELAY_MODE": "custom",
+            "FULILIAN_HUMAN_DELAY_MIN_MS": "oops",
+            "FULILIAN_HUMAN_DELAY_MAX_MS": "still-bad",
         }
         with patch.dict(os.environ, env):
             # falls back to the custom-mode defaults instead of crashing
@@ -1150,8 +1150,8 @@ class TestMediaDeliveryDiagnosability:
     def test_rejected_path_appears_in_log(self, tmp_path, caplog):
         outside = tmp_path / "outside.ogg"
         outside.write_bytes(b"OggS")
-        with patch.dict(os.environ, {"HERMES_MEDIA_DELIVERY_STRICT": "1",
-                                     "HERMES_MEDIA_TRUST_RECENT_FILES": "0"}), \
+        with patch.dict(os.environ, {"FULILIAN_MEDIA_DELIVERY_STRICT": "1",
+                                     "FULILIAN_MEDIA_TRUST_RECENT_FILES": "0"}), \
                 patch("gateway.platforms.base.MEDIA_DELIVERY_SAFE_ROOTS", ()):
             with caplog.at_level("WARNING"):
                 out = BasePlatformAdapter.filter_media_delivery_paths([(str(outside), False)])
@@ -1163,7 +1163,7 @@ class TestMediaDeliveryDiagnosability:
         """One crafted ~\\x00 path must not drop every other attachment."""
         good = tmp_path / "good.png"
         good.write_bytes(b"\x89PNG")
-        monkeypatch.setenv("HERMES_MEDIA_DELIVERY_STRICT", "0")
+        monkeypatch.setenv("FULILIAN_MEDIA_DELIVERY_STRICT", "0")
         out = BasePlatformAdapter.filter_media_delivery_paths([
             ("~\x00evil.png", False),
             (str(good), False),
@@ -1181,7 +1181,7 @@ class _CapturingAdapter(BasePlatformAdapter):
 
     The four media-send fallbacks (send_voice, send_video, send_document,
     send_image_file) historically forwarded their *_path argument into the
-    chat text. That argument is a host filesystem path inside the Hermes
+    chat text. That argument is a host filesystem path inside the Fulilian
     cache, so any subclass that fell back to super() — like the Telegram
     adapter on a rejected video — would leak the host's directory layout
     into the user's chat.
@@ -1217,11 +1217,11 @@ class TestMediaFallbackDoesNotLeakHostPath:
 
     Telegram, Discord, and Slack adapters all fall back to these base
     implementations on native-send failure. When they did, the user saw
-    a chat message like ``🎬 Video: /home/.../hermes/cache/video/abc.mp4``
+    a chat message like ``🎬 Video: /home/.../fulilian/cache/video/abc.mp4``
     — a host filesystem path with no actionable information.
     """
 
-    SENSITIVE_PATH = "/home/jayne/.hermes/cache/media/sensitive_host_path_abc123.bin"
+    SENSITIVE_PATH = "/home/jayne/.fulilian/cache/media/sensitive_host_path_abc123.bin"
 
 
     @pytest.mark.asyncio
@@ -1339,18 +1339,18 @@ class TestDockerProfileSandboxMediaTranslation:
         ) == str(produced.resolve())
 
     def test_home_credential_surface_still_refused(self, monkeypatch):
-        """The /root/.hermes exclusion survives profile scoping: translating
+        """The /root/.fulilian exclusion survives profile scoping: translating
         the home mount must never expose the container's secret surface —
         in the profile layout AND the legacy session layout."""
         self._enable_docker(monkeypatch)
         for task in ("default", f"session:{self.SESSION_KEY}"):
-            secrets = self._sandbox_dir(task) / "home" / ".hermes"
+            secrets = self._sandbox_dir(task) / "home" / ".fulilian"
             secrets.mkdir(parents=True, exist_ok=True)
             (secrets / "auth.json").write_text("{}")
 
         assert (
             BasePlatformAdapter.validate_media_delivery_path(
-                "/root/.hermes/auth.json", session_key=self.SESSION_KEY
+                "/root/.fulilian/auth.json", session_key=self.SESSION_KEY
             )
             is None
         )

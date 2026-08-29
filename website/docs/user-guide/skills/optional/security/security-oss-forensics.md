@@ -14,10 +14,10 @@ GitHub supply-chain forensics: recovery, IOCs, reporting.
 
 | | |
 |---|---|
-| Source | Optional — install with `hermes skills install official/security/oss-forensics` |
+| Source | Optional — install with `fulilian skills install official/security/oss-forensics` |
 | Path | `optional-skills/security/oss-forensics` |
 | Version | `1.0.0` |
-| Author | Teknium (teknium1), Hermes Agent |
+| Author | Teknium (teknium1), FuLiLian |
 | License | MIT |
 | Platforms | linux, macos, windows |
 | Tags | `Security`, `Forensics`, `GitHub`, `Supply-Chain` |
@@ -25,7 +25,7 @@ GitHub supply-chain forensics: recovery, IOCs, reporting.
 ## Reference: full SKILL.md
 
 :::info
-The following is the complete skill definition that Hermes loads when this skill is triggered. This is what the agent sees as instructions when the skill is active.
+The following is the complete skill definition that Fulilian loads when this skill is triggered. This is what the agent sees as instructions when the skill is active.
 :::
 
 # OSS Security Forensics Skill
@@ -62,7 +62,7 @@ Read these before every investigation step. Violating them invalidates the repor
 
 > **Path convention**: Throughout this skill, `SKILL_DIR` refers to the root of this skill's
 > installation directory (the folder containing this `SKILL.md`). When the skill is loaded,
-> resolve `SKILL_DIR` to the actual path — e.g. `~/.hermes/skills/security/oss-forensics/`
+> resolve `SKILL_DIR` to the actual path — e.g. `~/.fulilian/skills/security/oss-forensics/`
 > or the `optional-skills/` equivalent. All script and template references are relative to it.
 
 ## Phase 0: Initialization

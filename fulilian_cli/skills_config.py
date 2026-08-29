@@ -1,9 +1,9 @@
 """
-Skills configuration for Hermes Agent.
-`hermes skills` enters this module.
+Skills configuration for FuLiLian.
+`fulilian skills` enters this module.
 
 Toggle individual skills or categories on/off, globally or per-platform.
-Config stored in ~/.hermes/config.yaml under:
+Config stored in ~/.fulilian/config.yaml under:
 
   skills:
     disabled: [skill-a, skill-b]          # global disabled list
@@ -67,7 +67,7 @@ def get_disabled_skills(config: dict, platform: Optional[str] = None) -> Set[str
 def save_disabled_skills(config: dict, disabled: Set[str], platform: Optional[str] = None):
     """Persist disabled skill names to config.
 
-    Essential skills (e.g. ``hermes-agent``) are silently dropped from the
+    Essential skills (e.g. ``fulilian-agent``) are silently dropped from the
     list — they cannot be disabled from any surface.
     """
     from agent.skill_utils import ESSENTIAL_SKILLS
@@ -157,7 +157,7 @@ def _toggle_by_category(skills: List[dict], disabled: Set[str]) -> Set[str]:
 # ─── Entry Point ──────────────────────────────────────────────────────────────
 
 def skills_command(args=None):
-    """Entry point for `hermes skills`."""
+    """Entry point for `fulilian skills`."""
     from fulilian_cli.curses_ui import curses_checklist
 
     config = load_config()

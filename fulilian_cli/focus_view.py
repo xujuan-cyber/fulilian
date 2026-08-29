@@ -5,7 +5,7 @@
 
 ``/verbose off`` already silences per-tool progress lines (the
 ``tool_progress_mode == "off"`` gate in ``agent/tool_executor.py`` and the
-scrollback gate in ``HermesCLI._on_tool_progress``).  Focus view **composes
+scrollback gate in ``FulilianCLI._on_tool_progress``).  Focus view **composes
 with** that machinery instead of duplicating it:
 
 * turning focus ON snaps ``tool_progress_mode`` to ``"off"`` and remembers the
@@ -36,7 +36,7 @@ FOCUS_CONFIG_KEY = "display.focus_view"
 FOCUS_TOOL_PROGRESS_MODE = "off"
 
 #: Modes in which the CLI commits a per-tool scrollback line. Mirrors the gate
-#: in ``HermesCLI._on_tool_progress``; kept here so the hidden-line counter and
+#: in ``FulilianCLI._on_tool_progress``; kept here so the hidden-line counter and
 #: the renderer can never drift apart.
 TOOL_PROGRESS_VISIBLE_MODES = frozenset({"new", "all", "verbose"})
 

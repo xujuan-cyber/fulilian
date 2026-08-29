@@ -21,7 +21,7 @@ Features:
 
 Cloud sandbox note:
 - Persistent filesystems preserve working state across sandbox recreation
-- Persistent filesystems do NOT guarantee the same live sandbox or long-running processes survive cleanup, idle reaping, or Hermes exit
+- Persistent filesystems do NOT guarantee the same live sandbox or long-running processes survive cleanup, idle reaping, or Fulilian exit
 
 Usage:
     from terminal_tool import terminal_tool
@@ -69,7 +69,7 @@ def _redact_terminal_error_text(value: Any) -> str:
 from tools.interrupt import is_interrupted, _interrupt_event  # noqa: F401 — re-exported
 from tools.registry import tool_error
 from tools.shell_heredoc import strip_inert_heredoc_bodies
-# display_hermes_home imported lazily at call site (stale-module safety during hermes update)
+# display_fulilian_home imported lazily at call site (stale-module safety during fulilian update)
 
 
 
@@ -218,10 +218,10 @@ def _check_disk_usage_warning():
     try:
         scratch_dir = _get_scratch_dir()
 
-        # Get total size of hermes directories
+        # Get total size of fulilian directories
         total_bytes = 0
         import glob
-        for path in glob.glob(str(scratch_dir / "hermes-*")):
+        for path in glob.glob(str(scratch_dir / "fulilian-*")):
             for f in Path(path).rglob('*'):
                 if f.is_file():
                     try:
@@ -275,14 +275,14 @@ def _get_sudo_password_callback():
 def _current_session_key() -> str:
     """Return the active gateway/WebUI session key, or "" outside sessions.
 
-    Single lookup point for the ``HERMES_SESSION_KEY`` ContextVar with the
+    Single lookup point for the ``FULILIAN_SESSION_KEY`` ContextVar with the
     os.environ fallback that ``get_session_env()`` applies for CLI, cron, and
     test processes. Callers scope per-session caches by prefixing the value
     with ``"session:"`` so two sessions never share a cache slot.
     """
     from gateway.session_context import get_session_env
 
-    return get_session_env("HERMES_SESSION_KEY", "")
+    return get_session_env("FULILIAN_SESSION_KEY", "")
 
 
 def _get_approval_callback():
@@ -433,7 +433,7 @@ def _in_delegated_child_context() -> bool:
     """Return True while running inside a delegate_task child.
 
     Subagents execute on worker threads of the parent process, so they
-    inherit process-wide interactivity signals (``HERMES_INTERACTIVE=1`` set
+    inherit process-wide interactivity signals (``FULILIAN_INTERACTIVE=1`` set
     by the CLI at startup) that do NOT mean *this* execution context can
     reach the user. A child that passes the interactive gate with no sudo
     callback falls through to the raw ``/dev/tty`` prompt — printed mid-TUI
@@ -458,7 +458,7 @@ def _handle_sudo_failure(output: str, env_type: str) -> str:
 
     Returns enhanced output if sudo failed in such a context, else original.
     """
-    is_gateway = env_var_enabled("HERMES_GATEWAY_SESSION")
+    is_gateway = env_var_enabled("FULILIAN_GATEWAY_SESSION")
     is_delegated_child = _in_delegated_child_context()
 
     if not is_gateway and not is_delegated_child:
@@ -473,7 +473,7 @@ def _handle_sudo_failure(output: str, env_type: str) -> str:
     
     for failure in sudo_failures:
         if failure in output:
-            from fulilian_constants import display_hermes_home as _dhh
+            from fulilian_constants import display_fulilian_home as _dhh
             if is_delegated_child:
                 return output + (
                     "\n\n💡 Tip: Subagents cannot prompt for a sudo password. "
@@ -531,7 +531,7 @@ def _prompt_for_sudo_password(timeout_seconds: int = 45) -> str:
     - Timeout expires (45s default)
     - Any error occurs
     
-    Only works in interactive mode (HERMES_INTERACTIVE=1).
+    Only works in interactive mode (FULILIAN_INTERACTIVE=1).
     If a _sudo_password_callback is registered (by the CLI), delegates to it
     so the prompt integrates with prompt_toolkit's UI.  Otherwise reads
     directly from /dev/tty with echo disabled.
@@ -602,7 +602,7 @@ def _prompt_for_sudo_password(timeout_seconds: int = 45) -> str:
             result["done"] = True
     
     try:
-        os.environ["HERMES_SPINNER_PAUSE"] = "1"
+        os.environ["FULILIAN_SPINNER_PAUSE"] = "1"
         time.sleep(0.2)
         
         print()
@@ -653,8 +653,8 @@ def _prompt_for_sudo_password(timeout_seconds: int = 45) -> str:
         sys.stdout.flush()
         return ""
     finally:
-        if "HERMES_SPINNER_PAUSE" in os.environ:
-            del os.environ["HERMES_SPINNER_PAUSE"]
+        if "FULILIAN_SPINNER_PAUSE" in os.environ:
+            del os.environ["FULILIAN_SPINNER_PAUSE"]
 
 def _safe_command_preview(command: Any, limit: int = 200) -> str:
     """Return a log-safe preview for possibly-invalid command values."""
@@ -1052,7 +1052,7 @@ def _transform_sudo_command(command: str | None) -> tuple[str | None, str | None
     non-None sudo_stdin case.
 
     If SUDO_PASSWORD is not set and an interactive UI is available
-    (HERMES_INTERACTIVE=1 or a registered sudo password callback):
+    (FULILIAN_INTERACTIVE=1 or a registered sudo password callback):
       Prompts user for password with 45s timeout, caches for session.
 
     If SUDO_PASSWORD is not set and NOT interactive:
@@ -1084,24 +1084,24 @@ def _transform_sudo_command(command: str | None) -> tuple[str | None, str | None
     )
 
     # Local hosts with sudoers NOPASSWD should not be forced through the
-    # interactive Hermes password prompt or the sudo -S password-pipe path.
+    # interactive Fulilian password prompt or the sudo -S password-pipe path.
     # Scoped to the local terminal backend so Docker/SSH/Modal/etc. can't
     # inherit host sudo state. Re-probes every call (no process-lifetime
     # cache) so an expired sudo timestamp doesn't make a later command block
-    # silently without Hermes prompting.
+    # silently without Fulilian prompting.
     if not has_configured_password and not sudo_password and _sudo_nopasswd_works():
         return command, None
 
     has_sudo_prompt_callback = _get_sudo_password_callback() is not None
     # delegate_task children inherit the parent's process-wide
-    # HERMES_INTERACTIVE=1 (and, on a recycled worker thread, potentially a
+    # FULILIAN_INTERACTIVE=1 (and, on a recycled worker thread, potentially a
     # stale thread-local callback), but there is no user on the other side of
     # this execution context: prompting from a subagent thread fights the
     # parent's TUI for /dev/tty and blocks the child for the full timeout.
     # Children always behave as headless — configured SUDO_PASSWORD, the
     # session cache, and the NOPASSWD probe above all still work.
     should_prompt_for_sudo = (
-        env_var_enabled("HERMES_INTERACTIVE") or has_sudo_prompt_callback
+        env_var_enabled("FULILIAN_INTERACTIVE") or has_sudo_prompt_callback
     ) and not _in_delegated_child_context()
     if not has_configured_password and not sudo_password and should_prompt_for_sudo:
         sudo_password = _prompt_for_sudo_password(timeout_seconds=45)
@@ -1160,9 +1160,9 @@ _docker_orphan_reaper_lock = threading.Lock()
 def _maybe_reap_docker_orphans(container_config: Dict[str, Any]) -> None:
     """Run the docker orphan reaper once per process, if enabled.
 
-    Sweeps long-Exited containers labeled ``hermes-agent=1`` for the current
+    Sweeps long-Exited containers labeled ``fulilian-agent=1`` for the current
     profile that match the issue #20561 leak class — containers left behind
-    by Hermes processes that exited without firing ``atexit`` (SIGKILL,
+    by Fulilian processes that exited without firing ``atexit`` (SIGKILL,
     OOM, terminal-window-close). The reaper is conservative by default:
     only Exited containers older than ``2 × lifetime_seconds`` and scoped to
     the current profile.
@@ -1171,7 +1171,7 @@ def _maybe_reap_docker_orphans(container_config: Dict[str, Any]) -> None:
 
     * ``terminal.docker_orphan_reaper: false`` disables it entirely (the
       operator opted out — usually because they're running multiple
-      Hermes processes in the same profile and don't trust the
+      Fulilian processes in the same profile and don't trust the
       conservative defaults).
     * ``_docker_orphan_reaper_ran`` flag — sweep runs once per Python
       interpreter, not on every subagent / RL-rollout / parallel
@@ -1189,7 +1189,7 @@ def _maybe_reap_docker_orphans(container_config: Dict[str, Any]) -> None:
             return
         _docker_orphan_reaper_ran = True
 
-    # 2 × lifetime_seconds gives sibling Hermes processes a generous grace
+    # 2 × lifetime_seconds gives sibling Fulilian processes a generous grace
     # window. Floor at 60s so an operator with TERMINAL_LIFETIME_SECONDS=0
     # doesn't get an instant-reap that races their own setup.
     # ``container_config`` only carries container_* keys, so read
@@ -1408,7 +1408,7 @@ def _docker_persistent_profile_scoped() -> bool:
     """True when the persistent Docker container is shared per PROFILE.
 
     The product contract for ``TERMINAL_ENV=docker`` +
-    ``container_persistent: true`` is ONE long-lived container per Hermes
+    ``container_persistent: true`` is ONE long-lived container per Fulilian
     profile, shared by every session of that profile (CLI, gateway chats,
     WebUI). Commit a270c4ade added a session-key fallback to
     :func:`_resolve_container_task_id` to stop cross-profile SSH environment
@@ -1425,7 +1425,7 @@ def _docker_persistent_profile_scoped() -> bool:
 
 
 def _current_session_profile() -> str:
-    """Return the active session's Hermes profile name, or "" when unset.
+    """Return the active session's Fulilian profile name, or "" when unset.
 
     Same lookup discipline as :func:`_current_session_key`: the ContextVar
     (bound per message by the gateway, per session by the WebUI streaming
@@ -1434,7 +1434,7 @@ def _current_session_profile() -> str:
     """
     from gateway.session_context import get_session_env
 
-    return get_session_env("HERMES_SESSION_PROFILE", "")
+    return get_session_env("FULILIAN_SESSION_PROFILE", "")
 
 
 _ISOLATION_OVERRIDE_KEYS = frozenset({
@@ -1467,7 +1467,7 @@ def _resolve_container_task_id(task_id: Optional[str]) -> str:
     ``"default"`` here so subagents share the parent's long-lived container
     (one bash, one /workspace, one set of installed packages).
 
-    Exception: RL / benchmark environments (TerminalBench2, HermesSweEnv, ...)
+    Exception: RL / benchmark environments (TerminalBench2, FulilianSweEnv, ...)
     call ``register_task_env_overrides(task_id, {...})`` to request a
     per-task Docker/Modal image. When an override is registered for a
     task_id, we honour it by returning the task_id unchanged -- those
@@ -1612,7 +1612,7 @@ def _parse_env_var(name: str, default: str, converter: Any = int, type_label: st
     except (ValueError, json.JSONDecodeError):
         raise ValueError(
             f"Invalid value for {name}: {raw!r} (expected {type_label}). "
-            f"Check ~/.hermes/.env or environment variables."
+            f"Check ~/.fulilian/.env or environment variables."
         )
 
 
@@ -1717,7 +1717,7 @@ def _ensure_terminal_env_bridged() -> None:
     The CLI (cli.py ``env_mappings``), the gateway (gateway/run.py
     ``_terminal_env_map``), and TUI/dashboard PTY launches
     (``apply_terminal_config_to_env``) bridge ``terminal.*`` config into env
-    vars at startup — but processes that skip all of those paths (``hermes
+    vars at startup — but processes that skip all of those paths (``fulilian
     serve`` / the Desktop app backend's in-process agents, the desktop cron
     ticker, ACP) used to silently fall back to the local backend even when
     config.yaml selects ``terminal.backend: docker``, running commands on the
@@ -1725,7 +1725,7 @@ def _ensure_terminal_env_bridged() -> None:
 
     Explicit terminal config keys win: when config.yaml has a ``terminal``
     section, each key present there overrides its matching env value (which may
-    be stale from ``hermes setup``). Environment values for omitted terminal
+    be stale from ``fulilian setup``). Environment values for omitted terminal
     keys are preserved. When no terminal section exists, exported/.env values
     keep working unchanged.
     """
@@ -1883,7 +1883,7 @@ def _get_env_config() -> Dict[str, Any]:
         "docker_shared_container_key": os.getenv(
             "TERMINAL_DOCKER_SHARED_CONTAINER_KEY", ""
         ).strip(),
-        # Startup orphan reaper for hermes-tagged containers left behind by
+        # Startup orphan reaper for fulilian-tagged containers left behind by
         # crashed / SIGKILL'd previous processes that bypassed atexit.
         # Conservative: only sweeps Exited containers older than 2× the
         # idle-reap window AND scoped to the current profile. Issue #20561.
@@ -1983,7 +1983,7 @@ def _create_environment(env_type: str, image: str, cwd: str, timeout: int,
     
     elif env_type == "docker":
         # One-shot orphan reaper: clean up labeled containers left behind by
-        # prior Hermes processes that hit SIGKILL / OOM / a closed terminal
+        # prior Fulilian processes that hit SIGKILL / OOM / a closed terminal
         # before the atexit cleanup hook could run.  Gated to once per
         # process so concurrent _create_environment calls (parallel
         # subagents, RL benchmarks) don't run the reaper N times.
@@ -2141,7 +2141,7 @@ def _create_environment(env_type: str, image: str, cwd: str, timeout: int,
             # Stamp the backend name so path-resolution and progress surfaces
             # can identify plugin backends without class-name sniffing.
             try:
-                env_obj._hermes_backend_name = provider.name.strip().lower()
+                env_obj._fulilian_backend_name = provider.name.strip().lower()
             except AttributeError:
                 pass  # test doubles may reject attributes
             return env_obj
@@ -2391,7 +2391,7 @@ def cleanup_all_environments():
     # Also clean any orphaned directories
     scratch_dir = _get_scratch_dir()
     import glob
-    for path in glob.glob(str(scratch_dir / "hermes-*")):
+    for path in glob.glob(str(scratch_dir / "fulilian-*")):
         try:
             shutil.rmtree(path, ignore_errors=True)
             logger.info("Removed orphaned: %s", path)
@@ -2727,7 +2727,7 @@ def _foreground_background_guidance(command: str) -> str | None:
         return (
             "Foreground command uses shell-level background wrappers (nohup/disown/setsid). "
             "Re-send WITHOUT the wrapper as terminal(command=\"<cmd>\", background=true, "
-            "notify_on_complete=true) so Hermes tracks the process, then run readiness "
+            "notify_on_complete=true) so Fulilian tracks the process, then run readiness "
             "checks and tests in separate commands."
         )
 
@@ -2883,7 +2883,7 @@ def terminal_tool(
         # a registered env override (RL benchmarks) get isolated sandboxes.
         effective_task_id = _resolve_container_task_id(task_id)
         if _host_local:
-            # Hermes-owned control-plane children must run beside the current
+            # Fulilian-owned control-plane children must run beside the current
             # interpreter, never inside the model's configured Docker/SSH/etc.
             # Keep their environment cache separate from the configured backend.
             effective_task_id = f"host-local-{effective_task_id}"
@@ -3067,18 +3067,18 @@ def terminal_tool(
 
         session_key = get_current_session_key(default="") or (task_id or "")
 
-        # Hard-block: gateway lifecycle commands (systemctl/launchctl/hermes
-        # restart|stop|uninstall targeting hermes-gateway) must never run inside the
+        # Hard-block: gateway lifecycle commands (systemctl/launchctl/fulilian
+        # restart|stop|uninstall targeting fulilian-gateway) must never run inside the
         # gateway process itself. The restart would SIGTERM the gateway, which
         # kills this very subprocess before it can complete — the service may
-        # never restart. This mirrors the `hermes gateway restart` guard in
-        # hermes_cli/gateway.py and the cron-path guard in hermes_cli/cron.py,
+        # never restart. This mirrors the `fulilian gateway restart` guard in
+        # fulilian_cli/gateway.py and the cron-path guard in fulilian_cli/cron.py,
         # but applies unconditionally (force=True cannot help here).
-        # Gate on the SUPERVISED-gateway probe, not the raw _HERMES_GATEWAY
+        # Gate on the SUPERVISED-gateway probe, not the raw _FULILIAN_GATEWAY
         # marker: gateway.run sets it at import time, so it leaks into every
-        # process that merely imports gateway.run (hermes serve --isolated,
+        # process that merely imports gateway.run (fulilian serve --isolated,
         # CLI, web server) which are NOT the gateway and must be able to
-        # restart it. A plain foreground `hermes gateway run` (env set, PID
+        # restart it. A plain foreground `fulilian gateway run` (env set, PID
         # owned, no supervisor) now also PASSES this guard: intentional and
         # harmless, since without a supervisor there is no KeepAlive to turn a
         # self-restart into a respawn loop.
@@ -3097,7 +3097,7 @@ def terminal_tool(
                     "error": (
                         "Blocked: launchctl submit/bootstrap registers a persistent "
                         "KeepAlive job and is unsafe from inside the gateway process. "
-                        "Use Hermes cron for one-shot delayed work, or install an "
+                        "Use Fulilian cron for one-shot delayed work, or install an "
                         "explicit LaunchAgent from a separate shell."
                     ),
                     "status": "error",
@@ -3179,7 +3179,7 @@ def terminal_tool(
                         "Blocked: command or referenced script cannot restart, stop, or "
                         "uninstall the gateway from inside the gateway process. The gateway would "
                         "kill this command before it could complete (SIGTERM propagates "
-                        "to child processes). Run `hermes gateway restart` from a "
+                        "to child processes). Run `fulilian gateway restart` from a "
                         "separate shell outside the running gateway."
                     ),
                     "status": "error",
@@ -3367,7 +3367,7 @@ def terminal_tool(
                 # Nudge: homebrewed CI watcher built from `gh pr view`
                 # `--json statusCheckRollup` or `gh pr checks` piped through
                 # `jq` is the #1 cause of silent CI-watcher failures in
-                # hermes-agent dev work. May 2026 PRs that surfaced this
+                # fulilian-agent dev work. May 2026 PRs that surfaced this
                 # exact failure mode: #31329, #31448, #31695, #31709, #31745,
                 # #32264, #33131. Failure modes seen:
                 #   * `gh pr view --json statusCheckRollup --jq ...` with
@@ -3415,7 +3415,7 @@ def terminal_tool(
                             "This looks like a homebrewed CI poller built from "
                             "`gh pr view --json statusCheckRollup` and/or "
                             "`gh pr checks | jq`. That shape has burned us "
-                            "repeatedly in hermes-agent dev work (PRs #31329, "
+                            "repeatedly in fulilian-agent dev work (PRs #31329, "
                             "#31448, #31695, #31709, #31745, #32264, #33131) — "
                             "stdout buffering kills output capture, jq null-key "
                             "edge cases silently exit the loop, conclusion-vs-"
@@ -3429,7 +3429,7 @@ def terminal_tool(
                             "awk-on-tabs poller "
                             "(`awk -F\"\\t\" \"$2==\\\"pending\\\"\"`) for "
                             "sharded matrices. Load skill_view("
-                            "name='github/hermes-agent-dev', "
+                            "name='github/fulilian-agent-dev', "
                             "file_path='references/green-ci-policy.md') for "
                             "the verbatim snippets. If you must roll a custom "
                             "loop with rich structured output, write each tick "
@@ -3463,7 +3463,7 @@ def terminal_tool(
                         result_data["notify_unsupported"] = (
                             "notify_on_complete / watch_patterns are not available in "
                             "this session — it cannot receive an async completion after "
-                            "the turn ends (a one-shot runner such as `hermes -z`, a "
+                            "the turn ends (a one-shot runner such as `fulilian -z`, a "
                             "cron job, a Kanban worker, or a stateless HTTP endpoint). "
                             "The process is "
                             "running in the background; retrieve its result with "
@@ -3475,13 +3475,13 @@ def terminal_tool(
                             proc_session.id,
                         )
                     else:
-                        _gw_platform = _gse("HERMES_SESSION_PLATFORM", "")
+                        _gw_platform = _gse("FULILIAN_SESSION_PLATFORM", "")
                         if _gw_platform:
-                            _gw_chat_id = _gse("HERMES_SESSION_CHAT_ID", "")
-                            _gw_thread_id = _gse("HERMES_SESSION_THREAD_ID", "")
-                            _gw_user_id = _gse("HERMES_SESSION_USER_ID", "")
-                            _gw_user_name = _gse("HERMES_SESSION_USER_NAME", "")
-                            _gw_message_id = _gse("HERMES_SESSION_MESSAGE_ID", "")
+                            _gw_chat_id = _gse("FULILIAN_SESSION_CHAT_ID", "")
+                            _gw_thread_id = _gse("FULILIAN_SESSION_THREAD_ID", "")
+                            _gw_user_id = _gse("FULILIAN_SESSION_USER_ID", "")
+                            _gw_user_name = _gse("FULILIAN_SESSION_USER_NAME", "")
+                            _gw_message_id = _gse("FULILIAN_SESSION_MESSAGE_ID", "")
                             proc_session.watcher_platform = _gw_platform
                             proc_session.watcher_chat_id = _gw_chat_id
                             proc_session.watcher_user_id = _gw_user_id
@@ -3495,7 +3495,7 @@ def terminal_tool(
                             # (/new) before the process finishes, instead of
                             # injecting it into the chat's NEW session.
                             proc_session.parent_session_id = _gse(
-                                "HERMES_SESSION_ID", ""
+                                "FULILIAN_SESSION_ID", ""
                             )
 
                 # Mutual exclusion: if both notify_on_complete and watch_patterns
@@ -3658,7 +3658,7 @@ def terminal_tool(
             if sudo_cache_cleared:
                 has_sudo_prompt_callback = _get_sudo_password_callback() is not None
                 can_reprompt = (
-                    has_sudo_prompt_callback or env_var_enabled("HERMES_INTERACTIVE")
+                    has_sudo_prompt_callback or env_var_enabled("FULILIAN_INTERACTIVE")
                 ) and not _in_delegated_child_context()
                 if can_reprompt:
                     output += (
@@ -4087,7 +4087,7 @@ if __name__ == "__main__":
     print(f"  TERMINAL_MODAL_IMAGE: {os.getenv('TERMINAL_MODAL_IMAGE', default_img)}")
     print(f"  TERMINAL_DAYTONA_IMAGE: {os.getenv('TERMINAL_DAYTONA_IMAGE', default_img)}")
     print(f"  TERMINAL_CWD: {os.getenv('TERMINAL_CWD', _safe_getcwd())}")
-    from fulilian_constants import display_hermes_home as _dhh
+    from fulilian_constants import display_fulilian_home as _dhh
     print(f"  TERMINAL_SANDBOX_DIR: {os.getenv('TERMINAL_SANDBOX_DIR', f'{_dhh()}/sandboxes')}")
     print(f"  TERMINAL_TIMEOUT: {os.getenv('TERMINAL_TIMEOUT', '60')}")
     print(f"  TERMINAL_LIFETIME_SECONDS: {os.getenv('TERMINAL_LIFETIME_SECONDS', '300')}")

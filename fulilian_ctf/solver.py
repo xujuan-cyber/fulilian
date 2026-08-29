@@ -1,6 +1,6 @@
 """单题 Solver 进程（F2-001 的 worker 侧）。
 
-每个 solver 是一个独立进程（进程隔离：崩溃不影响其他），复用 Hermes 的
+每个 solver 是一个独立进程（进程隔离：崩溃不影响其他），复用 Fulilian 的
 ``run_agent.main(mode="ctf")`` 核心。通过 multiprocessing.Queue 上报结果。
 
 流程：
@@ -100,7 +100,7 @@ def read_flag_file(work_dir: str | Path) -> str:
 
 
 def resolve_default_model() -> str:
-    """从 Hermes 配置解析默认模型（config.yaml 的 model.default）。
+    """从 Fulilian 配置解析默认模型（config.yaml 的 model.default）。
 
     run_agent 在 model 为空时不会自动回退到配置默认值（会以空模型名请求
     API 导致 400），因此 solver 必须显式解析。解析失败返回空串。
@@ -193,7 +193,7 @@ def publish_result_fact(project, work_dir: str | Path, result: "SolverResult") -
 
 
 def _default_solver_impl(project, work_dir: Path, query: str) -> int:
-    """真实求解：复用 Hermes run_agent 核心（CTF 模式），stdout/stderr 进 solver.log。"""
+    """真实求解：复用 Fulilian run_agent 核心（CTF 模式），stdout/stderr 进 solver.log。"""
     from run_agent import main as run_agent_main
 
     log_path = work_dir / SOLVER_LOG
@@ -237,7 +237,7 @@ def solver_worker(project, work_dir: str, model: str, queue, solver_impl=None) -
             pass
         # F4-004：solver 侧默认 workspace-write 沙箱档（hooks 读取）
         os.environ.setdefault(ENV_SANDBOX_MODE, "workspace-write")
-        # F4-003/F4-004：worker 进程内注册 CTF hooks（不写 ~/.hermes 配置）
+        # F4-003/F4-004：worker 进程内注册 CTF hooks（不写 ~/.fulilian 配置）
         try:
             from .hooks import register_ctf_tool_hooks
 
@@ -290,7 +290,7 @@ def solver_worker(project, work_dir: str, model: str, queue, solver_impl=None) -
 def switch_solver_model(agent, new_model: str, new_provider: str = "") -> None:
     """运行时切换 solver 模型（F4-005，卡题时换强模型）。
 
-    复用 Hermes 原生 ``switch_model()``；黑板上下文在题目目录
+    复用 Fulilian 原生 ``switch_model()``；黑板上下文在题目目录
     blackboard.json 文件里，换模型不受影响。交互会话中直接用原生
     ``/model`` 命令即可（run_agent 内置，等价路径）。
     """

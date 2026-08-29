@@ -68,10 +68,10 @@ deepinfra = _DeepInfraProfile(
     # round-trip on every agent turn), so we need one explicit choice.
     # Every other surface (chat picker, image-gen, tts, stt, pricing)
     # discovers models live from
-    # ``api.deepinfra.com/v1/openai/models?filter=true&sort_by=hermes``.
+    # ``api.deepinfra.com/v1/openai/models?filter=true&sort_by=fulilian``.
     default_aux_model="deepseek-ai/DeepSeek-V4-Flash",
     # ``fallback_models`` deliberately empty — the live catalog at
-    # ``hermes_cli/models.py::_fetch_deepinfra_models`` is the source of
+    # ``fulilian_cli/models.py::_fetch_deepinfra_models`` is the source of
     # truth. When the live fetch fails (network/DNS), the picker shows
     # no options, which is preferable to silently routing the user to a
     # model that may have been retired upstream.

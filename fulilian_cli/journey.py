@@ -1,4 +1,4 @@
-"""``hermes journey`` — what Hermes has learned, on a timeline.
+"""``fulilian journey`` — what Fulilian has learned, on a timeline.
 
 A terminal-native rendition of the desktop Star Map / Memory Graph: a horizontal
 timeline bar chart of learned skills and memories over time (oldest at top,
@@ -255,7 +255,7 @@ def _cmd_show(args: argparse.Namespace) -> int:
 
     if not payload.get("nodes"):
         console.print(
-            "[grey62]No learning yet — use Hermes a while and your learned skills and "
+            "[grey62]No learning yet — use Fulilian a while and your learned skills and "
             "memories will start mapping out here.[/grey62]"
         )
         return 0
@@ -408,7 +408,7 @@ def cmd_journey(args: argparse.Namespace) -> int:
 
 
 if __name__ == "__main__":
-    _p = argparse.ArgumentParser(prog="hermes journey")
+    _p = argparse.ArgumentParser(prog="fulilian journey")
     register_cli(_p)
     _a = _p.parse_args()
     sys.exit(_a.func(_a))

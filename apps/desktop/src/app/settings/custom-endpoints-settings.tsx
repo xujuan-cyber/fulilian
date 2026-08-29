@@ -9,13 +9,13 @@ import {
   getCustomEndpoints,
   saveCustomEndpoint,
   validateCustomEndpoint
-} from '@/hermes'
+} from '@/fulilian'
 import { triggerHaptic } from '@/lib/haptics'
 import { Check, Globe, Loader2, Plus, Save, Trash2, Zap } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import { confirm } from '@/store/confirm'
 import { notify, notifyError } from '@/store/notifications'
-import type { CustomEndpoint, CustomEndpointUpdate } from '@/types/hermes'
+import type { CustomEndpoint, CustomEndpointUpdate } from '@/types/fulilian'
 
 import { EmptyState, Pill, SectionHeading, SettingsContent, SettingsSkeleton } from './primitives'
 

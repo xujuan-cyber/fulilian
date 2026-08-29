@@ -184,7 +184,7 @@ class TestKernelOwnershipAndLifecycle(unittest.TestCase):
     with anything. The owner is the approval session key; disposal rides
     the same session boundary that clears approval/yolo state, idle
     kernels are reaped, and the process-wide live count is capped (the
-    lifecycle shape carried forward from hermes-agent#88637).
+    lifecycle shape carried forward from fulilian-agent#88637).
     """
 
     def _run_as(self, session_key, code, task_id, **kwargs):
@@ -330,7 +330,7 @@ class TestPerCellRpcAuthority(unittest.TestCase):
         from tools.terminal_tool import set_approval_callback
 
         seen = []
-        cell = "import hermes_tools\nhermes_tools.web_search(query='q')\n"
+        cell = "import fulilian_tools\nfulilian_tools.web_search(query='q')\n"
         with _kernel_config(), patch(
             "model_tools.handle_function_call", new=self._recorder(seen)
         ):
@@ -374,7 +374,7 @@ class TestPerCellRpcAuthority(unittest.TestCase):
 
             set_approval_callback(cb_one)
             try:
-                first = _run("import hermes_tools\nalias = hermes_tools.web_search\n")
+                first = _run("import fulilian_tools\nalias = fulilian_tools.web_search\n")
                 set_approval_callback(cb_two)
                 second = _run("alias(query='q')\n")
             finally:

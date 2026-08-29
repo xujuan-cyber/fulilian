@@ -1,7 +1,7 @@
 """
-Gateway subcommand for hermes CLI.
+Gateway subcommand for fulilian CLI.
 
-Handles: hermes gateway [run|start|stop|restart|status|install|uninstall|setup]
+Handles: fulilian gateway [run|start|stop|restart|status|install|uninstall|setup]
 """
 
 import asyncio
@@ -48,7 +48,7 @@ from gateway.restart import (
 )
 from fulilian_cli.config import (
     get_env_value,
-    get_hermes_home,
+    get_fulilian_home,
     is_managed,
     managed_error,
     read_raw_config,
@@ -56,8 +56,8 @@ from fulilian_cli.config import (
     write_platform_config_field,
 )
 
-# display_hermes_home is imported lazily at call sites to avoid ImportError
-# when hermes_constants is cached from a pre-update version during `hermes update`.
+# display_fulilian_home is imported lazily at call sites to avoid ImportError
+# when fulilian_constants is cached from a pre-update version during `fulilian update`.
 from fulilian_cli.setup import (
     print_header,
     print_info,
@@ -125,19 +125,19 @@ def _get_service_pids(all_profiles: bool = False) -> set:
     returns (true for both systemd and launchd in practice).
 
     ``all_profiles`` widens the launchd branch to every installed
-    ``ai.hermes.gateway*`` LaunchAgent — the update path needs the whole
+    ``ai.fulilian.gateway*`` LaunchAgent — the update path needs the whole
     fleet excluded from its sweep (#41403, #73626): sibling-profile launchd
     gateways found by the (BSD-fixed) ps scan must not be misclassified as
     manual processes and killed.  Default-scope callers (``gateway status``,
     cron checks) keep seeing only the current profile's service; the orphan
     reaper passes all_profiles=True for the same friendly-fire reason.  The
-    systemd branch has always been fleet-wide (``hermes-gateway*``) and is
+    systemd branch has always been fleet-wide (``fulilian-gateway*``) and is
     unaffected.
     """
     pids: set = set()
 
     # --- systemd (Linux): user and system scopes ---
-    # systemd always lists every hermes-gateway* unit regardless of scope.
+    # systemd always lists every fulilian-gateway* unit regardless of scope.
     if supports_systemd_services():
         for scope_args in [["systemctl", "--user"], ["systemctl"]]:
             try:
@@ -145,7 +145,7 @@ def _get_service_pids(all_profiles: bool = False) -> set:
                     scope_args
                     + [
                         "list-units",
-                        "hermes-gateway*",
+                        "fulilian-gateway*",
                         "--plain",
                         "--no-legend",
                         "--no-pager",
@@ -179,7 +179,7 @@ def _get_service_pids(all_profiles: bool = False) -> set:
         labels = {get_launchd_label()}
         if all_profiles:
             # Every gateway LaunchAgent, not just the invoking profile's —
-            # mirrors the systemd branch's ``hermes-gateway*`` pattern above.
+            # mirrors the systemd branch's ``fulilian-gateway*`` pattern above.
             # The update path restarts the whole fleet, and its stale-process
             # sweep must not mistake a sibling service's fresh PID for a
             # manual gateway it should kill (#41403).
@@ -193,7 +193,7 @@ def _get_service_pids(all_profiles: bool = False) -> set:
                 pids.add(pid)
         if all_profiles:
             # Belt-and-suspenders for the EXCLUDE use case (#74075): a bare
-            # ``launchctl list`` prefix scan also catches ai.hermes.gateway*
+            # ``launchctl list`` prefix scan also catches ai.fulilian.gateway*
             # agents the label derivation can't map (renamed profiles, other
             # installs sharing this user).  Over-inclusion is safe here —
             # these PIDs are only ever protected from the kill sweep, never
@@ -209,7 +209,7 @@ def _get_service_pids(all_profiles: bool = False) -> set:
                     for line in result.stdout.strip().splitlines():
                         parts = line.split()
                         if len(parts) >= 3 and parts[-1].startswith(
-                            "ai.hermes.gateway"
+                            "ai.fulilian.gateway"
                         ):
                             try:
                                 pid = int(parts[0])
@@ -230,7 +230,7 @@ def _get_parent_pid(pid: int) -> int | None:
     older implementation shelled out to ``ps -o ppid= -p <pid>``, which
     silently fails on Windows (no ``ps``) so the ancestor walk terminated
     at self — the caller's dedup / exclude logic then couldn't distinguish
-    "hermes CLI that invoked this scan" from "real gateway process".
+    "fulilian CLI that invoked this scan" from "real gateway process".
     """
     if pid <= 1:
         return None
@@ -375,7 +375,7 @@ def _wait_for_pid_exit(pid: int, timeout: float) -> bool:
 # A gateway whose asyncio loop is stalled (e.g. an in-loop compression pass,
 # #72707) cannot process SIGTERM/SIGUSR1 shutdown: the drain wait then burns
 # the full drain budget (180s by default), warns "still running after 180.0s
-# — restart may fail", and `hermes update` can deadlock behind it.  The loop
+# — restart may fail", and `fulilian update` can deadlock behind it.  The loop
 # publishes a liveness signal precisely for this case: an asyncio task
 # rewrites ``state/gateway.heartbeat`` every 30s (#66892), so a frozen loop
 # stops refreshing the file while a busy-but-alive loop keeps refreshing it.
@@ -669,7 +669,7 @@ def _get_ancestor_pids() -> set[int]:
 
     Walks from the current PID up to PID 1 (init) so that process-table scans
     never match the calling CLI process or any of its parents.  This prevents
-    ``hermes gateway status`` from falsely counting the ``hermes`` CLI that
+    ``fulilian gateway status`` from falsely counting the ``fulilian`` CLI that
     invoked it as a running gateway instance (see #13242).
     """
     ancestors: set[int] = set()
@@ -706,7 +706,7 @@ def _scan_gateway_pids(
     discover gateways outside the current profile.
     """
     # Exclude the entire ancestor chain so the CLI process that invoked this
-    # scan (e.g. ``hermes gateway status``) is never mistaken for a running
+    # scan (e.g. ``fulilian gateway status``) is never mistaken for a running
     # gateway.  See #13242.
     exclude_pids = exclude_pids | _get_ancestor_pids()
     pids: list[int] = []
@@ -719,8 +719,8 @@ def _scan_gateway_pids(
         looks_like_gateway_command_line,
         looks_like_gateway_runtime_command_line,
     )
-    current_home = str(get_hermes_home().resolve())
-    # Forward slashes on both sides of the HERMES_HOME= match — see
+    current_home = str(get_fulilian_home().resolve())
+    # Forward slashes on both sides of the FULILIAN_HOME= match — see
     # gateway.status._command_line_belongs_to_profile, which this mirrors.
     current_home_lc = current_home.lower().replace("\\", "/")
     current_profile_arg = _profile_arg(current_home)
@@ -735,19 +735,19 @@ def _scan_gateway_pids(
             return (
                 f"--profile {current_profile_name_lc}" in command_lc
                 or f"-p {current_profile_name_lc}" in command_lc
-                or f"hermes_home={current_home_lc}" in command_lc
+                or f"fulilian_home={current_home_lc}" in command_lc
             )
 
         # Default-profile case: no profile flag in argv. Accept as long as
-        # the command doesn't advertise *some other* profile. HERMES_HOME
+        # the command doesn't advertise *some other* profile. FULILIAN_HOME
         # may be passed via env (not visible in wmic/CIM command line) so
         # its absence is NOT disqualifying — only a non-matching explicit
-        # HERMES_HOME= in argv is.
+        # FULILIAN_HOME= in argv is.
         if "--profile " in command_lc or " -p " in command_lc:
             return False
         if (
-            "hermes_home=" in command_lc
-            and f"hermes_home={current_home_lc}" not in command_lc
+            "fulilian_home=" in command_lc
+            and f"fulilian_home={current_home_lc}" not in command_lc
         ):
             return False
         return True
@@ -768,7 +768,7 @@ def _scan_gateway_pids(
             # ``subprocess.run(timeout=...)`` — because on Windows ``run()``'s
             # post-timeout cleanup joins the pipe reader threads unbounded; a
             # descendant (conhost.exe) holding duplicated pipe handles then
-            # wedges the caller forever. ``hermes update`` hung exactly there
+            # wedges the caller forever. ``fulilian update`` hung exactly there
             # on slow-WMI machines where the full Win32_Process scan exceeds
             # its budget (#87134).
             # bounded_probe_run also hides the console window: this scan runs
@@ -958,10 +958,10 @@ def find_gateway_pids(
         exclude_pids: PIDs to exclude from the result (e.g. service-managed
             PIDs that should not be killed during a stale-process sweep).
         all_profiles: When ``True``, return gateway PIDs across **all**
-            profiles (the pre-7923 global behaviour).  ``hermes update``
+            profiles (the pre-7923 global behaviour).  ``fulilian update``
             needs this because a code update affects every profile.
             When ``False`` (default), only PIDs belonging to the current
-            Hermes profile are returned.
+            Fulilian profile are returned.
     """
     _exclude = set(exclude_pids or set())
     pids: list[int] = []
@@ -992,7 +992,7 @@ def find_profile_gateway_processes(
     *,
     strict: bool = False,
 ) -> list[ProfileGatewayProcess]:
-    """Return running gateway PIDs mapped to Hermes profiles via PID files."""
+    """Return running gateway PIDs mapped to Fulilian profiles via PID files."""
     _exclude = set(exclude_pids or set())
     processes: list[ProfileGatewayProcess] = []
     try:
@@ -1048,7 +1048,7 @@ def find_windows_gateway_services(
 
     Service-logon processes can deny the interactive Desktop access to their
     command lines. The updater can still identify them without guessing: a
-    validated profile gateway PID comes from Hermes's own PID file, and its
+    validated profile gateway PID comes from Fulilian's own PID file, and its
     parent chain terminates at a running SCM service PID. The complete service
     subtree is returned so the Desktop preflight exempts only processes the CLI
     updater will stop through the Service Control Manager.
@@ -1161,7 +1161,7 @@ def find_windows_gateway_services(
 
 
 def _gateway_run_args_for_profile(profile: str) -> list[str]:
-    args = [get_python_path(), "-m", "hermes_cli.main"]
+    args = [get_python_path(), "-m", "fulilian_cli.main"]
     if profile != "default":
         args.extend(["--profile", profile])
     args.extend(["gateway", "run", "--replace"])
@@ -1172,7 +1172,7 @@ def _capture_gateway_argv(pid: int) -> list[str] | None:
     """Return the live argv of a running gateway process, or ``None``.
 
     Used to respawn gateways that have no profile→PID-file mapping (e.g. a
-    Windows Scheduled Task running ``pythonw.exe -m hermes_cli.main gateway
+    Windows Scheduled Task running ``pythonw.exe -m fulilian_cli.main gateway
     run``). ``_pause_windows_gateways_for_update`` force-kills such gateways
     before mutating the venv; without their original command line we cannot
     bring them back, so we snapshot it here before the kill.
@@ -1208,10 +1208,10 @@ def _capture_gateway_argv(pid: int) -> list[str] | None:
 
 
 def _prepare_profile_gateway_update_restart(profile: str, pid: int) -> str | None:
-    """Choose who relaunches a profile gateway after ``hermes update``.
+    """Choose who relaunches a profile gateway after ``fulilian update``.
 
     A gateway started with ``--external-supervisor`` must exit back to that
-    manager. Starting Hermes's detached watcher as well would escape the
+    manager. Starting Fulilian's detached watcher as well would escape the
     manager and race its replacement process. Ordinary foreground gateways
     retain the existing detached-watcher behavior.
 
@@ -1242,7 +1242,7 @@ def launch_detached_gateway_restart_by_cmdline(
 
     Companion to ``launch_detached_profile_gateway_restart`` for gateways that
     have no profile→PID-file mapping (Scheduled-Task / manually-launched
-    ``gateway run`` whose HERMES_HOME or argv doesn't match a known profile).
+    ``gateway run`` whose FULILIAN_HOME or argv doesn't match a known profile).
     Uses the identical detached-watcher mechanism; only the respawn argv
     differs (the process's own argv instead of a profile-derived one).
     """
@@ -1273,8 +1273,8 @@ def _spawn_gateway_restart_watcher(old_pid: int, run_argv: list[str]) -> bool:
     #
     # Windows — ``start_new_session`` is silently accepted but does NOT
     # detach.  The watcher stays attached to the CLI's console and dies
-    # when the user closes the terminal, leaving ``hermes update`` users
-    # with no running gateway until they re-invoke ``hermes gateway``
+    # when the user closes the terminal, leaving ``fulilian update`` users
+    # with no running gateway until they re-invoke ``fulilian gateway``
     # manually.  The Win32 equivalent is the ``CREATE_NEW_PROCESS_GROUP |
     # DETACHED_PROCESS | CREATE_NO_WINDOW`` creationflags bundle.
     #
@@ -1290,7 +1290,7 @@ def _spawn_gateway_restart_watcher(old_pid: int, run_argv: list[str]) -> bool:
     # want: the watcher respawns it under CREATE_NO_WINDOW detach flags, so
     # the gateway owns one hidden console that all descendants inherit —
     # nothing flashes (#54220/#56747).  The spec helper normalizes the
-    # interpreter and captures the stable cwd + env overlay (HERMES_HOME,
+    # interpreter and captures the stable cwd + env overlay (FULILIAN_HOME,
     # VIRTUAL_ENV, PYTHONPATH) so the respawn doesn't depend on the watcher's
     # transient working directory.  No-op on POSIX.
     # See gateway_windows.windowless_gateway_restart_spec.
@@ -1353,7 +1353,7 @@ def _spawn_gateway_restart_watcher(old_pid: int, run_argv: list[str]) -> bool:
             "stderr": subprocess.DEVNULL,
         }}
         # Anchor the respawned gateway at the stable working dir and overlay
-        # the env (VIRTUAL_ENV / PYTHONPATH / HERMES_HOME) the windowless
+        # the env (VIRTUAL_ENV / PYTHONPATH / FULILIAN_HOME) the windowless
         # base interpreter needs to import fulilian_cli.  Empty on POSIX, where
         # the venv python resolves imports without help.
         if _respawn_cwd:
@@ -1478,8 +1478,8 @@ def _read_systemd_unit_environment(system: bool = False) -> dict[str, str]:
     return parsed
 
 
-def _hermes_home_from_systemd_unit_file(system: bool = False) -> str | None:
-    """Read ``HERMES_HOME`` from the on-disk unit file (not ``systemctl show``).
+def _fulilian_home_from_systemd_unit_file(system: bool = False) -> str | None:
+    """Read ``FULILIAN_HOME`` from the on-disk unit file (not ``systemctl show``).
 
     Prefer the file when refreshing/comparing: under ``sudo``, ``systemctl``
     may be slow/unavailable in tests, and the on-disk unit is what
@@ -1498,18 +1498,18 @@ def _hermes_home_from_systemd_unit_file(system: bool = False) -> str | None:
         if not stripped.startswith("Environment="):
             continue
         body = stripped[len("Environment=") :].strip().strip('"')
-        if body.startswith("HERMES_HOME="):
+        if body.startswith("FULILIAN_HOME="):
             value = body.split("=", 1)[1].strip().strip('"')
             return value or None
     return None
 
 
-def _sync_hermes_home_from_systemd_unit(system: bool) -> None:
-    """When acting on a system-scope unit, adopt its ``HERMES_HOME``.
+def _sync_fulilian_home_from_systemd_unit(system: bool) -> None:
+    """When acting on a system-scope unit, adopt its ``FULILIAN_HOME``.
 
-    Under ``sudo``, ``HERMES_HOME`` is stripped and ``HOME=/root``, so
-    :func:`get_hermes_home` falls back to ``/root/.hermes`` — the wrong
-    profile. The unit file pins ``HERMES_HOME`` for the actual gateway
+    Under ``sudo``, ``FULILIAN_HOME`` is stripped and ``HOME=/root``, so
+    :func:`get_fulilian_home` falls back to ``/root/.fulilian`` — the wrong
+    profile. The unit file pins ``FULILIAN_HOME`` for the actual gateway
     process, so we mirror that into our own environment to make
     ``read_runtime_status`` / ``get_running_pid`` read the correct files.
     """
@@ -1517,15 +1517,15 @@ def _sync_hermes_home_from_systemd_unit(system: bool) -> None:
         return
     # Prefer the on-disk unit (source of truth for refresh/compare). Fall
     # back to ``systemctl show`` for units that only exist in the manager.
-    unit_home = (_hermes_home_from_systemd_unit_file(system=True) or "").strip()
+    unit_home = (_fulilian_home_from_systemd_unit_file(system=True) or "").strip()
     if not unit_home:
-        unit_home = _read_systemd_unit_environment(system=True).get("HERMES_HOME", "").strip()
+        unit_home = _read_systemd_unit_environment(system=True).get("FULILIAN_HOME", "").strip()
     if not unit_home:
         return
-    current = os.environ.get("HERMES_HOME", "").strip()
+    current = os.environ.get("FULILIAN_HOME", "").strip()
     if current == unit_home:
         return
-    os.environ["HERMES_HOME"] = unit_home
+    os.environ["FULILIAN_HOME"] = unit_home
 
 
 def _read_systemd_unit_properties(
@@ -1685,7 +1685,7 @@ def _wait_for_systemd_service_restart(
 
     print(
         f"⚠ {scope_label} service did not become active within {int(timeout)}s.\n"
-        f"  Check status: {'sudo ' if system else ''}hermes gateway status\n"
+        f"  Check status: {'sudo ' if system else ''}fulilian gateway status\n"
         f"  Check logs:   journalctl {'--user ' if not system else ''}-u {svc} -l --since '2 min ago'"
     )
     return False
@@ -1746,7 +1746,7 @@ def _print_systemd_start_limit_wait(system: bool = False) -> None:
     print(f"⏳ {scope_label} service is temporarily rate-limited by systemd.")
     print("  systemd is refusing another immediate start after repeated exits.")
     print(
-        f"  Wait for the start-limit window to expire, then run: {'sudo ' if system else ''}hermes gateway restart{scope_flag}"
+        f"  Wait for the start-limit window to expire, then run: {'sudo ' if system else ''}fulilian gateway restart{scope_flag}"
     )
     print(f"  Or clear the failed state manually: {systemctl_prefix}reset-failed {svc}")
     print(f"  Check logs: {journal_prefix}-u {svc} -l --since '5 min ago'")
@@ -2038,20 +2038,20 @@ def _print_gateway_process_mismatch(snapshot: GatewayRuntimeSnapshot) -> None:
         )
         print(f"  PID(s): {_format_gateway_pids(snapshot.gateway_pids, limit=None)}")
         print("  Auto-start at login and auto-restart on crash are NOT available.")
-        print("  Stop it with: hermes gateway stop")
+        print("  Stop it with: fulilian gateway stop")
     else:
         print(
             "⚠ Gateway process is running for this profile, but the service is not active"
         )
         print(f"  PID(s): {_format_gateway_pids(snapshot.gateway_pids, limit=None)}")
-        print("  This is usually a manual foreground/tmux/nohup run, so `hermes gateway`")
+        print("  This is usually a manual foreground/tmux/nohup run, so `fulilian gateway`")
         print("  can refuse to start another copy until this process stops.")
 
 
 def _print_other_profiles_gateway_status() -> None:
     """Print a summary of gateway status across all profiles.
 
-    Shown at the bottom of ``hermes gateway status`` output so users with
+    Shown at the bottom of ``fulilian gateway status`` output so users with
     multiple profiles can tell at a glance which gateways are running and
     avoid confusing another profile's process with the current one.
     """
@@ -2196,7 +2196,7 @@ def _reap_unsupervised_gateway_orphans(extra_exclude: set | None = None) -> bool
     """Kill no-supervisor gateway orphans the pidfile/runtime record can't see.
 
     On WSL/no-systemd hosts the manual restart fallback runs the gateway
-    in-process under a ``gateway restart`` argv (hermes_cli/gateway.py restart
+    in-process under a ``gateway restart`` argv (fulilian_cli/gateway.py restart
     branch → ``run_gateway()``). If its pidfile or runtime record goes missing
     or stale, ``get_running_pid()`` returns ``None`` even though a live orphan
     still holds the webhook port, so a follow-up restart stacks a duplicate on
@@ -2227,14 +2227,14 @@ def _reap_unsupervised_gateway_orphans(extra_exclude: set | None = None) -> bool
     # detached gateway on every desktop serve start (#86098, #87001).
     if is_windows():
         try:
-            # The install-time task name is profile-aware (Hermes_Gateway /
-            # Hermes_Gateway_<profile>) — never hardcode it, or the guard is
-            # dormant on every standard `hermes gateway install` deployment.
+            # The install-time task name is profile-aware (Fulilian_Gateway /
+            # Fulilian_Gateway_<profile>) — never hardcode it, or the guard is
+            # dormant on every standard `fulilian gateway install` deployment.
             from fulilian_cli.gateway_windows import get_task_name
 
             _task_name = get_task_name()
         except Exception:
-            _task_name = "Hermes_Gateway"
+            _task_name = "Fulilian_Gateway"
         if _windows_scheduled_task_supervises(_task_name):
             return False
 
@@ -2253,7 +2253,7 @@ def _reap_unsupervised_gateway_orphans(extra_exclude: set | None = None) -> bool
         # all_profiles=True: the reaper's process scan sees every profile's
         # gateway (and on macOS the now-working ps fallback surfaces sibling
         # launchd gateways, #73626), so the service exclusion must cover the
-        # whole ai.hermes.gateway* fleet — not just the current profile's
+        # whole ai.fulilian.gateway* fleet — not just the current profile's
         # label — or a sibling profile's launchd gateway is misclassified as
         # an unsupervised orphan and reaped. Same class as the update-sweep
         # fix in #74075.
@@ -2337,7 +2337,7 @@ def _reap_unsupervised_gateway_orphans(extra_exclude: set | None = None) -> bool
 
 
 def stop_profile_gateway() -> bool:
-    """Stop only the gateway for the current profile (HERMES_HOME-scoped).
+    """Stop only the gateway for the current profile (FULILIAN_HOME-scoped).
 
     Uses the PID file written by start_gateway(), so it only kills the
     gateway belonging to this profile — not gateways from other profiles.
@@ -2441,7 +2441,7 @@ def _systemd_operational(system: bool = False) -> bool:
 def _container_systemd_operational() -> bool:
     """Return True when a container exposes working user or system systemd.
 
-    This is NOT our Hermes Docker image — that one runs s6-overlay as
+    This is NOT our Fulilian Docker image — that one runs s6-overlay as
     PID 1 (since Phase 2 of the s6-overlay supervision plan) and is
     detected via ``service_manager.detect_service_manager() == "s6"``.
     This function handles the "container managed by something else"
@@ -2552,15 +2552,15 @@ def _windows_scheduled_task_supervises(task_name: str) -> bool:
 def _windows_gateway_should_absorb_console_controls() -> bool:
     """Return True for detached Windows gateway runs that should ignore Ctrl+C.
 
-    Foreground ``hermes gateway run`` must remain interruptible from
+    Foreground ``fulilian gateway run`` must remain interruptible from
     PowerShell/CMD. Detached service-style launches opt in via
-    ``HERMES_GATEWAY_DETACHED=1``; older wrappers without the env marker are
+    ``FULILIAN_GATEWAY_DETACHED=1``; older wrappers without the env marker are
     treated as detached when no interactive stdin is attached.
     """
     if not is_windows():
         return False
 
-    detached = os.getenv("HERMES_GATEWAY_DETACHED", "").strip().lower()
+    detached = os.getenv("FULILIAN_GATEWAY_DETACHED", "").strip().lower()
     if detached in {"1", "true", "yes", "on"}:
         return True
 
@@ -2600,23 +2600,23 @@ def _windows_gateway_breakaway_state() -> bool | None:
 # Service Configuration
 # =============================================================================
 
-_SERVICE_BASE = "hermes-gateway"
-SERVICE_DESCRIPTION = "Hermes Agent Gateway - Messaging Platform Integration"
+_SERVICE_BASE = "fulilian-gateway"
+SERVICE_DESCRIPTION = "FuLiLian Gateway - Messaging Platform Integration"
 
 
 def _profile_suffix() -> str:
-    """Derive a service-name suffix from the current HERMES_HOME.
+    """Derive a service-name suffix from the current FULILIAN_HOME.
 
     Returns ``""`` for the default root, the profile name for
     ``<root>/profiles/<name>``, or a short hash for any other path.
-    Works correctly in Docker (HERMES_HOME=/opt/data) and standard deployments.
+    Works correctly in Docker (FULILIAN_HOME=/opt/data) and standard deployments.
     """
     import hashlib
     import re
-    from fulilian_constants import get_default_hermes_root
+    from fulilian_constants import get_default_fulilian_root
 
-    home = get_hermes_home().resolve()
-    default = get_default_hermes_root().resolve()
+    home = get_fulilian_home().resolve()
+    default = get_default_fulilian_root().resolve()
     if home == default:
         return ""
     # Detect <root>/profiles/<name> pattern → use the profile name
@@ -2628,30 +2628,30 @@ def _profile_suffix() -> str:
             return parts[0]
     except ValueError:
         pass
-    # Fallback: short hash for arbitrary HERMES_HOME paths
+    # Fallback: short hash for arbitrary FULILIAN_HOME paths
     return hashlib.sha256(str(home).encode()).hexdigest()[:8]
 
 
-def _profile_arg(hermes_home: str | None = None, default_root: str | Path | None = None) -> str:
-    """Return ``--profile <name>`` only when HERMES_HOME is a named profile.
+def _profile_arg(fulilian_home: str | None = None, default_root: str | Path | None = None) -> str:
+    """Return ``--profile <name>`` only when FULILIAN_HOME is a named profile.
 
-    For ``~/.hermes/profiles/<name>``, returns ``"--profile <name>"``.
+    For ``~/.fulilian/profiles/<name>``, returns ``"--profile <name>"``.
     For the default profile or hash-based custom paths, returns the empty string.
 
     Args:
-        hermes_home: Optional explicit HERMES_HOME path. Defaults to the current
-            ``get_hermes_home()`` value. Should be passed when generating a
+        fulilian_home: Optional explicit FULILIAN_HOME path. Defaults to the current
+            ``get_fulilian_home()`` value. Should be passed when generating a
             service definition for a different user (e.g. system service).
-        default_root: Optional Hermes root to compare against. Used when
+        default_root: Optional Fulilian root to compare against. Used when
             generating a system service for another user from a sudo/root
-            process, where ``Path.home()`` and ``get_default_hermes_root()``
+            process, where ``Path.home()`` and ``get_default_fulilian_root()``
             refer to root but the target profile lives under the service user.
     """
     import re
-    from fulilian_constants import get_default_hermes_root
+    from fulilian_constants import get_default_fulilian_root
 
-    home = Path(hermes_home or str(get_hermes_home())).resolve()
-    default = Path(default_root).resolve() if default_root else get_default_hermes_root().resolve()
+    home = Path(fulilian_home or str(get_fulilian_home())).resolve()
+    default = Path(default_root).resolve() if default_root else get_default_fulilian_root().resolve()
     if home == default:
         return ""
     profiles_root = (default / "profiles").resolve()
@@ -2665,22 +2665,22 @@ def _profile_arg(hermes_home: str | None = None, default_root: str | Path | None
     return ""
 
 
-def _profile_arg_for_target_user(hermes_home: str, target_home_dir: str) -> str:
+def _profile_arg_for_target_user(fulilian_home: str, target_home_dir: str) -> str:
     """Return the profile arg for a system service running as another user."""
-    target_root = Path(target_home_dir) / ".hermes"
+    target_root = Path(target_home_dir) / ".fulilian"
     try:
-        Path(hermes_home).resolve().relative_to(target_root.resolve())
-        return _profile_arg(hermes_home, default_root=target_root)
+        Path(fulilian_home).resolve().relative_to(target_root.resolve())
+        return _profile_arg(fulilian_home, default_root=target_root)
     except ValueError:
-        return _profile_arg(hermes_home)
+        return _profile_arg(fulilian_home)
 
 
 def get_service_name() -> str:
-    """Derive a systemd service name scoped to this HERMES_HOME.
+    """Derive a systemd service name scoped to this FULILIAN_HOME.
 
-    Default ``~/.hermes`` returns ``hermes-gateway`` (backward compatible).
-    Profile ``~/.hermes/profiles/coder`` returns ``hermes-gateway-coder``.
-    Any other HERMES_HOME appends a short hash for uniqueness.
+    Default ``~/.fulilian`` returns ``fulilian-gateway`` (backward compatible).
+    Profile ``~/.fulilian/profiles/coder`` returns ``fulilian-gateway-coder``.
+    Any other FULILIAN_HOME appends a short hash for uniqueness.
     """
     suffix = _profile_suffix()
     if not suffix:
@@ -2929,7 +2929,7 @@ def _raise_user_systemd_unavailable(
         "\n"
         "  Alternative: run the gateway in the foreground (stays up until\n"
         "  you exit / close the terminal):\n"
-        "    hermes gateway run"
+        "    fulilian gateway run"
     )
     raise UserSystemdUnavailableError(msg)
 
@@ -2980,20 +2980,20 @@ def has_conflicting_systemd_units() -> bool:
     return len(get_installed_systemd_scopes()) > 1
 
 
-# Legacy service names from older Hermes installs that predate the
-# hermes-gateway rename. Kept as an explicit allowlist (NOT a glob) so
-# profile units (hermes-gateway-*.service) and unrelated third-party
-# "hermes" units are never matched.
-_LEGACY_SERVICE_NAMES: tuple[str, ...] = ("hermes.service",)
+# Legacy service names from older Fulilian installs that predate the
+# fulilian-gateway rename. Kept as an explicit allowlist (NOT a glob) so
+# profile units (fulilian-gateway-*.service) and unrelated third-party
+# "fulilian" units are never matched.
+_LEGACY_SERVICE_NAMES: tuple[str, ...] = ("fulilian.service",)
 
 # ExecStart content markers that identify a unit as running our gateway.
 # A legacy unit is only flagged when its file contains one of these.
 _LEGACY_UNIT_EXECSTART_MARKERS: tuple[str, ...] = (
-    "hermes_cli.main gateway",
-    "hermes_cli/main.py gateway",
+    "fulilian_cli.main gateway",
+    "fulilian_cli/main.py gateway",
     "gateway/run.py",
-    " hermes gateway ",
-    "/hermes gateway ",
+    " fulilian gateway ",
+    "/fulilian gateway ",
 )
 
 
@@ -3009,23 +3009,23 @@ def _legacy_unit_search_paths() -> list[tuple[bool, Path]]:
     ]
 
 
-def _find_legacy_hermes_units() -> list[tuple[str, Path, bool]]:
-    """Return ``[(unit_name, unit_path, is_system)]`` for legacy Hermes gateway units.
+def _find_legacy_fulilian_units() -> list[tuple[str, Path, bool]]:
+    """Return ``[(unit_name, unit_path, is_system)]`` for legacy Fulilian gateway units.
 
-    Detects unit files installed by older Hermes versions that used a
-    different service name (e.g. ``hermes.service`` before the rename to
-    ``hermes-gateway.service``). When both a legacy unit and the current
-    ``hermes-gateway.service`` are active, they fight over the same bot
+    Detects unit files installed by older Fulilian versions that used a
+    different service name (e.g. ``fulilian.service`` before the rename to
+    ``fulilian-gateway.service``). When both a legacy unit and the current
+    ``fulilian-gateway.service`` are active, they fight over the same bot
     token — the PR #5646 signal-recovery change turns this into a 30-second
     SIGTERM flap loop.
 
     Safety guards:
 
     * Explicit allowlist of legacy names (no globbing). Profile units such
-      as ``hermes-gateway-coder.service`` and unrelated third-party
-      ``hermes-*`` services are never matched.
+      as ``fulilian-gateway-coder.service`` and unrelated third-party
+      ``fulilian-*`` services are never matched.
     * ExecStart content check — only flag units that invoke our gateway
-      entrypoint. A user-created ``hermes.service`` running an unrelated
+      entrypoint. A user-created ``fulilian.service`` running an unrelated
       binary is left untouched.
     * Results are returned purely for caller inspection; this function
       never mutates or removes anything.
@@ -3047,37 +3047,37 @@ def _find_legacy_hermes_units() -> list[tuple[str, Path, bool]]:
     return results
 
 
-def has_legacy_hermes_units() -> bool:
-    """Return True when any legacy Hermes gateway unit files exist."""
-    return bool(_find_legacy_hermes_units())
+def has_legacy_fulilian_units() -> bool:
+    """Return True when any legacy Fulilian gateway unit files exist."""
+    return bool(_find_legacy_fulilian_units())
 
 
 def print_legacy_unit_warning() -> None:
-    """Warn about legacy Hermes gateway unit files if any are installed.
+    """Warn about legacy Fulilian gateway unit files if any are installed.
 
     Idempotent: prints nothing when no legacy units are detected. Safe to
     call from any status/install/setup path.
     """
-    legacy = _find_legacy_hermes_units()
+    legacy = _find_legacy_fulilian_units()
     if not legacy:
         return
-    print_warning("Legacy Hermes gateway unit(s) detected from an older install:")
+    print_warning("Legacy Fulilian gateway unit(s) detected from an older install:")
     for name, path, is_system in legacy:
         scope = "system" if is_system else "user"
         print_info(f"    {path}  ({scope} scope)")
-    print_info("  These run alongside the current hermes-gateway service and")
+    print_info("  These run alongside the current fulilian-gateway service and")
     print_info("  cause SIGTERM flap loops — both try to use the same bot token.")
     print_info("  Remove them with:")
-    print_info("    hermes gateway migrate-legacy")
+    print_info("    fulilian gateway migrate-legacy")
 
 
-def remove_legacy_hermes_units(
+def remove_legacy_fulilian_units(
     interactive: bool = True,
     dry_run: bool = False,
 ) -> tuple[int, list[Path]]:
-    """Stop, disable, and remove legacy Hermes gateway unit files.
+    """Stop, disable, and remove legacy Fulilian gateway unit files.
 
-    Iterates over whatever ``_find_legacy_hermes_units()`` returns — which is
+    Iterates over whatever ``_find_legacy_fulilian_units()`` returns — which is
     an explicit allowlist of legacy names (not a glob). Profile units and
     unrelated third-party services are never touched.
 
@@ -3091,16 +3091,16 @@ def remove_legacy_hermes_units(
         ``(removed_count, remaining_paths)`` — remaining includes units we
         couldn't remove (typically system-scope when not running as root).
     """
-    legacy = _find_legacy_hermes_units()
+    legacy = _find_legacy_fulilian_units()
     if not legacy:
-        print("No legacy Hermes gateway units found.")
+        print("No legacy Fulilian gateway units found.")
         return 0, []
 
     user_units = [(n, p) for n, p, is_sys in legacy if not is_sys]
     system_units = [(n, p) for n, p, is_sys in legacy if is_sys]
 
     print()
-    print("Legacy Hermes gateway unit(s) found:")
+    print("Legacy Fulilian gateway unit(s) found:")
     for name, path, is_system in legacy:
         scope = "system" if is_system else "user"
         print(f"  {path}  ({scope} scope)")
@@ -3111,7 +3111,7 @@ def remove_legacy_hermes_units(
         return 0, [p for _, p, _ in legacy]
 
     if interactive and not prompt_yes_no("Remove these legacy units?", True):
-        print("Skipped. Run again with: hermes gateway migrate-legacy")
+        print("Skipped. Run again with: fulilian gateway migrate-legacy")
         return 0, [p for _, p, _ in legacy]
 
     removed = 0
@@ -3140,7 +3140,7 @@ def remove_legacy_hermes_units(
         if os.geteuid() != 0:  # windows-footgun: ok — Linux systemd removal path, guarded by `if system == "Linux"` / systemd-only branch
             print()
             print_warning("System-scope legacy units require root to remove.")
-            print_info("  Re-run with: sudo hermes gateway migrate-legacy")
+            print_info("  Re-run with: sudo fulilian gateway migrate-legacy")
             for _, path in system_units:
                 remaining.append(path)
         else:
@@ -3187,8 +3187,8 @@ def print_systemd_scope_conflict_warning() -> None:
         "  Default gateway commands target the user service unless you pass --system."
     )
     print_info("  Keep one of these:")
-    print_info("    hermes gateway uninstall")
-    print_info("    sudo hermes gateway uninstall --system")
+    print_info("    fulilian gateway uninstall")
+    print_info("    sudo fulilian gateway uninstall --system")
 
 
 def _require_root_for_system_service(action: str) -> None:
@@ -3300,7 +3300,7 @@ def install_linux_gateway_from_setup(force: bool = False, enable_on_startup: boo
             # direct caller — we do NOT print a self-elevation recipe.
             print_warning(
                 "  System service install requires root. Re-run setup from a "
-                "root shell, or install a user service instead: hermes gateway install"
+                "root shell, or install a user service instead: fulilian gateway install"
             )
             return scope, False
 
@@ -3324,8 +3324,8 @@ def install_linux_gateway_from_setup(force: bool = False, enable_on_startup: boo
 def ensure_gateway_service(context: str = "setup") -> bool:
     """Install and start the gateway service without prompting.
 
-    The zero-decision service path used by ``hermes setup`` (end of wizard)
-    and ``hermes import``: if this host supports a service manager and no
+    The zero-decision service path used by ``fulilian setup`` (end of wizard)
+    and ``fulilian import``: if this host supports a service manager and no
     gateway service exists yet, install a user-scope service and start it.
     A gateway with zero configured platforms is a supported degraded mode
     (it runs the cron scheduler and picks up platforms as tokens appear),
@@ -3338,7 +3338,7 @@ def ensure_gateway_service(context: str = "setup") -> bool:
     Scope choice: always the least-surprising, no-privilege option —
     user-scope systemd unit on Linux, LaunchAgent on macOS, Scheduled Task
     on Windows. Users who want a boot-time system service still run
-    ``hermes gateway install --system`` explicitly (that path prompts and
+    ``fulilian gateway install --system`` explicitly (that path prompts and
     requires root; we never self-elevate from an installer).
     """
     from fulilian_constants import is_container
@@ -3346,7 +3346,7 @@ def ensure_gateway_service(context: str = "setup") -> bool:
     if is_container():
         # Containers use restart policies, not service managers.
         print_info("Start the gateway to bring your bots online:")
-        print_info("   hermes gateway run          # Run as container main process")
+        print_info("   fulilian gateway run          # Run as container main process")
         print_info("")
         print_info("For automatic restarts, use a Docker restart policy:")
         print_info("   docker run --restart unless-stopped ...")
@@ -3355,7 +3355,7 @@ def ensure_gateway_service(context: str = "setup") -> bool:
     supports_systemd = supports_systemd_services()
     if not (supports_systemd or is_macos() or is_windows()):
         print_info("  No supported service manager found on this host.")
-        print_info("  Run the gateway in the foreground with: hermes gateway")
+        print_info("  Run the gateway in the foreground with: fulilian gateway")
         return False
 
     try:
@@ -3402,10 +3402,10 @@ def ensure_gateway_service(context: str = "setup") -> bool:
         # Some install/start paths sys.exit() on hard failures (e.g. temp-HOME
         # guard). A background-service failure must never abort setup/import.
         print_warning("  Gateway service install did not complete.")
-        print_info("  You can retry manually: hermes gateway install")
+        print_info("  You can retry manually: fulilian gateway install")
     except Exception as e:
         print_warning(f"  Gateway service install failed: {e}")
-        print_info("  You can retry manually: hermes gateway install")
+        print_info("  You can retry manually: fulilian gateway install")
     return False
 
 
@@ -3476,7 +3476,7 @@ def print_systemd_linger_guidance() -> None:
 def _launchd_user_home() -> Path:
     """Return the real macOS user home for launchd artifacts.
 
-    Profile-mode Hermes often sets ``HOME`` to a profile-scoped directory, but
+    Profile-mode Fulilian often sets ``HOME`` to a profile-scoped directory, but
     launchd user agents still live under the actual account home.
     """
     import pwd
@@ -3487,11 +3487,11 @@ def _launchd_user_home() -> Path:
 def get_launchd_plist_path() -> Path:
     """Return the launchd plist path, scoped per profile.
 
-    Default ``~/.hermes`` → ``ai.hermes.gateway.plist`` (backward compatible).
-    Profile ``~/.hermes/profiles/coder`` → ``ai.hermes.gateway-coder.plist``.
+    Default ``~/.fulilian`` → ``ai.fulilian.gateway.plist`` (backward compatible).
+    Profile ``~/.fulilian/profiles/coder`` → ``ai.fulilian.gateway-coder.plist``.
     """
     suffix = _profile_suffix()
-    name = f"ai.hermes.gateway-{suffix}" if suffix else "ai.hermes.gateway"
+    name = f"ai.fulilian.gateway-{suffix}" if suffix else "ai.fulilian.gateway"
     return _launchd_user_home() / "Library" / "LaunchAgents" / f"{name}.plist"
 
 
@@ -3499,9 +3499,9 @@ def launchd_gateway_labels_for_install() -> list[str]:
     """Return the launchd gateway label for every profile of THIS install.
 
     Derived from the install's profile layout (rooted at
-    ``get_default_hermes_root()``), NOT by globbing ``~/Library/LaunchAgents``:
+    ``get_default_fulilian_root()``), NOT by globbing ``~/Library/LaunchAgents``:
     the LaunchAgents directory is shared per-user, so a sandboxed
-    ``HERMES_HOME`` (tests, capture sandboxes, side-by-side installs) must
+    ``FULILIAN_HOME`` (tests, capture sandboxes, side-by-side installs) must
     never enumerate — let alone restart — another install's fleet.
 
     Root label first, then profile labels sorted by name.  Profile names
@@ -3519,9 +3519,9 @@ def launchd_gateway_labels_for_install() -> list[str]:
     profile_labels: list[str] = []
     for profile in list_profiles():
         if profile.is_default:
-            root_label.append("ai.hermes.gateway")
+            root_label.append("ai.fulilian.gateway")
         elif _re.match(r"^[a-z0-9][a-z0-9_-]{0,63}$", profile.name):
-            profile_labels.append(f"ai.hermes.gateway-{profile.name}")
+            profile_labels.append(f"ai.fulilian.gateway-{profile.name}")
     return root_label + sorted(profile_labels)
 
 
@@ -3565,11 +3565,11 @@ def get_python_path() -> str:
             from fulilian_constants import venv_python_path
         except ImportError:
             # Update-boundary: a gateway restarted mid-update can hold a
-            # hermes_constants cached from before this symbol existed. See
-            # _reload_hermes_constants() in hermes_cli/managed_uv.py.
-            from fulilian_cli.managed_uv import _reload_hermes_constants
+            # fulilian_constants cached from before this symbol existed. See
+            # _reload_fulilian_constants() in fulilian_cli/managed_uv.py.
+            from fulilian_cli.managed_uv import _reload_fulilian_constants
 
-            venv_python_path = _reload_hermes_constants().venv_python_path
+            venv_python_path = _reload_fulilian_constants().venv_python_path
 
         venv_python = venv_python_path(venv, windows=is_windows())
         if venv_python.exists():
@@ -3639,8 +3639,8 @@ def _remap_path_for_user(path: str, target_home_dir: str) -> str:
     If *path* lives under ``Path.home()`` the corresponding prefix is swapped
     to *target_home_dir*; otherwise the path is returned unchanged.
 
-      /root/.hermes/hermes-agent  -> /home/alice/.hermes/hermes-agent
-      /opt/hermes                 -> /opt/hermes  (kept as-is)
+      /root/.fulilian/fulilian-agent  -> /home/alice/.fulilian/fulilian-agent
+      /opt/fulilian                 -> /opt/fulilian  (kept as-is)
 
     Note: this function intentionally does NOT resolve symlinks. A venv's
     ``bin/python`` is typically a symlink to the base interpreter (e.g. a
@@ -3659,38 +3659,38 @@ def _remap_path_for_user(path: str, target_home_dir: str) -> str:
         return str(p)
 
 
-def _hermes_home_for_target_user(target_home_dir: str) -> str:
-    """Remap the current HERMES_HOME to the equivalent under a target user's home.
+def _fulilian_home_for_target_user(target_home_dir: str) -> str:
+    """Remap the current FULILIAN_HOME to the equivalent under a target user's home.
 
-    When installing a system service via sudo, get_hermes_home() resolves to
+    When installing a system service via sudo, get_fulilian_home() resolves to
     root's home.  This translates it to the target user's equivalent path:
-      /root/.hermes                    → /home/alice/.hermes
-      /root/.hermes/profiles/coder     → /home/alice/.hermes/profiles/coder
-      /opt/custom-hermes               → /opt/custom-hermes  (kept as-is)
+      /root/.fulilian                    → /home/alice/.fulilian
+      /root/.fulilian/profiles/coder     → /home/alice/.fulilian/profiles/coder
+      /opt/custom-fulilian               → /opt/custom-fulilian  (kept as-is)
     """
-    current_hermes_raw = os.environ.get("HERMES_HOME", "").strip()
-    current_hermes = (
-        Path(current_hermes_raw).expanduser()
-        if current_hermes_raw
-        else get_hermes_home()
+    current_fulilian_raw = os.environ.get("FULILIAN_HOME", "").strip()
+    current_fulilian = (
+        Path(current_fulilian_raw).expanduser()
+        if current_fulilian_raw
+        else get_fulilian_home()
     )
     # Keep explicit custom paths lexical. Resolving a non-existent custom path
     # can rewrite it through host-specific path mappings, which would bake a
-    # different HERMES_HOME into the generated service unit.
-    current_default = Path.home() / ".hermes"
-    target_default = Path(target_home_dir) / ".hermes"
+    # different FULILIAN_HOME into the generated service unit.
+    current_default = Path.home() / ".fulilian"
+    target_default = Path(target_home_dir) / ".fulilian"
 
-    # Default ~/.hermes → remap to target user's default
-    if current_hermes == current_default:
+    # Default ~/.fulilian → remap to target user's default
+    if current_fulilian == current_default:
         return str(target_default)
 
-    # Profile or subdir of ~/.hermes → preserve the relative structure
+    # Profile or subdir of ~/.fulilian → preserve the relative structure
     try:
-        relative = current_hermes.relative_to(current_default)
+        relative = current_fulilian.relative_to(current_default)
         return str(target_default / relative)
     except ValueError:
-        # Completely custom path (not under ~/.hermes) — keep as-is
-        return str(current_hermes)
+        # Completely custom path (not under ~/.fulilian) — keep as-is
+        return str(current_fulilian)
 
 
 def _build_service_path_dirs(project_root: Path | None = None) -> list[str]:
@@ -3716,13 +3716,13 @@ def _build_service_path_dirs(project_root: Path | None = None) -> list[str]:
     if _is_dir(node_bin):
         candidates.append(str(node_bin))
 
-    hermes_home = get_hermes_home()
-    hermes_node = hermes_home / "node" / "bin"
-    if _is_dir(hermes_node):
-        candidates.append(str(hermes_node))
-    hermes_nm = hermes_home / "node_modules" / ".bin"
-    if _is_dir(hermes_nm):
-        candidates.append(str(hermes_nm))
+    fulilian_home = get_fulilian_home()
+    fulilian_node = fulilian_home / "node" / "bin"
+    if _is_dir(fulilian_node):
+        candidates.append(str(fulilian_node))
+    fulilian_nm = fulilian_home / "node_modules" / ".bin"
+    if _is_dir(fulilian_nm):
+        candidates.append(str(fulilian_nm))
 
     return candidates
 
@@ -3731,23 +3731,23 @@ def _stable_service_working_dir() -> str:
     """Return a WorkingDirectory that will not disappear out from under systemd.
 
     The gateway does NOT need its cwd to be the source checkout — ``ExecStart``
-    uses an absolute python interpreter and ``-m hermes_cli.main``, so module
+    uses an absolute python interpreter and ``-m fulilian_cli.main``, so module
     resolution does not depend on cwd. Pinning ``WorkingDirectory`` to
     ``PROJECT_ROOT`` (``Path(__file__).parent.parent``) is actively harmful:
     when the unit is generated from a transient checkout — a ``.worktrees/``
-    dir, or a clone that ``hermes update`` later relocates/removes — the path
+    dir, or a clone that ``fulilian update`` later relocates/removes — the path
     rots. systemd then fails the start at the CHDIR step (``status=200/CHDIR``,
     "Changing to the requested working directory failed") *before* Python
     loads, so the on-boot ``refresh_systemd_unit_if_needed()`` self-heal never
     runs and ``Restart=always`` crash-loops forever on a dead directory.
 
-    ``HERMES_HOME`` is the stable anchor: it is where config/state/logs live,
+    ``FULILIAN_HOME`` is the stable anchor: it is where config/state/logs live,
     it never moves, and it is guaranteed to exist whenever the gateway is
-    meaningfully installed. Fall back to ``PROJECT_ROOT`` only if HERMES_HOME
+    meaningfully installed. Fall back to ``PROJECT_ROOT`` only if FULILIAN_HOME
     cannot be resolved (it always can in practice).
     """
     try:
-        home = get_hermes_home()
+        home = get_fulilian_home()
         if home and Path(home).is_dir():
             return str(Path(home).resolve())
     except Exception:
@@ -3755,18 +3755,18 @@ def _stable_service_working_dir() -> str:
     return str(PROJECT_ROOT)
 
 
-def _systemd_watchdog_seconds(hermes_home: str | Path | None = None) -> int:
+def _systemd_watchdog_seconds(fulilian_home: str | Path | None = None) -> int:
     """Resolve the managed-overlay-aware watchdog setting for a service home."""
     override_token = None
     reset_home_override = None
-    if hermes_home is not None:
+    if fulilian_home is not None:
         from fulilian_constants import (
-            reset_hermes_home_override,
-            set_hermes_home_override,
+            reset_fulilian_home_override,
+            set_fulilian_home_override,
         )
 
-        override_token = set_hermes_home_override(hermes_home)
-        reset_home_override = reset_hermes_home_override
+        override_token = set_fulilian_home_override(fulilian_home)
+        reset_home_override = reset_fulilian_home_override
     try:
         config = load_gateway_config()
         return coerce_systemd_watchdog_seconds(
@@ -3784,21 +3784,21 @@ def _systemd_watchdog_seconds(hermes_home: str | Path | None = None) -> int:
 
 
 def _systemd_watchdog_service_fields(
-    hermes_home: str | Path | None = None,
+    fulilian_home: str | Path | None = None,
 ) -> tuple[str, str]:
     """Return systemd service fields for the effective gateway config."""
-    seconds = _systemd_watchdog_seconds(hermes_home)
+    seconds = _systemd_watchdog_seconds(fulilian_home)
     if seconds <= 0:
         return "simple", ""
     return "notify", f"NotifyAccess=main\nWatchdogSec={seconds}s\n"
 
 
 def _append_node_dir_for_service(
-    path_entries: list[str], hermes_root: Path | None = None
+    path_entries: list[str], fulilian_root: Path | None = None
 ) -> None:
     """Add the Node directory a generated service unit should use to *path_entries*.
 
-    The Hermes-managed Node under ``$HERMES_HOME/node`` goes first when it
+    The Fulilian-managed Node under ``$FULILIAN_HOME/node`` goes first when it
     exists. A bare ``shutil.which("node")`` cannot be trusted on its own here:
     a service unit is written once and then survives reboots, so resolving a
     system Node that happens to be ahead on the installing shell's PATH bakes
@@ -3806,7 +3806,7 @@ def _append_node_dir_for_service(
     backend spawn was fixed for. Managed dirs are profile-scoped, so each
     profile's unit still names its own Node.
 
-    *hermes_root* is the Hermes home the unit will run against. System units
+    *fulilian_root* is the Fulilian home the unit will run against. System units
     installed via sudo MUST pass the **target user's** home: probing the
     default (the calling user's — root's — tree) would bake root's Node into
     the target user's unit. The probe swallows OSError: an unreadable
@@ -3816,12 +3816,12 @@ def _append_node_dir_for_service(
     PATH lookup remains the fallback rung for installs with no managed Node.
     """
     from fulilian_constants import (
-        hermes_managed_node_tree_present,
-        iter_hermes_node_dirs,
+        fulilian_managed_node_tree_present,
+        iter_fulilian_node_dirs,
     )
 
-    managed_node_present = hermes_managed_node_tree_present(hermes_root)
-    for directory in iter_hermes_node_dirs(hermes_root) if managed_node_present else ():
+    managed_node_present = fulilian_managed_node_tree_present(fulilian_root)
+    for directory in iter_fulilian_node_dirs(fulilian_root) if managed_node_present else ():
         entry = str(directory)
         try:
             present = directory.is_dir()
@@ -3831,7 +3831,7 @@ def _append_node_dir_for_service(
             path_entries.append(entry)
 
     # Ambient PATH lookup is a fallback, not an additional rung. Once the
-    # target Hermes home provides managed Node, consulting the invoker's PATH
+    # target Fulilian home provides managed Node, consulting the invoker's PATH
     # makes a system unit differ between sudo/root and its service user.
     if managed_node_present:
         return
@@ -3862,7 +3862,7 @@ def generate_systemd_unit(system: bool = False, run_as_user: str | None = None) 
     path_entries = _build_service_path_dirs()
     if not system:
         # System units append the managed Node dirs later, once the TARGET
-        # user's Hermes home is known — probing here would stat the calling
+        # user's Fulilian home is known — probing here would stat the calling
         # (sudo → root's) tree and bake the wrong user's Node into the unit.
         _append_node_dir_for_service(path_entries)
 
@@ -3886,28 +3886,28 @@ def generate_systemd_unit(system: bool = False, run_as_user: str | None = None) 
 
     if system:
         username, group_name, home_dir = _system_service_identity(run_as_user)
-        hermes_home = _hermes_home_for_target_user(home_dir)
+        fulilian_home = _fulilian_home_for_target_user(home_dir)
         systemd_type, systemd_watchdog_directives = _systemd_watchdog_service_fields(
-            hermes_home
+            fulilian_home
         )
-        profile_arg = _profile_arg_for_target_user(hermes_home, home_dir)
+        profile_arg = _profile_arg_for_target_user(fulilian_home, home_dir)
         # Remap all paths that may resolve under the calling user's home
         # (e.g. /root/) to the target user's home so the service can
         # actually access them.
         python_path = _remap_path_for_user(python_path, home_dir)
-        # Anchor cwd to the target user's HERMES_HOME (stable, always exists)
+        # Anchor cwd to the target user's FULILIAN_HOME (stable, always exists)
         # rather than a remapped source-checkout path that can rot. See
         # _stable_service_working_dir() for the full rationale.
-        working_dir = str(hermes_home) if hermes_home else _remap_path_for_user(working_dir, home_dir)
+        working_dir = str(fulilian_home) if fulilian_home else _remap_path_for_user(working_dir, home_dir)
         venv_dir = _remap_path_for_user(venv_dir, home_dir)
         path_entries = [_remap_path_for_user(p, home_dir) for p in path_entries]
         # Managed Node for the TARGET user's tree (see the skip above): probe
-        # the remapped hermes_home, not the calling user's. Prepend — the
+        # the remapped fulilian_home, not the calling user's. Prepend — the
         # managed Node must outrank remapped shell-PATH entries, matching the
         # user-unit ordering where it's appended before PATH capture.
         _target_node_entries: list[str] = []
         _append_node_dir_for_service(
-            _target_node_entries, Path(hermes_home) if hermes_home else None
+            _target_node_entries, Path(fulilian_home) if fulilian_home else None
         )
         path_entries = [
             e for e in _target_node_entries if e not in path_entries
@@ -3926,14 +3926,14 @@ StartLimitIntervalSec=0
 Type={systemd_type}
 {systemd_watchdog_directives}User={username}
 Group={group_name}
-ExecStart={python_path} -m hermes_cli.main{f" {profile_arg}" if profile_arg else ""} gateway run
+ExecStart={python_path} -m fulilian_cli.main{f" {profile_arg}" if profile_arg else ""} gateway run
 WorkingDirectory={working_dir}
 Environment="HOME={home_dir}"
 Environment="USER={username}"
 Environment="LOGNAME={username}"
 Environment="PATH={sane_path}"
 Environment="VIRTUAL_ENV={venv_dir}"
-Environment="HERMES_HOME={hermes_home}"
+Environment="FULILIAN_HOME={fulilian_home}"
 Restart=always
 RestartSec=5
 RestartForceExitStatus={GATEWAY_SERVICE_RESTART_EXIT_CODE}
@@ -3950,11 +3950,11 @@ StandardError=journal
 WantedBy=multi-user.target
 """
 
-    hermes_home = str(get_hermes_home().resolve())
+    fulilian_home = str(get_fulilian_home().resolve())
     systemd_type, systemd_watchdog_directives = _systemd_watchdog_service_fields(
-        hermes_home
+        fulilian_home
     )
-    profile_arg = _profile_arg(hermes_home)
+    profile_arg = _profile_arg(fulilian_home)
     path_entries.extend(_build_user_local_paths(Path.home(), path_entries))
     path_entries.extend(_build_wsl_interop_paths(path_entries))
     path_entries.extend(common_bin_paths)
@@ -3967,11 +3967,11 @@ StartLimitIntervalSec=0
 
 [Service]
 Type={systemd_type}
-{systemd_watchdog_directives}ExecStart={python_path} -m hermes_cli.main{f" {profile_arg}" if profile_arg else ""} gateway run
+{systemd_watchdog_directives}ExecStart={python_path} -m fulilian_cli.main{f" {profile_arg}" if profile_arg else ""} gateway run
 WorkingDirectory={working_dir}
 Environment="PATH={sane_path}"
 Environment="VIRTUAL_ENV={venv_dir}"
-Environment="HERMES_HOME={hermes_home}"
+Environment="FULILIAN_HOME={fulilian_home}"
 Restart=always
 RestartSec=5
 RestartForceExitStatus={GATEWAY_SERVICE_RESTART_EXIT_CODE}
@@ -4029,30 +4029,30 @@ def _normalize_launchd_plist_for_comparison(text: str) -> str:
     normalized = _normalize_service_definition(text)
     return re.sub(
         r"(<key>PATH</key>\s*<string>)(.*?)(</string>)",
-        r"\1__HERMES_PATH__\3",
+        r"\1__FULILIAN_PATH__\3",
         normalized,
         flags=re.S,
     )
 
 
 def systemd_unit_is_current(system: bool = False) -> bool:
-    # ── HERMES_HOME sync chokepoint ──────────────────────────────────────
+    # ── FULILIAN_HOME sync chokepoint ──────────────────────────────────────
     # Every path that compares OR regenerates the unit funnels through here:
     # ``refresh_systemd_unit_if_needed`` gates on this before rewriting, and
     # ``systemd_status`` / ``systemd_install`` call it directly. Doing the
     # sync here — and ONLY here — enforces the invariant "the operator's
-    # pinned HERMES_HOME is adopted before any compare/regenerate" at a single
+    # pinned FULILIAN_HOME is adopted before any compare/regenerate" at a single
     # site, so a future callsite cannot regress it by forgetting to pre-sync.
     #
-    # Under ``sudo hermes gateway … --system``, HERMES_HOME is often stripped
-    # and falls back to ``/root/.hermes``. Adopting the unit's pinned home
-    # first makes TimeoutStopSec / WorkingDirectory / HERMES_HOME comparisons
+    # Under ``sudo fulilian gateway … --system``, FULILIAN_HOME is often stripped
+    # and falls back to ``/root/.fulilian``. Adopting the unit's pinned home
+    # first makes TimeoutStopSec / WorkingDirectory / FULILIAN_HOME comparisons
     # use the real operator config — otherwise start/restart "refresh" rewrites
     # a correct unit from root's defaults and ``status`` keeps warning forever.
     # ``_sync_...`` is idempotent (early-returns once os.environ matches), so
     # the mutation persists for callers that read runtime state after this
     # (e.g. ``systemd_restart``'s post-refresh get_running_pid / drain-timeout).
-    _sync_hermes_home_from_systemd_unit(system=system)
+    _sync_fulilian_home_from_systemd_unit(system=system)
 
     unit_path = get_systemd_unit_path(system=system)
     if not unit_path.exists():
@@ -4074,29 +4074,29 @@ def systemd_unit_is_current(system: bool = False) -> bool:
 
 
 def _temp_home_in_service_definition(definition: str) -> str | None:
-    """Return the temp-dir HERMES_HOME baked into a service definition, or None.
+    """Return the temp-dir FULILIAN_HOME baked into a service definition, or None.
 
-    A generated systemd unit / launchd plist carries the resolved HERMES_HOME
+    A generated systemd unit / launchd plist carries the resolved FULILIAN_HOME
     in its environment block. If that path lives under the system temp dir,
     the definition was almost certainly generated by a test/E2E harness that
-    exported a throwaway ``HERMES_HOME=/tmp/...`` — writing it to the real
+    exported a throwaway ``FULILIAN_HOME=/tmp/...`` — writing it to the real
     service file silently breaks the user's gateway on the next (re)start:
     the gateway comes back "active (running)" but pointed at an empty temp
     home ("No messaging platforms enabled"), deaf to every platform.
-    Seen live 2026-06-11: an E2E guard probe ran ``hermes gateway restart``
-    with ``HERMES_HOME=/tmp/hermes-e2e-<pr>`` exported; the restart path's
+    Seen live 2026-06-11: an E2E guard probe ran ``fulilian gateway restart``
+    with ``FULILIAN_HOME=/tmp/fulilian-e2e-<pr>`` exported; the restart path's
     unit refresh baked the temp path into the production unit and the
     post-update restart produced a zombie gateway for 7+ hours.
 
-    Matches both systemd ``Environment="HERMES_HOME=..."`` lines and launchd
-    ``<key>HERMES_HOME</key><string>...</string>`` pairs.
+    Matches both systemd ``Environment="FULILIAN_HOME=..."`` lines and launchd
+    ``<key>FULILIAN_HOME</key><string>...</string>`` pairs.
     """
     import re
     import tempfile
 
-    candidates = re.findall(r'HERMES_HOME=([^"\n]+)', definition)
+    candidates = re.findall(r'FULILIAN_HOME=([^"\n]+)', definition)
     candidates += re.findall(
-        r"<key>HERMES_HOME</key>\s*<string>(.*?)</string>", definition, flags=re.S
+        r"<key>FULILIAN_HOME</key>\s*<string>(.*?)</string>", definition, flags=re.S
     )
     temp_roots = {
         Path(tempfile.gettempdir()).resolve(),
@@ -4117,16 +4117,16 @@ def _temp_home_in_service_definition(definition: str) -> str | None:
 
 
 def _refuse_temp_home_service_write(definition: str, kind: str) -> bool:
-    """Refuse (with guidance) when a service definition carries a temp HERMES_HOME."""
+    """Refuse (with guidance) when a service definition carries a temp FULILIAN_HOME."""
     temp_home = _temp_home_in_service_definition(definition)
     if temp_home is None:
         return False
     print(
-        f"✗ Refusing to write the gateway {kind}: HERMES_HOME resolves to a "
+        f"✗ Refusing to write the gateway {kind}: FULILIAN_HOME resolves to a "
         f"temporary directory ({temp_home})."
     )
     print(
-        "  This usually means a test/E2E environment exported HERMES_HOME. "
+        "  This usually means a test/E2E environment exported FULILIAN_HOME. "
         "Unset it (or run from a clean shell) and retry."
     )
     return True
@@ -4139,7 +4139,7 @@ def refresh_systemd_unit_if_needed(system: bool = False) -> bool:
         return False
 
     # The gate below funnels through ``systemd_unit_is_current``, which is the
-    # single HERMES_HOME-sync chokepoint (adopts the unit's pinned home before
+    # single FULILIAN_HOME-sync chokepoint (adopts the unit's pinned home before
     # any compare/regenerate). No separate pre-sync needed here — and the env
     # mutation it performs persists for the regenerate path below.
     if systemd_unit_is_current(system=system):
@@ -4150,10 +4150,10 @@ def refresh_systemd_unit_if_needed(system: bool = False) -> bool:
 
     # ── Test-environment safety belt ─────────────────────────────────────
     # The user-scope unit path resolves under ``Path.home()``, which is NOT
-    # sandboxed by the test conftest (only HERMES_HOME is). If a test
-    # exercises ``run_gateway()`` with a pytest-tmp HERMES_HOME, the freshly
-    # generated unit bakes that ``/tmp/pytest-of-.../hermes_test`` path into
-    # ``Environment="HERMES_HOME=..."``. Writing that to the developer's
+    # sandboxed by the test conftest (only FULILIAN_HOME is). If a test
+    # exercises ``run_gateway()`` with a pytest-tmp FULILIAN_HOME, the freshly
+    # generated unit bakes that ``/tmp/pytest-of-.../fulilian_test`` path into
+    # ``Environment="FULILIAN_HOME=..."``. Writing that to the developer's
     # real user systemd unit file silently breaks their gateway on the next
     # reboot (systemd loads the polluted env, the gateway looks at an empty
     # tmp dir, and Telegram/Discord/etc. all show as "not configured").
@@ -4164,13 +4164,13 @@ def refresh_systemd_unit_if_needed(system: bool = False) -> bool:
     # still works.
     if not system and (
         "/pytest-of-" in new_unit
-        or '/hermes_test"' in new_unit
-        or "/hermes_test/" in new_unit
+        or '/fulilian_test"' in new_unit
+        or "/fulilian_test/" in new_unit
     ):
         return False
 
     # Structural variant of the same belt: refuse to bake ANY temp-dir
-    # HERMES_HOME into the unit (manual E2E homes like /tmp/hermes-e2e-NNN
+    # FULILIAN_HOME into the unit (manual E2E homes like /tmp/fulilian-e2e-NNN
     # don't carry the pytest markers above but poison the unit identically).
     if _refuse_temp_home_service_write(new_unit, "systemd unit"):
         return False
@@ -4178,7 +4178,7 @@ def refresh_systemd_unit_if_needed(system: bool = False) -> bool:
     unit_path.write_text(new_unit, encoding="utf-8")
     _run_systemctl(["daemon-reload"], system=system, check=True, timeout=30)
     print(
-        f"↻ Updated gateway {_service_scope_label(system)} service definition to match the current Hermes install"
+        f"↻ Updated gateway {_service_scope_label(system)} service definition to match the current Fulilian install"
     )
     return True
 
@@ -4284,14 +4284,14 @@ def _print_system_scope_remediation(action: str) -> None:
     else:
         print_info(f"         sudo systemctl {action} {svc}")
     print_info("    2. Switch to a per-user service (recommended for personal use):")
-    print_info("         sudo hermes gateway uninstall --system")
-    print_info("         hermes gateway install")
-    print_info("         hermes gateway start")
+    print_info("         sudo fulilian gateway uninstall --system")
+    print_info("         fulilian gateway install")
+    print_info("         fulilian gateway start")
 
 
 def _get_restart_drain_timeout() -> float:
     """Return the configured gateway restart drain timeout in seconds."""
-    raw = os.getenv("HERMES_RESTART_DRAIN_TIMEOUT", "").strip()
+    raw = os.getenv("FULILIAN_RESTART_DRAIN_TIMEOUT", "").strip()
     if not raw:
         cfg = read_raw_config()
         agent_cfg = cfg.get("agent", {}) if isinstance(cfg, dict) else {}
@@ -4305,7 +4305,7 @@ def _get_restart_drain_timeout() -> float:
 
 def _get_cron_drain_timeout() -> float:
     """Return the configured cron-only drain floor in seconds (#82161)."""
-    env_raw = os.getenv("HERMES_CRON_DRAIN_TIMEOUT")
+    env_raw = os.getenv("FULILIAN_CRON_DRAIN_TIMEOUT")
     if env_raw is not None and str(env_raw).strip() != "":
         return parse_cron_drain_timeout(env_raw)
     cfg = read_raw_config()
@@ -4317,7 +4317,7 @@ def _get_cron_drain_timeout() -> float:
 
 def _get_restart_after_turn_timeout() -> float:
     """Return the in-band restart wait-for-idle timeout in seconds (#77184)."""
-    env_raw = os.getenv("HERMES_RESTART_AFTER_TURN_TIMEOUT")
+    env_raw = os.getenv("FULILIAN_RESTART_AFTER_TURN_TIMEOUT")
     if env_raw is not None and str(env_raw).strip() != "":
         return parse_restart_after_turn_timeout(env_raw)
     cfg = read_raw_config()
@@ -4345,30 +4345,30 @@ def systemd_install(
     if system:
         _require_root_for_system_service("install")
 
-    # Offer to remove legacy units (hermes.service from pre-rename installs)
-    # before installing the new hermes-gateway.service. If both remain, they
+    # Offer to remove legacy units (fulilian.service from pre-rename installs)
+    # before installing the new fulilian-gateway.service. If both remain, they
     # flap-fight for the Telegram bot token on every gateway startup.
     # Only removes units matching _LEGACY_SERVICE_NAMES + our ExecStart
     # signature — profile units are never touched.
-    if has_legacy_hermes_units():
+    if has_legacy_fulilian_units():
         print()
         print_legacy_unit_warning()
         print()
         if non_interactive or prompt_yes_no("Remove the legacy unit(s) before installing?", True):
-            remove_legacy_hermes_units(interactive=False)
+            remove_legacy_fulilian_units(interactive=False)
             print()
 
     unit_path = get_systemd_unit_path(system=system)
     scope_flag = " --system" if system else ""
 
-    # Existing system units already pin HERMES_HOME; adopt it before any
+    # Existing system units already pin FULILIAN_HOME; adopt it before any
     # regenerate. This pre-sync is NOT redundant with the systemd_unit_is_current
     # chokepoint: the ``--force`` path below skips the is_current gate and calls
     # generate_systemd_unit() directly (line ~3172), so without this a
-    # ``sudo hermes gateway install --system --force`` would bake /root/.hermes
+    # ``sudo fulilian gateway install --system --force`` would bake /root/.fulilian
     # into an already-correct unit. Keep it to protect that bypass path.
     if unit_path.exists():
-        _sync_hermes_home_from_systemd_unit(system=system)
+        _sync_fulilian_home_from_systemd_unit(system=system)
 
     if unit_path.exists() and not force:
         if not systemd_unit_is_current(system=system):
@@ -4401,10 +4401,10 @@ def systemd_install(
     print()
     print("Next steps:")
     print(
-        f"  {'sudo ' if system else ''}hermes gateway start{scope_flag}              # Start the service"
+        f"  {'sudo ' if system else ''}fulilian gateway start{scope_flag}              # Start the service"
     )
     print(
-        f"  {'sudo ' if system else ''}hermes gateway status{scope_flag}             # Check status"
+        f"  {'sudo ' if system else ''}fulilian gateway status{scope_flag}             # Check status"
     )
     print(
         f"  {'journalctl' if system else 'journalctl --user'} -u {get_service_name()} -f  # View logs"
@@ -4446,7 +4446,7 @@ def _require_service_installed(action: str, system: bool = False) -> None:
     if not unit_path.exists():
         scope_flag = " --system" if system else ""
         print("✗ Gateway service is not installed")
-        print(f"  Run: {'sudo ' if system else ''}hermes gateway install{scope_flag}")
+        print(f"  Run: {'sudo ' if system else ''}fulilian gateway install{scope_flag}")
         sys.exit(1)
 
 
@@ -4460,7 +4460,7 @@ def systemd_start(system: bool = False):
         # Raises UserSystemdUnavailableError with a remediation message.
         _preflight_user_systemd()
     _require_service_installed("start", system=system)
-    # HERMES_HOME sync happens inside refresh_systemd_unit_if_needed's
+    # FULILIAN_HOME sync happens inside refresh_systemd_unit_if_needed's
     # systemd_unit_is_current gate (the single chokepoint), and the unit is
     # guaranteed to exist here by _require_service_installed, so the gate runs.
     refresh_systemd_unit_if_needed(system=system)
@@ -4473,7 +4473,7 @@ def systemd_stop(system: bool = False):
     if system:
         _require_root_for_system_service("stop")
     _require_service_installed("stop", system=system)
-    _sync_hermes_home_from_systemd_unit(system=system)
+    _sync_fulilian_home_from_systemd_unit(system=system)
     try:
         from gateway.status import get_running_pid, write_planned_stop_marker
 
@@ -4490,7 +4490,7 @@ def systemd_stop(system: bool = False):
         label = _service_scope_label(system)
         print(
             f"Gateway {label} service is still stopping after 90s; "
-            "check `hermes gateway status` or logs for final shutdown state."
+            "check `fulilian gateway status` or logs for final shutdown state."
         )
         return
     print(f"✓ {_service_scope_label(system).capitalize()} service stopped")
@@ -4503,7 +4503,7 @@ def systemd_restart(system: bool = False):
     else:
         _preflight_user_systemd()
     _require_service_installed("restart", system=system)
-    # HERMES_HOME sync happens inside refresh_systemd_unit_if_needed's
+    # FULILIAN_HOME sync happens inside refresh_systemd_unit_if_needed's
     # systemd_unit_is_current gate (the single chokepoint). The unit exists
     # here (_require_service_installed), so the gate runs and its os.environ
     # mutation persists for the get_running_pid / drain-timeout reads below —
@@ -4601,7 +4601,7 @@ def systemd_restart(system: bool = False):
             label = _service_scope_label(system)
             print(
                 f"Gateway {label} service is still restarting after 90s; "
-                "check `hermes gateway status` or logs for final state."
+                "check `fulilian gateway status` or logs for final state."
             )
             return
         _wait_for_systemd_service_restart(system=system, previous_pid=pid)
@@ -4631,7 +4631,7 @@ def systemd_restart(system: bool = False):
         label = _service_scope_label(system)
         print(
             f"Gateway {label} service is still restarting after 90s; "
-            "check `hermes gateway status` or logs for final state."
+            "check `fulilian gateway status` or logs for final state."
         )
         return
     _wait_for_systemd_service_restart(system=system, previous_pid=pid)
@@ -4644,21 +4644,21 @@ def systemd_status(deep: bool = False, system: bool = False, full: bool = False)
 
     if not unit_path.exists():
         print("✗ Gateway service is not installed")
-        print(f"  Run: {'sudo ' if system else ''}hermes gateway install{scope_flag}")
+        print(f"  Run: {'sudo ' if system else ''}fulilian gateway install{scope_flag}")
         return
 
     if has_conflicting_systemd_units():
         print_systemd_scope_conflict_warning()
         print()
 
-    if has_legacy_hermes_units():
+    if has_legacy_fulilian_units():
         print_legacy_unit_warning()
         print()
 
     if not systemd_unit_is_current(system=system):
         print("⚠ Installed gateway service definition is outdated")
         print(
-            f"  Run: {'sudo ' if system else ''}hermes gateway restart{scope_flag}  # auto-refreshes the unit"
+            f"  Run: {'sudo ' if system else ''}fulilian gateway restart{scope_flag}  # auto-refreshes the unit"
         )
         print()
 
@@ -4691,7 +4691,7 @@ def systemd_status(deep: bool = False, system: bool = False, full: bool = False)
         print(
             f"✗ {_service_scope_label(system).capitalize()} gateway service is stopped"
         )
-        print(f"  Run: {'sudo ' if system else ''}hermes gateway start{scope_flag}")
+        print(f"  Run: {'sudo ' if system else ''}fulilian gateway start{scope_flag}")
 
     configured_user = _read_systemd_user_from_unit(unit_path) if system else None
     if configured_user:
@@ -4714,7 +4714,7 @@ def systemd_status(deep: bool = False, system: bool = False, full: bool = False)
     elif _systemd_unit_is_start_limited(unit_props):
         print("  ⏳ Restart pending: systemd is temporarily rate-limiting starts")
         print(
-            f"  Run after the start-limit window expires: {'sudo ' if system else ''}hermes gateway restart{scope_flag}"
+            f"  Run after the start-limit window expires: {'sudo ' if system else ''}fulilian gateway restart{scope_flag}"
         )
         print(
             f"  Or clear it manually: systemctl {'--user ' if not system else ''}reset-failed {get_service_name()}"
@@ -4724,7 +4724,7 @@ def systemd_status(deep: bool = False, system: bool = False, full: bool = False)
     ):
         print("  ⚠ Planned restart is stuck in systemd failed state (exit 75)")
         print(
-            f"  Run: systemctl {'--user ' if not system else ''}reset-failed {get_service_name()} && {'sudo ' if system else ''}hermes gateway start{scope_flag}"
+            f"  Run: systemctl {'--user ' if not system else ''}reset-failed {get_service_name()} && {'sudo ' if system else ''}fulilian gateway start{scope_flag}"
         )
     elif active_state == "failed" and result_code:
         print(f"  ⚠ Systemd unit result: {result_code}")
@@ -4764,11 +4764,11 @@ def systemd_status(deep: bool = False, system: bool = False, full: bool = False)
 def get_launchd_label() -> str:
     """Return the launchd service label, scoped per profile."""
     suffix = _profile_suffix()
-    return f"ai.hermes.gateway-{suffix}" if suffix else "ai.hermes.gateway"
+    return f"ai.fulilian.gateway-{suffix}" if suffix else "ai.fulilian.gateway"
 
 
 # Cached launchd domain result — probing is cheap but should only run once per
-# process invocation (each ``hermes gateway start/stop/status`` call).
+# process invocation (each ``fulilian gateway start/stop/status`` call).
 _resolved_launchd_domain: str | None = None
 
 
@@ -4851,7 +4851,7 @@ _LAUNCHD_JOB_UNLOADED_EXIT_CODES = frozenset({3, 113, 125})
 #   2. The domain genuinely can't manage services (macOS 26+, neither
 #      `gui/<uid>` nor `user/<uid>` supports service management). Here launchd
 #      cannot supervise the gateway at all and we degrade to a detached
-#      background process (the `nohup hermes gateway run` workaround). See #23387.
+#      background process (the `nohup fulilian gateway run` workaround). See #23387.
 # `_launchctl_bootstrap()` disambiguates by trying the bootout+retry (case 1)
 # first; only when that retry ALSO returns 5/125 do callers treat the domain as
 # unsupported (case 2) via `_launchctl_domain_unsupported`.
@@ -4924,7 +4924,7 @@ def _launchctl_bootstrap(
 
 def _launchd_reload_log_path() -> Path:
     """Path the launchd reload watchdog tails for persistent-orphan detection."""
-    return get_hermes_home() / "logs" / "launchd-reload.log"
+    return get_fulilian_home() / "logs" / "launchd-reload.log"
 
 
 def _append_launchd_reload_log(message: str) -> None:
@@ -5028,7 +5028,7 @@ def _retry_launchctl_bootstrap_until_registered(
 
 
 def _launchd_unsupported_marker_path() -> Path:
-    return get_hermes_home() / ".gateway-launchd-unsupported"
+    return get_fulilian_home() / ".gateway-launchd-unsupported"
 
 
 def _write_launchd_unsupported_marker() -> None:
@@ -5061,12 +5061,12 @@ def _launchd_unsupported_marker_exists() -> bool:
 
 
 def _gateway_run_command() -> list[str]:
-    """Build the `python -m hermes_cli.main [--profile X] gateway run --replace` argv.
+    """Build the `python -m fulilian_cli.main [--profile X] gateway run --replace` argv.
 
-    Profile-aware: honors the active HERMES_HOME via `_profile_arg()` so the
+    Profile-aware: honors the active FULILIAN_HOME via `_profile_arg()` so the
     detached fallback launches into the same profile as the CLI invocation.
     """
-    cmd = [get_python_path(), "-m", "hermes_cli.main"]
+    cmd = [get_python_path(), "-m", "fulilian_cli.main"]
     profile_arg = _profile_arg()
     if profile_arg:
         cmd.extend(profile_arg.split())
@@ -5083,7 +5083,7 @@ def _timestamped_stderr_gateway_command(
 
     ``external_supervisor=True`` is for launchd ProgramArguments only: the
     inner ``gateway run`` must carry ``--external-supervisor`` so
-    ``hermes update`` sees the flag on the live grandchild argv and hands
+    ``fulilian update`` sees the flag on the live grandchild argv and hands
     the process back to launchd instead of starting a detached watcher
     (#86893 / #87005). The detached nohup fallback stays unmarked.
 
@@ -5105,7 +5105,7 @@ def _timestamped_stderr_gateway_command(
     return [
         get_python_path(),
         "-m",
-        "hermes_cli.stderr_timestamp",
+        "fulilian_cli.stderr_timestamp",
         "--error-log",
         str(error_log),
         "--",
@@ -5117,7 +5117,7 @@ def _spawn_detached_gateway() -> bool:
     """Launch the gateway as a detached background process (launchd fallback).
 
     Used when launchctl can no longer bootstrap/kickstart the gateway on
-    macOS 26+ (issue #23387). Mirrors the `nohup hermes gateway run --replace`
+    macOS 26+ (issue #23387). Mirrors the `nohup fulilian gateway run --replace`
     workaround but keeps it CLI-managed: stdout goes to gateway.log, stderr is
     timestamped into gateway.error.log, and the PID is tracked via the
     gateway.pid file that `run_gateway` writes, so stop/status/restart keep
@@ -5125,7 +5125,7 @@ def _spawn_detached_gateway() -> bool:
     """
     from fulilian_cli._subprocess_compat import windows_detach_popen_kwargs
 
-    log_dir = get_hermes_home() / "logs"
+    log_dir = get_fulilian_home() / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     out_path = log_dir / "gateway.log"
     err_path = log_dir / "gateway.error.log"
@@ -5154,7 +5154,7 @@ def _launchd_fallback_to_detached(reason: str, *, exit_on_failure: bool = True) 
     launched, prints the manual workaround and (by default) exits non-zero so
     the failure surfaces instead of silently doing nothing.
     """
-    from fulilian_constants import display_hermes_home as _dhh
+    from fulilian_constants import display_fulilian_home as _dhh
 
     _write_launchd_unsupported_marker()
     print(f"⚠ launchd cannot manage the gateway on this macOS version ({reason}).")
@@ -5162,11 +5162,11 @@ def _launchd_fallback_to_detached(reason: str, *, exit_on_failure: bool = True) 
         print("✓ Started gateway as a background process instead")
         print("  It will NOT auto-start at login or auto-restart on crash.")
         print(f"  Logs: {_dhh()}/logs/gateway.log")
-        print("  Stop it with: hermes gateway stop")
+        print("  Stop it with: fulilian gateway stop")
         return True
     print_error("Failed to start the gateway as a background process.")
     print(
-        f"  Try manually: nohup hermes gateway run --replace "
+        f"  Try manually: nohup fulilian gateway run --replace "
         f"> {_dhh()}/logs/gateway.log 2>&1 &"
     )
     if exit_on_failure:
@@ -5179,8 +5179,8 @@ def generate_launchd_plist() -> str:
     # _stable_service_working_dir() for the rationale (same rot risk applies
     # to launchd's WorkingDirectory as to systemd's).
     working_dir = _stable_service_working_dir()
-    hermes_home = str(get_hermes_home().resolve())
-    log_dir = get_hermes_home() / "logs"
+    fulilian_home = str(get_fulilian_home().resolve())
+    log_dir = get_fulilian_home() / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     label = get_launchd_label()
     # Build a sane PATH for the launchd plist.  launchd provides only a
@@ -5215,7 +5215,7 @@ def generate_launchd_plist() -> str:
 
     # Persist the configured RLIMIT_NOFILE floor into the service definition
     # itself. launchd starts children with a soft limit of 256 by default;
-    # without this block every plist rewrite (e.g. `hermes gateway start`)
+    # without this block every plist rewrite (e.g. `fulilian gateway start`)
     # would silently strip a manually-added limit and reintroduce EMFILE
     # crashes under load. The in-process floor (resource_limits.py) still
     # applies as a second layer for non-launchd launches.
@@ -5256,8 +5256,8 @@ def generate_launchd_plist() -> str:
         <string>{sane_path}</string>
         <key>VIRTUAL_ENV</key>
         <string>{venv_dir}</string>
-        <key>HERMES_HOME</key>
-        <string>{hermes_home}</string>
+        <key>FULILIAN_HOME</key>
+        <string>{fulilian_home}</string>
     </dict>
 
     <key>LimitLoadToSessionType</key>
@@ -5367,10 +5367,10 @@ def refresh_launchd_plist_if_needed() -> bool:
         # service stays unregistered — KeepAlive can't revive a service
         # launchd no longer knows about, so the gateway stays dark until a
         # manual `launchctl bootstrap`. Failures append a timestamped line
-        # to ~/.hermes/logs/launchd-reload.log, which the health watchdog
-        # can tail to detect a persistent orphan. See hermes-restart
+        # to ~/.fulilian/logs/launchd-reload.log, which the health watchdog
+        # can tail to detect a persistent orphan. See fulilian-restart
         # rootcause handoff (2026-06-26 incident).
-        reload_log_path = get_hermes_home() / "logs" / "launchd-reload.log"
+        reload_log_path = get_fulilian_home() / "logs" / "launchd-reload.log"
         try:
             reload_log_path.parent.mkdir(parents=True, exist_ok=True)
         except OSError:
@@ -5511,7 +5511,7 @@ def refresh_launchd_plist_if_needed() -> bool:
             _launchd_reload_log_path(),
         )
     print(
-        "↻ Updated gateway launchd service definition to match the current Hermes install"
+        "↻ Updated gateway launchd service definition to match the current Fulilian install"
     )
     return True
 
@@ -5551,8 +5551,8 @@ def launchd_install(force: bool = False):
     _clear_launchd_unsupported_marker()
     print()
     print("Next steps:")
-    print("  hermes gateway status             # Check status")
-    from fulilian_constants import display_hermes_home as _dhh
+    print("  fulilian gateway status             # Check status")
+    from fulilian_constants import display_fulilian_home as _dhh
 
     print(f"  tail -f {_dhh()}/logs/gateway.log  # View logs")
 
@@ -5645,7 +5645,7 @@ def launchd_stop():
     # bootout unloads the service definition so KeepAlive doesn't respawn
     # the process.  A plain `kill SIGTERM` only signals the process — launchd
     # immediately restarts it because KeepAlive is unconditionally true.
-    # `hermes gateway start` re-bootstraps when it detects the job is unloaded.
+    # `fulilian gateway start` re-bootstraps when it detects the job is unloaded.
     try:
         subprocess.run(["launchctl", "bootout", target], check=True, timeout=90)
     except subprocess.CalledProcessError as e:
@@ -5669,7 +5669,7 @@ def _wait_for_gateway_exit(
 
     Uses the PID from the gateway.pid file — not launchd labels — so this
     works correctly when multiple gateway instances run under separate
-    HERMES_HOME directories.
+    FULILIAN_HOME directories.
 
     Args:
         timeout: Total seconds to wait before giving up.
@@ -5766,7 +5766,7 @@ def launchd_restart():
         if pid is not None and probe_gateway_loop_liveness(pid) == GATEWAY_LOOP_WEDGED:
             # Health probe says the event loop is provably dead (#81642):
             # the gateway cannot process a graceful shutdown, so waiting the
-            # full drain budget only stalls the restart (and `hermes update`
+            # full drain budget only stalls the restart (and `fulilian update`
             # behind it) for 180s. Bounded escalation instead: SIGTERM grace
             # → SIGKILL → proceed, ~10s worst case. Never taken for a
             # busy-but-alive gateway — a fresh heartbeat keeps the drain path
@@ -5937,14 +5937,14 @@ def launchd_status(deep: bool = False):
     # unmanageable domain).  A PID in the output confirms a live process.
     launchd_pid = _parse_launchd_pid_from_list_output(list_output) if service_listed else None
 
-    # Hermes PID tracking — may be a detached fallback process spawned when
+    # Fulilian PID tracking — may be a detached fallback process spawned when
     # launchd cannot manage the domain on this host.
     from gateway.status import get_running_pid
     fallback_pid = get_running_pid(cleanup_stale=False)
 
     # Avoid double-counting: when launchd IS supervising, fallback_pid and
     # launchd_pid point at the same process (the gateway writes both the
-    # launchd PID and the Hermes PID file).
+    # launchd PID and the Fulilian PID file).
     if launchd_pid is not None and fallback_pid == launchd_pid:
         fallback_pid = None
 
@@ -5956,10 +5956,10 @@ def launchd_status(deep: bool = False):
     # ── Report ──
     print(f"Launchd plist: {plist_path}")
     if launchd_plist_is_current():
-        print("✓ Service definition matches the current Hermes install")
+        print("✓ Service definition matches the current Fulilian install")
     else:
-        print("⚠ Service definition is stale relative to the current Hermes install")
-        print("  Run: hermes gateway start")
+        print("⚠ Service definition is stale relative to the current Fulilian install")
+        print("  Run: fulilian gateway start")
 
     if service_listed:
         if launchd_pid is not None:
@@ -5972,10 +5972,10 @@ def launchd_status(deep: bool = False):
             print("  launchd cannot manage the gateway on this macOS version.")
             if fallback_pid:
                 print(f"✓ Detached fallback process is running (PID {fallback_pid})")
-                print("  Cron jobs will fire. Stop with: hermes gateway stop")
+                print("  Cron jobs will fire. Stop with: fulilian gateway stop")
             else:
                 print("✗ No fallback process is running")
-                print("  Run: hermes gateway start")
+                print("  Run: fulilian gateway start")
             print("  ⚠ Auto-start at login and auto-restart on crash are NOT available.")
         else:
             print("✓ Gateway service is registered with launchd")
@@ -5985,12 +5985,12 @@ def launchd_status(deep: bool = False):
     else:
         print("✗ Gateway service is not loaded")
         print("  Service definition exists locally but launchd has not loaded it.")
-        print("  Run: hermes gateway start")
+        print("  Run: fulilian gateway start")
         if fallback_pid:
             print(f"  Note: a detached gateway process is running (PID {fallback_pid})")
 
     if deep:
-        log_file = get_hermes_home() / "logs" / "gateway.log"
+        log_file = get_fulilian_home() / "logs" / "gateway.log"
         if log_file.exists():
             print()
             print("Recent logs:")
@@ -6008,7 +6008,7 @@ def _truthy_env(value: str | None) -> bool:
 
 def _is_official_docker_checkout() -> bool:
     return (
-        str(PROJECT_ROOT) == "/opt/hermes"
+        str(PROJECT_ROOT) == "/opt/fulilian"
         and (PROJECT_ROOT / "docker" / "entrypoint.sh").is_file()
     )
 
@@ -6024,7 +6024,7 @@ def _running_under_gateway_supervisor() -> bool:
         marker ``gateway/run.py`` already uses to pick the restart path).
       - launchd sets ``XPC_SERVICE_NAME`` to the job label for jobs it spawns;
         interactive shells inherit the sentinel ``"0"`` instead.
-      - the s6-overlay container longrun exports ``HERMES_S6_SUPERVISED_CHILD``.
+      - the s6-overlay container longrun exports ``FULILIAN_S6_SUPERVISED_CHILD``.
       - wrapped services can opt in with ``--external-supervisor`` when their
         launcher strips the native systemd/launchd marker.
     """
@@ -6038,7 +6038,7 @@ def _guard_named_profile_under_multiplexer(force: bool = False) -> None:
     it is the sole inbound process for EVERY profile on the host. Starting a
     separate gateway for a named profile would double-bind that profile's
     platforms (two pollers on one bot token, port fights). In that mode a
-    named-profile ``hermes gateway run`` is always a misconfiguration, so we
+    named-profile ``fulilian gateway run`` is always a misconfiguration, so we
     hard-error with a pointer to the multiplexer. ``--force`` overrides.
 
     Inert unless ALL of: (a) this invocation is a named profile, (b) a default-
@@ -6055,8 +6055,8 @@ def _guard_named_profile_under_multiplexer(force: bool = False) -> None:
         return  # default profile (or unrecognized) — this guard doesn't apply
 
     try:
-        from fulilian_constants import get_default_hermes_root
-        default_root = get_default_hermes_root()
+        from fulilian_constants import get_default_fulilian_root
+        default_root = get_default_fulilian_root()
         # (b) Is the default-profile gateway running?
         from gateway.status import get_running_pid as _default_running_pid  # noqa
     except Exception:
@@ -6139,7 +6139,7 @@ def _guard_named_profile_under_multiplexer(force: bool = False) -> None:
     )
     print("  Manage the multiplexer instead (from the default profile):")
     print()
-    print("    hermes gateway restart")
+    print("    fulilian gateway restart")
     print()
     print("  Pass --force to start a separate profile gateway anyway (not")
     print("  recommended while the multiplexer is running).")
@@ -6160,7 +6160,7 @@ def _guard_named_profile_under_multiplexer(force: bool = False) -> None:
 def _guard_supervised_gateway_conflict(force: bool = False) -> None:
     """Refuse a foreground gateway when a service manager already supervises one.
 
-    Running ``hermes gateway run [--replace]`` (or the manual-restart fallback)
+    Running ``fulilian gateway run [--replace]`` (or the manual-restart fallback)
     from a shell on a systemd/launchd host spawns a second, long-lived
     dispatcher that escapes the service cgroup, survives
     ``systemctl restart``, and becomes a silent concurrent writer on the shared
@@ -6188,7 +6188,7 @@ def _guard_supervised_gateway_conflict(force: bool = False) -> None:
         "  instead:"
     )
     print()
-    print("    hermes gateway restart")
+    print("    fulilian gateway restart")
     print()
     print(
         "  Pass --force to start a foreground gateway anyway (not recommended\n"
@@ -6203,10 +6203,10 @@ def _guard_existing_gateway_process_conflict(replace: bool = False) -> None:
     ``gateway.run`` performs the authoritative PID/lock check, but importing it
     is expensive: it pulls in model_tools/plugin discovery first. On small
     instances, a supervisor or dashboard loop repeatedly running bare
-    ``hermes gateway run`` can burn memory/CPU just to fail with "already
+    ``fulilian gateway run`` can burn memory/CPU just to fail with "already
     running" after plugin discovery. This cheap PID-file preflight preserves the
     same user-facing contract while avoiding that startup work without scanning
-    unrelated gateway processes from other HERMES_HOME roots.
+    unrelated gateway processes from other FULILIAN_HOME roots.
     """
     if replace or _running_under_gateway_supervisor():
         return
@@ -6223,9 +6223,9 @@ def _guard_existing_gateway_process_conflict(replace: bool = False) -> None:
     print_error(
         f"Another gateway instance is already running (PID {pid})."
     )
-    print("  Use 'hermes gateway restart' to replace it,")
-    print("  or 'hermes gateway stop' first.")
-    print("  Or use 'hermes gateway run --replace' to auto-replace.")
+    print("  Use 'fulilian gateway restart' to replace it,")
+    print("  or 'fulilian gateway stop' first.")
+    print("  Or use 'fulilian gateway run --replace' to auto-replace.")
     sys.exit(1)
 
 
@@ -6233,25 +6233,25 @@ def _guard_official_docker_root_gateway() -> None:
     """Refuse gateway startup when the official Docker privilege drop was bypassed."""
     if not hasattr(os, "geteuid") or os.geteuid() != 0:
         return
-    if _truthy_env(os.getenv("HERMES_ALLOW_ROOT_GATEWAY")):
+    if _truthy_env(os.getenv("FULILIAN_ALLOW_ROOT_GATEWAY")):
         return
     if not _is_official_docker_checkout():
         return
 
     print_error(
-        "Refusing to run the Hermes gateway as root inside the official Docker image."
+        "Refusing to run the Fulilian gateway as root inside the official Docker image."
     )
     print(
-        "  The image entrypoint normally drops privileges to the 'hermes' user. "
+        "  The image entrypoint normally drops privileges to the 'fulilian' user. "
         "If you override entrypoint in Docker Compose, include "
-        "/opt/hermes/docker/entrypoint.sh before the Hermes command."
+        "/opt/fulilian/docker/entrypoint.sh before the Fulilian command."
     )
     print(
         "  Running the gateway as root can leave root-owned files in "
-        "$HERMES_HOME and break later non-root dashboard/gateway runs."
+        "$FULILIAN_HOME and break later non-root dashboard/gateway runs."
     )
     print(
-        "  Set HERMES_ALLOW_ROOT_GATEWAY=1 only if you intentionally accept this risk."
+        "  Set FULILIAN_ALLOW_ROOT_GATEWAY=1 only if you intentionally accept this risk."
     )
     sys.exit(1)
 
@@ -6275,9 +6275,9 @@ def run_gateway(verbose: int = 0, quiet: bool = False, replace: bool = False, fo
     sys.path.insert(0, str(PROJECT_ROOT))
 
     # Detached Windows gateway runs must ignore console-control broadcasts
-    # from sibling CLI processes, but foreground `hermes gateway run` still
+    # from sibling CLI processes, but foreground `fulilian gateway run` still
     # needs to obey the banner's "Press Ctrl+C to stop" contract.
-    # Service-style launchers set HERMES_GATEWAY_DETACHED=1; older wrappers
+    # Service-style launchers set FULILIAN_GATEWAY_DETACHED=1; older wrappers
     # without the marker are handled by the non-TTY fallback.
     try:
         _stdin_is_tty = bool(sys.stdin and sys.stdin.isatty())
@@ -6285,7 +6285,7 @@ def run_gateway(verbose: int = 0, quiet: bool = False, replace: bool = False, fo
         _stdin_is_tty = False
     _console_window_attached = _windows_console_window_attached()
     _gateway_detached = (
-        os.getenv("HERMES_GATEWAY_DETACHED", "").strip().lower()
+        os.getenv("FULILIAN_GATEWAY_DETACHED", "").strip().lower()
         in {"1", "true", "yes", "on"}
     )
     _breakaway = _windows_gateway_breakaway_state()
@@ -6323,10 +6323,10 @@ def run_gateway(verbose: int = 0, quiet: bool = False, replace: bool = False, fo
     # Refresh the systemd unit definition on every boot so that restart
     # settings (RestartSec, StartLimitIntervalSec, etc.) stay current even
     # when the process was respawned via exit-code-75 (stale-code or
-    # /restart) rather than through `hermes gateway restart` which already
+    # /restart) rather than through `fulilian gateway restart` which already
     # calls refresh_systemd_unit_if_needed().  Without this, a code update
     # that ships new unit settings won't take effect until the next manual
-    # `hermes gateway start/restart` — leaving the gateway vulnerable to
+    # `fulilian gateway start/restart` — leaving the gateway vulnerable to
     # the exact failure mode the new settings were meant to prevent.
     if supports_systemd_services():
         try:
@@ -6337,7 +6337,7 @@ def run_gateway(verbose: int = 0, quiet: bool = False, replace: bool = False, fo
     from gateway.run import start_gateway
 
     print("┌─────────────────────────────────────────────────────────┐")
-    print("│           ⚕ Hermes Gateway Starting...                 │")
+    print("│           ⚕ Fulilian Gateway Starting...                 │")
     print("├─────────────────────────────────────────────────────────┤")
     print("│  Messaging platforms + cron scheduler                    │")
     print("│  Press Ctrl+C to stop                                   │")
@@ -6356,17 +6356,17 @@ def run_gateway(verbose: int = 0, quiet: bool = False, replace: bool = False, fo
     # the next silent death yields evidence instead of a mystery. This
     # is diagnostic scaffolding; cheap to keep on, costs nothing during
     # normal operation, and the emitted lines are opt-in via the
-    # HERMES_GATEWAY_EXIT_DIAG env var (default: on while we're still
+    # FULILIAN_GATEWAY_EXIT_DIAG env var (default: on while we're still
     # chasing the Windows lifecycle bug).
     import atexit as _atexit
     import traceback as _traceback
     from datetime import datetime as _dt, timezone as _tz
 
     def _exit_diag(tag: str, **extra: object) -> None:
-        if os.environ.get("HERMES_GATEWAY_EXIT_DIAG", "1") != "1":
+        if os.environ.get("FULILIAN_GATEWAY_EXIT_DIAG", "1") != "1":
             return
         try:
-            from fulilian_constants import get_hermes_home as _ghh
+            from fulilian_constants import get_fulilian_home as _ghh
 
             log_dir = _ghh() / "logs"
             log_dir.mkdir(parents=True, exist_ok=True)
@@ -6406,8 +6406,8 @@ def run_gateway(verbose: int = 0, quiet: bool = False, replace: bool = False, fo
     # their own throttles, but this backstop works on every platform (and covers
     # supervisors that lack a respawn floor). Configured via
     # ``gateway.respawn_storm`` in config.yaml (``max_starts`` / ``window_seconds``);
-    # the env vars ``HERMES_GATEWAY_MAX_STARTS`` /
-    # ``HERMES_GATEWAY_START_WINDOW_S`` override for escape-hatch use.
+    # the env vars ``FULILIAN_GATEWAY_MAX_STARTS`` /
+    # ``FULILIAN_GATEWAY_START_WINDOW_S`` override for escape-hatch use.
     # Set max_starts <= 0 to disable. Best-effort: a bookkeeping failure must
     # never block startup.
     try:
@@ -6433,13 +6433,13 @@ def run_gateway(verbose: int = 0, quiet: bool = False, replace: bool = False, fo
             pass
         # Env vars override config for escape-hatch use.
         try:
-            _env_starts = os.getenv("HERMES_GATEWAY_MAX_STARTS")
+            _env_starts = os.getenv("FULILIAN_GATEWAY_MAX_STARTS")
             if _env_starts is not None:
                 _max_starts = int(_env_starts)
         except ValueError:
             pass
         try:
-            _env_win = os.getenv("HERMES_GATEWAY_START_WINDOW_S")
+            _env_win = os.getenv("FULILIAN_GATEWAY_START_WINDOW_S")
             if _env_win is not None:
                 _win = float(_env_win)
         except ValueError:
@@ -6461,7 +6461,7 @@ def run_gateway(verbose: int = 0, quiet: bool = False, replace: bool = False, fo
         logger.debug("respawn-storm breaker check failed (non-fatal): %s", _be)
 
     def _hard_exit_after_gateway_teardown(code: int) -> None:
-        # ``hermes gateway run`` enters through this CLI wrapper, not through
+        # ``fulilian gateway run`` enters through this CLI wrapper, not through
         # ``gateway.run.main()``.  Mirror that module's wedge-proof exit path:
         # once start_gateway() has completed graceful teardown, bypass Python
         # finalization so non-daemon worker threads (notably in-flight cron
@@ -6542,7 +6542,7 @@ _PLATFORMS = [
         "setup_instructions": [
             "1. In Mattermost: Integrations → Bot Accounts → Add Bot Account",
             "   (System Console → Integrations → Bot Accounts must be enabled)",
-            "2. Give it a username (e.g. hermes) and copy the bot token",
+            "2. Give it a username (e.g. fulilian) and copy the bot token",
             "3. Works with any self-hosted Mattermost instance — enter your server URL",
             "4. To find your user ID: click your avatar (top-left) → Profile",
             "   Your user ID is displayed there — click it to copy.",
@@ -6573,7 +6573,7 @@ _PLATFORMS = [
                 "name": "MATTERMOST_HOME_CHANNEL",
                 "prompt": "Home channel ID (for cron/notification delivery, or empty to set later with /set-home)",
                 "password": False,
-                "help": "Channel ID where Hermes delivers cron results and notifications.",
+                "help": "Channel ID where Fulilian delivers cron results and notifications.",
             },
             {
                 "name": "MATTERMOST_REPLY_MODE",
@@ -6612,9 +6612,9 @@ _PLATFORMS = [
             "2. Complete the BlueBubbles setup wizard — sign in with your Apple ID",
             "3. In BlueBubbles Settings → API, note the Server URL and password",
             "4. The server URL is typically http://<your-mac-ip>:1234",
-            "5. Hermes connects via the BlueBubbles REST API and receives",
+            "5. Fulilian connects via the BlueBubbles REST API and receives",
             "   incoming messages via a local webhook",
-            "6. To authorize users, use DM pairing: hermes pairing generate bluebubbles",
+            "6. To authorize users, use DM pairing: fulilian pairing generate bluebubbles",
             "   Share the code — the user sends it via iMessage to get approved",
         ],
         "vars": [
@@ -6693,7 +6693,7 @@ _PLATFORMS = [
             "1. Download the Yuanbao app from https://yuanbao.tencent.com/",
             "2. In the app, go to PAI → My Bot and create a new bot",
             "3. After the bot is created, copy the App ID and App Secret",
-            "4. Enter them below and Hermes will connect automatically over WebSocket",
+            "4. Enter them below and Fulilian will connect automatically over WebSocket",
         ],
         "vars": [
             {
@@ -6719,7 +6719,7 @@ def _all_platforms() -> list[dict]:
     Combines the built-in ``_PLATFORMS`` with plugin platforms registered via
     ``platform_registry``. Plugins are discovered on first call so bundled
     platforms (like IRC, which auto-load via ``kind: platform``) appear in
-    ``hermes setup gateway`` without needing the gateway to be running.
+    ``fulilian setup gateway`` without needing the gateway to be running.
     Built-ins keep their dict shape; plugin entries are adapted to the same
     shape with ``_registry_entry`` holding the source.
 
@@ -6729,13 +6729,13 @@ def _all_platforms() -> list[dict]:
         ``mautrix[encryption]`` -> ``python-olm``, which has no Windows
         wheel and needs ``make`` + libolm to build from sdist. There's
         no native Windows path that works, so we don't offer it in the
-        picker. Users who want Matrix on Windows can run hermes under
+        picker. Users who want Matrix on Windows can run fulilian under
         WSL.
     """
     # Populate the registry so plugin platforms are visible. Idempotent.
     # Bundled platform plugins (``kind: platform``) auto-load unconditionally,
     # so every shipped messaging channel appears in the setup menu by default.
-    # User-installed platform plugins under ~/.hermes/plugins/ still require
+    # User-installed platform plugins under ~/.fulilian/plugins/ still require
     # opt-in via ``plugins.enabled`` (untrusted code).
     try:
         from fulilian_cli.plugins import discover_plugins
@@ -6815,7 +6815,7 @@ def _platform_status(platform: dict) -> str:
     val = get_env_value(token_var)
     if token_var == "WHATSAPP_ENABLED":
         if val and val.lower() == "true":
-            session_file = get_hermes_home() / "whatsapp" / "session" / "creds.json"
+            session_file = get_fulilian_home() / "whatsapp" / "session" / "creds.json"
             if session_file.exists():
                 return "configured + paired"
             return "enabled, not paired"
@@ -7058,7 +7058,7 @@ def _setup_standard_platform(platform: dict):
                 else:
                     access_choices = [
                         "Enable open access (anyone can message the bot)",
-                        "Use DM pairing (unknown users request access, you approve with 'hermes pairing approve')",
+                        "Use DM pairing (unknown users request access, you approve with 'fulilian pairing approve')",
                         "Skip for now (bot will deny all users until configured)",
                     ]
                     default_access_idx = 1
@@ -7080,13 +7080,13 @@ def _setup_standard_platform(platform: dict):
                         "  DM pairing mode — users will receive a code to request access."
                     )
                     print_info(
-                        "  Approve with: hermes pairing approve <platform> <code>"
+                        "  Approve with: fulilian pairing approve <platform> <code>"
                     )
                 elif is_email:
                     print_success("  Unknown email senders will be ignored.")
                 else:
                     print_info(
-                        "  Skipped — configure later with 'hermes gateway setup'"
+                        "  Skipped — configure later with 'fulilian gateway setup'"
                     )
             continue
 
@@ -7203,10 +7203,10 @@ def _setup_weixin():
     print()
     print(color("  ─── 💬 Weixin / WeChat Setup ───", Colors.CYAN))
     print()
-    print_info("  1. Hermes will open Tencent iLink QR login in this terminal.")
+    print_info("  1. Fulilian will open Tencent iLink QR login in this terminal.")
     print_info("  2. Use WeChat to scan and confirm the QR code.")
     print_info(
-        "  3. Hermes will store the returned account_id/token in ~/.hermes/.env."
+        "  3. Fulilian will store the returned account_id/token in ~/.fulilian/.env."
     )
     print_info(
         "  4. This adapter supports native text, image, video, and document delivery."
@@ -7229,7 +7229,7 @@ def _setup_weixin():
 
     if not check_weixin_requirements():
         print_error("  Missing dependencies: Weixin needs aiohttp and cryptography.")
-        print_info("  Install them, then rerun `hermes gateway setup`.")
+        print_info("  Install them, then rerun `fulilian gateway setup`.")
         return
 
     print()
@@ -7240,7 +7240,7 @@ def _setup_weixin():
     import asyncio
 
     try:
-        credentials = asyncio.run(qr_login(str(get_hermes_home())))
+        credentials = asyncio.run(qr_login(str(get_fulilian_home())))
     except KeyboardInterrupt:
         print()
         print_warning("  Weixin setup cancelled.")
@@ -7283,7 +7283,7 @@ def _setup_weixin():
         save_env_value("WEIXIN_ALLOWED_USERS", "")
         print_success("  DM pairing enabled.")
         print_info(
-            "  Unknown DM users can request access and you approve them with `hermes pairing approve`."
+            "  Unknown DM users can request access and you approve them with `fulilian pairing approve`."
         )
     elif access_idx == 1:
         save_env_value("WEIXIN_DM_POLICY", "open")
@@ -7458,7 +7458,7 @@ def _setup_qqbot():
             save_env_value("QQ_ALLOWED_USERS", "")
         print_success("  DM pairing enabled.")
         print_info(
-            "  Unknown users can request access; approve with `hermes pairing approve`."
+            "  Unknown users can request access; approve with `fulilian pairing approve`."
         )
     elif access_idx == 1:
         save_env_value("QQ_ALLOW_ALL_USERS", "true")
@@ -7525,7 +7525,7 @@ def _setup_signal():
         print_info("    Docker: bbernhard/signal-cli-rest-api")
         print()
         print_info("  After installing, link your account and start the daemon:")
-        print_info('    signal-cli link -n "HermesAgent"')
+        print_info('    signal-cli link -n "FulilianAgent"')
         print_info("    signal-cli --account +YOURNUMBER daemon --http 127.0.0.1:8080")
         print()
 
@@ -7629,7 +7629,7 @@ def _setup_signal():
 def _builtin_setup_fn(key: str):
     """Resolve the interactive setup function for a built-in platform key.
 
-    Late-bound to avoid a circular import with ``hermes_cli.setup`` (which
+    Late-bound to avoid a circular import with ``fulilian_cli.setup`` (which
     imports from this module for the remaining bespoke flows).
     """
     from fulilian_cli import setup as _s
@@ -7674,7 +7674,7 @@ def _configure_platform(platform: dict) -> None:
       4. Env-var hint fallback for plugins that offer no setup helper.
 
     Bundled platform plugins (e.g. IRC) auto-load, so no plugin enable step
-    is needed here. User-installed platform plugins under ~/.hermes/plugins/
+    is needed here. User-installed platform plugins under ~/.fulilian/plugins/
     must already be in ``plugins.enabled`` before they appear in this menu.
     """
     entry = platform.get("_registry_entry")
@@ -7699,7 +7699,7 @@ def _configure_platform(platform: dict) -> None:
     print(color(f"  ─── {emoji} {label} Setup ───", Colors.CYAN))
     required = entry.required_env if entry else []
     if required:
-        print_info(f"  Set these env vars in ~/.hermes/.env: {', '.join(required)}")
+        print_info(f"  Set these env vars in ~/.fulilian/.env: {', '.join(required)}")
     else:
         print_info(
             f"  Configure {label} in config.yaml under gateway.platforms.{platform['key']}"
@@ -7759,7 +7759,7 @@ def gateway_setup():
         print_systemd_scope_conflict_warning()
         print()
 
-    if supports_systemd_services() and has_legacy_hermes_units():
+    if supports_systemd_services() and has_legacy_fulilian_units():
         print_legacy_unit_warning()
         print()
 
@@ -7847,7 +7847,7 @@ def gateway_setup():
                         gateway_windows.restart()
                     else:
                         stop_profile_gateway()
-                        print_info("Start manually: hermes gateway")
+                        print_info("Start manually: fulilian gateway")
                 except UserSystemdUnavailableError as e:
                     print_error("  Restart failed — user systemd not reachable:")
                     for line in str(e).splitlines():
@@ -7931,38 +7931,38 @@ def gateway_setup():
                                 print_error(f"  Start failed: {e}")
                     except subprocess.CalledProcessError as e:
                         print_error(f"  Install failed: {e}")
-                        print_info("  You can try manually: hermes gateway install")
+                        print_info("  You can try manually: fulilian gateway install")
                 else:
                     print_info("  Skipped start and auto-start setup.")
-                    print_info("  You can install later: hermes gateway install")
+                    print_info("  You can install later: fulilian gateway install")
                     if supports_systemd_services():
                         print_info(
-                            "  Or as a boot-time service: sudo hermes gateway install --system"
+                            "  Or as a boot-time service: sudo fulilian gateway install --system"
                         )
-                    print_info("  Or run in foreground:  hermes gateway run")
+                    print_info("  Or run in foreground:  fulilian gateway run")
             elif is_wsl():
                 print_info("  WSL detected but systemd is not running.")
-                print_info("  Run in foreground: hermes gateway run")
+                print_info("  Run in foreground: fulilian gateway run")
                 print_info(
-                    "  For persistence:   tmux new -s hermes 'hermes gateway run'"
+                    "  For persistence:   tmux new -s fulilian 'fulilian gateway run'"
                 )
                 print_info(
                     "  To enable systemd: add systemd=true to /etc/wsl.conf, then 'wsl --shutdown'"
                 )
             elif is_termux():
-                from fulilian_constants import display_hermes_home as _dhh
+                from fulilian_constants import display_fulilian_home as _dhh
 
                 print_info("  Termux does not use systemd/launchd services.")
-                print_info("  Run in foreground: hermes gateway run")
+                print_info("  Run in foreground: fulilian gateway run")
                 print_info(
-                    f"  Or start it manually in the background (best effort): nohup hermes gateway run >{_dhh()}/logs/gateway.log 2>&1 &"
+                    f"  Or start it manually in the background (best effort): nohup fulilian gateway run >{_dhh()}/logs/gateway.log 2>&1 &"
                 )
             else:
                 print_info("  Service install not supported on this platform.")
-                print_info("  Run in foreground: hermes gateway run")
+                print_info("  Run in foreground: fulilian gateway run")
     else:
         print()
-        print_info("No platforms configured. Run 'hermes gateway setup' when ready.")
+        print_info("No platforms configured. Run 'fulilian gateway setup' when ready.")
 
     print()
 
@@ -7984,7 +7984,7 @@ def _dispatch_via_service_manager_if_s6(
     The s6 service slot was created either by the Phase 4 profile-create
     hook or by the container-boot reconciler (cont-init.d/02-…). If it
     doesn't exist or s6 returns an error, the named errors from
-    :mod:`hermes_cli.service_manager` are caught and surfaced as
+    :mod:`fulilian_cli.service_manager` are caught and surfaced as
     actionable CLI messages (no raw ``CalledProcessError`` traceback).
     """
     from fulilian_cli.service_manager import (
@@ -7998,7 +7998,7 @@ def _dispatch_via_service_manager_if_s6(
         return False
     if profile is None:
         # _profile_suffix() returns the bare profile name for
-        # HERMES_HOME=<root>/profiles/<name>, "" for the default root,
+        # FULILIAN_HOME=<root>/profiles/<name>, "" for the default root,
         # or a hash for unrelated paths. Map "" → "default" so the
         # default-profile gateway is reachable as gateway-default.
         profile = _profile_suffix() or "default"
@@ -8029,7 +8029,7 @@ def _dispatch_all_via_service_manager_if_s6(action: str) -> bool:
     Returns True iff dispatched (caller should ``return``); False
     otherwise — caller continues with the host-side code path.
 
-    Without this, ``hermes gateway stop --all`` and ``... restart --all``
+    Without this, ``fulilian gateway stop --all`` and ``... restart --all``
     fall through to ``kill_gateway_processes(all_profiles=True)``, which
     just ``pkill``s every gateway process. s6-supervise observes the
     crash and restarts each one ~1s later — so ``--all`` ends up
@@ -8086,7 +8086,7 @@ def gateway_command(args):
             print(f"  {line}")
         sys.exit(1)
     except SystemScopeRequiresRootError as e:
-        # The direct ``hermes gateway install|uninstall|start|stop|restart``
+        # The direct ``fulilian gateway install|uninstall|start|stop|restart``
         # path lands here when the user typed a system-scope action without
         # sudo. Same exit code as before — just gives the wizard a way to
         # intercept the same condition with friendlier guidance before the
@@ -8113,25 +8113,25 @@ def _maybe_redirect_run_to_s6_supervision(args) -> bool:
 
       1. ``_dispatch_via_service_manager_if_s6`` returns False unless
          we're in a container with s6 as PID 1. Host runs of
-         ``hermes gateway run`` are unaffected.
-      2. ``HERMES_S6_SUPERVISED_CHILD`` is exported by
+         ``fulilian gateway run`` are unaffected.
+      2. ``FULILIAN_S6_SUPERVISED_CHILD`` is exported by
          ``S6ServiceManager._render_run_script`` for the supervised
-         process itself — i.e. when s6-supervise execs ``hermes gateway
+         process itself — i.e. when s6-supervise execs ``fulilian gateway
          run --replace`` as a longrun, this guard short-circuits the
          redirect so the supervised gateway actually runs in
          foreground (otherwise we'd recurse: run → start → run → start
          → ...).
-      3. ``--no-supervise`` (or ``HERMES_GATEWAY_NO_SUPERVISE=1``) opts
+      3. ``--no-supervise`` (or ``FULILIAN_GATEWAY_NO_SUPERVISE=1``) opts
          out for users who genuinely want pre-s6 semantics — CI smoke
          tests, debugging the foreground startup path, etc.
 
     Returns True iff dispatched (caller should ``return``).
     """
     no_supervise = getattr(args, "no_supervise", False) or \
-        os.environ.get("HERMES_GATEWAY_NO_SUPERVISE", "").lower() in ("1", "true", "yes")
+        os.environ.get("FULILIAN_GATEWAY_NO_SUPERVISE", "").lower() in ("1", "true", "yes")
     if no_supervise:
         return False
-    if os.environ.get("HERMES_S6_SUPERVISED_CHILD"):
+    if os.environ.get("FULILIAN_S6_SUPERVISED_CHILD"):
         # We ARE the supervised child s6-supervise is running. Fall
         # through to the foreground code path so the gateway actually
         # starts.
@@ -8141,15 +8141,15 @@ def _maybe_redirect_run_to_s6_supervision(args) -> bool:
     # Loud breadcrumb: explain the upgrade and how to opt out. Print to
     # stderr so it doesn't pollute stdout-parsing scripts. The
     # supervised gateway's own logs are routed by s6-log to both
-    # `docker logs` and ${HERMES_HOME}/logs/gateways/<profile>/current,
+    # `docker logs` and ${FULILIAN_HOME}/logs/gateways/<profile>/current,
     # so the user sees a clear sequence: this banner first, then the
     # gateway's own stdout/stderr from the supervisor.
     print(
         "→ gateway is now running under s6 supervision (auto-restart on crash,\n"
-        "  dashboard supervised alongside if HERMES_DASHBOARD is set).\n"
+        "  dashboard supervised alongside if FULILIAN_DASHBOARD is set).\n"
         "  This is the recommended setup for the s6 container image — the\n"
         "  gateway will keep running even if it crashes.\n"
-        "  Use `--no-supervise` (or HERMES_GATEWAY_NO_SUPERVISE=1) to opt out\n"
+        "  Use `--no-supervise` (or FULILIAN_GATEWAY_NO_SUPERVISE=1) to opt out\n"
         "  and get the pre-s6 foreground behavior instead.",
         file=sys.stderr,
         flush=True,
@@ -8161,8 +8161,8 @@ def _maybe_redirect_run_to_s6_supervision(args) -> bool:
     # `docker stop` sends SIGTERM, at which point /init runs stage 3
     # shutdown (which tears down the supervised gateway cleanly).
     #
-    # Prefer `sleep infinity` (matches the static main-hermes service's
-    # pattern in docker/s6-rc.d/main-hermes/run, and frees the Python
+    # Prefer `sleep infinity` (matches the static main-fulilian service's
+    # pattern in docker/s6-rc.d/main-fulilian/run, and frees the Python
     # interpreter — the heartbeat is a tiny `sleep` process, not a
     # resident interpreter). But `os.execvp` does a PATH lookup for the
     # `sleep` binary and historically crashed the whole container with
@@ -8240,7 +8240,7 @@ def _gateway_command_inner(args):
         run_as_user = getattr(args, "run_as_user", None)
         if is_termux():
             print("Gateway service installation is not supported on Termux.")
-            print("Run manually: hermes gateway")
+            print("Run manually: fulilian gateway")
             sys.exit(1)
         if supports_systemd_services():
             if is_wsl():
@@ -8248,10 +8248,10 @@ def _gateway_command_inner(args):
                     "WSL detected — systemd services may not survive WSL restarts."
                 )
                 print_info(
-                    "  Consider running in foreground instead: hermes gateway run"
+                    "  Consider running in foreground instead: fulilian gateway run"
                 )
                 print_info(
-                    "  Or use tmux/screen for persistence: tmux new -s hermes 'hermes gateway run'"
+                    "  Or use tmux/screen for persistence: tmux new -s fulilian 'fulilian gateway run'"
                 )
                 print()
             # Honor CLI flags (--start-now / --no-start-now, --start-on-login /
@@ -8301,13 +8301,13 @@ def _gateway_command_inner(args):
             print("or run the gateway in foreground mode:")
             print()
             print(
-                "  hermes gateway run                              # direct foreground"
+                "  fulilian gateway run                              # direct foreground"
             )
             print(
-                "  tmux new -s hermes 'hermes gateway run'         # persistent via tmux"
+                "  tmux new -s fulilian 'fulilian gateway run'         # persistent via tmux"
             )
             print(
-                "  nohup hermes gateway run > ~/.hermes/logs/gateway.log 2>&1 &  # background"
+                "  nohup fulilian gateway run > ~/.fulilian/logs/gateway.log 2>&1 &  # background"
             )
             sys.exit(1)
         elif is_container():
@@ -8318,9 +8318,9 @@ def _gateway_command_inner(args):
             if detect_service_manager() == "s6":
                 print("Per-profile gateways are auto-registered when you create a profile.")
                 print()
-                print("  hermes profile create <name>     # creates the s6 service slot")
-                print("  hermes -p <name> gateway start   # bring it up via s6")
-                print("  hermes status                    # see currently-supervised gateways")
+                print("  fulilian profile create <name>     # creates the s6 service slot")
+                print("  fulilian -p <name> gateway start   # bring it up via s6")
+                print("  fulilian status                    # see currently-supervised gateways")
                 return
             # Fallback for pre-s6 containers or other container runtimes
             # we haven't taught about supervision (Podman without our
@@ -8336,11 +8336,11 @@ def _gateway_command_inner(args):
             )
             print("  docker restart <container>                # manual restart")
             print()
-            print("To run the gateway: hermes gateway run")
+            print("To run the gateway: fulilian gateway run")
             sys.exit(0)
         else:
             print("Service installation not supported on this platform.")
-            print("Run manually: hermes gateway run")
+            print("Run manually: fulilian gateway run")
             sys.exit(1)
 
     elif subcmd == "uninstall":
@@ -8354,7 +8354,7 @@ def _gateway_command_inner(args):
             print_error(
                 "Refusing to uninstall the gateway from inside the gateway process.\n"
                 "This command was blocked to prevent the gateway from terminating itself.\n"
-                "Use `hermes gateway uninstall` from a shell outside the running gateway."
+                "Use `fulilian gateway uninstall` from a shell outside the running gateway."
             )
             sys.exit(1)
 
@@ -8366,7 +8366,7 @@ def _gateway_command_inner(args):
             print(
                 "Gateway service uninstall is not supported on Termux because there is no managed service to remove."
             )
-            print("Stop manual runs with: hermes gateway stop")
+            print("Stop manual runs with: fulilian gateway stop")
             sys.exit(1)
         if supports_systemd_services():
             systemd_uninstall(system=system)
@@ -8381,8 +8381,8 @@ def _gateway_command_inner(args):
             if detect_service_manager() == "s6":
                 print("Per-profile gateways are auto-unregistered when you delete the profile.")
                 print()
-                print("  hermes profile delete <name>     # tears down the s6 service slot")
-                print("  hermes -p <name> gateway stop    # stop without deleting the profile")
+                print("  fulilian profile delete <name>     # tears down the s6 service slot")
+                print("  fulilian -p <name> gateway stop    # stop without deleting the profile")
                 return
             print("Service uninstall is not applicable inside a Docker container.")
             print("To stop the gateway, stop or remove the container:")
@@ -8401,7 +8401,7 @@ def _gateway_command_inner(args):
         # Phase 4: inside a container with s6, dispatch via the service
         # manager instead of falling through to systemd/launchd/windows.
         # `--all` isn't meaningful here (each profile has its own service
-        # slot — start them individually via `hermes -p <name> gateway
+        # slot — start them individually via `fulilian -p <name> gateway
         # start`), so just bring up the current profile's slot.
         if not start_all and _dispatch_via_service_manager_if_s6("start"):
             return
@@ -8419,7 +8419,7 @@ def _gateway_command_inner(args):
             print(
                 "Gateway service start is not supported on Termux because there is no system service manager."
             )
-            print("Run manually: hermes gateway")
+            print("Run manually: fulilian gateway")
             sys.exit(1)
         if supports_systemd_services():
             systemd_start(system=system)
@@ -8434,13 +8434,13 @@ def _gateway_command_inner(args):
             print("Run the gateway in foreground mode instead:")
             print()
             print(
-                "  hermes gateway run                              # direct foreground"
+                "  fulilian gateway run                              # direct foreground"
             )
             print(
-                "  tmux new -s hermes 'hermes gateway run'         # persistent via tmux"
+                "  tmux new -s fulilian 'fulilian gateway run'         # persistent via tmux"
             )
             print(
-                "  nohup hermes gateway run > ~/.hermes/logs/gateway.log 2>&1 &  # background"
+                "  nohup fulilian gateway run > ~/.fulilian/logs/gateway.log 2>&1 &  # background"
             )
             print()
             print(
@@ -8459,7 +8459,7 @@ def _gateway_command_inner(args):
             print("  docker start <container>     # start a stopped container")
             print("  docker restart <container>   # restart a running container")
             print()
-            print("Or run the gateway directly: hermes gateway run")
+            print("Or run the gateway directly: fulilian gateway run")
             sys.exit(0)
         else:
             print("Not supported on this platform.")
@@ -8468,7 +8468,7 @@ def _gateway_command_inner(args):
     elif subcmd == "stop":
         # Defense: refuse self-targeting gateway stop from inside the gateway.
         # Prevents agent-initiated kill loops when combined with supervisor KeepAlive.
-        # The supervised probe also PASSES a plain foreground `hermes gateway run`
+        # The supervised probe also PASSES a plain foreground `fulilian gateway run`
         # (env set, PID owned, but no supervisor): that is intentional and
         # harmless — with no supervisor there is no KeepAlive, so a self-stop is
         # a one-shot exit rather than a respawn loop.
@@ -8478,7 +8478,7 @@ def _gateway_command_inner(args):
             print_error(
                 "Refusing to stop the gateway from inside the gateway process.\n"
                 "This command was blocked to prevent restart loops.\n"
-                "Use `hermes gateway stop` from a shell outside the running gateway."
+                "Use `fulilian gateway stop` from a shell outside the running gateway."
             )
             sys.exit(1)
 
@@ -8567,7 +8567,7 @@ def _gateway_command_inner(args):
     elif subcmd == "restart":
         # Defense: refuse self-targeting gateway restart from inside the gateway.
         # Prevents agent-initiated kill loops when combined with supervisor KeepAlive.
-        # The supervised probe also PASSES a plain foreground `hermes gateway run`
+        # The supervised probe also PASSES a plain foreground `fulilian gateway run`
         # (env set, PID owned, but no supervisor): that is intentional and
         # harmless — with no supervisor there is no KeepAlive, so a self-restart
         # is a single relaunch rather than a respawn loop.
@@ -8577,7 +8577,7 @@ def _gateway_command_inner(args):
             print_error(
                 "Refusing to restart the gateway from inside the gateway process.\n"
                 "This command was blocked to prevent restart loops.\n"
-                "Use `hermes gateway restart` from a shell outside the running gateway."
+                "Use `fulilian gateway restart` from a shell outside the running gateway."
             )
             sys.exit(1)
 
@@ -8706,7 +8706,7 @@ def _gateway_command_inner(args):
                     print(f"  Run:  sudo loginctl enable-linger {_username}")
                     print()
                     print("  Then restart the gateway:")
-                    print("    hermes gateway restart")
+                    print("    fulilian gateway restart")
                     return
 
             if service_configured:
@@ -8715,7 +8715,7 @@ def _gateway_command_inner(args):
                 print(
                     "  The service definition exists, but the service manager did not recover it."
                 )
-                print("  Fix the service, then retry: hermes gateway start")
+                print("  Fix the service, then retry: fulilian gateway start")
                 sys.exit(1)
 
             # Manual restart: stop only this profile's gateway
@@ -8782,11 +8782,11 @@ def _gateway_command_inner(args):
                     print(
                         "To install as a Windows Scheduled Task (auto-start on login):"
                     )
-                    print("  hermes gateway install")
+                    print("  fulilian gateway install")
                 else:
                     print("To install as a service:")
-                    print("  hermes gateway install")
-                    print("  sudo hermes gateway install --system")
+                    print("  fulilian gateway install")
+                    print("  sudo fulilian gateway install --system")
             else:
                 print("✗ Gateway is not running")
                 runtime_lines = _runtime_health_lines()
@@ -8797,26 +8797,26 @@ def _gateway_command_inner(args):
                         print(f"  {line}")
                 print()
                 print("To start:")
-                print("  hermes gateway run      # Run in foreground")
+                print("  fulilian gateway run      # Run in foreground")
                 if is_termux():
                     print(
-                        "  nohup hermes gateway run > ~/.hermes/logs/gateway.log 2>&1 &  # Best-effort background start"
+                        "  nohup fulilian gateway run > ~/.fulilian/logs/gateway.log 2>&1 &  # Best-effort background start"
                     )
                 elif is_wsl():
                     print(
-                        "  tmux new -s hermes 'hermes gateway run'         # persistent via tmux"
+                        "  tmux new -s fulilian 'fulilian gateway run'         # persistent via tmux"
                     )
                     print(
-                        "  nohup hermes gateway run > ~/.hermes/logs/gateway.log 2>&1 &  # background"
+                        "  nohup fulilian gateway run > ~/.fulilian/logs/gateway.log 2>&1 &  # background"
                     )
                 elif is_windows():
                     print(
-                        "  hermes gateway install  # Install as Windows Scheduled Task (auto-start on login)"
+                        "  fulilian gateway install  # Install as Windows Scheduled Task (auto-start on login)"
                     )
                 else:
-                    print("  hermes gateway install  # Install as user service")
+                    print("  fulilian gateway install  # Install as user service")
                     print(
-                        "  sudo hermes gateway install --system  # Install as boot-time system service"
+                        "  sudo fulilian gateway install --system  # Install as boot-time system service"
                     )
 
         # Show other profiles' gateway status for multi-profile awareness
@@ -8826,12 +8826,12 @@ def _gateway_command_inner(args):
         _gateway_list()
 
     elif subcmd == "migrate-legacy":
-        # Stop, disable, and remove legacy Hermes gateway unit files from
-        # pre-rename installs (e.g. hermes.service). Profile units and
+        # Stop, disable, and remove legacy Fulilian gateway unit files from
+        # pre-rename installs (e.g. fulilian.service). Profile units and
         # unrelated third-party services are never touched.
         dry_run = getattr(args, "dry_run", False)
         yes = getattr(args, "yes", False)
         if not supports_systemd_services() and not is_macos():
             print("Legacy unit migration only applies to systemd-based Linux hosts.")
             return
-        remove_legacy_hermes_units(interactive=not yes, dry_run=dry_run)
+        remove_legacy_fulilian_units(interactive=not yes, dry_run=dry_run)

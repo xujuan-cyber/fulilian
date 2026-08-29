@@ -2,7 +2,7 @@
 
 Covers:
 - agent/skill_utils namespace helpers
-- hermes_cli/plugins register_skill API + registry
+- fulilian_cli/plugins register_skill API + registry
 - tools/skills_tool qualified name dispatch in skill_view
 """
 
@@ -181,7 +181,7 @@ class TestSkillViewQualifiedName:
         empty = tmp_path / "empty-skills"
         empty.mkdir()
         monkeypatch.setattr("tools.skills_tool.SKILLS_DIR", empty)
-        monkeypatch.setenv("HERMES_HOME", str(tmp_path / ".hermes"))
+        monkeypatch.setenv("FULILIAN_HOME", str(tmp_path / ".fulilian"))
 
     def _register_skill(self, tmp_path, plugin="superpowers", name="writing-plans", content=None):
         skill_dir = tmp_path / "plugins" / plugin / "skills" / name
@@ -315,7 +315,7 @@ class TestSkillViewQualifiedName:
         assert "not found" in result["error"].lower()
 
     def _make_memory_provider_with_skill(self, tmp_path, name, body="Provider skill body."):
-        plugin_dir = tmp_path / ".hermes" / "plugins" / name
+        plugin_dir = tmp_path / ".fulilian" / "plugins" / name
         skill_dir = plugin_dir / "skills" / "maintenance"
         skill_dir.mkdir(parents=True)
         (skill_dir / "SKILL.md").write_text(
@@ -344,7 +344,7 @@ class TestSkillViewQualifiedName:
         self._make_memory_provider_with_skill(tmp_path, "memtest")
         monkeypatch.setattr(
             "plugins.memory._get_user_plugins_dir",
-            lambda: tmp_path / ".hermes" / "plugins",
+            lambda: tmp_path / ".fulilian" / "plugins",
         )
         monkeypatch.setattr(
             "plugins.memory._get_active_memory_provider",
@@ -367,7 +367,7 @@ class TestSkillViewQualifiedName:
         self._make_memory_provider_with_skill(tmp_path, "meminactive", "Inactive body.")
         monkeypatch.setattr(
             "plugins.memory._get_user_plugins_dir",
-            lambda: tmp_path / ".hermes" / "plugins",
+            lambda: tmp_path / ".fulilian" / "plugins",
         )
         monkeypatch.setattr(
             "plugins.memory._get_active_memory_provider",
@@ -410,7 +410,7 @@ class TestSkillViewPluginGuards:
         empty = tmp_path / "empty"
         empty.mkdir()
         monkeypatch.setattr("tools.skills_tool.SKILLS_DIR", empty)
-        monkeypatch.setenv("HERMES_HOME", str(tmp_path / ".hermes"))
+        monkeypatch.setenv("FULILIAN_HOME", str(tmp_path / ".fulilian"))
         self._platform = sys.platform
 
     def _reg(self, tmp_path, content, plugin="myplugin", name="foo"):
@@ -426,7 +426,7 @@ class TestSkillViewPluginGuards:
         from tools.skills_tool import skill_view
 
         self._reg(tmp_path, "---\nname: foo\n---\nBody.\n")
-        monkeypatch.setattr("hermes_cli.plugins._get_disabled_plugins", lambda: {"myplugin"})
+        monkeypatch.setattr("fulilian_cli.plugins._get_disabled_plugins", lambda: {"myplugin"})
 
         result = json.loads(skill_view("myplugin:foo"))
         assert result["success"] is False
@@ -467,7 +467,7 @@ class TestBundleContextBanner:
         empty = tmp_path / "empty"
         empty.mkdir()
         monkeypatch.setattr("tools.skills_tool.SKILLS_DIR", empty)
-        monkeypatch.setenv("HERMES_HOME", str(tmp_path / ".hermes"))
+        monkeypatch.setenv("FULILIAN_HOME", str(tmp_path / ".fulilian"))
 
     def _setup_bundle(self, tmp_path, skills=("foo", "bar", "baz")):
         for name in skills:

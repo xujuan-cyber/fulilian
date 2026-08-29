@@ -2,7 +2,7 @@
 
 Two behaviours are covered:
 
-1. ``load_hermes_dotenv()`` auto-loads ``~/.hermes/.op.env`` so the
+1. ``load_fulilian_dotenv()`` auto-loads ``~/.fulilian/.op.env`` so the
    ``OP_SERVICE_ACCOUNT_TOKEN`` bootstrap token is available to
    ``apply_onepassword_secrets()`` in cron / subprocess / macOS / Docker
    contexts that inherit no shell state (no systemd EnvironmentFile, no
@@ -53,7 +53,7 @@ def _isolate_op_token(monkeypatch):
 
 def test_op_env_autoloads_bootstrap_token_in_cron_context(tmp_path, monkeypatch):
     """A fresh interpreter (no inherited shell state) picks up the token."""
-    home = tmp_path / ".hermes"
+    home = tmp_path / ".fulilian"
     home.mkdir()
     # .env carries user secrets / op:// references but NOT the bootstrap token.
     (home / ".env").write_text("FOO=bar\n", encoding="utf-8")
@@ -64,7 +64,7 @@ def test_op_env_autoloads_bootstrap_token_in_cron_context(tmp_path, monkeypatch)
 
     assert os.environ.get("OP_SERVICE_ACCOUNT_TOKEN") is None
 
-    env_loader.load_hermes_dotenv(hermes_home=home)
+    env_loader.load_fulilian_dotenv(fulilian_home=home)
 
     assert os.environ["OP_SERVICE_ACCOUNT_TOKEN"] == "test-token"
 
@@ -97,7 +97,7 @@ def _seed_openrouter_token(monkeypatch, dotenv_value, environ_value):
         monkeypatch.setenv("OPENROUTER_API_KEY", environ_value)
     # Never treat the synthetic source as suppressed.
     monkeypatch.setattr(
-        "hermes_cli.auth.is_source_suppressed", lambda _p, _s: False
+        "fulilian_cli.auth.is_source_suppressed", lambda _p, _s: False
     )
 
     entries: list = []

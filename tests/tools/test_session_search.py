@@ -14,7 +14,7 @@ import time
 
 import pytest
 
-from hermes_state import SessionDB
+from fulilian_state import SessionDB
 from tools.session_search_tool import (
     SESSION_SEARCH_SCHEMA,
     _format_timestamp,
@@ -125,7 +125,7 @@ class TestBrowseShape:
                 self.closed += 1
 
         db = _DB()
-        monkeypatch.setattr("hermes_state.SessionDB", lambda: db)
+        monkeypatch.setattr("fulilian_state.SessionDB", lambda: db)
 
         result = json.loads(session_search())
 

@@ -1,21 +1,21 @@
-"""``hermes sync`` subcommand parser — Skill Sync.
+"""``fulilian sync`` subcommand parser — Skill Sync.
 
-Cloned from ``hermes_cli/subcommands/cron.py`` — same injected-handler shape
+Cloned from ``fulilian_cli/subcommands/cron.py`` — same injected-handler shape
 (``func=cmd_sync``) so this module does not import ``main`` (cycle avoidance).
 
 Skill Sync covers two surfaces, both under this one command for launch:
 
   Personal — your own skills, across your own devices:
-    hermes sync status                 show gate/opt-in/head state
-    hermes sync pull                   pull and materialize opted-in skills
-    hermes sync push                   push opted-in skills
-    hermes sync now                    reconcile: pull then push
-    hermes sync enable <skill>         opt a skill into sync
-    hermes sync disable <skill>        opt a skill out of sync
-    hermes sync device [--name]        show or set this device's label
+    fulilian sync status                 show gate/opt-in/head state
+    fulilian sync pull                   pull and materialize opted-in skills
+    fulilian sync push                   push opted-in skills
+    fulilian sync now                    reconcile: pull then push
+    fulilian sync enable <skill>         opt a skill into sync
+    fulilian sync disable <skill>        opt a skill out of sync
+    fulilian sync device [--name]        show or set this device's label
 
   Organisation — skills shared with your team:
-    hermes sync propose <skill>        share a skill with your organisation
+    fulilian sync propose <skill>        share a skill with your organisation
 
 Sync is INERT unless the resolved Nous token carries the access-gate claim
 AND a sync base URL is configured. The commands report that state rather than
@@ -41,10 +41,10 @@ def build_sync_parser(subparsers, *, cmd_sync: Callable) -> None:
         ),
         epilog=(
             "Examples:\n"
-            "  hermes sync status            what is synced, and from where\n"
-            "  hermes sync enable my-skill   include a skill in your sync\n"
-            "  hermes sync now               pull, then push\n"
-            "  hermes sync propose my-skill  share a skill with your team\n"
+            "  fulilian sync status            what is synced, and from where\n"
+            "  fulilian sync enable my-skill   include a skill in your sync\n"
+            "  fulilian sync now               pull, then push\n"
+            "  fulilian sync propose my-skill  share a skill with your team\n"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )

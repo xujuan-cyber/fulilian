@@ -94,7 +94,7 @@ def _unseen(task_id):
 
 
 def test_changes_requested_notify_wake_is_actionable_and_exactly_routed(tmp_path, monkeypatch):
-    monkeypatch.setenv("HERMES_KANBAN_DB", str(tmp_path / "review-block.db"))
+    monkeypatch.setenv("FULILIAN_KANBAN_DB", str(tmp_path / "review-block.db"))
     kb.init_db()
     task_id = _create_review_block("notify+wake")
     adapter = RecordingAdapter()
@@ -124,7 +124,7 @@ def test_changes_requested_notify_wake_is_actionable_and_exactly_routed(tmp_path
 
 
 def test_changes_requested_notify_is_passive_only(tmp_path, monkeypatch):
-    monkeypatch.setenv("HERMES_KANBAN_DB", str(tmp_path / "notify.db"))
+    monkeypatch.setenv("FULILIAN_KANBAN_DB", str(tmp_path / "notify.db"))
     kb.init_db()
     task_id = _create_review_block("notify")
     adapter = RecordingAdapter()
@@ -137,7 +137,7 @@ def test_changes_requested_notify_is_passive_only(tmp_path, monkeypatch):
 
 
 def test_changes_requested_wake_only_has_no_passive_post(tmp_path, monkeypatch):
-    monkeypatch.setenv("HERMES_KANBAN_DB", str(tmp_path / "wake.db"))
+    monkeypatch.setenv("FULILIAN_KANBAN_DB", str(tmp_path / "wake.db"))
     kb.init_db()
     task_id = _create_review_block("wake")
     adapter = RecordingAdapter()
@@ -150,7 +150,7 @@ def test_changes_requested_wake_only_has_no_passive_post(tmp_path, monkeypatch):
 
 
 def test_changes_requested_send_failure_retries_without_event_loss(tmp_path, monkeypatch):
-    monkeypatch.setenv("HERMES_KANBAN_DB", str(tmp_path / "retry.db"))
+    monkeypatch.setenv("FULILIAN_KANBAN_DB", str(tmp_path / "retry.db"))
     kb.init_db()
     task_id = _create_review_block("notify")
     failing = RecordingAdapter(fail_send=True)
@@ -166,7 +166,7 @@ def test_changes_requested_send_failure_retries_without_event_loss(tmp_path, mon
 
 
 def test_changes_requested_reason_is_redacted_path_safe_and_truncated(tmp_path, monkeypatch):
-    monkeypatch.setenv("HERMES_KANBAN_DB", str(tmp_path / "redact.db"))
+    monkeypatch.setenv("FULILIAN_KANBAN_DB", str(tmp_path / "redact.db"))
     kb.init_db()
     secret = "sk-abcdefghijklmnopqrstuvwxyz123456"
     reason = f"See /Users/alice/private/review.log token={secret} " + ("x" * 300)

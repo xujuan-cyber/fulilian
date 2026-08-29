@@ -3,7 +3,7 @@
 Mounted at /api/plugins/kanban/ by the dashboard plugin system.
 
 This layer is intentionally thin: every handler is a small wrapper around
-``hermes_cli.kanban_db`` or a direct SQL query. Writes use the same code
+``fulilian_cli.kanban_db`` or a direct SQL query. Writes use the same code
 paths the CLI and gateway ``/kanban`` command use, so the three surfaces
 cannot drift.
 
@@ -18,15 +18,15 @@ Plugin HTTP routes go through the dashboard's session-token auth middleware
 ``/api/plugins/...`` request must present the session bearer token (or the
 session cookie set when you load the dashboard HTML). The token is the
 random per-process ``_SESSION_TOKEN`` printed at startup; the dashboard's
-own pages inject it via ``window.__HERMES_SESSION_TOKEN__`` so logged-in
+own pages inject it via ``window.__FULILIAN_SESSION_TOKEN__`` so logged-in
 browsers don't have to handle it manually.
 
 For the ``/events`` WebSocket we still require the session token as a
 ``?token=`` query parameter (browsers cannot set the ``Authorization``
 header on an upgrade request), matching the established pattern used by
-the in-browser PTY bridge in ``hermes_cli/web_server.py``.
+the in-browser PTY bridge in ``fulilian_cli/web_server.py``.
 
-This means ``hermes dashboard --host 0.0.0.0`` is safe to run on a LAN:
+This means ``fulilian dashboard --host 0.0.0.0`` is safe to run on a LAN:
 plugin routes are no longer an unauthenticated exception. The auth still
 isn't multi-user — anyone who can read the printed URL+token gets full
 dashboard access — but they can't ride along just because they can reach
@@ -64,7 +64,7 @@ router = APIRouter()
 
 def _ws_upgrade_authorized(ws: "WebSocket") -> bool:
     """Authorize a WebSocket upgrade by delegating to the dashboard's canonical
-    WS auth gate (``hermes_cli.web_server._ws_auth_ok``).
+    WS auth gate (``fulilian_cli.web_server._ws_auth_ok``).
 
     Delegating (rather than re-implementing a ``_SESSION_TOKEN``-only check)
     means this endpoint transparently accepts whatever the core gate accepts
@@ -254,7 +254,7 @@ def _compute_task_diagnostics(
     and return ``{task_id: [diagnostic_dict, ...]}``.
 
     Tasks with no active diagnostics are omitted from the result.
-    Uses ``hermes_cli.kanban_diagnostics`` — see that module for the
+    Uses ``fulilian_cli.kanban_diagnostics`` — see that module for the
     rule definitions.
     """
     from fulilian_cli import kanban_diagnostics as kd
@@ -396,7 +396,7 @@ def get_board(
     install doesn't surface a "failed to load" error on the plugin tab.
 
     ``board`` selects which board to read from. Omitting it falls
-    through to the active board (``HERMES_KANBAN_BOARD`` env → on-disk
+    through to the active board (``FULILIAN_KANBAN_BOARD`` env → on-disk
     ``current`` pointer → ``default``).
     """
     board = _resolve_board(board)
@@ -659,14 +659,14 @@ def create_task(payload: CreateTaskBody, board: Optional[str] = Query(None)):
         if task and task.status == "ready" and task.assignee:
             try:
                 from fulilian_cli.kanban import _check_dispatcher_presence
-                from fulilian_constants import get_hermes_home
+                from fulilian_constants import get_fulilian_home
 
                 # Scope the probe to the request's active home. The dashboard
-                # backend can run under a different HERMES_HOME than the
+                # backend can run under a different FULILIAN_HOME than the
                 # profile this board belongs to, which otherwise warned "no
                 # gateway is running" against a live profile gateway (#71211).
                 running, message = _check_dispatcher_presence(
-                    hermes_home=get_hermes_home()
+                    fulilian_home=get_fulilian_home()
                 )
                 if not running and message:
                     body["warning"] = message
@@ -835,7 +835,7 @@ class UpdateTaskBody(BaseModel):
     result: Optional[str] = None
     block_reason: Optional[str] = None
     # Structured handoff fields — forwarded to complete_task when status
-    # transitions to 'done'. Dashboard parity with ``hermes kanban
+    # transitions to 'done'. Dashboard parity with ``fulilian kanban
     # complete --summary ... --metadata ...``.
     summary: Optional[str] = None
     metadata: Optional[dict] = None
@@ -1457,7 +1457,7 @@ def bulk_update(payload: BulkTaskBody, board: Optional[str] = Query(None)):
 
 # ---------------------------------------------------------------------------
 # Diagnostics — fleet-wide distress signals (hallucinations, crashes,
-# spawn failures, stuck-blocked). See hermes_cli.kanban_diagnostics for
+# spawn failures, stuck-blocked). See fulilian_cli.kanban_diagnostics for
 # the rule engine.
 # ---------------------------------------------------------------------------
 
@@ -1475,7 +1475,7 @@ def list_diagnostics(
 
     Severity-filterable so the UI can render "just the critical ones"
     or the CLI can grep. Useful for the board-header attention strip
-    AND for ``hermes kanban diagnostics`` which shells to this
+    AND for ``fulilian kanban diagnostics`` which shells to this
     endpoint when the dashboard's running, or invokes the engine
     directly when it isn't.
     """
@@ -1771,7 +1771,7 @@ def reclaim_task_endpoint(
     Used by the dashboard recovery popover when an operator wants to
     abort a stuck worker (e.g. one that keeps hallucinating card ids)
     without waiting for the claim TTL. Maps 1:1 to
-    ``hermes kanban reclaim <task_id> --reason ...``.
+    ``fulilian kanban reclaim <task_id> --reason ...``.
     """
     board = _resolve_board(board)
     conn = _conn(board=board)
@@ -1805,7 +1805,7 @@ def specify_task_endpoint(
     board: Optional[str] = Query(None),
 ):
     """Flesh out a triage-column task via the auxiliary LLM and promote
-    it to ``todo``. Maps 1:1 to ``hermes kanban specify <task_id>``.
+    it to ``todo``. Maps 1:1 to ``fulilian kanban specify <task_id>``.
 
     Returns the outcome shape used by the CLI: ``{ok, task_id, reason,
     new_title}``. A non-OK outcome is NOT an HTTP error — the UI renders
@@ -1821,7 +1821,7 @@ def specify_task_endpoint(
     # Pin the board for the duration of this call so the specifier module
     # (which calls ``kb.connect()`` with no args) hits the right DB. Use a
     # context-local override rather than mutating the process-global
-    # HERMES_KANBAN_BOARD env var — this endpoint runs in FastAPI's
+    # FULILIAN_KANBAN_BOARD env var — this endpoint runs in FastAPI's
     # threadpool, so two concurrent requests for different boards would
     # otherwise race on the shared env var and cross-write (issue #38323).
     with kanban_db.scoped_current_board(board or kanban_db.DEFAULT_BOARD):
@@ -1859,7 +1859,7 @@ def reassign_task_endpoint(
     Used by the dashboard recovery popover when an operator wants to
     retry a task with a different worker profile (e.g. switch to a
     smarter model after the assigned profile keeps hallucinating).
-    Maps 1:1 to ``hermes kanban reassign <task_id> <profile> [--reclaim]``.
+    Maps 1:1 to ``fulilian kanban reassign <task_id> <profile> [--reclaim]``.
     """
     board = _resolve_board(board)
     conn = _conn(board=board)
@@ -2017,7 +2017,7 @@ def _run_estimate(title: str, body: Optional[str]) -> dict:
 
 @router.get("/config")
 def get_config():
-    """Return kanban dashboard preferences from ~/.hermes/config.yaml.
+    """Return kanban dashboard preferences from ~/.fulilian/config.yaml.
 
     Reads the ``dashboard.kanban`` section if present; defaults otherwise.
     Used by the UI to pre-select tenant filters, toggle markdown rendering,
@@ -2087,7 +2087,7 @@ def _configured_home_channels() -> list[dict]:
 
 
 def _active_profile_name() -> str:
-    """Return the current Hermes profile name for notify-sub ownership."""
+    """Return the current Fulilian profile name for notify-sub ownership."""
     try:
         from fulilian_cli.profiles import get_active_profile_name
         return get_active_profile_name() or "default"
@@ -2222,7 +2222,7 @@ def get_stats(board: Optional[str] = Query(None)):
 def get_assignees(board: Optional[str] = Query(None)):
     """Known profiles + per-profile task counts.
 
-    Returns the union of ``~/.hermes/profiles/*`` on disk and every
+    Returns the union of ``~/.fulilian/profiles/*`` on disk and every
     distinct assignee currently used on the board. The dashboard uses
     this to populate its assignee dropdown so a freshly-created profile
     appears in the picker before it's been given any task.
@@ -2309,9 +2309,9 @@ def model_options():
     """Authenticated providers + curated model lists for the task drawer's
     model-override dropdown.
 
-    Thin wrapper around ``hermes_cli.inventory.build_models_payload`` — the
+    Thin wrapper around ``fulilian_cli.inventory.build_models_payload`` — the
     same substrate the dashboard Models page and the TUI picker use, so the
-    dropdown can never offer a model/provider pair the rest of Hermes
+    dropdown can never offer a model/provider pair the rest of Fulilian
     wouldn't accept. Deliberately skips pricing/capability enrichment and
     custom-provider probes: the dropdown needs names fast, not $/Mtok
     columns (a slow/offline local endpoint must not hang the drawer).
@@ -2434,7 +2434,7 @@ def _default_workspace_kind(board: dict[str, Any]) -> str:
 
 @router.get("/projects")
 def list_kanban_projects():
-    """List first-class Hermes projects for board scoping.
+    """List first-class Fulilian projects for board scoping.
 
     Returns ``{projects: [{id, slug, name, primary_path, icon, color}]}``.
     Archived projects are excluded — a board can only be scoped to a live one.
@@ -2669,9 +2669,9 @@ def update_profile_description(profile_name: str, payload: DescribeBody):
         from fulilian_cli import profiles as profiles_mod
         canon = profiles_mod.normalize_profile_name(profile_name)
         if canon == "default":
-            from fulilian_constants import get_hermes_home  # type: ignore
+            from fulilian_constants import get_fulilian_home  # type: ignore
             from pathlib import Path as _Path
-            profile_dir = _Path(get_hermes_home())
+            profile_dir = _Path(get_fulilian_home())
         else:
             profile_dir = profiles_mod.get_profile_dir(canon)
         if not profile_dir.is_dir():
@@ -2696,7 +2696,7 @@ def auto_describe_profile(profile_name: str, payload: DescribeAutoBody):
     ``description_auto: true`` so the dashboard can surface a "review"
     badge.
 
-    Maps 1:1 to ``hermes profile describe <name> --auto``. Non-OK
+    Maps 1:1 to ``fulilian profile describe <name> --auto``. Non-OK
     outcomes are NOT HTTP errors — the UI renders the reason inline
     (e.g. "no auxiliary client configured") so the operator can fix
     config and retry without a page reload.
@@ -2733,7 +2733,7 @@ def decompose_task_endpoint(
 ):
     """Fan a triage-column task out into a graph of child tasks via the
     auxiliary LLM, routed to specialist profiles by description. Maps
-    1:1 to ``hermes kanban decompose <task_id>``.
+    1:1 to ``fulilian kanban decompose <task_id>``.
 
     Returns the outcome shape used by the CLI: ``{ok, task_id, reason,
     fanout, child_ids, new_title}``. A non-OK outcome is NOT an HTTP
@@ -2745,7 +2745,7 @@ def decompose_task_endpoint(
     board = _resolve_board(board)
     # Context-local board pin (see specify endpoint above): this sync
     # endpoint runs in FastAPI's threadpool, so mutating the process-global
-    # HERMES_KANBAN_BOARD env var would let concurrent requests for
+    # FULILIAN_KANBAN_BOARD env var would let concurrent requests for
     # different boards race and cross-write (issue #38323).
     with kanban_db.scoped_current_board(board or kanban_db.DEFAULT_BOARD):
         from fulilian_cli import kanban_decompose  # noqa: WPS433 (intentional)
@@ -2821,7 +2821,7 @@ def get_orchestration_settings():
 
 @router.put("/orchestration")
 def set_orchestration_settings(payload: OrchestrationSettingsBody):
-    """Update the kanban orchestration knobs in ~/.hermes/config.yaml.
+    """Update the kanban orchestration knobs in ~/.fulilian/config.yaml.
 
     Each field is optional — only fields explicitly passed are
     written. ``orchestrator_profile`` / ``default_assignee`` accept

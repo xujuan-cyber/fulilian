@@ -1,7 +1,7 @@
 """Starter bank templates for the Hindsight memory-provider setup wizard.
 
 Fetches the Hindsight Bank Templates catalog, filters to templates tagged for
-the ``hermes`` integration, and applies a chosen manifest to the user's bank
+the ``fulilian`` integration, and applies a chosen manifest to the user's bank
 via the import API (``POST /v1/default/banks/{bank}/import``, which creates the
 bank if it doesn't exist).
 
@@ -49,11 +49,11 @@ def _get_json(url: str) -> dict:
         return json.loads(resp.read().decode("utf-8"))
 
 
-def fetch_hermes_templates(url: str | None = None) -> list[dict]:
-    """Return catalog entries tagged for the ``hermes`` integration."""
+def fetch_fulilian_templates(url: str | None = None) -> list[dict]:
+    """Return catalog entries tagged for the ``fulilian`` integration."""
     catalog = _get_json(url or catalog_url())
     entries = catalog.get("templates", []) if isinstance(catalog, dict) else []
-    return [e for e in entries if "hermes" in (e.get("integrations") or [])]
+    return [e for e in entries if "fulilian" in (e.get("integrations") or [])]
 
 
 def fetch_manifest(entry: dict, url: str | None = None) -> dict:
@@ -112,7 +112,7 @@ def run_template_step(
     if skipped/blank/failed. Never raises — the template is a nice-to-have.
     """
     try:
-        entries = fetch_hermes_templates()
+        entries = fetch_fulilian_templates()
     except Exception as e:  # network/parse — non-fatal
         logger.debug("Hindsight: could not fetch templates: %s", e)
         return None

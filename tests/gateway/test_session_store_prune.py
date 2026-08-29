@@ -24,17 +24,17 @@ from gateway.config import GatewayConfig, Platform, SessionResetPolicy
 from gateway.session import SessionEntry, SessionStore
 
 
-def test_session_store_default_db_uses_runtime_hermes_home(tmp_path, monkeypatch):
-    """SessionStore must honor runtime HERMES_HOME when opening the default DB.
+def test_session_store_default_db_uses_runtime_fulilian_home(tmp_path, monkeypatch):
+    """SessionStore must honor runtime FULILIAN_HOME when opening the default DB.
 
     Regression for the import-time DEFAULT_DB_PATH freeze: importing
-    hermes_state before a fixture redirected HERMES_HOME used to pin every
-    default SessionDB() at the developer's real ~/.hermes/state.db.
+    fulilian_state before a fixture redirected FULILIAN_HOME used to pin every
+    default SessionDB() at the developer's real ~/.fulilian/state.db.
     """
     config = GatewayConfig(default_reset_policy=SessionResetPolicy(mode="none"))
-    fake_home = tmp_path / "alt_hermes_home"
+    fake_home = tmp_path / "alt_fulilian_home"
     fake_home.mkdir()
-    monkeypatch.setenv("HERMES_HOME", str(fake_home))
+    monkeypatch.setenv("FULILIAN_HOME", str(fake_home))
 
     with patch("gateway.session.SessionStore._ensure_loaded"):
         store = SessionStore(sessions_dir=tmp_path / "sessions", config=config)
@@ -257,5 +257,5 @@ class TestReadmeSentinel:
         assert next(iter(raw)) == "_README"
         # The note points users at the real store and command.
         assert "state.db" in raw["_README"]
-        assert "hermes sessions list" in raw["_README"]
+        assert "fulilian sessions list" in raw["_README"]
 

@@ -80,9 +80,9 @@ def check_sms_requirements() -> bool:
 
 class SmsAdapter(BasePlatformAdapter):
     """
-    Twilio SMS <-> Hermes gateway adapter.
+    Twilio SMS <-> Fulilian gateway adapter.
 
-    Each inbound phone number gets its own Hermes session (multi-tenant).
+    Each inbound phone number gets its own Fulilian session (multi-tenant).
     Replies are always sent from the configured TWILIO_PHONE_NUMBER.
     """
 
@@ -431,7 +431,7 @@ class SmsAdapter(BasePlatformAdapter):
 # this bundled plugin. register() exposes the platform via the registry,
 # replacing the Platform.SMS elif in gateway/run.py, the
 # _PLATFORM_CONNECTED_CHECKERS entry in gateway/config.py, the _PLATFORMS["sms"]
-# static dict in hermes_cli/gateway.py, and the _send_sms dispatch in
+# static dict in fulilian_cli/gateway.py, and the _send_sms dispatch in
 # tools/send_message_tool.py. TWILIO_* env→PlatformConfig seeding stays in core.
 # ──────────────────────────────────────────────────────────────────────────
 
@@ -518,7 +518,7 @@ def _build_adapter(config):
 
 
 def register(ctx) -> None:
-    """Plugin entry point — called by the Hermes plugin system."""
+    """Plugin entry point — called by the Fulilian plugin system."""
     ctx.register_platform(
         name="sms",
         label="SMS (Twilio)",

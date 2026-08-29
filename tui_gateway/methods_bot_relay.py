@@ -1,7 +1,7 @@
 """Bot-relay JSON-RPC handlers — the gateway side of cross-connection A2A.
 
 Connections ARE the peer set: every gateway the Desktop holds a socket to
-(local, remote URL, SSH, Hermes Cloud, docker) must be able to find every
+(local, remote URL, SSH, Fulilian Cloud, docker) must be able to find every
 other connection's agents and message them. The Desktop is the relay — it
 owns every socket — and these four methods are the door it uses on EACH
 connected gateway:
@@ -44,7 +44,7 @@ def _(rid, params: dict) -> dict:
 
         from tools.bot_relay import write_remote_roster
 
-        home = Path(os.getenv("HERMES_HOME") or os.path.expanduser("~/.hermes"))
+        home = Path(os.getenv("FULILIAN_HOME") or os.path.expanduser("~/.fulilian"))
         root = home.parent.parent if home.parent.name == "profiles" else home
         count = write_remote_roster(root, params.get("agents"))
         return _ok(rid, {"count": count})
@@ -65,7 +65,7 @@ def _(rid, params: dict) -> dict:
 
         from tools.bot_relay import claim_pending_envelopes
 
-        home = Path(os.getenv("HERMES_HOME") or os.path.expanduser("~/.hermes"))
+        home = Path(os.getenv("FULILIAN_HOME") or os.path.expanduser("~/.fulilian"))
         root = home.parent.parent if home.parent.name == "profiles" else home
         return _ok(rid, {"envelopes": claim_pending_envelopes(root)})
     except Exception as e:
@@ -78,7 +78,7 @@ def _(rid, params: dict) -> dict:
 
     Params: ``profile`` (target on this install), ``message`` (already
     attribution-prefixed by the sender gateway). Runs the same one-turn
-    ``hermes -p <profile> chat -c "Bot Chat"`` transport local DMs use and
+    ``fulilian -p <profile> chat -c "Bot Chat"`` transport local DMs use and
     returns ``{reply}`` — the target agent's response text. Blocking by
     design (the Desktop calls it from its relay worker, off any UI path;
     the RPC pool keeps it off the WS reader thread).
@@ -99,17 +99,17 @@ def _(rid, params: dict) -> dict:
         if len(message) > MESSAGE_MAX_CHARS + 200:  # + attribution headroom
             return _err(rid, 4091, "message too long")
 
-        home = Path(os.getenv("HERMES_HOME") or os.path.expanduser("~/.hermes"))
+        home = Path(os.getenv("FULILIAN_HOME") or os.path.expanduser("~/.fulilian"))
         root = home.parent.parent if home.parent.name == "profiles" else home
         known = {"default"}
         profiles_dir = root / "profiles"
         if profiles_dir.is_dir():
             known.update(c.name for c in profiles_dir.iterdir() if c.is_dir())
-        resolved = "default" if profile.lower() == "hermes" else profile
+        resolved = "default" if profile.lower() == "fulilian" else profile
         if resolved not in known:
             return _err(rid, 4092, f"no profile '{profile}' on this gateway")
 
-        fd, tmp = tempfile.mkstemp(prefix="hermes-relay-dm-", suffix=".txt", text=True)
+        fd, tmp = tempfile.mkstemp(prefix="fulilian-relay-dm-", suffix=".txt", text=True)
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 f.write(message)
@@ -194,7 +194,7 @@ def _(rid, params: dict) -> dict:
 
         from tools.bot_relay import write_reply
 
-        home = Path(os.getenv("HERMES_HOME") or os.path.expanduser("~/.hermes"))
+        home = Path(os.getenv("FULILIAN_HOME") or os.path.expanduser("~/.fulilian"))
         root = home.parent.parent if home.parent.name == "profiles" else home
         write_reply(
             root,

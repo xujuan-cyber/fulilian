@@ -2,7 +2,7 @@ import type { Unstable_TriggerItem } from '@assistant-ui/core'
 import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
-import { hermesDirectiveFormatter } from '@/components/assistant-ui/directive-text'
+import { fulilianDirectiveFormatter } from '@/components/assistant-ui/directive-text'
 
 import { classify } from './hooks/use-at-completions'
 import { useComposerTrigger } from './hooks/use-composer-trigger'
@@ -59,7 +59,7 @@ function typed(text: string) {
 
 /** The label the sent message renders for a committed draft. */
 function sentLabel(draft: string) {
-  return hermesDirectiveFormatter
+  return fulilianDirectiveFormatter
     .parse(draft)
     .filter((s): s is Extract<typeof s, { kind: 'mention' }> => s.kind === 'mention')
     .map(s => s.label)
@@ -92,7 +92,7 @@ describe('one label per reference, on every surface', () => {
     // Rows exactly as complete.path emits profile mentions (colon-less text).
     const item = backendRow('@mr-tester', '@mr-tester', 'agent profile')
 
-    expect(hermesDirectiveFormatter.serialize(item)).toBe('@mr-tester')
+    expect(fulilianDirectiveFormatter.serialize(item)).toBe('@mr-tester')
 
     const { editor, result } = typed('@mr-')
 

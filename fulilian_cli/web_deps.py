@@ -2,10 +2,10 @@
 
 Why this exists
 ---------------
-``hermes_cli/web_server.py`` owns all dashboard runtime state: the ephemeral
+``fulilian_cli/web_server.py`` owns all dashboard runtime state: the ephemeral
 ``_SESSION_TOKEN``, the ``DASHBOARD_HEALTH`` singleton, config helpers, and a
 large set of private helper functions the route handlers call.  Extracted
-``APIRouter`` modules under ``hermes_cli/web_routers/`` need those helpers, but
+``APIRouter`` modules under ``fulilian_cli/web_routers/`` need those helpers, but
 
 * importing ``web_server`` at module import time from a router module would be
   a circular import (``web_server`` imports the router modules to mount them),
@@ -14,7 +14,7 @@ large set of private helper functions the route handlers call.  Extracted
   party code) that ``monkeypatch.setattr(web_server, "_helper", ...)``.
 
 Design: **late binding, state stays in web_server.**  ``late(name)`` returns a
-thin proxy that resolves ``hermes_cli.web_server.<name>`` *at call time*.  This
+thin proxy that resolves ``fulilian_cli.web_server.<name>`` *at call time*.  This
 is cycle-safe (the import happens inside the call, long after both modules are
 initialised) and keeps ``web_server``'s runtime behaviour byte-identical:
 monkeypatching an attribute on ``web_server`` is still authoritative because
@@ -28,8 +28,8 @@ from typing import Any
 
 
 def _server():
-    """Return the live ``hermes_cli.web_server`` module (imported on demand)."""
-    mod = sys.modules.get("hermes_cli.web_server")
+    """Return the live ``fulilian_cli.web_server`` module (imported on demand)."""
+    mod = sys.modules.get("fulilian_cli.web_server")
     if mod is None:  # pragma: no cover - routers are only mounted by web_server
         import fulilian_cli.web_server as mod  # type: ignore[no-redef]
     return mod

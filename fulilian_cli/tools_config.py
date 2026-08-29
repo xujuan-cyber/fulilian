@@ -1,11 +1,11 @@
 """
-Unified tool configuration for Hermes Agent.
+Unified tool configuration for FuLiLian.
 
-`hermes tools` and `hermes setup tools` both enter this module.
+`fulilian tools` and `fulilian setup tools` both enter this module.
 Select a platform → toggle toolsets on/off → for newly enabled tools
 that need API keys, run through provider-aware configuration.
 
-Saves per-platform tool configuration to ~/.hermes/config.yaml under
+Saves per-platform tool configuration to ~/.fulilian/config.yaml under
 the `platform_toolsets` key.
 """
 
@@ -41,11 +41,11 @@ def _post_setup_no_window_flags(*, streams_to_console: bool = False) -> int:
     """Win32 creationflags that stop post-setup children flashing a console.
 
     The dashboard/GUI runs post-setup hooks through a detached, console-less
-    ``hermes tools post-setup <key>`` child. On Windows, every console child
+    ``fulilian tools post-setup <key>`` child. On Windows, every console child
     (npm.cmd, npx, pip, powershell, curl) spawned from that console-less
     parent materializes a brand-new console window — the "terminal flash"
     users see when clicking "Run setup". ``CREATE_NO_WINDOW`` (via
-    :func:`hermes_cli._subprocess_compat.windows_hide_flags`) suppresses it
+    :func:`fulilian_cli._subprocess_compat.windows_hide_flags`) suppresses it
     without breaking ``capture_output`` — unlike ``DETACHED_PROCESS``, stdio
     handles stay inheritable. Returns 0 on POSIX, so passing the result
     unconditionally is safe.
@@ -139,23 +139,23 @@ def gui_toolset_label(label: str) -> str:
 
 
 # Toolsets that are OFF by default for new installs.
-# They're still in _HERMES_CORE_TOOLS (available at runtime if enabled),
+# They're still in _FULILIAN_CORE_TOOLS (available at runtime if enabled),
 # but the setup checklist won't pre-select them for first-time users.
 #
 # Video gen is off by default — it's a niche, paid, slow feature. Users
-# who want it opt in via `hermes tools` → Video Generation, which walks
+# who want it opt in via `fulilian tools` → Video Generation, which walks
 # them through provider + model selection.
 #
 # X search is off by default for users without xAI credentials, but
 # auto-enables when SuperGrok OAuth tokens are stored OR XAI_API_KEY is
 # set — mirroring the HASS_TOKEN → homeassistant auto-enable below. The
-# `hermes tools` → X (Twitter) Search setup walks users through credential
+# `fulilian tools` → X (Twitter) Search setup walks users through credential
 # setup. The tool's check_fn means the schema still won't appear to the
 # model if the credential later goes missing or expires.
 _DEFAULT_OFF_TOOLSETS = {"homeassistant", "spotify", "discord", "discord_admin", "video", "video_gen", "x_search", "a2a"}
 
 
-# Config-only capabilities: they appear in `hermes tools` for provider/API-key
+# Config-only capabilities: they appear in `fulilian tools` for provider/API-key
 # configuration (TOOL_CATEGORIES) but are NOT model toolsets — they ship zero
 # tool schemas and their on/off switch lives in their own config section
 # (e.g. ``stt.enabled``), not ``platform_toolsets``. Excluded from the
@@ -205,7 +205,7 @@ def _homeassistant_credentials_present() -> bool:
     except Exception:
         return False
 
-# Platform-scoped toolsets: only appear in the `hermes tools` checklist for
+# Platform-scoped toolsets: only appear in the `fulilian tools` checklist for
 # these platforms, and only resolve/save for these platforms.  A toolset
 # absent from this map is available on every platform (current behaviour).
 #
@@ -249,7 +249,7 @@ def _get_effective_configurable_toolsets():
     already appears in ``CONFIGURABLE_TOOLSETS`` is skipped — bundled
     plugins (e.g. ``plugins/spotify``) share their toolset key with the
     built-in entry, and we want the built-in label/description to win.
-    Without the dedupe, ``hermes tools`` → "reconfigure existing" would
+    Without the dedupe, ``fulilian tools`` → "reconfigure existing" would
     list the same toolset twice.
     """
     result = list(CONFIGURABLE_TOOLSETS)
@@ -281,7 +281,7 @@ def _get_plugin_toolset_keys() -> set:
 
 
 def _checklist_toolset_keys(platform: str) -> Set[str]:
-    """Return the toolset keys the ``hermes tools`` checklist actually offers
+    """Return the toolset keys the ``fulilian tools`` checklist actually offers
     for ``platform``.
 
     This mirrors exactly what ``_prompt_toolset_checklist`` renders:
@@ -293,7 +293,7 @@ def _checklist_toolset_keys(platform: str) -> Set[str]:
     time — ``kanban`` and other check_fn-gated toolsets, recovered platform
     composites, MCP server names — are NOT in this set because the checklist
     never shows them. Use this to scope the added/removed diff the UI prints,
-    so ``hermes tools`` never claims to add or remove a toolset the user was
+    so ``fulilian tools`` never claims to add or remove a toolset the user was
     never given a checkbox for. The underlying config is unaffected — those
     entries are preserved by ``_save_platform_tools`` regardless.
     """
@@ -573,7 +573,7 @@ TOOL_CATEGORIES = {
         "name": "X (Twitter) Search",
         "setup_title": "Select xAI Credential Source",
         "setup_note": (
-            "Hermes routes X searches through xAI's built-in x_search "
+            "Fulilian routes X searches through xAI's built-in x_search "
             "Responses tool for read-only public X discovery. Use the xurl "
             "skill for authenticated X API reads and account actions. Both "
             "credential sources hit the same "
@@ -710,7 +710,7 @@ TOOL_CATEGORIES = {
                 ),
                 "env_vars": [
                     # cua-driver reads HOME/TMPDIR from the process env, no
-                    # extra keys required. Set HERMES_CUA_DRIVER_CMD to use a
+                    # extra keys required. Set FULILIAN_CUA_DRIVER_CMD to use a
                     # specific binary (e.g. a local build); there is no
                     # version-pin env var.
                 ],
@@ -727,8 +727,8 @@ TOOL_CATEGORIES = {
                 "name": "Langfuse Cloud",
                 "tag": "Hosted Langfuse (cloud.langfuse.com)",
                 "env_vars": [
-                    {"key": "HERMES_LANGFUSE_PUBLIC_KEY", "prompt": "Langfuse public key (pk-lf-...)", "url": "https://cloud.langfuse.com"},
-                    {"key": "HERMES_LANGFUSE_SECRET_KEY", "prompt": "Langfuse secret key (sk-lf-...)", "url": "https://cloud.langfuse.com"},
+                    {"key": "FULILIAN_LANGFUSE_PUBLIC_KEY", "prompt": "Langfuse public key (pk-lf-...)", "url": "https://cloud.langfuse.com"},
+                    {"key": "FULILIAN_LANGFUSE_SECRET_KEY", "prompt": "Langfuse secret key (sk-lf-...)", "url": "https://cloud.langfuse.com"},
                 ],
                 "post_setup": "langfuse",
             },
@@ -736,9 +736,9 @@ TOOL_CATEGORIES = {
                 "name": "Langfuse Self-Hosted",
                 "tag": "Self-hosted Langfuse instance",
                 "env_vars": [
-                    {"key": "HERMES_LANGFUSE_PUBLIC_KEY", "prompt": "Langfuse public key (pk-lf-...)"},
-                    {"key": "HERMES_LANGFUSE_SECRET_KEY", "prompt": "Langfuse secret key (sk-lf-...)"},
-                    {"key": "HERMES_LANGFUSE_BASE_URL", "prompt": "Langfuse server URL (e.g. http://localhost:3000)", "default": "http://localhost:3000"},
+                    {"key": "FULILIAN_LANGFUSE_PUBLIC_KEY", "prompt": "Langfuse public key (pk-lf-...)"},
+                    {"key": "FULILIAN_LANGFUSE_SECRET_KEY", "prompt": "Langfuse secret key (sk-lf-...)"},
+                    {"key": "FULILIAN_LANGFUSE_BASE_URL", "prompt": "Langfuse server URL (e.g. http://localhost:3000)", "default": "http://localhost:3000"},
                 ],
                 "post_setup": "langfuse",
             },
@@ -752,7 +752,7 @@ TOOL_CATEGORIES = {
 # `vision` is listed here only so it registers as a *configurable* toolset
 # (the value gates the reconfigure menu + the "[no API key]" suffix). Its
 # actual setup runs through `_configure_vision_backend()` — a full
-# provider+model picker like `hermes model` — NOT this single-key prompt, so
+# provider+model picker like `fulilian model` — NOT this single-key prompt, so
 # users are never forced onto OpenRouter. `_toolset_has_keys("vision")`
 # resolves via `resolve_vision_provider_client()`, so the tuple below is never
 # prompted or read for vision; it's purely a presence marker.
@@ -766,13 +766,13 @@ TOOLSET_ENV_REQUIREMENTS = {
 
 def _cua_driver_cmd() -> str:
     """Return the configured cua-driver override, or the bare default name."""
-    return os.environ.get("HERMES_CUA_DRIVER_CMD", "").strip() or "cua-driver"
+    return os.environ.get("FULILIAN_CUA_DRIVER_CMD", "").strip() or "cua-driver"
 
 
 def _cua_version_summary(raw: str, *, limit: int = 120) -> str:
     """Reduce a driver's ``--version`` output to one short status line.
 
-    A binary selected by ``HERMES_CUA_DRIVER_CMD`` is not obliged to answer
+    A binary selected by ``FULILIAN_CUA_DRIVER_CMD`` is not obliged to answer
     ``--version`` the way cua-driver does. Pointing the override at, say,
     ``cmd.exe`` yields a multi-line banner plus a prompt, which used to be
     interpolated verbatim into ``cua-driver: installed at ... (<version>)``
@@ -794,7 +794,7 @@ def _resolved_cua_driver_cmd() -> Optional[str]:
 
 
 def _cua_driver_env() -> dict:
-    """cua-driver child env with the Hermes telemetry policy applied.
+    """cua-driver child env with the Fulilian telemetry policy applied.
 
     Delegates to ``cua_backend.cua_driver_child_env`` (telemetry disabled by
     default; user opt-in via ``computer_use.cua_telemetry``). Falls back to the
@@ -813,7 +813,7 @@ _CUA_DRIVER_CONTRACT_CACHE: dict = {}
 
 
 def _cua_driver_contract_status(binary: Optional[str] = None) -> dict:
-    """Inspect whether an installed driver supports Hermes' runtime contract."""
+    """Inspect whether an installed driver supports Fulilian' runtime contract."""
     import time
 
     from tools.computer_use.cua_backend import cua_driver_runtime_contract_status
@@ -877,8 +877,8 @@ def _pip_install(
     venv_root = Path(sys.executable).parent.parent
     uv_env = {**os.environ, "VIRTUAL_ENV": str(venv_root)}
 
-    # Managed uv first: $HERMES_HOME/bin is never on PATH, so a bare which()
-    # misses the uv Hermes installed and prefers a system one when both exist.
+    # Managed uv first: $FULILIAN_HOME/bin is never on PATH, so a bare which()
+    # misses the uv Fulilian installed and prefers a system one when both exist.
     # ensure_uv() rather than a pure lookup because this runs during setup,
     # where installing uv is in scope — and tier 2 is a pip that the Windows
     # installer's `uv venv` does not seed, so failing to find uv here is the
@@ -991,19 +991,19 @@ def install_cua_driver(
       repair an old or incomplete installation, and install when missing.
       Used by the toolset enable flow.
     * ``upgrade=True`` — always re-run the installer (or call ``cua-driver
-      update`` if the binary supports it). Used by ``hermes update`` and
-      by ``hermes computer-use install --upgrade``.
+      update`` if the binary supports it). Used by ``fulilian update`` and
+      by ``fulilian computer-use install --upgrade``.
 
     ``require_confirmed_update`` (only meaningful with ``upgrade=True`` and
     an installed binary): when the driver's native ``check-update`` verb
     can't positively confirm that a newer release exists — the driver is
     too old for the verb, the GitHub check failed, we're offline, or the
     probe timed out — keep the installed version and return instead of
-    falling through to the full upstream installer. ``hermes update`` sets
+    falling through to the full upstream installer. ``fulilian update`` sets
     this so a broken update check costs seconds, not a multi-minute silent
     reinstall on every update (the upstream installer runs up to
     ``_CUA_INSTALLER_TIMEOUT`` and install.ps1's concurrency lock can add
-    a further ~600s wait on Windows). ``hermes computer-use install
+    a further ~600s wait on Windows). ``fulilian computer-use install
     --upgrade`` leaves it False — an explicit upgrade request should still
     reinstall when the check is indeterminate. On Windows this flag also
     defers contract REPAIRS and fresh INSTALLS to the explicit command
@@ -1013,12 +1013,12 @@ def install_cua_driver(
     preflights, and the shorter background ceiling below.
 
     ``show_installer_progress`` controls the installer's own progress line.
-    ``hermes update`` already prints a contextual line before its update
+    ``fulilian update`` already prints a contextual line before its update
     check, so it disables this to avoid printing the refresh twice.
 
     The confirmed-update path is also bounded by
     ``_CUA_BACKGROUND_UPDATE_TIMEOUT``. It runs as an optional, quiet part of
-    ``hermes update`` and must not inherit the explicit install command's
+    ``fulilian update`` and must not inherit the explicit install command's
     11-minute ceiling when an upstream prompt or UAC dialog is unattended.
 
     Returns True iff cua-driver is installed (or successfully refreshed)
@@ -1032,7 +1032,7 @@ def install_cua_driver(
     system = _plat.system()
     if system not in ("Darwin", "Windows", "Linux"):
         if upgrade:
-            # Silent on unsupported platforms — `hermes update` calls this
+            # Silent on unsupported platforms — `fulilian update` calls this
             # for every user; only macOS/Windows/Linux users care.
             return False
         _print_warning("    Computer Use (cua-driver) is unsupported on this platform; skipping.")
@@ -1051,10 +1051,10 @@ def install_cua_driver(
     # An explicit override is authoritative even when it is currently broken.
     # Do not install or replace the standard system driver: that cannot repair
     # the configured path and would mutate an unrelated installation.
-    override = os.environ.get("HERMES_CUA_DRIVER_CMD", "").strip()
+    override = os.environ.get("FULILIAN_CUA_DRIVER_CMD", "").strip()
     if override and not binary:
         _print_warning(
-            "    HERMES_CUA_DRIVER_CMD does not resolve to an executable: "
+            "    FULILIAN_CUA_DRIVER_CMD does not resolve to an executable: "
             f"{override}"
         )
         _print_info(
@@ -1081,14 +1081,14 @@ def install_cua_driver(
         # baked in by CD and errors cleanly on missing-arch assets.
         return _run_cua_driver_installer(label="Installing")
 
-    # An installed driver that fails Hermes' runtime contract (version floor,
+    # An installed driver that fails Fulilian' runtime contract (version floor,
     # missing manifest verbs) is repaired regardless of the caller's mode.
-    # Hermes' own minimum requirement IS the confirmation that an upgrade is
+    # Fulilian' own minimum requirement IS the confirmation that an upgrade is
     # needed, so the ``upgrade=True`` path must not defer to the driver's
     # ``check-update`` verb here — a cached/indeterminate "no update" answer
     # would otherwise pin users on an unusable driver forever (observed:
     # 0.19.3 installs hard-failing every computer_use call after the 0.20
-    # contract landed, with `hermes update` declining to refresh).
+    # contract landed, with `fulilian update` declining to refresh).
     contract = _cua_driver_contract_status(binary) if binary else None
     repair_existing = bool(binary and contract and not contract.get("ready"))
 
@@ -1124,13 +1124,13 @@ def install_cua_driver(
         version = contract.get("version") or "unknown version"
         reason = contract.get("reason") or "required runtime features are missing"
         _print_warning(
-            f"    Found cua-driver {version}, but Hermes cannot use its current "
+            f"    Found cua-driver {version}, but Fulilian cannot use its current "
             f"runtime contract: {reason}."
         )
-        if os.environ.get("HERMES_CUA_DRIVER_CMD", "").strip():
+        if os.environ.get("FULILIAN_CUA_DRIVER_CMD", "").strip():
             _print_info(
-                "    Update the binary selected by HERMES_CUA_DRIVER_CMD, or unset "
-                "the override and run: hermes computer-use install --upgrade"
+                "    Update the binary selected by FULILIAN_CUA_DRIVER_CMD, or unset "
+                "the override and run: fulilian computer-use install --upgrade"
             )
             return False
         if is_windows and require_confirmed_update:
@@ -1140,7 +1140,7 @@ def install_cua_driver(
             )
             _print_info(
                 "    Repair it from an interactive terminal with: "
-                "hermes computer-use install --upgrade"
+                "fulilian computer-use install --upgrade"
             )
             return False
         _print_info("    Repairing it with the current upstream installer.")
@@ -1151,7 +1151,7 @@ def install_cua_driver(
             "    /Applications is not writable; skipping cua-driver refresh."
         )
         _print_info(
-            "    Run `hermes computer-use install --upgrade` from an admin account to update it."
+            "    Run `fulilian computer-use install --upgrade` from an admin account to update it."
         )
         return bool(binary)
 
@@ -1167,10 +1167,10 @@ def install_cua_driver(
     # Skip the (network) re-install when the driver itself reports it's already
     # on the latest release. Best-effort: an older driver (no check-update
     # verb) or an offline check returns None. What happens then depends on the
-    # caller: `hermes update` (require_confirmed_update=True) keeps the
+    # caller: `fulilian update` (require_confirmed_update=True) keeps the
     # installed version — an indeterminate check must never cost the user a
     # multi-minute silent reinstall on every update. An explicit
-    # `hermes computer-use install --upgrade` falls through and re-runs the
+    # `fulilian computer-use install --upgrade` falls through and re-runs the
     # installer as before.
     confirmed_version = None
     if binary and not repair_existing:
@@ -1193,7 +1193,7 @@ def install_cua_driver(
                 "keeping the installed version."
             )
             _print_info(
-                "    Force a refresh with: hermes computer-use install --upgrade"
+                "    Force a refresh with: fulilian computer-use install --upgrade"
             )
             return True
         if _state is not None and _state.get("update_available"):
@@ -1231,7 +1231,7 @@ def install_cua_driver(
         )
         _print_info(
             "    Install it from an interactive terminal with: "
-            "hermes computer-use install --upgrade"
+            "fulilian computer-use install --upgrade"
         )
         return False
 
@@ -1266,7 +1266,7 @@ def install_cua_driver(
                 "    cua-driver was reinstalled, but its runtime contract is still "
                 f"unusable: {repaired.get('reason') or 'unknown error'}."
             )
-            _print_info("    Run: hermes computer-use doctor")
+            _print_info("    Run: fulilian computer-use doctor")
             return False
     if ok and before:
         try:
@@ -1303,7 +1303,7 @@ _CUA_INSTALLER_TIMEOUT = 660
 # normal case; it only caps how long a failed one can stall the update.
 _CUA_INSTALLER_DRAIN_GRACE = 15
 
-# Optional refreshes launched by ``hermes update`` are quiet and unattended.
+# Optional refreshes launched by ``fulilian update`` are quiet and unattended.
 # Keep their interruption bounded even when upstream waits on Read-Host or a
 # consent prompt. Explicit ``computer-use install --upgrade`` runs retain the
 # full installer ceiling above. (The lock/network preflights below make a
@@ -1731,7 +1731,7 @@ def _run_cua_driver_installer(
     # refresh doesn't wedge waiting on a dead holder (issue #58762).
     _clear_stale_cua_install_lock()
 
-    # Unattended refreshes (installer_timeout set by `hermes update`) fail
+    # Unattended refreshes (installer_timeout set by `fulilian update`) fail
     # FAST on the two conditions that otherwise consume the whole ceiling:
     #
     # 1. Install lock held by a live process — upstream would poll it for up
@@ -1751,7 +1751,7 @@ def _run_cua_driver_installer(
             )
             _print_info(
                 "    If no install is really running, retry with: "
-                "hermes computer-use install --upgrade"
+                "fulilian computer-use install --upgrade"
             )
             return False
         if not _cua_release_endpoint_reachable():
@@ -1847,7 +1847,7 @@ def _run_cua_driver_installer(
 
         Draining with no deadline then blocks on an EOF that only arrives when
         someone kills that process by hand, so the ``_CUA_INSTALLER_TIMEOUT``
-        ceiling stops bounding anything and ``hermes update`` hangs past its
+        ceiling stops bounding anything and ``fulilian update`` hangs past its
         own timeout warning (#87703). Bound the drain instead: a kill that
         landed closes the pipe at once, and one that did not costs
         ``_CUA_INSTALLER_DRAIN_GRACE`` rather than forever. The caller
@@ -1883,7 +1883,7 @@ def _run_cua_driver_installer(
             logger.debug("cua-driver installer drain failed: %s", e)
 
     try:
-        # When not verbose (e.g. `hermes update`'s refresh), capture the
+        # When not verbose (e.g. `fulilian update`'s refresh), capture the
         # installer's chatty "Next steps" wall instead of dumping it to the
         # terminal. The combined output is logged so a failure stays
         # debuggable. Verbose installs (interactive `computer-use install`)
@@ -1919,9 +1919,9 @@ def _run_cua_driver_installer(
             result = subprocess.CompletedProcess(
                 install_cmd, proc.returncode, stdout=out, stderr=None
             )
-            # Preserve the full installer output. During `hermes update`,
+            # Preserve the full installer output. During `fulilian update`,
             # sys.stdout is the mirroring _UpdateOutputStream whose `_log`
-            # handle is ~/.hermes/logs/update.log — write straight to it so
+            # handle is ~/.fulilian/logs/update.log — write straight to it so
             # the captured "Next steps" wall is kept in full (success AND
             # failure), without echoing it to the terminal.
             if result.stdout:
@@ -1957,7 +1957,7 @@ def _run_cua_driver_installer(
                     _print_info("    IMPORTANT — grant macOS permissions now:")
                     _print_info("      System Settings > Privacy & Security > Accessibility")
                     _print_info("      System Settings > Privacy & Security > Screen Recording")
-                    _print_info("    Both must allow the terminal / Hermes process.")
+                    _print_info("    Both must allow the terminal / Fulilian process.")
             return True
         _print_warning(f"    cua-driver {label.lower()} did not complete. Re-run manually:")
         _print_info(f"      {manual_hint}")
@@ -1999,9 +1999,9 @@ def _ensure_browser_use_cli(*, verbose_hints: bool = False) -> None:
     remain the final fallback.
 
     MANAGED-FIRST: a browser-use on the user's PATH does NOT satisfy this
-    check — only the Hermes-managed ``$HERMES_HOME/bin`` copy does.
+    check — only the Fulilian-managed ``$FULILIAN_HOME/bin`` copy does.
     ``install_cli()`` short-circuits on the managed copy and otherwise
-    provisions it, so resolution always lands on a binary Hermes installs
+    provisions it, so resolution always lands on a binary Fulilian installs
     and updates rather than a user-level side install.
     """
     _print_info("    Ensuring browser-use CLI (managed install)...")
@@ -2035,7 +2035,7 @@ def _run_post_setup(post_setup_key: str):
         # explicit "Browser Use" picker row.
         _ensure_browser_use_cli()
         # agent-browser is no longer a root package.json dependency (#43564)
-        # — it resolves lazily via npx (or a global/Hermes-managed install)
+        # — it resolves lazily via npx (or a global/Fulilian-managed install)
         # instead of a local `npm install`, so there's no node_modules/
         # population step here anymore.
         try:
@@ -2054,8 +2054,8 @@ def _run_post_setup(post_setup_key: str):
             return
 
         # Reuse the same resolution cascade browser tools use at runtime
-        # (PATH -> Homebrew/Hermes-managed node -> npx) rather than a bare
-        # shutil.which — Hermes-managed-Node-only setups resolve agent-browser
+        # (PATH -> Homebrew/Fulilian-managed node -> npx) rather than a bare
+        # shutil.which — Fulilian-managed-Node-only setups resolve agent-browser
         # / npx only through the extended fallback path, which a bare
         # shutil.which("npx") lookup misses.
         try:
@@ -2089,17 +2089,17 @@ def _run_post_setup(post_setup_key: str):
                 "    Pull the latest image to get the bundled Chromium:"
             )
             _print_info(
-                "      docker pull ghcr.io/nousresearch/hermes-agent:latest"
+                "      docker pull ghcr.io/nousresearch/fulilian-agent:latest"
             )
             return
 
         # browser_cmd was already resolved above (same PATH -> Homebrew ->
-        # Hermes-managed-node -> npx cascade _find_agent_browser uses at
+        # Fulilian-managed-node -> npx cascade _find_agent_browser uses at
         # runtime), so this can't diverge from what actually gets invoked.
         if _is_npx_agent_browser_sentinel(browser_cmd):
             # Re-resolve via the same PATH + extended-PATH cascade
             # _find_agent_browser used, rather than a bare shutil.which("npx")
-            # — Hermes-managed-Node-only setups resolve npx only through the
+            # — Fulilian-managed-Node-only setups resolve npx only through the
             # extended fallback path, and a bare lookup here would silently
             # diverge and hand subprocess.run a None argument.
             npx_bin = _resolve_npx_bin()
@@ -2187,7 +2187,7 @@ def _run_post_setup(post_setup_key: str):
             if result.returncode == 0:
                 _print_success("    faster-whisper installed")
                 _print_info("    Model sizes: tiny, base (default), small, medium, large-v3")
-                _print_info("    Change via stt.local.model in ~/.hermes/config.yaml")
+                _print_info("    Change via stt.local.model in ~/.fulilian/config.yaml")
             else:
                 _print_warning("    faster-whisper install failed:")
                 _print_info(f"      {(result.stderr or '').strip()[:300]}")
@@ -2243,7 +2243,7 @@ def _run_post_setup(post_setup_key: str):
                 return
         _print_info("    Default voice: en_US-lessac-medium (downloaded on first TTS call)")
         _print_info("    Full voice list: https://github.com/OHF-Voice/piper1-gpl/blob/main/docs/VOICES.md")
-        _print_info("    Switch voices by setting tts.piper.voice in ~/.hermes/config.yaml")
+        _print_info("    Switch voices by setting tts.piper.voice in ~/.fulilian/config.yaml")
 
     elif post_setup_key == "ddgs":
         try:
@@ -2268,17 +2268,17 @@ def _run_post_setup(post_setup_key: str):
         _print_info("    Pair with an extract provider if you also need web_extract.")
 
     elif post_setup_key == "spotify":
-        # Run the full `hermes auth spotify` flow — if the user has no
+        # Run the full `fulilian auth spotify` flow — if the user has no
         # client_id yet, this drops them into the interactive wizard
         # (opens the Spotify dashboard, prompts for client_id, persists
-        # to ~/.hermes/.env), then continues straight into PKCE. If they
+        # to ~/.fulilian/.env), then continues straight into PKCE. If they
         # already have an app, it skips the wizard and just does OAuth.
         from types import SimpleNamespace
         try:
             from fulilian_cli.auth import login_spotify_command
         except Exception as exc:
             _print_warning(f"    Could not load Spotify auth: {exc}")
-            _print_info("    Run manually: hermes auth spotify")
+            _print_info("    Run manually: fulilian auth spotify")
             return
         _print_info("    Starting Spotify login...")
         try:
@@ -2289,12 +2289,12 @@ def _run_post_setup(post_setup_key: str):
             _print_success("    Spotify authenticated")
         except SystemExit as exc:
             # User aborted the wizard, or OAuth failed — don't fail the
-            # toolset enable; they can retry with `hermes auth spotify`.
+            # toolset enable; they can retry with `fulilian auth spotify`.
             _print_warning(f"    Spotify login did not complete: {exc}")
-            _print_info("    Run later: hermes auth spotify")
+            _print_info("    Run later: fulilian auth spotify")
         except Exception as exc:
             _print_warning(f"    Spotify login failed: {exc}")
-            _print_info("    Run manually: hermes auth spotify")
+            _print_info("    Run manually: fulilian auth spotify")
 
     elif post_setup_key == "langfuse":
         # Install the langfuse SDK.
@@ -2322,9 +2322,9 @@ def _run_post_setup(post_setup_key: str):
                 _print_success("    Plugin observability/langfuse enabled")
         except Exception as exc:
             _print_warning(f"    Could not enable plugin automatically: {exc}")
-            _print_info("    Run manually: hermes plugins enable observability/langfuse")
-        _print_info("    Restart Hermes for tracing to take effect.")
-        _print_info("    Verify: hermes plugins list")
+            _print_info("    Run manually: fulilian plugins enable observability/langfuse")
+        _print_info("    Restart Fulilian for tracing to take effect.")
+        _print_info("    Verify: fulilian plugins list")
 
     elif post_setup_key == "xai_grok":
         # Shared credential bootstrap for any picker entry that talks to xAI
@@ -2359,7 +2359,7 @@ def _run_post_setup(post_setup_key: str):
             from fulilian_cli.config import save_env_value
         except Exception as exc:
             _print_warning(f"    Could not load setup helpers: {exc}")
-            _print_info("    Run later: hermes auth add xai-oauth   (or set XAI_API_KEY)")
+            _print_info("    Run later: fulilian auth add xai-oauth   (or set XAI_API_KEY)")
             return
 
         idx = prompt_choice(
@@ -2367,7 +2367,7 @@ def _run_post_setup(post_setup_key: str):
             choices=[
                 "Sign in with xAI Grok OAuth (SuperGrok / Premium+) — browser login",
                 "Paste an xAI API key (console.x.ai)",
-                "Skip — configure later via `hermes auth add xai-oauth`",
+                "Skip — configure later via `fulilian auth add xai-oauth`",
             ],
             default=0,
         )
@@ -2379,7 +2379,7 @@ def _run_post_setup(post_setup_key: str):
             else:
                 _print_warning(
                     "    xAI Grok OAuth login did not complete. "
-                    "Run later: hermes auth add xai-oauth"
+                    "Run later: fulilian auth add xai-oauth"
                 )
         elif idx == 1:
             api_key = _setup_prompt("    xAI API key", password=True)
@@ -2388,7 +2388,7 @@ def _run_post_setup(post_setup_key: str):
                 _print_success("    XAI_API_KEY saved")
             else:
                 _print_warning(
-                    "    No API key provided. Run later: hermes auth add xai-oauth"
+                    "    No API key provided. Run later: fulilian auth add xai-oauth"
                 )
         else:
             _print_info("    xAI will remain inactive until credentials are configured.")
@@ -2399,7 +2399,7 @@ def valid_post_setup_keys() -> Set[str]:
 
     Collected from ``TOOL_CATEGORIES`` plus the plugin-registered web /
     image-gen / video-gen / browser providers (which can also carry a
-    ``post_setup``). This is the allowlist the ``hermes tools post-setup``
+    ``post_setup``). This is the allowlist the ``fulilian tools post-setup``
     command and the dashboard post-setup endpoint validate against, so a
     caller can't drive ``_run_post_setup`` with an arbitrary key.
     """
@@ -2427,7 +2427,7 @@ def valid_post_setup_keys() -> Set[str]:
 
 
 def run_post_setup_command(args) -> int:
-    """``hermes tools post-setup <key>`` — non-interactive post-setup runner.
+    """``fulilian tools post-setup <key>`` — non-interactive post-setup runner.
 
     Runs the install/bootstrap hook a provider declares (npm install for
     browser/Camofox, pip install for kittentts/piper/ddgs, cua-driver fetch,
@@ -2437,7 +2437,7 @@ def run_post_setup_command(args) -> int:
     """
     key = getattr(args, "post_setup_key", None)
     if not key:
-        _print_error("Usage: hermes tools post-setup <key>")
+        _print_error("Usage: fulilian tools post-setup <key>")
         return 2
     valid = valid_post_setup_keys()
     if key not in valid:
@@ -2554,7 +2554,7 @@ def _exempt_explicit_platform_native(
     ``discord``/``discord_admin`` on the discord platform) are the platform's
     own native tools. They are kept off for *unconfigured* platforms (security
     opt-in), but once a user explicitly saves a toolset list for the platform
-    the composite they chose (e.g. ``hermes-discord``, which contains those
+    the composite they chose (e.g. ``fulilian-discord``, which contains those
     tools) is an opt-in — stripping them silently defeats the explicit
     configuration (#35527). Mutates ``default_off`` in place.
     """
@@ -2569,10 +2569,10 @@ def _exempt_explicit_platform_native(
 #: Toolsets young enough that absence from a saved ``platform_toolsets`` list
 #: means "never offered" rather than "declined".
 #:
-#: Saving ``hermes tools`` (or one toggle in the desktop Toolsets UI) replaces
+#: Saving ``fulilian tools`` (or one toggle in the desktop Toolsets UI) replaces
 #: a platform's composite with a frozen explicit list, and nothing ever adds to
 #: that list — so a toolset shipped afterwards stays off forever for anyone who
-#: has touched the picker, while everyone still on ``[hermes-cli]`` inherits it
+#: has touched the picker, while everyone still on ``[fulilian-cli]`` inherits it
 #: on upgrade. Listing it here restores that parity.
 #:
 #: MUST ship in the same release as the toolset it names, and be emptied in the
@@ -2595,7 +2595,7 @@ def _enable_recently_shipped_toolsets(
 ) -> None:
     """Turn on toolsets that shipped after this platform's saved list.
 
-    Either way of saying no outlives this: unchecking in ``hermes tools``
+    Either way of saying no outlives this: unchecking in ``fulilian tools``
     records the toolset in ``known_builtin_toolsets`` so it reads as declined
     from then on, and ``agent.disabled_toolsets`` is subtracted after every
     rule in :func:`_get_platform_tools`. Mutates ``enabled_toolsets`` in place.
@@ -2606,7 +2606,7 @@ def _enable_recently_shipped_toolsets(
     declined = {str(ts) for ts in offered} if isinstance(offered, list) else set()
 
     plat_info = PLATFORMS.get(platform)
-    default_ts = plat_info["default_toolset"] if plat_info else f"hermes-{platform}"
+    default_ts = plat_info["default_toolset"] if plat_info else f"fulilian-{platform}"
     composite_tools = None
 
     for ts_key in sorted(_RECENTLY_SHIPPED_TOOLSETS):
@@ -2616,7 +2616,7 @@ def _enable_recently_shipped_toolsets(
             continue
         # Parity is the whole justification, so only enable the toolset where
         # staying on the composite would have enabled it anyway. Deliberately
-        # narrow composites (hermes-acp, hermes-webhook) stay narrow.
+        # narrow composites (fulilian-acp, fulilian-webhook) stay narrow.
         ts_tools = set(resolve_toolset(ts_key, include_registry=False))
         if composite_tools is None:
             composite_tools = set(resolve_toolset(default_ts))
@@ -2638,7 +2638,7 @@ def _get_platform_tools(
     toolset_names = platform_toolsets.get(platform)
     # Track whether the user explicitly saved a toolset list for this platform
     # (vs. falling back to the platform default). An explicit composite (e.g.
-    # ``hermes-discord``) is an opt-in to the platform's native default-off
+    # ``fulilian-discord``) is an opt-in to the platform's native default-off
     # toolsets — see _exempt_explicit_platform_native (#35527).
     explicitly_configured = isinstance(toolset_names, list)
 
@@ -2648,7 +2648,7 @@ def _get_platform_tools(
             default_ts = plat_info["default_toolset"]
         else:
             # Plugin platform — derive toolset name from platform key
-            default_ts = f"hermes-{platform}"
+            default_ts = f"fulilian-{platform}"
         toolset_names = [default_ts]
 
     # YAML may parse bare numeric names (e.g. ``12306:``) as int.
@@ -2659,14 +2659,14 @@ def _get_platform_tools(
     plugin_ts_keys = _get_plugin_toolset_keys()
     platform_default_keys = {p["default_toolset"] for p in PLATFORMS.values()}
     # Plugin-provided toolsets are first-class on a platform-toolsets list —
-    # explicit config like ``[hermes-cli, a2a]`` must survive filtering just
+    # explicit config like ``[fulilian-cli, a2a]`` must survive filtering just
     # like a built-in configurable toolset would. See issue #81163.
     explicit_known_keys = configurable_keys | plugin_ts_keys
 
     # If the saved list contains any configurable keys directly, the user
     # has explicitly configured this platform — use direct membership.
     # This avoids the subset-inference bug where composite toolsets like
-    # "hermes-cli" (which include all _HERMES_CORE_TOOLS) cause disabled
+    # "fulilian-cli" (which include all _FULILIAN_CORE_TOOLS) cause disabled
     # toolsets to re-appear as enabled.
     has_explicit_config = any(ts in explicit_known_keys for ts in toolset_names)
 
@@ -2676,7 +2676,7 @@ def _get_platform_tools(
             if ts in explicit_known_keys and _toolset_allowed_for_platform(ts, platform)
         }
         # Mixed config: composite toolset alongside configurables (e.g.
-        # ``[hermes-cli, spotify]`` after enabling Spotify via ``hermes
+        # ``[fulilian-cli, spotify]`` after enabling Spotify via ``fulilian
         # tools``). Without expansion the composite name is silently dropped,
         # leaving sessions with only the configurable opt-ins and no native
         # tools. Mirror the else-branch's subset inference, but apply
@@ -2718,7 +2718,7 @@ def _get_platform_tools(
         _enable_recently_shipped_toolsets(enabled_toolsets, config, platform)
     else:
         # No explicit config — fall back to resolving composite toolset names
-        # (e.g. "hermes-cli") to individual tool names and reverse-mapping.
+        # (e.g. "fulilian-cli") to individual tool names and reverse-mapping.
         all_tool_names = set()
         for ts_name in toolset_names:
             all_tool_names.update(resolve_toolset(ts_name))
@@ -2743,7 +2743,7 @@ def _get_platform_tools(
         # NOT include, so the subset loop never picks it up. Inject it
         # directly here, mirroring the HASS_TOKEN → ``homeassistant`` rule
         # below: once you have working creds, you don't have to also click
-        # through ``hermes tools`` to flip the toolset on. Only fires when
+        # through ``fulilian tools`` to flip the toolset on. Only fires when
         # the user has not yet saved an explicit toolset list — once they
         # do, the saved list is authoritative.
         x_search_auto_enabled = (
@@ -2784,10 +2784,10 @@ def _get_platform_tools(
     # feishu_drive).  These are part of the platform's default composite but
     # absent from CONFIGURABLE_TOOLSETS, so they can't appear in the TUI
     # checklist or in a user-saved config.  Must run in BOTH branches —
-    # otherwise saving via `hermes tools` (which flips has_explicit_config
+    # otherwise saving via `fulilian tools` (which flips has_explicit_config
     # to True) silently drops them.
     _plat_info = PLATFORMS.get(platform)
-    _default_ts = _plat_info["default_toolset"] if _plat_info else f"hermes-{platform}"
+    _default_ts = _plat_info["default_toolset"] if _plat_info else f"fulilian-{platform}"
     platform_tool_universe = set(resolve_toolset(_default_ts))
     configurable_tool_universe = set()
     for ck in configurable_keys:
@@ -2796,7 +2796,7 @@ def _get_platform_tools(
     for ts_key in enabled_toolsets:
         claimed.update(resolve_toolset(ts_key))
     skip = configurable_keys | plugin_ts_keys | platform_default_keys
-    skip |= {k for k in TOOLSETS if k.startswith("hermes-")}
+    skip |= {k for k in TOOLSETS if k.startswith("fulilian-")}
     skip |= set(_DEFAULT_OFF_TOOLSETS) - {platform}
     for ts_key, ts_def in TOOLSETS.items():
         if ts_key in skip:
@@ -2821,9 +2821,9 @@ def _get_platform_tools(
 
     # Plugin toolsets: enabled by default unless explicitly disabled, or
     # unless the toolset is in _DEFAULT_OFF_TOOLSETS (e.g. spotify —
-    # shipped as a bundled plugin but user must opt in via `hermes tools`
+    # shipped as a bundled plugin but user must opt in via `fulilian tools`
     # so we don't ship 7 Spotify tool schemas to users who don't use it).
-    # A plugin toolset is "known" for a platform once `hermes tools`
+    # A plugin toolset is "known" for a platform once `fulilian tools`
     # has been saved for that platform (tracked via known_plugin_toolsets).
     # Unknown plugins default to enabled; known-but-absent = disabled.
     if plugin_ts_keys:
@@ -2837,7 +2837,7 @@ def _get_platform_tools(
                 # Opt-in plugin toolset — stay off until user picks it
                 continue
             elif pts not in known_for_platform:
-                # New plugin not yet seen by hermes tools — default enabled
+                # New plugin not yet seen by fulilian tools — default enabled
                 enabled_toolsets.add(pts)
             # else: known but not in config = user disabled it
 
@@ -2893,7 +2893,7 @@ def _get_platform_tools(
     # globally suppress specific toolsets (e.g. "memory") across all
     # platforms without per-platform toolset configuration.  This runs
     # last so it overrides everything above.  The value may arrive as a
-    # JSON-array string (e.g. "['memory']") from `hermes config set` or a
+    # JSON-array string (e.g. "['memory']") from `fulilian config set` or a
     # JSON-mode editor save; parse it so the list is not silently dead (#86661).
     agent_cfg = config.get("agent") or {}
     disabled_toolsets = agent_cfg.get("disabled_toolsets") or []
@@ -2906,11 +2906,11 @@ def _get_platform_tools(
         enabled_toolsets -= disabled_set
 
     # #38798: if this platform was explicitly configured but every toolset name
-    # is invalid (e.g. a migration or hand-edit left `hermes` instead of
-    # `hermes-cli`), resolve_toolset() returns [] for each and the platform ends
+    # is invalid (e.g. a migration or hand-edit left `fulilian` instead of
+    # `fulilian-cli`), resolve_toolset() returns [] for each and the platform ends
     # up with no native tools — silently, with no error. Surface it at the point
     # tools are resolved for a session so an already-corrupted config is caught
-    # at runtime, not only during the next `hermes update`/`hermes doctor`.
+    # at runtime, not only during the next `fulilian update`/`fulilian doctor`.
     _explicit = platform_toolsets.get(platform)
     if isinstance(_explicit, list) and _explicit:
         from toolsets import validate_toolset
@@ -2924,7 +2924,7 @@ def _get_platform_tools(
             _warned_invalid_platform_toolsets.add(platform)
             logger.warning(
                 "platform '%s' has no valid toolsets configured (unknown "
-                "name(s): %s) - tools will be unavailable. Run `hermes tools` "
+                "name(s): %s) - tools will be unavailable. Run `fulilian tools` "
                 "to reconfigure. See issue #38798.",
                 platform,
                 ", ".join(_named),
@@ -2954,7 +2954,7 @@ def _save_platform_tools(config: dict, platform: str, enabled_toolset_keys: Set[
     plugin_keys = _get_plugin_toolset_keys()
     configurable_keys |= plugin_keys
 
-    # Also exclude platform default toolsets (hermes-cli, hermes-telegram, etc.)
+    # Also exclude platform default toolsets (fulilian-cli, fulilian-telegram, etc.)
     # These are "super" toolsets that resolve to ALL tools, so preserving them
     # would silently override the user's unchecked selections on the next read.
     platform_default_keys = {p["default_toolset"] for p in PLATFORMS.values()}
@@ -2971,7 +2971,7 @@ def _save_platform_tools(config: dict, platform: str, enabled_toolset_keys: Set[
         entry for entry in existing_toolsets
         if entry not in configurable_keys and entry not in platform_default_keys
     }
-    # Opening `hermes tools` is the user's opt-in to reconfigure tools, so treat
+    # Opening `fulilian tools` is the user's opt-in to reconfigure tools, so treat
     # saving from the picker as consent to clear the "no_mcp" sentinel. The
     # picker has no checkbox for no_mcp, so without this users who once set it
     # by hand could never re-enable MCP servers through the UI.
@@ -3107,9 +3107,9 @@ def _estimate_tool_tokens() -> Dict[str, int]:
     Returns an empty dict when tiktoken or the registry is unavailable.
     """
     global _tool_token_cache
-    from fulilian_constants import hermes_home_key
+    from fulilian_constants import fulilian_home_key
 
-    scope = hermes_home_key()
+    scope = fulilian_home_key()
 
     try:
         # Trigger full tool discovery (imports all tool modules).
@@ -3628,7 +3628,7 @@ _POST_SETUP_INSTALLED: dict = {
     # is already satisfied. Used by `_toolset_needs_configuration_prompt`
     # to force the provider-setup flow when a no-key provider still needs
     # a binary/dependency install (otherwise an already-configured user
-    # who toggles the toolset on via `hermes tools` gets a silent no-op
+    # who toggles the toolset on via `fulilian tools` gets a silent no-op
     # because the gate sees "no env vars to ask about" and skips the
     # provider-setup flow that would have run the post_setup hook).
     #
@@ -3664,7 +3664,7 @@ def _module_installed(module_name: str) -> bool:
         return False
 
 
-# Python dependencies installed explicitly through ``hermes tools`` are not
+# Python dependencies installed explicitly through ``fulilian tools`` are not
 # part of the managed runtime's locked ``all`` sync. A runtime replacement
 # therefore needs a small, static allowlist that can be snapshotted before the
 # old site-packages disappears and restored afterward. Keep these install
@@ -3687,7 +3687,7 @@ _RESTORABLE_PYTHON_TOOL_DEPENDENCIES: dict[str, tuple[str, tuple[str, ...]]] = {
 
 
 def active_restorable_python_tool_dependencies() -> list[str]:
-    """Return ``hermes tools`` Python dependencies present in this runtime."""
+    """Return ``fulilian tools`` Python dependencies present in this runtime."""
     return [
         name
         for name, (module_name, _install_args) in (
@@ -3714,7 +3714,7 @@ def _agent_browser_installed() -> bool:
 
     from fulilian_cli.nous_subscription import _local_browser_runnable
 
-    # The install hook runs in a spawned ``hermes tools post-setup`` process,
+    # The install hook runs in a spawned ``fulilian tools post-setup`` process,
     # but this probe runs in the long-lived web-server/CLI process, whose
     # browser_tool module may have cached a stale "Chromium missing" result
     # from before the install. Drop the cache (when the module is loaded) so
@@ -4571,7 +4571,7 @@ def _configure_videogen_model_for_plugin(plugin_name: str, config: dict) -> None
 
 # Per-provider STT model catalogs for the interactive picker. Keys are
 # ``stt.<provider>`` config sections; the first entry is the default.
-# Kept in sync with the dashboard selects (hermes_cli/web_server.py
+# Kept in sync with the dashboard selects (fulilian_cli/web_server.py
 # _CONFIG_FIELD_META) and the desktop settings enums
 # (apps/desktop/src/app/settings/constants.ts).
 STT_MODEL_CATALOG = {
@@ -4818,7 +4818,7 @@ def _configure_provider(
     # _visible_providers), but only *activate* once the user has paid Nous
     # Portal access. Selecting one runs an inline Portal login when needed —
     # auth + entitlement only, no inference-provider switch and no bulk
-    # "enable all tools" prompt (that lives in `hermes model`).
+    # "enable all tools" prompt (that lives in `fulilian model`).
     if managed_feature:
         from fulilian_cli.nous_subscription import (
             MANAGED_FEATURE_COVERAGE_CATEGORY,
@@ -5009,7 +5009,7 @@ def _configure_vision_backend() -> None:
     ``auxiliary.vision.{provider,model,base_url}`` in config.yaml (see
     ``agent/auxiliary_client.resolve_vision_provider_client``). Rather than
     forcing the user onto OpenRouter, let them pick any authenticated
-    provider + model — the same surface as ``hermes model`` — or point at a
+    provider + model — the same surface as ``fulilian model`` — or point at a
     custom OpenAI-compatible endpoint. "Auto" leaves the config keys empty so
     the resolver uses the main model / aggregator fallback chain.
     """
@@ -5086,7 +5086,7 @@ def _configure_vision_provider_model(config: dict, vision_cfg: dict) -> None:
     """Provider + model picker for vision, mirroring the ``/model`` surface.
 
     Provider rows come from ``build_aux_picker_rows()`` — the shared aux-picker
-    substrate — so this picker lists exactly what the ``hermes model`` aux-task
+    substrate — so this picker lists exactly what the ``fulilian model`` aux-task
     picker lists, including the user's own ``providers:`` / ``custom_providers:``
     endpoints. Lets the user pick a provider and then a model from its curated
     list (or type a custom id), and persists ``auxiliary.vision.provider`` +
@@ -5119,7 +5119,7 @@ def _configure_vision_provider_model(config: dict, vision_cfg: dict) -> None:
     if not providers:
         _print_warning(
             "  No authenticated providers found. Configure a provider first "
-            "with `hermes model`, then re-run this."
+            "with `fulilian model`, then re-run this."
         )
         return
 
@@ -5541,7 +5541,7 @@ def _reconfigure_simple_requirements(ts_key: str):
     """Reconfigure simple env var requirements."""
     if ts_key == "vision":
         # Vision has its own provider/model picker (any provider, like
-        # `hermes model`). Run it directly so reconfigure doesn't fall back to
+        # `fulilian model`). Run it directly so reconfigure doesn't fall back to
         # the generic single-key prompt (which would re-ask for OPENROUTER_API_KEY).
         _configure_vision_backend()
         return
@@ -5571,7 +5571,7 @@ def _reconfigure_simple_requirements(ts_key: str):
 # ─── Main Entry Point ─────────────────────────────────────────────────────────
 
 def tools_command(args=None, first_install: bool = False, config: dict = None):
-    """Entry point for `hermes tools` and `hermes setup tools`.
+    """Entry point for `fulilian tools` and `fulilian setup tools`.
 
     Args:
         first_install: When True (set by the setup wizard on fresh installs),
@@ -5606,7 +5606,7 @@ def tools_command(args=None, first_install: bool = False, config: dict = None):
                 print(color("    (none enabled)", Colors.DIM))
         print()
         return
-    print(color("⚕ Hermes Tool Configuration", Colors.CYAN, Colors.BOLD))
+    print(color("⚕ Fulilian Tool Configuration", Colors.CYAN, Colors.BOLD))
     print(color("  Enable or disable tools per platform.", Colors.DIM))
     print(color("  Tools that need API keys will be configured when enabled.", Colors.DIM))
     print(color("  Guide: https://hermes-agent.nousresearch.com/docs/user-guide/features/tools", Colors.DIM))
@@ -5888,9 +5888,9 @@ def tools_command(args=None, first_install: bool = False, config: dict = None):
         platform_choices[idx] = f"Configure {pinfo['label']}  ({new_count}/{total} enabled)"
 
     print()
-    from fulilian_constants import display_hermes_home
-    print(color(f"  Tool configuration saved to {display_hermes_home()}/config.yaml", Colors.DIM))
-    print(color("  Changes take effect on next 'hermes' or gateway restart.", Colors.DIM))
+    from fulilian_constants import display_fulilian_home
+    print(color(f"  Tool configuration saved to {display_fulilian_home()}/config.yaml", Colors.DIM))
+    print(color("  Changes take effect on next 'fulilian' or gateway restart.", Colors.DIM))
     print()
 
 

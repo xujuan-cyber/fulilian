@@ -67,10 +67,10 @@ def test_profile_local_mcp_tool_is_visible_in_slash_worker(tmp_path):
     for key in list(env):
         if key.endswith("_API_KEY") or key.endswith("_TOKEN"):
             env.pop(key)
-    env["HERMES_HOME"] = str(profile_home)
+    env["FULILIAN_HOME"] = str(profile_home)
     env["PYTHONPATH"] = str(Path(__file__).resolve().parents[2])
-    env["HERMES_SLASH_WATCHDOG_GRACE_S"] = "0"
-    env["HERMES_SLASH_WATCHDOG_POLL_S"] = "0.05"
+    env["FULILIAN_SLASH_WATCHDOG_GRACE_S"] = "0"
+    env["FULILIAN_SLASH_WATCHDOG_POLL_S"] = "0.05"
     proc = subprocess.Popen(
         [
             sys.executable,
@@ -104,7 +104,7 @@ def test_profile_local_mcp_tool_is_visible_in_slash_worker(tmp_path):
             pytest.fail("slash worker produced no /tools response within 10 seconds")
         response = json.loads(line)
         assert response["ok"] is True
-        assert "mcp__profileprobe__hermes_61922_profile_probe" in response["output"]
+        assert "mcp__profileprobe__fulilian_61922_profile_probe" in response["output"]
     finally:
         proc.terminate()
         try:

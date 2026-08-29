@@ -7,7 +7,7 @@
  *   nobody meets is a feature nobody has, and the pacing is what earns the
  *   default: minutes into a launch at the earliest, then six hours, which is a
  *   nicety rather than the nag that would owe you an opt-in.
- * - It covers Hermes too. "Off" from someone who has just closed a bubble means
+ * - It covers Fulilian too. "Off" from someone who has just closed a bubble means
  *   no bubbles, not "no bubbles unless the agent sends one", so an agent tip is
  *   dropped at the bridge like a rotation tip is skipped here.
  * - `$retiredTips` is the hard-close ledger for the rotation. A tip the user ✕'d
@@ -47,11 +47,11 @@ export interface ActiveTip {
 // Key still says `rotation` from when the switch only covered that half.
 // Renaming it would read as unset for anyone who had already turned tips off,
 // and silently turning them back on is the one outcome worth avoiding here.
-export const $tipsEnabled = persistentAtom('hermes.desktop.tips.rotation.v1', true, Codecs.bool)
-export const $retiredTips = persistentAtom<string[]>('hermes.desktop.tips.retired.v1', [], Codecs.stringArray)
-export const $lastTipId = persistentAtom<null | string>('hermes.desktop.tips.last.v1', null, Codecs.nullableText)
+export const $tipsEnabled = persistentAtom('fulilian.desktop.tips.rotation.v1', true, Codecs.bool)
+export const $retiredTips = persistentAtom<string[]>('fulilian.desktop.tips.retired.v1', [], Codecs.stringArray)
+export const $lastTipId = persistentAtom<null | string>('fulilian.desktop.tips.last.v1', null, Codecs.nullableText)
 export const $nextTipAt = persistentAtom<null | number>(
-  'hermes.desktop.tips.next.v1',
+  'fulilian.desktop.tips.next.v1',
   null,
   Codecs.json(value => (typeof value === 'number' && Number.isFinite(value) ? value : null))
 )

@@ -1,9 +1,9 @@
 """Tests for the WeCom plugin's interactive_setup wizard home-channel flow.
 
 The interactive_setup wizard lazy-imports its CLI helpers from
-``hermes_cli.config`` (get_env_value / save_env_value / remove_env_value),
-``hermes_cli.cli_output`` (prompt / prompt_yes_no / print_*), and
-``hermes_cli.setup`` (prompt_choice); we patch each at its source module so
+``fulilian_cli.config`` (get_env_value / save_env_value / remove_env_value),
+``fulilian_cli.cli_output`` (prompt / prompt_yes_no / print_*), and
+``fulilian_cli.setup`` (prompt_choice); we patch each at its source module so
 the QR scan / pip paths never fire. Covers the home-channel clear-on-blank
 behavior added in the follow-up to PR #58421.
 """
@@ -62,7 +62,7 @@ class TestWeComHomeChannelClear:
     """Blank home-channel answer must clear WECOM_HOME_CHANNEL (#12423)."""
 
     def test_blank_removes_existing_home_channel(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        monkeypatch.setenv("FULILIAN_HOME", str(tmp_path))
         saved, removed = {}, []
         _patch_setup_io(
             monkeypatch,

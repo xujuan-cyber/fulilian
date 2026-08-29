@@ -2,7 +2,7 @@
 
 Handler bodies are byte-identical to their previous in-web_server form; the
 helpers they call (``_git_op``, ``_git_path``) still live in web_server and are
-reached via the late-binding seam in :mod:`hermes_cli.web_deps`, so
+reached via the late-binding seam in :mod:`fulilian_cli.web_deps`, so
 ``monkeypatch.setattr(web_server, ...)`` keeps working.
 """
 

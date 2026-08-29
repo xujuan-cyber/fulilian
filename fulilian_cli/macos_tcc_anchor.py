@@ -1,7 +1,7 @@
 """Stable macOS TCC anchor for the uv-managed Python interpreter (#95596).
 
 Re-land of the interpreter anchor reverted in #95563.  macOS keys TCC grants
-to the resolved absolute path of the client binary.  Hermes' interpreter is
+to the resolved absolute path of the client binary.  Fulilian' interpreter is
 managed by uv and lives at a versioned store path; every patch bump orphans
 every prior grant (#85345).
 
@@ -10,7 +10,7 @@ two holes that bricked real Macs:
 
 * Dynamically-linked builds look up ``libpython`` via
   ``@executable_path/../lib``.  That resolved into ``venv/lib/``, which had
-  no dylib — every hermes command, including update/doctor, died in dyld
+  no dylib — every fulilian command, including update/doctor, died in dyld
   (#95425).
 * Alias names (``python3``, ``python3.N``) were re-pointed at the copy as
   *symlinks*.  Invoking the copied interpreter through a symlink makes
@@ -411,7 +411,7 @@ def ensure_tcc_anchor(project_root: Path | None = None) -> Path | None:
 
 
 def tcc_anchor_state(project_root: Path | None = None) -> tuple[str, str]:
-    """Report the anchor state for ``hermes doctor``.
+    """Report the anchor state for ``fulilian doctor``.
 
     Returns ``(status, detail)`` with status one of:
 

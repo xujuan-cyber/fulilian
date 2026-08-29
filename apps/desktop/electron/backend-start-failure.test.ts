@@ -30,7 +30,7 @@ test('the two branches are mutually exclusive (a failure either latches or stays
 })
 
 test('latches a CONFIRMED remote reauth failure so the overlay stays clickable', () => {
-  // Without this the non-latching remote path re-runs startHermes on every
+  // Without this the non-latching remote path re-runs startFulilian on every
   // getConnection/api call, re-emits running:true, and the overlay hides
   // itself — the "Sign in" button flickers away before it can be clicked.
   assert.equal(shouldLatchRemoteReauthFailure({ attemptedRemote: true, isReauth: true }), true)
@@ -71,7 +71,7 @@ test('a CONFIRMED reauth rejection is never auto-retried (missing capability, no
 })
 
 test('unsigned OAuth latches and is never auto-retried; needsOauthLogin alone still retries', () => {
-  // Production composition in startHermes: isReauth = isReauthRequiredError(error).
+  // Production composition in startFulilian: isReauth = isReauthRequiredError(error).
   const unsigned = isReauthRequiredError(makeUnsignedOauthError())
   const ticketHint = isReauthRequiredError({ needsOauthLogin: true })
 

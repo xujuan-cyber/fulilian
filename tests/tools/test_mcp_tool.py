@@ -117,7 +117,7 @@ class TestLoadMCPConfig:
                 "env": {},
             }
         }
-        with patch("hermes_cli.config.load_config", return_value={"mcp_servers": servers}):
+        with patch("fulilian_cli.config.load_config", return_value={"mcp_servers": servers}):
             from tools.mcp_tool import _load_mcp_config
             result = _load_mcp_config()
             assert "filesystem" in result
@@ -125,7 +125,7 @@ class TestLoadMCPConfig:
 
     def test_mcp_servers_not_dict_returns_empty(self):
         """mcp_servers set to non-dict value -> empty dict."""
-        with patch("hermes_cli.config.load_config", return_value={"mcp_servers": "invalid"}):
+        with patch("fulilian_cli.config.load_config", return_value={"mcp_servers": "invalid"}):
             from tools.mcp_tool import _load_mcp_config
             result = _load_mcp_config()
             assert result == {}
@@ -141,9 +141,9 @@ class TestLoadMCPConfig:
         }
         manager = SimpleNamespace(get_portable_mcp_servers=lambda: portable)
         with (
-            patch("hermes_cli.config.load_config", return_value={"mcp_servers": native}),
-            patch("hermes_cli.plugins.discover_plugins"),
-            patch("hermes_cli.plugins.get_plugin_manager", return_value=manager),
+            patch("fulilian_cli.config.load_config", return_value={"mcp_servers": native}),
+            patch("fulilian_cli.plugins.discover_plugins"),
+            patch("fulilian_cli.plugins.get_plugin_manager", return_value=manager),
             patch.dict(os.environ, {"PORT": "3000"}),
         ):
             from tools.mcp_tool import _load_mcp_config
@@ -183,8 +183,8 @@ class TestLoadMCPConfig:
         )
         bundled = tmp_path / "bundled"
         bundled.mkdir()
-        monkeypatch.setenv("HERMES_HOME", str(home))
-        monkeypatch.setenv("HERMES_BUNDLED_PLUGINS", str(bundled))
+        monkeypatch.setenv("FULILIAN_HOME", str(home))
+        monkeypatch.setenv("FULILIAN_BUNDLED_PLUGINS", str(bundled))
         monkeypatch.setattr(plugins_mod, "_plugin_manager", None)
 
         from tools.mcp_tool import _load_mcp_config
@@ -357,7 +357,7 @@ class TestLifecycleConfig:
 # ---------------------------------------------------------------------------
 
 class TestSchemaConversion:
-    def test_converts_mcp_tool_to_hermes_schema(self):
+    def test_converts_mcp_tool_to_fulilian_schema(self):
         from tools.mcp_tool import _convert_mcp_schema
 
         mcp_tool = _make_mcp_tool(name="read_file", description="Read a file")
@@ -988,7 +988,7 @@ class TestToolsetInjection:
             "good": {"command": "npx", "args": []},
         }
         fake_toolsets = {
-            "hermes-cli": {"tools": [], "description": "CLI", "includes": []},
+            "fulilian-cli": {"tools": [], "description": "CLI", "includes": []},
         }
 
         with patch("tools.mcp_tool._MCP_AVAILABLE", True), \
@@ -2502,7 +2502,7 @@ class TestMCPSelectiveToolLoading:
             }
         }
         fake_toolsets = {
-            "hermes-cli": {"tools": [], "description": "CLI", "includes": []},
+            "fulilian-cli": {"tools": [], "description": "CLI", "includes": []},
         }
 
         with patch("tools.mcp_tool._MCP_AVAILABLE", True), \

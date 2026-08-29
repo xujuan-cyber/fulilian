@@ -59,7 +59,7 @@ describe('actOnActivePreview (drive_preview tool)', () => {
     expect(result).toMatchObject({ acted: 'clicked button "Save"', success: true })
     // Self-contained payload: the engine source and the action travel together,
     // and the holder keeps refs alive across calls on the same page.
-    expect(injected).toContain('__hermesActHolder')
+    expect(injected).toContain('__fulilianActHolder')
     expect(injected).toContain('"ref":"@e1"')
   })
 
@@ -270,7 +270,7 @@ describe('actOnActivePreview (drive_preview tool)', () => {
       registerPreviewScriptRunner(tabId, async code =>
         code.includes('"kind":"locate"')
           ? JSON.stringify({ acted: 'looking at button "Save"', point: { x: 12, y: 8 }, success: true })
-          : JSON.stringify({ elements: [], hit: { tag: 'HERMES-WATCH', trusted: true }, success: true })
+          : JSON.stringify({ elements: [], hit: { tag: 'FULILIAN-WATCH', trusted: true }, success: true })
       )
     )
     cleanups.push(registerPreviewInput(tabId, { focus: vi.fn(), send: vi.fn() }))

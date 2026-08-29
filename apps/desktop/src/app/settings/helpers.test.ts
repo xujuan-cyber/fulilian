@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import type { HermesConfigRecord } from '@/types/hermes'
+import type { FulilianConfigRecord } from '@/types/fulilian'
 
 import { FIELD_DESCRIPTIONS, FIELD_LABELS, SECTIONS } from './constants'
 import { defineFieldCopy, fieldCopyForSchemaKey, schemaKeyToFieldCopyKey } from './field-copy'
@@ -123,7 +123,7 @@ describe('settings helpers', () => {
   })
 
   it('reads and writes nested config paths', () => {
-    const config: HermesConfigRecord = { display: { theme: 'mono' } }
+    const config: FulilianConfigRecord = { display: { theme: 'mono' } }
     const next = setNested(config, 'display.theme', 'slate')
 
     expect(getNested(next, 'display.theme')).toBe('slate')
@@ -131,7 +131,7 @@ describe('settings helpers', () => {
   })
 
   it('rejects prototype-polluting config paths', () => {
-    const config: HermesConfigRecord = {}
+    const config: FulilianConfigRecord = {}
 
     expect(() => setNested(config, '__proto__.polluted', true)).toThrow('Unsafe config path')
     expect(() => setNested(config, 'constructor.prototype.polluted', true)).toThrow('Unsafe config path')
@@ -173,8 +173,8 @@ describe('settings helpers', () => {
       // KIMI_CN_ likewise must beat KIMI_.
       expect(providerGroup('KIMI_CN_API_KEY')).toBe('Kimi (China)')
       expect(providerGroup('KIMI_API_KEY')).toBe('Kimi / Moonshot')
-      // HERMES_QWEN_ shares the HERMES_ stem with other integrations.
-      expect(providerGroup('HERMES_QWEN_BASE_URL')).toBe('DashScope (Qwen)')
+      // FULILIAN_QWEN_ shares the FULILIAN_ stem with other integrations.
+      expect(providerGroup('FULILIAN_QWEN_BASE_URL')).toBe('DashScope (Qwen)')
       expect(providerGroup('GEMINI_API_KEY')).toBe('Gemini')
     })
 
@@ -184,7 +184,7 @@ describe('settings helpers', () => {
   })
 
   describe('enumOptionsFor — backend selector dropdowns', () => {
-    const config: HermesConfigRecord = {}
+    const config: FulilianConfigRecord = {}
 
     it('renders a dropdown for the TTS provider including xAI (Grok)', () => {
       const opts = enumOptionsFor('tts.provider', 'edge', config)
@@ -237,7 +237,7 @@ describe('settings helpers', () => {
     })
 
     it('surfaces user-defined command-type TTS providers (canonical providers nesting + legacy)', () => {
-      const withCustom: HermesConfigRecord = {
+      const withCustom: FulilianConfigRecord = {
         tts: {
           provider: 'neutts',
           // canonical location the runtime resolves first: tts.providers.<name>
@@ -270,7 +270,7 @@ describe('settings helpers', () => {
     })
 
     it('surfaces command-type STT providers too (canonical providers nesting)', () => {
-      const withCustom: HermesConfigRecord = {
+      const withCustom: FulilianConfigRecord = {
         stt: {
           provider: 'local',
           providers: { myasr: { type: 'command', command: 'curl …' } }
@@ -289,7 +289,7 @@ describe('settings helpers', () => {
     // STT), where filtering on ENUM_OPTIONS instead of the runtime's built-in set
     // would wrongly offer a provider that can never dispatch.
     it('never offers a built-in name as a command provider, even one absent from the dropdown list', () => {
-      const shadowing: HermesConfigRecord = {
+      const shadowing: FulilianConfigRecord = {
         tts: {
           provider: 'edge',
           providers: {
@@ -311,7 +311,7 @@ describe('settings helpers', () => {
     })
 
     it('never offers a built-in STT name absent from the dropdown list as a command provider', () => {
-      const shadowing: HermesConfigRecord = {
+      const shadowing: FulilianConfigRecord = {
         stt: {
           provider: 'local',
           providers: {
@@ -333,7 +333,7 @@ describe('settings helpers', () => {
   describe('sectionFieldEntries', () => {
     it('renders memory.provider from config even when the backend schema omits it', () => {
       const schema = { 'memory.memory_enabled': { type: 'boolean' as const } }
-      const config: HermesConfigRecord = { memory: { memory_enabled: true, provider: '' } }
+      const config: FulilianConfigRecord = { memory: { memory_enabled: true, provider: '' } }
 
       const memoryKeys = (sectionFieldEntries(schema, config).get('memory') ?? []).map(([key]) => key)
 
@@ -341,7 +341,7 @@ describe('settings helpers', () => {
     })
 
     it('infers the field type from the config value when the schema omits the key', () => {
-      const config: HermesConfigRecord = { memory: { provider: '', memory_enabled: true, memory_char_limit: 2200 } }
+      const config: FulilianConfigRecord = { memory: { provider: '', memory_enabled: true, memory_char_limit: 2200 } }
 
       const fields = new Map(sectionFieldEntries({}, config).get('memory') ?? [])
 
@@ -352,7 +352,7 @@ describe('settings helpers', () => {
 
     it('prefers the backend schema entry over inference when both exist', () => {
       const schema = { 'memory.provider': { type: 'select' as const, options: ['honcho'] } }
-      const config: HermesConfigRecord = { memory: { provider: 'honcho' } }
+      const config: FulilianConfigRecord = { memory: { provider: 'honcho' } }
 
       const field = new Map(sectionFieldEntries(schema, config).get('memory') ?? []).get('memory.provider')
 
@@ -367,8 +367,8 @@ describe('settings helpers', () => {
 
   describe('clearsEnabledToolsets', () => {
     it('flags a non-empty → empty transition', () => {
-      const prev: HermesConfigRecord = { toolsets: ['memory', 'terminal', 'web_search'] }
-      const next: HermesConfigRecord = { toolsets: [] }
+      const prev: FulilianConfigRecord = { toolsets: ['memory', 'terminal', 'web_search'] }
+      const next: FulilianConfigRecord = { toolsets: [] }
 
       expect(clearsEnabledToolsets(prev, next)).toBe(true)
     })
@@ -377,29 +377,29 @@ describe('settings helpers', () => {
       // PUT /api/config deep-merges the override onto the stored config, so an
       // import that omits `toolsets` keeps the existing list — no wipe happens,
       // so there is nothing to confirm.
-      const prev: HermesConfigRecord = { toolsets: ['memory'] }
-      const next: HermesConfigRecord = {}
+      const prev: FulilianConfigRecord = { toolsets: ['memory'] }
+      const next: FulilianConfigRecord = {}
 
       expect(clearsEnabledToolsets(prev, next)).toBe(false)
     })
 
     it('does not flag when at least one toolset remains', () => {
-      const prev: HermesConfigRecord = { toolsets: ['memory', 'terminal'] }
-      const next: HermesConfigRecord = { toolsets: ['memory'] }
+      const prev: FulilianConfigRecord = { toolsets: ['memory', 'terminal'] }
+      const next: FulilianConfigRecord = { toolsets: ['memory'] }
 
       expect(clearsEnabledToolsets(prev, next)).toBe(false)
     })
 
     it('does not flag when the list was already empty', () => {
-      const prev: HermesConfigRecord = { toolsets: [] }
-      const next: HermesConfigRecord = { toolsets: [] }
+      const prev: FulilianConfigRecord = { toolsets: [] }
+      const next: FulilianConfigRecord = { toolsets: [] }
 
       expect(clearsEnabledToolsets(prev, next)).toBe(false)
     })
 
     it('does not flag an unrelated edit that never touched toolsets', () => {
-      const prev: HermesConfigRecord = { model: 'a', toolsets: ['memory'] }
-      const next: HermesConfigRecord = { model: 'b', toolsets: ['memory'] }
+      const prev: FulilianConfigRecord = { model: 'a', toolsets: ['memory'] }
+      const next: FulilianConfigRecord = { model: 'b', toolsets: ['memory'] }
 
       expect(clearsEnabledToolsets(prev, next)).toBe(false)
     })

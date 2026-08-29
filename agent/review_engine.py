@@ -99,7 +99,7 @@ def collect_parent_loaded_skills(
 
     Two sources, both surface-independent:
 
-    * Launch-preloaded skills (``hermes -s``, kanban lanes, TUI skills env):
+    * Launch-preloaded skills (``fulilian -s``, kanban lanes, TUI skills env):
       their activation notes are embedded in the parent's
       ``ephemeral_system_prompt`` with a stable marker
       (see ``agent.skill_commands.build_preloaded_skills_prompt``).

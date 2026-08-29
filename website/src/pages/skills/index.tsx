@@ -418,9 +418,9 @@ function SkillCard({
               </div>
             )}
             <div className={styles.installHint}>
-              <code>{skill.installCmd || `hermes skills install ${skill.name}`}</code>
+              <code>{skill.installCmd || `fulilian skills install ${skill.name}`}</code>
               <CopyButton
-                text={skill.installCmd || `hermes skills install ${skill.name}`}
+                text={skill.installCmd || `fulilian skills install ${skill.name}`}
               />
             </div>
             {onPick ? (
@@ -501,10 +501,10 @@ function buildSearchHaystack(s: Skill): string {
 
 export default function SkillsDashboard() {
   // Picker embed mode (?embed=picker): the page is being iframed by a host
-  // app (Hermes desktop's Bot Mode agent editor) as a skill PICKER. Site
+  // app (Fulilian desktop's Bot Mode agent editor) as a skill PICKER. Site
   // chrome is hidden via a CSS class and every card gains an
   // "+ Add to this Agent" button that posts
-  //   { type: 'hermes-skill-pick', name, identifier, installCmd, source }
+  //   { type: 'fulilian-skill-pick', name, identifier, installCmd, source }
   // to the parent window. The HOST performs the actual install through its
   // own gateway (skills.manage) — the page never installs anything, so
   // there is no origin to trust in this direction; parents must validate
@@ -518,10 +518,10 @@ export default function SkillsDashboard() {
       if (typeof window === "undefined" || window.parent === window) return;
       window.parent.postMessage(
         {
-          type: "hermes-skill-pick",
+          type: "fulilian-skill-pick",
           name: skill.name,
           identifier: skill.identifier || skill.name,
-          installCmd: skill.installCmd || `hermes skills install ${skill.name}`,
+          installCmd: skill.installCmd || `fulilian skills install ${skill.name}`,
           source: skill.source,
         },
         "*"
@@ -678,13 +678,13 @@ export default function SkillsDashboard() {
   return (
     <Layout
       title="Skills Hub"
-      description="Browse all skills and plugins available for Hermes Agent"
+      description="Browse all skills and plugins available for FuLiLian"
     >
       <div className={`${styles.page} ${pickerMode ? styles.pickerMode : ""}`}>
         <header className={styles.hero}>
           <div className={styles.heroGlow} />
           <div className={styles.heroContent}>
-            <p className={styles.heroEyebrow}>Hermes Agent</p>
+            <p className={styles.heroEyebrow}>FuLiLian</p>
             <h1 className={styles.heroTitle}>Skills Hub</h1>
             <p className={styles.heroSub}>
               Discover, search, and install from{" "}

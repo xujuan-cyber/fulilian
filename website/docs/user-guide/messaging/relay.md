@@ -1,17 +1,17 @@
 ---
 sidebar_position: 30
-title: "Hermes Relay"
-description: "Connect Hermes to messaging platforms through a relay connector that owns the platform credentials — enrollment, capabilities, config, and troubleshooting"
+title: "Fulilian Relay"
+description: "Connect Fulilian to messaging platforms through a relay connector that owns the platform credentials — enrollment, capabilities, config, and troubleshooting"
 ---
 
-# Hermes Relay (Connector)
+# Fulilian Relay (Connector)
 
 :::warning Experimental
 Relay is **experimental**. The wire contract, auth scheme, and configuration
 may change without a deprecation cycle while the system is being validated.
 :::
 
-Hermes Relay is not a chat platform itself — it is a **connector system** that
+Fulilian Relay is not a chat platform itself — it is a **connector system** that
 lets your gateway front one or more real messaging platforms (Discord,
 Telegram, Slack, WhatsApp, …) **without holding any platform credentials**. A
 separate service, the *connector*, owns the platform bot tokens and sockets.
@@ -47,12 +47,12 @@ adapters ([Telegram](/user-guide/messaging/telegram),
 ## Enrollment
 
 A self-hosted gateway authenticates to the connector with a per-gateway
-secret. `hermes gateway enroll` redeems a **single-use enrollment token**
+secret. `fulilian gateway enroll` redeems a **single-use enrollment token**
 (minted by the connector when your tenant's route is provisioned and delivered
 with your gateway config) for that secret:
 
 ```bash
-hermes gateway enroll \
+fulilian gateway enroll \
   --token <enrollment-token> \
   --connector-url wss://connector.example.com/relay
 ```
@@ -60,7 +60,7 @@ hermes gateway enroll \
 What it does:
 
 1. Resolves a fresh Nous Portal access token from your existing login
-   (`~/.hermes/auth.json`) — this proves which Nous org (tenant) you own. If
+   (`~/.fulilian/auth.json`) — this proves which Nous org (tenant) you own. If
    `gateway.idp.token_url` is configured, your own IdP is used instead (the
    air-gapped / self-hosted-IdP path, no Nous Portal involved): with
    `client_id`/`client_secret` configured it performs a generic OAuth2
@@ -73,7 +73,7 @@ What it does:
 3. The connector verifies the token (signature, single-use, tenant match),
    mints a per-gateway secret plus a per-tenant delivery key, and returns them
    once.
-4. Persists the credentials into `~/.hermes/.env`:
+4. Persists the credentials into `~/.fulilian/.env`:
    `GATEWAY_RELAY_ID`, `GATEWAY_RELAY_SECRET`, `GATEWAY_RELAY_DELIVERY_KEY`
    (plus `GATEWAY_RELAY_URL` / `GATEWAY_RELAY_WAKE_URL` when supplied).
 
@@ -89,7 +89,7 @@ Flags:
 | `--wake-url` | Optional reachable URL the connector pokes (payload-free GET) to wake this gateway when buffered work arrives while it is idle. Persisted as `GATEWAY_RELAY_WAKE_URL`. Without it the gateway still drains buffered messages whenever it next reconnects. |
 
 :::note Managed installs
-`hermes gateway enroll` refuses to run in managed/hosted installs — there the
+`fulilian gateway enroll` refuses to run in managed/hosted installs — there the
 hosting platform provisions the relay secret directly into the container
 environment.
 :::
@@ -101,7 +101,7 @@ separate feature flag. Deployments that don't set it are unaffected.
 
 | Setting | Where | Meaning |
 |---------|-------|---------|
-| `GATEWAY_RELAY_URL` | env (`~/.hermes/.env`) | Connector relay WebSocket URL. Presence enables the relay platform. |
+| `GATEWAY_RELAY_URL` | env (`~/.fulilian/.env`) | Connector relay WebSocket URL. Presence enables the relay platform. |
 | `gateway.relay_url` | `config.yaml` | Same as above, config-file form (env takes precedence). |
 | `GATEWAY_RELAY_ID` | env | This gateway instance's id (written by `enroll`). |
 | `GATEWAY_RELAY_SECRET` | env | Per-gateway secret authenticating the WebSocket upgrade (written by `enroll`). |
@@ -161,7 +161,7 @@ outbound message tagged for the platform it targets.
 ## Troubleshooting
 
 **Enrollment fails with 401** — the connector could not verify your identity
-token. Re-login with `hermes auth add nous` (or `hermes setup`) and retry.
+token. Re-login with `fulilian auth add nous` (or `fulilian setup`) and retry.
 
 **Enrollment fails with 403** — the enrollment token is invalid, expired,
 already used, or belongs to a different tenant. Enrollment tokens are
@@ -183,7 +183,7 @@ stops reconnecting and reports relay as disabled rather than retrying. A 4401
 not-yet-provisioned race and retried normally.
 
 **Nothing changed after enrolling** — the gateway reads `GATEWAY_RELAY_*` at
-startup. Restart it (`hermes gateway restart`).
+startup. Restart it (`fulilian gateway restart`).
 
 **A feature (buttons, media, threads…) silently degrades to plain text** — the
 connector for your platform did not advertise that operation in its handshake

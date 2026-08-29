@@ -10,7 +10,7 @@ import { Loader2 } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 
 /**
- * The consent card for connecting a thing to Hermes, as pure presentation.
+ * The consent card for connecting a thing to Fulilian, as pure presentation.
  *
  * Deliberately knows nothing about MCP. It renders a subject, a state, and an
  * outcome, and it calls back — what a connector IS, how one connects, and

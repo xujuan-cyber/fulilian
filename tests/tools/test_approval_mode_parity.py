@@ -32,10 +32,10 @@ import pytest
 
 
 @pytest.fixture()
-def hermes_home(tmp_path, monkeypatch):
-    home = tmp_path / ".hermes"
+def fulilian_home(tmp_path, monkeypatch):
+    home = tmp_path / ".fulilian"
     home.mkdir()
-    monkeypatch.setenv("HERMES_HOME", str(home))
+    monkeypatch.setenv("FULILIAN_HOME", str(home))
     return home
 
 
@@ -44,8 +44,8 @@ def tui_server():
     with patch.dict(
         "sys.modules",
         {
-            "hermes_cli.env_loader": MagicMock(),
-            "hermes_cli.banner": MagicMock(),
+            "fulilian_cli.env_loader": MagicMock(),
+            "fulilian_cli.banner": MagicMock(),
         },
     ):
         yield importlib.import_module("tui_gateway.server")
@@ -107,11 +107,11 @@ def _approval_module():
 
 @pytest.mark.parametrize("yaml_text,expected_mode,expected_timeout", CASES)
 def test_mode_and_timeout_parity_across_surfaces(
-    hermes_home, tui_server, yaml_text, expected_mode, expected_timeout
+    fulilian_home, tui_server, yaml_text, expected_mode, expected_timeout
 ):
     approval_mod = _approval_module()
 
-    _write_config(hermes_home, yaml_text)
+    _write_config(fulilian_home, yaml_text)
 
     core_mode = approval_mod._get_approval_mode()
     core_timeout = approval_mod._get_approval_timeout()
@@ -136,7 +136,7 @@ def test_mode_and_timeout_parity_across_surfaces(
             )
 
 
-def test_tui_loader_delegates_to_core(hermes_home, tui_server):
+def test_tui_loader_delegates_to_core(fulilian_home, tui_server):
     """The TUI must not re-resolve mode itself — it delegates to the core.
 
     Pin the delegation seam directly: patching the core resolver changes

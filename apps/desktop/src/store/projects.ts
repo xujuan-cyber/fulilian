@@ -5,8 +5,8 @@ import {
   NO_PROJECT_ID,
   type SidebarProjectTree
 } from '@/app/chat/sidebar/projects/workspace-groups'
-import type { HermesGitBaseBranch, HermesGitBranch } from '@/global'
-import { getHermesConfig, hermesApi, type HermesGateway } from '@/hermes'
+import type { FulilianGitBaseBranch, FulilianGitBranch } from '@/global'
+import { getFulilianConfig, fulilianApi, type FulilianGateway } from '@/fulilian'
 import { translateNow } from '@/i18n'
 import { desktopDefaultCwd, isDesktopFsRemoteMode, selectDesktopPaths, writeDesktopFileText } from '@/lib/desktop-fs'
 import { desktopGit } from '@/lib/desktop-git'
@@ -30,7 +30,7 @@ import {
   setSessions,
   workspaceCwdForNewSession
 } from '@/store/session'
-import type { ProjectInfo, ProjectsPayload } from '@/types/hermes'
+import type { ProjectInfo, ProjectsPayload } from '@/types/fulilian'
 
 // First-class, per-profile Projects (named, multi-folder workspaces). State is
 // served by the live gateway's `projects.*` JSON-RPC methods, which wrap the
@@ -149,7 +149,7 @@ export const $reposScanning = atom(false)
 // chats land there, exactly as selecting a profile does.
 export const ALL_PROJECTS = '__all_projects__'
 
-const PROJECT_SCOPE_KEY = 'hermes.desktop.projectScope'
+const PROJECT_SCOPE_KEY = 'fulilian.desktop.projectScope'
 
 export const $projectScope = persistentAtom<string>(PROJECT_SCOPE_KEY, ALL_PROJECTS, {
   decode: raw => raw || ALL_PROJECTS,
@@ -341,7 +341,7 @@ async function gatewayRequest<T>(method: string, params: Record<string, unknown>
   }
 
   if (!gateway) {
-    throw new Error('Hermes gateway is not connected')
+    throw new Error('Fulilian gateway is not connected')
   }
 
   return gateway.request<T>(method, params)
@@ -365,7 +365,7 @@ function projectParams(
 }
 
 async function gatewayRequestOn<T>(
-  gateway: HermesGateway,
+  gateway: FulilianGateway,
   method: string,
   params: Record<string, unknown> = {}
 ): Promise<T> {
@@ -379,7 +379,7 @@ function isRetryableProjectTreeReadError(error: unknown): boolean {
 }
 
 interface ActiveProjectsContext {
-  gateway: HermesGateway
+  gateway: FulilianGateway
   profile: string
 }
 
@@ -401,7 +401,7 @@ async function activeProjectsContext(): Promise<ActiveProjectsContext> {
   }
 
   if (!gateway || gateway !== activeGateway() || profile !== projectProfile()) {
-    throw new Error('Active Hermes profile changed while connecting')
+    throw new Error('Active Fulilian profile changed while connecting')
   }
 
   return { gateway, profile }
@@ -552,7 +552,7 @@ async function refreshProjectTreeAcrossProfiles(): Promise<void> {
   $projectTreeLoading.set(true)
 
   try {
-    const res = await hermesApi<ProjectTreePayload>({
+    const res = await fulilianApi<ProjectTreePayload>({
       path: `/api/profiles/projects/tree?preview_limit=${PROJECT_TREE_PREVIEW_LIMIT}`,
       timeoutMs: PROJECT_TREE_REQUEST_TIMEOUT_MS
     })
@@ -679,8 +679,8 @@ interface RepoScanState {
   runningSignature?: string
 }
 
-const repoScanStates = new WeakMap<HermesGateway, RepoScanState>()
-const scanningGatewayGenerations = new WeakMap<HermesGateway, number>()
+const repoScanStates = new WeakMap<FulilianGateway, RepoScanState>()
+const scanningGatewayGenerations = new WeakMap<FulilianGateway, number>()
 
 function syncReposScanning(): void {
   const gateway = activeGateway()
@@ -693,7 +693,7 @@ export async function scanAndRecordRepos(force = false): Promise<void> {
   if (isDesktopFsRemoteMode()) {
     // On a remote backend the desktop can't crawl the host filesystem.
     // Ask the host to scan its own discovery roots (`projects.discover_repos`
-    // with `scan: true` — added in #81723) so repos with zero Hermes
+    // with `scan: true` — added in #81723) so repos with zero Fulilian
     // sessions still surface, then refresh the tree so the sidebar picks up
     // the merged session-derived + scanned list.
     try {
@@ -751,7 +751,7 @@ export async function scanAndRecordRepos(force = false): Promise<void> {
   let generation: number | undefined
 
   try {
-    const policy = repoDiscoveryPolicyFromConfig(await getHermesConfig(context.profile))
+    const policy = repoDiscoveryPolicyFromConfig(await getFulilianConfig(context.profile))
     const signature = repoDiscoveryPolicySignature(policy)
 
     if (!force && (state.completedSignature === signature || state.runningSignature === signature)) {
@@ -1204,7 +1204,7 @@ export function refreshWorktrees(): void {
 }
 
 // Spin up a fresh worktree the lightest way (`git worktree add -b`) under the
-// repo, returning where Hermes should start working. Git is the source of
+// repo, returning where Fulilian should start working. Git is the source of
 // truth; the caller starts a session in the returned path.
 export async function startWorkInRepo(
   repoPath: string,
@@ -1243,7 +1243,7 @@ export async function startWorkInRepo(
 // by hand first.
 // Empty on a non-repo. On a remote gateway the list comes from the backend's
 // /api/git/branches mirror, so it acts on the repo where sessions actually run.
-export async function listRepoBranches(repoPath: string): Promise<HermesGitBranch[]> {
+export async function listRepoBranches(repoPath: string): Promise<FulilianGitBranch[]> {
   const git = desktopGit()
 
   if (!git?.branchList || !repoPath) {
@@ -1257,7 +1257,7 @@ export async function listRepoBranches(repoPath: string): Promise<HermesGitBranc
 // new-worktree dialog. The remote default (origin/HEAD) is flagged so the
 // UI can preselect it. Empty on a non-repo; remote gateways serve it from the
 // backend's /api/git/base-branches mirror.
-export async function listBaseBranches(repoPath: string): Promise<HermesGitBaseBranch[]> {
+export async function listBaseBranches(repoPath: string): Promise<FulilianGitBaseBranch[]> {
   const git = desktopGit()
 
   if (!git?.baseBranchList || !repoPath) {
@@ -1352,14 +1352,14 @@ export async function removeWorktreePath(
 // Reveal a project/worktree path in the OS file manager (git-GUI standard).
 export async function revealPath(path: null | string): Promise<void> {
   if (path) {
-    await window.hermesDesktop?.revealPath?.(path)
+    await window.fulilianDesktop?.revealPath?.(path)
   }
 }
 
 // Copy a path to the clipboard (git-GUI standard).
 export async function copyPath(path: null | string): Promise<void> {
   if (path) {
-    await window.hermesDesktop?.writeClipboard?.(path)
+    await window.fulilianDesktop?.writeClipboard?.(path)
   }
 }
 

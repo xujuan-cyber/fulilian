@@ -168,7 +168,7 @@ def test_cli_and_cron_share_plugin_target_normalization(plugin_platform, monkeyp
         quiet=False,
     )
 
-    monkeypatch.setattr("hermes_cli.send_cmd._load_hermes_env", lambda: None)
+    monkeypatch.setattr("fulilian_cli.send_cmd._load_fulilian_env", lambda: None)
     with patch("gateway.config.load_gateway_config", return_value=config), \
          patch("tools.interrupt.is_interrupted", return_value=False), \
          patch("gateway.mirror.mirror_to_session", return_value=True), \
@@ -254,8 +254,8 @@ print(json.dumps({"host_send": host_send, "cron": cron,
 '''
     env = dict(os.environ)
     env.update({
-        "HERMES_HOME": str(home),
-        "HERMES_KANBAN_TASK": "fixture",
+        "FULILIAN_HOME": str(home),
+        "FULILIAN_KANBAN_TASK": "fixture",
         "PYTHONPATH": os.getcwd(),
     })
     completed = subprocess.run(

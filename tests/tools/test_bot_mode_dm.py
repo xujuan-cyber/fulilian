@@ -27,7 +27,7 @@ def _fresh_probe_cache():
 
 
 def _managed_home(tmp_path, *, teammates=("researcher",), peers=()) -> Path:
-    home = tmp_path / ".hermes"
+    home = tmp_path / ".fulilian"
     home.mkdir(exist_ok=True)
     for name in teammates:
         d = home / "profiles" / name
@@ -37,7 +37,7 @@ def _managed_home(tmp_path, *, teammates=("researcher",), peers=()) -> Path:
                 """\
                 description: teammate for tests
                 ui_meta:
-                  hermes-bots:
+                  fulilian-bots:
                     shape: cloud
                 """
             ),
@@ -101,7 +101,7 @@ def test_never_injects_outside_bot_chat(tmp_path, title):
 
 def test_never_injects_on_unmanaged_install(tmp_path):
     """A 'Bot Chat'-titled session on a plain install stays tool-free."""
-    home = tmp_path / ".hermes"
+    home = tmp_path / ".fulilian"
     home.mkdir()
     agent = _FakeAgent(home, title="Bot Chat")
     assert bot_mode_dm.ensure_message_agent_tool(agent) is False
@@ -141,7 +141,7 @@ def test_tool_refuses_outside_bot_chat(tmp_path):
 
 
 def test_tool_refuses_on_unmanaged_install(tmp_path):
-    home = tmp_path / ".hermes"
+    home = tmp_path / ".fulilian"
     home.mkdir()
     agent = _FakeAgent(home, title="Bot Chat")
     result = json.loads(
@@ -167,7 +167,7 @@ def test_cannot_message_self(tmp_path):
     home = _managed_home(tmp_path)
     agent = _FakeAgent(home, title="Bot Chat")  # default profile
     result = json.loads(
-        bot_mode_dm.message_agent_tool(target="hermes", message="hi", agent=agent)
+        bot_mode_dm.message_agent_tool(target="fulilian", message="hi", agent=agent)
     )
     assert "error" in result
     assert "yourself" in result["error"]
@@ -244,7 +244,7 @@ def test_local_delivery_command_and_ack(tmp_path, monkeypatch):
     mode, dm_file, transport_argv = _runner_parts(command)
     assert mode == "query-file"
     assert transport_argv == [
-        "hermes",
+        "fulilian",
         "-p",
         "researcher",
         "chat",
@@ -261,7 +261,7 @@ def test_local_delivery_command_and_ack(tmp_path, monkeypatch):
 
     # attribution prefix applied server-side; body verbatim inside the file
     content = Path(dm_file).read_text(encoding="utf-8")
-    assert content.startswith("Message from 🤖 hermes (@hermes): ")
+    assert content.startswith("Message from 🤖 fulilian (@fulilian): ")
     assert '$(and this is not shell)' in content
 
 
@@ -277,7 +277,7 @@ def test_peer_delivery_command(tmp_path, monkeypatch):
     assert "spark" in result["to"]
     mode, _dm_file, transport_argv = _runner_parts(calls[0]["command"])
     assert mode == "stdin"
-    assert transport_argv == ["hermes", "peer", "dm", "spark/researcher"]
+    assert transport_argv == ["fulilian", "peer", "dm", "spark/researcher"]
 
     # bare peer name targets the peer's main agent
     result2 = json.loads(
@@ -286,11 +286,11 @@ def test_peer_delivery_command(tmp_path, monkeypatch):
     assert result2["status"] == "sent"
     mode, _dm_file, transport_argv = _runner_parts(calls[1]["command"])
     assert mode == "stdin"
-    assert transport_argv == ["hermes", "peer", "dm", "spark"]
+    assert transport_argv == ["fulilian", "peer", "dm", "spark"]
 
 
 def test_named_profile_sender_prefix(tmp_path, monkeypatch):
-    """A named-profile bot signs with its own handle, not @hermes."""
+    """A named-profile bot signs with its own handle, not @fulilian."""
     calls = _capture_spawn(monkeypatch)
     home = _managed_home(tmp_path, teammates=("researcher", "coder"))
     profile_home = home / "profiles" / "coder"
@@ -367,7 +367,7 @@ def test_delivery_runner_unlinks_when_child_launch_raises(tmp_path, monkeypatch)
 
     monkeypatch.setattr(subprocess, "run", boom)
     with pytest.raises(RuntimeError, match="child launch failed"):
-        bot_mode_dm._run_delivery(["hermes"], str(dm_file), stdin_file=False)
+        bot_mode_dm._run_delivery(["fulilian"], str(dm_file), stdin_file=False)
     assert not dm_file.exists()
 
 
@@ -586,7 +586,7 @@ def test_write_dm_file_unlinks_partial_file_on_write_exception(tmp_path, monkeyp
 def test_sweeper_removes_only_stale_dm_files(tmp_path, monkeypatch):
     monkeypatch.setattr(bot_mode_dm.tempfile, "gettempdir", lambda: str(tmp_path))
     dm_dir = bot_mode_dm._dm_dir()
-    legacy_stale = tmp_path / "hermes-dm-stale.txt"
+    legacy_stale = tmp_path / "fulilian-dm-stale.txt"
     stale = dm_dir / "dm-stale.txt"
     fresh = dm_dir / "dm-fresh.txt"
     unrelated = tmp_path / "other.txt"

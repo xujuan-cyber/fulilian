@@ -17,7 +17,7 @@ from tools.setup_mcp_tool import setup_mcp_tool
 def test_requires_desktop_callback():
     result = json.loads(setup_mcp_tool(server="linear", callback=None))
     assert "error" in result
-    assert "hermes mcp install" in result["error"]
+    assert "fulilian mcp install" in result["error"]
 
 
 def test_requires_server_name():

@@ -1,6 +1,6 @@
-"""CLI entry point for the hermes-agent ACP adapter.
+"""CLI entry point for the fulilian-agent ACP adapter.
 
-Loads environment variables from ``~/.hermes/.env``, configures logging
+Loads environment variables from ``~/.fulilian/.env``, configures logging
 to write to stderr (so stdout is reserved for ACP JSON-RPC transport),
 and starts the ACP agent server.
 
@@ -8,26 +8,26 @@ Usage::
 
     python -m acp_adapter.entry
     # or
-    hermes acp
+    fulilian acp
     # or
-    hermes-acp
+    fulilian-acp
 """
 
-# IMPORTANT: hermes_bootstrap must be the very first import — UTF-8 stdio
-# on Windows.  No-op on POSIX.  See hermes_bootstrap.py for full rationale.
+# IMPORTANT: fulilian_bootstrap must be the very first import — UTF-8 stdio
+# on Windows.  No-op on POSIX.  See fulilian_bootstrap.py for full rationale.
 try:
-    import hermes_bootstrap  # noqa: F401
+    import fulilian_bootstrap  # noqa: F401
 except ModuleNotFoundError:
-    # Graceful fallback when hermes_bootstrap isn't registered in the venv
-    # yet — happens during partial ``hermes update`` where git-reset landed
+    # Graceful fallback when fulilian_bootstrap isn't registered in the venv
+    # yet — happens during partial ``fulilian update`` where git-reset landed
     # new code but ``uv pip install -e .`` didn't finish.  Missing bootstrap
     # means UTF-8 stdio setup is skipped on Windows; POSIX is unaffected.
     pass
 else:
     # Stop a ``utils/``/``proxy/``/``ui/`` package in the launch directory from
-    # shadowing Hermes's own modules — ``hermes acp`` can be started from any
+    # shadowing Fulilian's own modules — ``fulilian acp`` can be started from any
     # cwd, including a project that has same-named packages on its path.
-    hermes_bootstrap.harden_import_path()
+    fulilian_bootstrap.harden_import_path()
 
 import argparse
 import asyncio
@@ -35,7 +35,7 @@ import logging
 import os
 import sys
 from pathlib import Path
-from fulilian_constants import get_hermes_home
+from fulilian_constants import get_fulilian_home
 
 
 # Methods clients send as periodic liveness probes. They are not part of the
@@ -102,26 +102,26 @@ def _setup_logging() -> None:
 
 
 def _load_env() -> None:
-    """Load .env from HERMES_HOME (default ``~/.hermes``)."""
-    from fulilian_cli.env_loader import load_hermes_dotenv
+    """Load .env from FULILIAN_HOME (default ``~/.fulilian``)."""
+    from fulilian_cli.env_loader import load_fulilian_dotenv
 
-    hermes_home = get_hermes_home()
-    loaded = load_hermes_dotenv(hermes_home=hermes_home)
+    fulilian_home = get_fulilian_home()
+    loaded = load_fulilian_dotenv(fulilian_home=fulilian_home)
     if loaded:
         for env_file in loaded:
             logging.getLogger(__name__).info("Loaded env from %s", env_file)
     else:
         logging.getLogger(__name__).info(
-            "No .env found at %s, using system env", hermes_home / ".env"
+            "No .env found at %s, using system env", fulilian_home / ".env"
         )
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        prog="hermes-acp",
-        description="Run Hermes Agent as an ACP stdio server.",
+        prog="fulilian-acp",
+        description="Run FuLiLian as an ACP stdio server.",
     )
-    parser.add_argument("--version", action="store_true", help="Print Hermes version and exit")
+    parser.add_argument("--version", action="store_true", help="Print Fulilian version and exit")
     parser.add_argument(
         "--check",
         action="store_true",
@@ -130,12 +130,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--setup",
         action="store_true",
-        help="Run interactive Hermes provider/model setup for ACP terminal auth",
+        help="Run interactive Fulilian provider/model setup for ACP terminal auth",
     )
     parser.add_argument(
         "--setup-browser",
         action="store_true",
-        help="Install agent-browser + Playwright Chromium into ~/.hermes/node/ "
+        help="Install agent-browser + Playwright Chromium into ~/.fulilian/node/ "
              "for browser tool support. Idempotent.",
     )
     parser.add_argument(
@@ -150,25 +150,25 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def _print_version() -> None:
-    from fulilian_cli import __version__ as hermes_version
+    from fulilian_cli import __version__ as fulilian_version
 
-    print(hermes_version)
+    print(fulilian_version)
 
 
 def _run_check() -> None:
     import acp  # noqa: F401
-    from acp_adapter.server import HermesACPAgent  # noqa: F401
+    from acp_adapter.server import FulilianACPAgent  # noqa: F401
 
-    print("Hermes ACP check OK")
+    print("Fulilian ACP check OK")
 
 
 def _run_setup() -> None:
-    from fulilian_cli.main import main as hermes_main
+    from fulilian_cli.main import main as fulilian_main
 
     old_argv = sys.argv[:]
     try:
-        sys.argv = [old_argv[0] if old_argv else "hermes", "model"]
-        hermes_main()
+        sys.argv = [old_argv[0] if old_argv else "fulilian", "model"]
+        fulilian_main()
     finally:
         sys.argv = old_argv
 
@@ -239,7 +239,7 @@ def main(argv: list[str] | None = None) -> None:
     _load_env()
 
     logger = logging.getLogger(__name__)
-    logger.info("Starting hermes-agent ACP adapter")
+    logger.info("Starting fulilian-agent ACP adapter")
 
     # Ensure the project root is on sys.path so ``from run_agent import AIAgent`` works
     project_root = str(Path(__file__).resolve().parent.parent)
@@ -247,7 +247,7 @@ def main(argv: list[str] | None = None) -> None:
         sys.path.insert(0, project_root)
 
     import acp
-    from .server import HermesACPAgent
+    from .server import FulilianACPAgent
 
     # MCP tool discovery from config.yaml — fire-and-forget in a
     # background daemon thread so the ACP server becomes responsive
@@ -257,7 +257,7 @@ def main(argv: list[str] | None = None) -> None:
     # that path is unaffected.)  Moved from model_tools.py module scope
     # to avoid freezing the gateway's loop on lazy import (#16856).
     # Metadata-only hosts can opt out of unrelated global MCP startup.
-    if os.environ.get("HERMES_ACP_SKIP_CONFIGURED_MCP", "").strip() != "1":
+    if os.environ.get("FULILIAN_ACP_SKIP_CONFIGURED_MCP", "").strip() != "1":
         try:
             from fulilian_cli.mcp_startup import start_background_mcp_discovery
 
@@ -268,7 +268,7 @@ def main(argv: list[str] | None = None) -> None:
         except Exception:
             logger.debug("MCP tool discovery failed at ACP startup", exc_info=True)
 
-    agent = HermesACPAgent()
+    agent = FulilianACPAgent()
     try:
         asyncio.run(acp.run_agent(agent, use_unstable_protocol=True))
     except KeyboardInterrupt:

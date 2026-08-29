@@ -57,7 +57,7 @@ def test_share_nous_uploads_redacted_bundle(captured_upload):
     assert payload["upload_id"] == "abc123"
 
     envelope = _envelope(captured_upload["blob"])
-    assert envelope["format"].startswith("hermes-debug-share/")
+    assert envelope["format"].startswith("fulilian-debug-share/")
     assert envelope["redacted"] is True
     assert "report" in envelope["files"]
 

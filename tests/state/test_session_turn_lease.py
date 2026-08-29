@@ -10,8 +10,8 @@ from types import SimpleNamespace
 
 import pytest
 
-import hermes_state
-from hermes_state import SessionDB, SessionTurnLeaseLostError
+import fulilian_state
+from fulilian_state import SessionDB, SessionTurnLeaseLostError
 
 
 def test_turn_lease_serializes_separate_session_db_instances(tmp_path):
@@ -376,7 +376,7 @@ def test_acquire_turn_lease_retries_sqlite_lock(tmp_path, monkeypatch):
         attempts["n"] += 1
         if attempts["n"] == 1:
             raise sqlite3.OperationalError(
-                "database is locked (another Hermes process held the "
+                "database is locked (another Fulilian process held the "
                 "state.db write lock for over 20s)"
             )
         return original(*args, **kwargs)
@@ -429,7 +429,7 @@ def test_non_expired_turn_lease_from_dead_pid_is_reclaimed(
         return False
 
     monkeypatch.setattr(
-        hermes_state, "psutil", SimpleNamespace(pid_exists=pid_exists)
+        fulilian_state, "psutil", SimpleNamespace(pid_exists=pid_exists)
     )
 
     fresh_holder = "pid=525252:turn=fresh:platform=test"

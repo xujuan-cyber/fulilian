@@ -1,7 +1,7 @@
-"""On-demand worktree + branch reclaim (``hermes worktree`` / ``/worktree prune``).
+"""On-demand worktree + branch reclaim (``fulilian worktree`` / ``/worktree prune``).
 
 The startup pruner in ``cli._prune_stale_worktrees`` is deliberately
-conservative and silent: it runs before the banner on every ``hermes -w``
+conservative and silent: it runs before the banner on every ``fulilian -w``
 launch, so it only reaps clean, fully-merged scratch trees past an age tier
 and preserves everything else. That policy is correct for an unattended
 startup path — but it means real installs accumulate two kinds of debris the
@@ -10,7 +10,7 @@ startup pass can never touch:
 - **Preserved trees** whose only "dirt" is untracked scratch (PR body drafts,
   logs) on an otherwise merged branch — preserved forever by the dirty guard.
 - **Orphaned local branches** beyond the two auto-generated prefixes the
-  startup pass deletes (``hermes/hermes-*``, ``pr-*``): salvage lanes, port
+  startup pass deletes (``fulilian/fulilian-*``, ``pr-*``): salvage lanes, port
   branches, feature branches whose PRs merged months ago. Multi-agent boxes
   reach hundreds.
 
@@ -25,7 +25,7 @@ safe. Invariants shared with the startup pruner (never violated here either):
 - live-locked trees (owning pid alive) are never touched;
 - a branch is deleted only after its worktree removal succeeded — a failed
   removal must not orphan reachable commits;
-- untracked-only dirt is ARCHIVED to ``~/.hermes/archive/worktree-prune/``
+- untracked-only dirt is ARCHIVED to ``~/.fulilian/archive/worktree-prune/``
   before its tree is reaped, never destroyed.
 
 Classification primitives are imported from ``cli`` so the two paths can
@@ -147,7 +147,7 @@ def _archive_untracked(tree: Path, untracked: List[str]) -> Optional[Path]:
     """
     stamp = time.strftime("%Y%m%d-%H%M%S")
     dest = (
-        Path.home() / ".hermes" / "archive" / "worktree-prune"
+        Path.home() / ".fulilian" / "archive" / "worktree-prune"
         / f"{tree.name}-{stamp}"
     )
     try:
@@ -212,7 +212,7 @@ def audit_worktrees(repo_root: str, *, with_sizes: bool = True) -> List[TreeReco
 
         lock_state = _cli._worktree_lock_is_live(repo_root, str(entry), timeout=5)
         if lock_state == "live":
-            rec("keep", "in use by a running hermes session")
+            rec("keep", "in use by a running fulilian session")
             continue
 
         tracked_dirty, untracked = _dirty_split(str(entry))
@@ -306,7 +306,7 @@ def audit_branches(repo_root: str) -> List[BranchRecord]:
     upstream (fully merged OR every commit patch-equivalent via ``git
     cherry``) and they are not checked out anywhere.
 
-    Generalizes the startup pass's prefix list (``hermes/hermes-*``/``pr-*``)
+    Generalizes the startup pass's prefix list (``fulilian/fulilian-*``/``pr-*``)
     to EVERY local branch, because deletion is gated on content reachability
     rather than name: a branch whose commits are all upstream loses nothing
     when its ref goes. Branch names checked out in any worktree, protected
@@ -376,7 +376,7 @@ def audit_branches(repo_root: str) -> List[BranchRecord]:
     if workers > 1:
         try:
             with concurrent.futures.ThreadPoolExecutor(
-                max_workers=workers, thread_name_prefix="hermes-branch-gc"
+                max_workers=workers, thread_name_prefix="fulilian-branch-gc"
             ) as pool:
                 return list(pool.map(_classify_branch, branches))
         except Exception:

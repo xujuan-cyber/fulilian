@@ -3,9 +3,9 @@ explicit ``encoding=`` triggers ``UnicodeDecodeError`` on Chinese Windows
 (cp936/GBK default encoding).
 
 PR #55339 covers 21 call sites in ``agent/``, ``gateway/``, ``cli.py``,
-``cron/``, plus 5 more in ``tools/`` and ``hermes_cli/`` (main.py,
+``cron/``, plus 5 more in ``tools/`` and ``fulilian_cli/`` (main.py,
 setup.py, tts_tool.py, transcription_tools.py). The two call sites it
-misses — ``hermes_cli/onepassword_secrets_cli.py::_op_whoami`` and
+misses — ``fulilian_cli/onepassword_secrets_cli.py::_op_whoami`` and
 ``_op_version`` — are guarded here.
 
 Without ``encoding=``, ``text=True`` decodes child output with

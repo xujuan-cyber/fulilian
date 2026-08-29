@@ -1,8 +1,8 @@
 """Import sessions from foreign coding agents (Claude Code, Codex CLI).
 
-``hermes sessions import`` (and ``--resume @claude`` / ``--resume @codex``)
+``fulilian sessions import`` (and ``--resume @claude`` / ``--resume @codex``)
 let a user pull a conversation they started in another agent CLI into
-Hermes and continue it here.
+Fulilian and continue it here.
 
 Sources (read-only — foreign files are never modified):
 
@@ -23,7 +23,7 @@ Sources (read-only — foreign files are never modified):
   real rollout files, Codex CLI 0.147.)
 
 Conversion contract — imported history must satisfy the provider
-role-alternation invariant Hermes enforces everywhere else:
+role-alternation invariant Fulilian enforces everywhere else:
 
 * only plain ``user`` / ``assistant`` text messages are produced (tool
   calls become short bracketed summaries inside the assistant text; we
@@ -318,9 +318,9 @@ _SOURCE_DB_NAMES = {"claude": "claude-code", "codex": "codex-cli"}
 
 
 def import_foreign_session(source: str, path, db=None) -> str:
-    """Import one foreign session into the Hermes SessionDB.
+    """Import one foreign session into the Fulilian SessionDB.
 
-    Returns the new Hermes session id.  The foreign file is only read.
+    Returns the new Fulilian session id.  The foreign file is only read.
     Raises ``ValueError`` on unknown source or a session with no usable
     conversation turns.
     """
@@ -352,7 +352,7 @@ def import_foreign_session(source: str, path, db=None) -> str:
 
     owns_db = db is None
     if owns_db:
-        from hermes_state import SessionDB
+        from fulilian_state import SessionDB
 
         db = SessionDB()
     try:
@@ -429,7 +429,7 @@ def pick_foreign_session(
     if not sys.stdin.isatty():
         print(
             "Non-interactive terminal — pass the file path directly:\n"
-            "  hermes sessions import --from claude|codex <path>"
+            "  fulilian sessions import --from claude|codex <path>"
         )
         return None
     try:
@@ -451,7 +451,7 @@ def pick_foreign_session(
 
 
 def run_sessions_import(args, db=None) -> Optional[str]:
-    """`hermes sessions import` entry point. Returns new session id or None."""
+    """`fulilian sessions import` entry point. Returns new session id or None."""
     source = getattr(args, "from_source", None)
     path = getattr(args, "path", None)
 
@@ -485,5 +485,5 @@ def run_sessions_import(args, db=None) -> Optional[str]:
         return None
     label = _SOURCE_LABELS.get(source, source)
     print(f"✓ Imported {label} session as {session_id}")
-    print(f"  Continue it with:  hermes --resume {session_id}")
+    print(f"  Continue it with:  fulilian --resume {session_id}")
     return session_id

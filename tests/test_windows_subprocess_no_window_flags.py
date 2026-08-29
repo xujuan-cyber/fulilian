@@ -40,7 +40,7 @@ def _spawns(captured, *needles):
 def _is_git_spawn(cmd) -> bool:
     """True only for a ``git -C <cwd> ...`` spawn.
 
-    ``bounded_git_probe`` lives in ``hermes_cli._subprocess_compat`` and both
+    ``bounded_git_probe`` lives in ``fulilian_cli._subprocess_compat`` and both
     probe call sites delegate to it, so these tests patch
     ``_subprocess_compat.subprocess.Popen`` — which is the shared ``subprocess``
     module singleton, i.e. a process-wide patch. Any unrelated daemon spawn

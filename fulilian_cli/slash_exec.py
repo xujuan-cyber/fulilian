@@ -1,7 +1,7 @@
 """Registry-owned slash command execution (thin slice).
 
 Shared, surface-independent executors for informational slash commands.
-``CommandDef.execute`` (hermes_cli/commands.py) names a key in
+``CommandDef.execute`` (fulilian_cli/commands.py) names a key in
 :data:`EXECUTORS`; each surface (CLI REPL, gateway, TUI slash worker via the
 CLI) resolves that key through :func:`run_execute` and applies only its own
 decoration (Rich markup, emoji/markdown, ``_telegramize_command_mentions``)
@@ -9,10 +9,10 @@ to the canonical :class:`CommandReply`.
 
 Invariant: an executor's output depends only on ``ctx.args`` / ``ctx.options``
 — never on ``ctx.surface`` — so the core text is identical across surfaces
-for a fixed context (enforced by tests/hermes_cli/test_commands_execute.py).
+for a fixed context (enforced by tests/fulilian_cli/test_commands_execute.py).
 
 Import discipline: this module imports nothing heavy at module level and
-``hermes_cli.commands`` does NOT import this module (the ``execute`` field is
+``fulilian_cli.commands`` does NOT import this module (the ``execute`` field is
 a plain string), so the gateway can keep importing ``commands.py`` without
 prompt_toolkit and without cycles.
 """
@@ -96,9 +96,9 @@ def _exec_profile(ctx: CommandContext) -> CommandReply:
 
         profile_name = get_active_profile_name()
     if not home_display:
-        from fulilian_constants import display_hermes_home
+        from fulilian_constants import display_fulilian_home
 
-        home_display = display_hermes_home()
+        home_display = display_fulilian_home()
 
     # Presentation-only display name (profile.yaml). `data.profile` stays
     # the canonical id — consumers route on it; only the text gets the label.
@@ -136,7 +136,7 @@ def _exec_bundles(ctx: CommandContext) -> CommandReply:
     if not bundles:
         return CommandReply(
             "No skill bundles installed.\n"
-            "Create one with: hermes bundles create <name> --skill <s1> --skill <s2>\n"
+            "Create one with: fulilian bundles create <name> --skill <s1> --skill <s2>\n"
             f"Directory: {bundles_dir}",
             data={"bundles": [], "dir": bundles_dir},
         )

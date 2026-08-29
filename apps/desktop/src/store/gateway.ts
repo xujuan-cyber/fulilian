@@ -1,8 +1,8 @@
-import { type ConnectionState, type GatewayEvent, registryBackendScopeKey, resolveGatewayWsUrl } from '@hermes/shared'
+import { type ConnectionState, type GatewayEvent, registryBackendScopeKey, resolveGatewayWsUrl } from '@fulilian/shared'
 import { atom } from 'nanostores'
 
-import type { HermesConnection } from '@/global'
-import { HermesGateway, setApiRequestConnection } from '@/hermes'
+import type { FulilianConnection } from '@/global'
+import { FulilianGateway, setApiRequestConnection } from '@/fulilian'
 import { reconnectBackoffDelayMs } from '@/lib/reconnect-backoff'
 import { RECONNECT_ATTEMPT_TIMEOUT_MS, withTimeout } from '@/lib/with-timeout'
 import { markNativeNotifyBaseline } from '@/store/notify-baseline'
@@ -22,7 +22,7 @@ const normKey = (profile: string | null | undefined): string => (profile ?? '').
 
 // Read connection state through a call so TS control-flow analysis doesn't
 // narrow the getter to a constant across guards (it genuinely changes).
-const isOpen = (gateway: HermesGateway | null): boolean => gateway?.connectionState === 'open'
+const isOpen = (gateway: FulilianGateway | null): boolean => gateway?.connectionState === 'open'
 
 interface RegistryConfig {
   /** Electron's published descriptor is authoritative for a primary gateway's
@@ -31,7 +31,7 @@ interface RegistryConfig {
   activeConnectionId?: () => null | string
   onEvent: (event: GatewayEvent) => void
   onActiveConnectionInvalidated?: (fallbackProfile: string, activationEpoch: number) => void
-  onActiveConnectionChanged?: (connection: HermesConnection) => void
+  onActiveConnectionChanged?: (connection: FulilianConnection) => void
   /**
    * Fires whenever applyActive() moves the active route to a (possibly
    * different) profile — including registry-internal eviction fallbacks
@@ -63,8 +63,8 @@ interface Secondary {
   profile: string
   /** Registry connection serving this socket; null = the local/legacy path. */
   connectionId: null | string
-  connection: HermesConnection | null
-  gateway: HermesGateway
+  connection: FulilianConnection | null
+  gateway: FulilianGateway
   /** True after this entry completed at least one socket connection. */
   openedOnce: boolean
   activeRequests: number
@@ -130,7 +130,7 @@ const ACTIVATION_LEASE_MS = 30_000
 // runtime behavior is identical to plain module state.
 interface GatewayRegistryState {
   config: RegistryConfig | null
-  primaryGateway: HermesGateway | null
+  primaryGateway: FulilianGateway | null
   /** Registry source currently served by primaryGateway, when known. */
   primaryConnectionId: null | string
   primaryProfile: string
@@ -143,11 +143,11 @@ interface GatewayRegistryState {
   turnLeases: Map<string, () => void>
   /** Debounced releases so an immediate chained turn can reuse its lease. */
   turnLeaseReleaseTimers: Map<string, ReturnType<typeof setTimeout>>
-  $gateway: ReturnType<typeof atom<HermesGateway | null>>
+  $gateway: ReturnType<typeof atom<FulilianGateway | null>>
   $activeProfile: ReturnType<typeof atom<string>>
 }
 
-const STATE_KEY = Symbol.for('hermes.desktop.gatewayRegistryState')
+const STATE_KEY = Symbol.for('fulilian.desktop.gatewayRegistryState')
 
 function createRegistryState(): GatewayRegistryState {
   return {
@@ -164,7 +164,7 @@ function createRegistryState(): GatewayRegistryState {
     // The active gateway instance, exposed for inline message-stream
     // components (inline ClarifyTool, model overlays) that call gateway
     // methods without the instance threaded down through props.
-    $gateway: atom<HermesGateway | null>(null),
+    $gateway: atom<FulilianGateway | null>(null),
     // The PROFILE the active gateway is routed to (bare profile name, never a
     // composite registry scope). Owned exclusively by applyActive() so the
     // published profile can never diverge from the socket actually selected —
@@ -236,7 +236,7 @@ export function emitLocalGatewayEvent(event: GatewayEvent): void {
   g.config?.onEvent(event)
 }
 
-export function setPrimaryGateway(gateway: HermesGateway | null, profile = 'default'): void {
+export function setPrimaryGateway(gateway: FulilianGateway | null, profile = 'default'): void {
   const next = normKey(profile)
 
   if (g.primaryGateway !== gateway) {
@@ -281,7 +281,7 @@ export function setPrimaryGatewayConnectionId(connectionId: null | string | unde
 }
 
 /** Publish the registry source owned by the window primary socket. */
-export function setPrimaryGatewayConnection(connection: Pick<HermesConnection, 'connectionId'> | null): void {
+export function setPrimaryGatewayConnection(connection: Pick<FulilianConnection, 'connectionId'> | null): void {
   setPrimaryGatewayConnectionId(connection?.connectionId)
 }
 
@@ -305,7 +305,7 @@ export function gatewayActivationEpoch(): number {
   return Number.isFinite(g.activationEpoch) ? g.activationEpoch : 0
 }
 
-export function activeGateway(): HermesGateway | null {
+export function activeGateway(): FulilianGateway | null {
   if (g.activeKey === g.primaryProfile) {
     return g.primaryGateway
   }
@@ -394,7 +394,7 @@ function applyActive(profile: string, activationEpoch: number): boolean {
   const gateway = activeGateway()
   g.$gateway.set(gateway)
   setGatewayState(gateway?.connectionState ?? 'closed')
-  // Push the active scope's registry connection into the hermes module (null
+  // Push the active scope's registry connection into the fulilian module (null
   // for the local pool) so connection-building WS calls (pluginSocket) resolve
   // through the same source of truth every activation path maintains here —
   // registry-agent activations included, not just profile switches.
@@ -416,7 +416,7 @@ function applyActive(profile: string, activationEpoch: number): boolean {
   return true
 }
 
-function publishActiveConnection(connection: HermesConnection): void {
+function publishActiveConnection(connection: FulilianConnection): void {
   if (g.config?.onActiveConnectionChanged) {
     g.config.onActiveConnectionChanged(connection)
   } else {
@@ -432,7 +432,7 @@ function clearTimer(entry: Secondary): void {
 }
 
 async function openSecondary(entry: Secondary): Promise<void> {
-  const desktop = window.hermesDesktop
+  const desktop = window.fulilianDesktop
 
   if (!desktop) {
     return
@@ -645,7 +645,7 @@ function isMissingProfileError(error: unknown): boolean {
 }
 
 function createSecondary(profile: string, connectionId: null | string = null): Secondary {
-  const gateway = new HermesGateway()
+  const gateway = new FulilianGateway()
   const scope = registryBackendScopeKey(connectionId, profile)
 
   const entry: Secondary = {
@@ -708,7 +708,7 @@ function createSecondary(profile: string, connectionId: null | string = null): S
 // poisons the active gateway with "not connected" even though the primary is
 // open right next to it.
 async function sharedPrimaryRoute(profile: string): Promise<boolean> {
-  const desktop = window.hermesDesktop
+  const desktop = window.fulilianDesktop
 
   if (!desktop) {
     return false
@@ -737,7 +737,7 @@ async function sharedPrimaryRoute(profile: string): Promise<boolean> {
 async function gatewayForProfile(
   profile: string,
   leaseRequest = false
-): Promise<{ gateway: HermesGateway | null; key: string; release: () => void; scopeProfile: boolean }> {
+): Promise<{ gateway: FulilianGateway | null; key: string; release: () => void; scopeProfile: boolean }> {
   const key = normKey(profile)
   const noRelease = () => undefined
 
@@ -821,7 +821,7 @@ export async function requestGatewayForProfile<T>(
 
   try {
     if (!route.gateway) {
-      throw new Error(`Hermes gateway unavailable for profile "${route.key}"`)
+      throw new Error(`Fulilian gateway unavailable for profile "${route.key}"`)
     }
 
     const routedParams = route.scopeProfile ? { ...params, profile: route.key } : params
@@ -870,8 +870,8 @@ export async function requestGatewayForAgent<T>(
     return requestGatewayForProfile<T>(key, method, params, timeoutMs, signal)
   }
 
-  if (!window.hermesDesktop?.getConnectionFor) {
-    throw new Error('This Desktop build cannot dial registry connections. Update Hermes Desktop.')
+  if (!window.fulilianDesktop?.getConnectionFor) {
+    throw new Error('This Desktop build cannot dial registry connections. Update Fulilian Desktop.')
   }
 
   const entry = g.secondaries.get(scope) ?? createSecondary(key, connectionId)
@@ -1054,7 +1054,7 @@ export async function retainGatewayForAgent(connectionId: null | string, profile
     return route.release
   }
 
-  if (!window.hermesDesktop?.getConnectionFor) {
+  if (!window.fulilianDesktop?.getConnectionFor) {
     // No registry dialing in this build — nothing to hold; the request path
     // will throw its own actionable error.
     return () => undefined
@@ -1268,8 +1268,8 @@ export async function openGatewayForAgent(
     return openGatewayForProfile(profile)
   }
 
-  if (!window.hermesDesktop?.getConnectionFor) {
-    throw new Error('This Desktop build cannot dial registry connections. Update Hermes Desktop.')
+  if (!window.fulilianDesktop?.getConnectionFor) {
+    throw new Error('This Desktop build cannot dial registry connections. Update Fulilian Desktop.')
   }
 
   const entry = g.secondaries.get(scope) ?? createSecondary(profile, connectionId)
@@ -1314,8 +1314,8 @@ export async function ensureGatewayForAgent(
     return !signal?.aborted
   }
 
-  if (!window.hermesDesktop?.getConnectionFor) {
-    throw new Error('This Desktop build cannot dial registry connections. Update Hermes Desktop.')
+  if (!window.fulilianDesktop?.getConnectionFor) {
+    throw new Error('This Desktop build cannot dial registry connections. Update Fulilian Desktop.')
   }
 
   const activationEpoch = beginGatewayActivation()
@@ -1450,7 +1450,7 @@ export async function ensureGatewayForProfile(profile: string): Promise<void> {
 
 // Reconnect the active gateway after a transient request failure. Primary
 // reconnects are owned by use-gateway-boot, so we only drive secondaries here.
-export async function ensureActiveGatewayOpen(): Promise<HermesGateway | null> {
+export async function ensureActiveGatewayOpen(): Promise<FulilianGateway | null> {
   if (g.activeKey === g.primaryProfile) {
     return g.primaryGateway
   }
@@ -1468,7 +1468,7 @@ export async function ensureActiveGatewayOpen(): Promise<HermesGateway | null> {
   if (!isOpen(entry.gateway)) {
     // A remote/registry secondary can still be ACTIVATING (backend waking,
     // socket dialing). Failing instantly turned a routine cold start into
-    // "Hermes gateway is not connected" on the Sessions `+` action (#88880).
+    // "Fulilian gateway is not connected" on the Sessions `+` action (#88880).
     // Wait a bounded beat for the in-flight activation instead of erroring;
     // a genuinely dead gateway still returns null when the window closes.
     const deadline = Date.now() + ACTIVE_GATEWAY_OPEN_WAIT_MS
@@ -1514,7 +1514,7 @@ export function reconnectSecondaryGateways({ forceOpenSockets = false }: { force
 // Keep the idle reaper from killing a backend we still need: ping every live
 // secondary. The active one is pinged separately (touchActiveGatewayBackend).
 export function touchSecondaryGateways(): void {
-  const desktop = window.hermesDesktop
+  const desktop = window.fulilianDesktop
 
   for (const entry of g.secondaries.values()) {
     if (entry.wantOpen) {
