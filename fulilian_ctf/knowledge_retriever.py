@@ -15,6 +15,7 @@ FTS5 使用 trigram tokenizer 兼顾中英文搜索。
 
 from __future__ import annotations
 
+import os
 import re
 import sqlite3
 from pathlib import Path
