@@ -7,6 +7,7 @@ Registered in the ``ctf_solve`` toolset.
 
 from __future__ import annotations
 
+import inspect
 import os
 import subprocess
 from pathlib import Path
@@ -14,6 +15,23 @@ from pathlib import Path
 from tools.registry import registry
 
 FLAG_FILENAME = "FLAG"
+
+
+def _unpack(handler):
+    """适配 registry.dispatch 的调用约定。
+
+    dispatch 调用 ``handler(args_dict, **context_kwargs)``（task_id /
+    session_id / user_task 等运行时上下文走 kwargs），而本模块的 impl 均
+    为命名参数风格。此适配器把 args_dict 解包为命名参数，只传 impl 声明过
+    的键——模型多传的键（如习惯性带上 task_id）与上下文 kwargs 一并丢弃，
+    避免 TypeError 使校验门/提交门整体失效。
+    """
+    accepted = set(inspect.signature(handler).parameters)
+
+    def wrapper(args, **_context_kw):
+        return handler(**{k: v for k, v in (args or {}).items() if k in accepted})
+
+    return wrapper
 
 
 # ── 工具实现 ─────────────────────────────────────────────────────────
@@ -180,7 +198,7 @@ registry.register(
             },
         },
     },
-    handler=_verify_flag_impl,
+    handler=_unpack(_verify_flag_impl),
     description="Verify a flag candidate against evidence",
 )
 
@@ -207,7 +225,7 @@ registry.register(
             },
         },
     },
-    handler=_submit_flag_impl,
+    handler=_unpack(_submit_flag_impl),
     description="Submit the flag from the workspace FLAG file",
 )
 
@@ -244,7 +262,7 @@ registry.register(
             },
         },
     },
-    handler=_record_fact_impl,
+    handler=_unpack(_record_fact_impl),
     description="Publish a confirmed/refuted finding to the blackboard",
 )
 
@@ -274,7 +292,7 @@ registry.register(
             },
         },
     },
-    handler=_git_auto_commit_impl,
+    handler=_unpack(_git_auto_commit_impl),
     description="Auto-commit solve progress to git",
 )
 
@@ -299,7 +317,7 @@ registry.register(
             },
         },
     },
-    handler=_checkpoint_impl,
+    handler=_unpack(_checkpoint_impl),
     description="Save current solve state checkpoint",
 )
 
@@ -346,7 +364,7 @@ registry.register(
             },
         },
     },
-    handler=_compile_check_impl,
+    handler=_unpack(_compile_check_impl),
     description="Syntax-check a source file and return compiler diagnostics",
 )
 
@@ -371,6 +389,6 @@ registry.register(
             },
         },
     },
-    handler=_generate_writeup_impl,
+    handler=_unpack(_generate_writeup_impl),
     description="Auto-generate CTF writeup from session",
 )
