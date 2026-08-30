@@ -848,7 +848,7 @@ def _print_curator_first_run_notice() -> None:
     print("  Preview now:  fulilian curator run --dry-run")
     print("  Pause it:     fulilian curator pause")
     print(
-        "  Docs:         https://github.com/xujuan-cyber/fulilian/docs/user-guide/features/curator"
+        "  Docs:         https://github.com/xujuan-cyber/fulilians/user-guide/features/curator"
     )
 
 def _print_fts_optimize_available_notice() -> None:
@@ -1860,7 +1860,7 @@ def _update_via_zip(args, *, had_desktop_app_before_update: bool = False) -> boo
         _m().sys.exit(1)
     _abort_zip_update_if_dirty_tree()
     zip_url = (
-        f"https://github.com/xujuan-cyber/fulilian/archive/refs/heads/{branch}.zip"
+        f"https://github.com/xujuan-cyber/fulilians/heads/{branch}.zip"
     )
 
     print("→ Downloading latest version...")

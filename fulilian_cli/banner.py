@@ -604,7 +604,7 @@ def _compute_git_banner_state(repo_dir: Optional[Path] = None) -> Optional[dict]
     return {"upstream": upstream, "local": local, "ahead": max(ahead, 0)}
 
 
-_RELEASE_URL_BASE = "https://github.com/xujuan-cyber/fulilian/releases/tag"
+_RELEASE_URL_BASE = "https://github.com/xujuan-cyber/fulilianses/tag"
 _latest_release_cache: Optional[tuple] = None  # (tag, url) once resolved
 
 

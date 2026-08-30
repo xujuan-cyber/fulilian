@@ -284,7 +284,7 @@ describe('SkillsView toolset management', { timeout: 60_000 }, () => {
       window.dispatchEvent(
         new MessageEvent('message', {
           data: { type: 'fulilian-skill-pick', name: 'web-research', identifier: 'web-research' },
-          origin: 'https://hermes-agent.nousresearch.com'
+          origin: 'https://github.com/xujuan-cyber/fulilian'
         })
       )
     })

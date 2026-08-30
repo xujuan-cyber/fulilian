@@ -972,7 +972,7 @@ export const en: Translations = {
       sshErrHostKey:
         'The host key has CHANGED since you last connected. Verify this is expected, then run ssh-keygen -R <host> and reconnect.',
       sshErrNotInstalled:
-        'Fulilian is not installed on the remote host. Install it there (curl -fsSL https://hermes-agent.nousresearch.com/install.sh | sh) or set the Fulilian path.',
+        'Fulilian is not installed on the remote host. Install it there (curl -fsSL https://github.com/xujuan-cyber/fulilianstall.sh | sh) or set the Fulilian path.',
       sshErrPlatform:
         'Unsupported remote platform. Fulilian Desktop SSH mode supports Linux, macOS, and Windows remote hosts.',
       sshErrTimeout: 'SSH connection timed out. The host may be unreachable or asleep.',
