@@ -3,7 +3,7 @@
 [project]
 name = "fulilian"
 version = "0.1.0"
-description = "FuLiLian — a CTF-dedicated agent CLI built on the Hermes Agent codebase, with scheduling engine, verification gate, and knowledge system"
+description = "FuLiLian — a CTF & forensics dedicated agent CLI with scheduling engine, verification gate, and knowledge system"
 readme = "README.md"
 # Upper bound is load-bearing, not cosmetic. uv resolves the project's
 # Python from `requires-python`, and an inherited `UV_PYTHON` env var (or a
@@ -13,7 +13,7 @@ readme = "README.md"
 # <3.14 makes uv refuse 3.14 with a clear error instead of attempting that
 # build. Raise the ceiling once our Rust transitives ship cp314 wheels.
 requires-python = ">=3.11,<3.14"
-authors = [{ name = "Nous Research" }]
+authors = [{ name = "xujuan" }]
 license = "MIT"
 license-files = ["LICENSE"]
 dependencies = [
@@ -292,22 +292,22 @@ azure-identity = ["azure-identity==1.25.3"]
 termux = [
   # Baseline Android / Termux path for reliable fresh installs.
   "python-telegram-bot[webhooks]==22.8",
-  "fulilian-agent[cron]",
-  "fulilian-agent[mcp]",
-  "fulilian-agent[honcho]",
-  "fulilian-agent[acp]",
+  "fulilian[cron]",
+  "fulilian[mcp]",
+  "fulilian[honcho]",
+  "fulilian[acp]",
 ]
 termux-all = [
   # Best-effort "install all" profile for Termux. Same policy as [all]:
   # only includes extras that aren't covered by `tools/lazy_deps.py`.
   # Backends like telegram/slack/dingtalk/feishu/honcho lazy-install at
   # first use, so they're no longer eager-installed here.
-  "fulilian-agent[termux]",
-  "fulilian-agent[google]",
-  "fulilian-agent[homeassistant]",
-  "fulilian-agent[sms]",
-  "fulilian-agent[web]",
-  "fulilian-agent[pty]",
+  "fulilian[termux]",
+  "fulilian[google]",
+  "fulilian[homeassistant]",
+  "fulilian[sms]",
+  "fulilian[web]",
+  "fulilian[pty]",
 ]
 dingtalk = ["dingtalk-stream==0.24.3", "alibabacloud-dingtalk==2.2.42", "qrcode==7.4.2"]
 feishu = ["lark-oapi==1.6.8", "qrcode==7.4.2"]
@@ -360,15 +360,15 @@ all = [
   # [all], `uv sync --locked` on Windows tried to build it from sdist
   # and failed on `make`. Lazy-install routes that build to first use,
   # where the user is expected to have a toolchain available.
-  "fulilian-agent[cron]",
-  "fulilian-agent[pty]",
-  "fulilian-agent[mcp]",
-  "fulilian-agent[homeassistant]",
-  "fulilian-agent[sms]",
-  "fulilian-agent[acp]",
-  "fulilian-agent[google]",
-  "fulilian-agent[web]",
-  "fulilian-agent[youtube]",
+  "fulilian[cron]",
+  "fulilian[pty]",
+  "fulilian[mcp]",
+  "fulilian[homeassistant]",
+  "fulilian[sms]",
+  "fulilian[acp]",
+  "fulilian[google]",
+  "fulilian[web]",
+  "fulilian[youtube]",
 ]
 
 [build-system]
