@@ -3,7 +3,7 @@
   "updated_at": "2026-08-27T11:03:10Z",
   "metadata": {
     "source": "fulilian-agent repo",
-    "docs": "https://hermes-agent.nousresearch.com/docs/reference/model-catalog"
+    "docs": "https://github.com/xujuan-cyber/fulilian"
   },
   "providers": {
     "openrouter": {

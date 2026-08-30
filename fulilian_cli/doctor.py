@@ -2199,13 +2199,42 @@ def run_doctor(args):
 
     if sys.platform != "win32":
         _section("Command Installation")
-        # Determine the venv entry point location
+        # Determine the venv entry point location. Candidates must actually
+        # run (`--version` exits 0) — a leftover entry point whose shebang
+        # points at a removed interpreter would otherwise be taken as the
+        # expected symlink target and produce false "wrong target" warnings.
+        def _venv_entry_point_works(_candidate: Path) -> bool:
+            try:
+                _proc = subprocess.run(
+                    [str(_candidate), "--version"],
+                    capture_output=True,
+                    timeout=15,
+                )
+                return _proc.returncode == 0
+            except Exception:
+                return False
+
         _venv_bin = None
         for _venv_name in ("venv", ".venv"):
             _candidate = PROJECT_ROOT / _venv_name / "bin" / "fulilian"
-            if _candidate.exists():
+            if _candidate.exists() and _venv_entry_point_works(_candidate):
                 _venv_bin = _candidate
                 break
+        if _venv_bin is None:
+            # Fallbacks for installs outside the project tree (e.g. a
+            # user-level venv via `pip install -e .`): prefer the venv this
+            # CLI is actually running from, then whatever the existing
+            # `fulilian` command symlink points at.
+            if sys.prefix != getattr(sys, "base_prefix", sys.prefix):
+                _running = Path(sys.executable).parent / "fulilian"
+                if _running.exists():
+                    _venv_bin = _running
+            if _venv_bin is None:
+                _which = shutil.which("fulilian")
+                if _which and Path(_which).is_symlink():
+                    _target = Path(_which).resolve()
+                    if _target.name == "fulilian" and _target.exists() and PROJECT_ROOT not in _target.parents:
+                        _venv_bin = _target
 
         # Determine the expected command link directory (mirrors install.sh logic)
         _prefix = os.environ.get("PREFIX", "")
@@ -2227,7 +2256,12 @@ def run_doctor(args):
                 f"Reinstall entry point: cd {PROJECT_ROOT} && source venv/bin/activate && pip install -e '.[all]'"
             )
         else:
-            check_ok(f"Venv entry point exists ({_venv_bin.relative_to(PROJECT_ROOT)})")
+            try:
+                _venv_bin_display = str(_venv_bin.relative_to(PROJECT_ROOT))
+            except ValueError:
+                # Entry point lives outside the project tree (external venv)
+                _venv_bin_display = str(_venv_bin)
+            check_ok(f"Venv entry point exists ({_venv_bin_display})")
 
             # Check the symlink at the command link location
             if _cmd_link.is_symlink():
@@ -2271,6 +2305,32 @@ def run_doctor(args):
                         manual_issues.append(f"Add {_cmd_link_display} to your PATH")
                 else:
                     issues.append(f"Missing {_cmd_link_display}/fulilian symlink — run 'fulilian doctor --fix'")
+
+        # fll short alias (same entry point as fulilian)
+        _fll_link = _cmd_link_dir / "fll"
+        if _fll_link.is_symlink() and _venv_bin is not None:
+            _fll_target = _fll_link.resolve()
+            # The venv ships its own `fll` entry point (pyproject scripts);
+            # accept it, or the shared `fulilian` entry point for setups
+            # that symlink the alias directly onto the main command.
+            _fll_expected = [
+                _p.resolve()
+                for _p in (_venv_bin.parent / "fll", _venv_bin)
+                if _p.exists()
+            ]
+            if _fll_target in _fll_expected:
+                check_ok(f"{_cmd_link_display}/fll → correct target (short alias)")
+            else:
+                check_warn(
+                    f"{_cmd_link_display}/fll points to wrong target",
+                    f"(→ {_fll_target}, expected → {_venv_bin.resolve()})"
+                )
+        elif not _fll_link.exists():
+            check_warn(
+                f"{_cmd_link_display}/fll alias not found",
+                "(optional short alias — create with: ln -sf \"$(command -v fulilian)\" "
+                f"{_cmd_link_display}/fll)"
+            )
 
     _section("External Tools")
     # Git

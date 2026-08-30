@@ -15,7 +15,7 @@
 
 [Unit]
 Description=Fulilian Kanban dispatcher (DEPRECATED standalone daemon — prefer gateway-embedded dispatch)
-Documentation=https://hermes-agent.nousresearch.com/docs/user-guide/features/kanban
+Documentation=https://github.com/xujuan-cyber/fulilians/user-guide/features/kanban
 After=network.target
 
 [Service]

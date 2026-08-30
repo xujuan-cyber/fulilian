@@ -81,7 +81,7 @@ python $FULILIAN_HOME/skills/devops/watchers/scripts/watch_rss.py \
 
 ```bash
 python $FULILIAN_HOME/skills/devops/watchers/scripts/watch_github.py \
-  --name fulilian-issues --repo NousResearch/hermes-agent --scope issues
+  --name fulilian-issues --repo xujuan-cyber/fulilian --scope issues
 ```
 
 轮询任意 JSON API：

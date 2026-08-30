@@ -1,7 +1,7 @@
 {
   "client_id": "https://nousresearch.github.io/fulilian-agent/docs/oauth/client-metadata.json",
   "client_name": "FuLiLian",
-  "client_uri": "https://hermes-agent.nousresearch.com",
+  "client_uri": "https://github.com/xujuan-cyber/fulilian",
   "logo_uri": "https://nousresearch.github.io/fulilian-agent/docs/img/logo.png",
   "application_type": "native",
   "grant_types": ["authorization_code", "refresh_token"],

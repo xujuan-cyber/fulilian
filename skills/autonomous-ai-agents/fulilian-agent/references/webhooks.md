@@ -83,7 +83,7 @@ fulilian webhook subscribe todoist-fulilian \
   --deliver telegram --deliver-chat-id "12345"
 ```
 
-Full filter syntax: https://hermes-agent.nousresearch.com/docs/user-guide/messaging/webhooks#payload-filters
+Full filter syntax: https://github.com/xujuan-cyber/fulilian
 
 ### List subscriptions
 ```bash

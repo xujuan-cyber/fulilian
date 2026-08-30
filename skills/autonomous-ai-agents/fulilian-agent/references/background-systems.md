@@ -42,7 +42,7 @@ the `cronjob` tool, the `fulilian cron` CLI (`list`, `add`, `edit`,
   header/footer instead of being mirrored into the target gateway
   session (keeps role alternation intact).
 
-User docs: https://hermes-agent.nousresearch.com/docs/user-guide/features/cron
+User docs: https://github.com/xujuan-cyber/fulilian
 
 ### Curator (skill lifecycle)
 
@@ -69,7 +69,7 @@ so nothing is lost.
 
 Config: `curator.*` (`enabled`, `interval_hours`, `min_idle_hours`,
 `stale_after_days`, `archive_after_days`, `backup.*`).
-User docs: https://hermes-agent.nousresearch.com/docs/user-guide/features/curator
+User docs: https://github.com/xujuan-cyber/fulilian
 
 ### Kanban (multi-agent work queue)
 
@@ -98,4 +98,4 @@ sessions still have zero `kanban_*` schema footprint unless configured.
   `FULILIAN_KANBAN_BOARD` pinned in env); tenant is a soft namespace
   within a board for workspace-path + memory-key isolation.
 
-User docs: https://hermes-agent.nousresearch.com/docs/user-guide/features/kanban
+User docs: https://github.com/xujuan-cyber/fulilian

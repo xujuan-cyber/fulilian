@@ -43,7 +43,7 @@ description: "如何为 FuLiLian 做贡献 — 开发环境配置、代码风格
 对大多数贡献者来说，最好的开发启动方式和用户安装方式相同：运行标准安装器，然后在它克隆出的仓库里开发。安装器会创建 Fulilian venv、配置 `fulilian` 命令、为 `fulilian update` 写入安装方式标记，并把完整 git 项目克隆到 `$FULILIAN_HOME/fulilian-agent`（通常是 `~/.fulilian/fulilian-agent`）。这样你的开发环境会和 CLI、updater、lazy dependency installer、gateway、docs 默认假设的布局一致。
 
 ```bash
-curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
+curl -fsSL https://github.com/xujuan-cyber/fulilian | bash
 cd "${FULILIAN_HOME:-$HOME/.fulilian}/fulilian-agent"
 
 # 在标准安装基础上添加开发/测试 extras。
@@ -65,7 +65,7 @@ scripts/run_tests.sh
 只有在你明确不想使用 Fulilian managed install layout 时才使用这种方式（例如容器或 CI job 里的临时 clone）。如果这样安装，请确保运行的是这个 venv 里的 `fulilian` entrypoint；运行系统 `python3 -m fulilian_cli.main` 可能会加载无关的系统 Python 包。
 
 ```bash
-git clone https://github.com/NousResearch/hermes-agent.git
+git clone https://github.com/xujuan-cyber/fulilian.git
 cd fulilian-agent
 
 # 使用 Python 3.11 创建虚拟环境
@@ -117,7 +117,7 @@ scripts/run_tests.sh
 - **注释**：仅在解释非显而易见的意图、权衡取舍或 API 特殊行为时添加
 - **错误处理**：捕获具体异常。对于意外错误，使用 `logger.warning()`/`logger.error()` 并设置 `exc_info=True`
 - **跨平台**：不得假设 Unix 环境（见下文）
-- **Profile 安全路径**：不得硬编码 `~/.fulilian` — 代码路径使用 `fulilian_constants` 中的 `get_fulilian_home()`，面向用户的消息使用 `display_fulilian_home()`。完整规则参见 [AGENTS.md](https://github.com/NousResearch/hermes-agent/blob/main/AGENTS.md#profiles-multi-instance-support)。
+- **Profile 安全路径**：不得硬编码 `~/.fulilian` — 代码路径使用 `fulilian_constants` 中的 `get_fulilian_home()`，面向用户的消息使用 `display_fulilian_home()`。完整规则参见 [AGENTS.md](https://github.com/xujuan-cyber/fulilian/blob/main/AGENTS.md#profiles-multi-instance-support)。
 
 ## 跨平台兼容性
 
@@ -250,4 +250,4 @@ fix(security): prevent shell injection in sudo password piping
 
 ## 许可证
 
-提交贡献即表示您同意您的贡献将以 [MIT 许可证](https://github.com/NousResearch/hermes-agent/blob/main/LICENSE) 授权。
+提交贡献即表示您同意您的贡献将以 [MIT 许可证](https://github.com/xujuan-cyber/fulilian/blob/main/LICENSE) 授权。

@@ -6,7 +6,7 @@
 # Uses uv for desktop/server installs and Python's stdlib venv + pip on Termux.
 #
 # Usage:
-#   curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/xujuan-cyber/fulilian/main/scripts/install.sh | bash
 #
 # Or with options:
 #   curl -fsSL ... | bash -s -- --no-venv --skip-setup
@@ -43,8 +43,8 @@ NC='\033[0m' # No Color
 BOLD='\033[1m'
 
 # Configuration
-REPO_URL_SSH="git@github.com:NousResearch/hermes-agent.git"
-REPO_URL_HTTPS="https://github.com/NousResearch/hermes-agent.git"
+REPO_URL_SSH="git@github.com:xujuan-cyber/fulilian.git"
+REPO_URL_HTTPS="https://github.com/xujuan-cyber/fulilian.git"
 FULILIAN_HOME="${FULILIAN_HOME:-$HOME/.fulilian}"
 # INSTALL_DIR is resolved AFTER arg parsing and OS detection so we can pick an
 # FHS-style layout for root installs.  Track whether the user gave us an
@@ -535,7 +535,7 @@ detect_os() {
             OS="windows"
             DISTRO="windows"
             log_error "Windows detected. Please use the PowerShell installer:"
-            log_info "  iex (irm https://hermes-agent.nousresearch.com/install.ps1)"
+            log_info "  iex (irm https://raw.githubusercontent.com/xujuan-cyber/fulilian/main/scripts/install.ps1)"
             exit 1
             ;;
         *)
@@ -1832,7 +1832,7 @@ setup_path() {
         FULILIAN_BIN="$INSTALL_DIR/venv/bin/python"
         FULILIAN_ENTRYPOINT="$INSTALL_DIR/fulilian"
     else
-        FULILIAN_BIN="$(which hermes 2>/dev/null || echo "")"
+        FULILIAN_BIN="$(which fulilian 2>/dev/null || echo "")"
         if [ -z "$FULILIAN_BIN" ]; then
             log_warn "fulilian not found on PATH after install"
             return 0

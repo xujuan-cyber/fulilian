@@ -4,12 +4,12 @@
 
 # FuLiLian ☤
 <p align="center">
-  <a href="https://hermes-agent.nousresearch.com/">FuLiLian</a> | <a href="https://hermes-agent.nousresearch.com/">Fulilian Desktop</a>
+  <a href="https://github.com/xujuan-cyber/fulilian">FuLiLian</a> | <a href="https://github.com/xujuan-cyber/fulilian">Fulilian Desktop</a>
 </p>
 <p align="center">
-  <a href="https://hermes-agent.nousresearch.com/docs/"><img src="https://img.shields.io/badge/Docs-hermes--agent.nousresearch.com-FFD700?style=for-the-badge" alt="Documentación"></a>
+  <a href="https://github.com/xujuan-cyber/fulilian"><img src="https://img.shields.io/badge/Docs-github.com--xujuan-cyber-fulilian-FFD700?style=for-the-badge" alt="Documentación"></a>
   <a href="https://discord.gg/NousResearch"><img src="https://img.shields.io/badge/Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"></a>
-  <a href="https://github.com/NousResearch/hermes-agent/blob/main/LICENSE"><img src="https://img.shields.io/badge/Licencia-MIT-green?style=for-the-badge" alt="Licencia: MIT"></a>
+  <a href="https://github.com/xujuan-cyber/fulilian/blob/main/LICENSE"><img src="https://img.shields.io/badge/Licencia-MIT-green?style=for-the-badge" alt="Licencia: MIT"></a>
   <a href="https://nousresearch.com"><img src="https://img.shields.io/badge/Creado%20por-Nous%20Research-blueviolet?style=for-the-badge" alt="Creado por Nous Research"></a>
   <a href="README.md"><img src="https://img.shields.io/badge/Lang-English-blue?style=for-the-badge" alt="English"></a>
   <a href="README.zh-CN.md"><img src="https://img.shields.io/badge/Lang-中文-red?style=for-the-badge" alt="中文"></a>
@@ -37,24 +37,24 @@ Usa cualquier modelo que quieras — [Nous Portal](https://portal.nousresearch.c
 ### Linux, macOS, WSL2, Termux
 
 ```bash
-curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
+curl -fsSL https://github.com/xujuan-cyber/fulilian | bash
 ```
 
 ### Windows (nativo, PowerShell)
 
-> **Nota:** En Windows nativo, Fulilian funciona sin WSL — la CLI, el gateway, la TUI y las herramientas funcionan de forma nativa. Si prefieres usar WSL2, el comando de Linux/macOS de arriba también funciona allí. ¿Encontraste un error? Por favor [crea un issue](https://github.com/NousResearch/hermes-agent/issues).
+> **Nota:** En Windows nativo, Fulilian funciona sin WSL — la CLI, el gateway, la TUI y las herramientas funcionan de forma nativa. Si prefieres usar WSL2, el comando de Linux/macOS de arriba también funciona allí. ¿Encontraste un error? Por favor [crea un issue](https://github.com/xujuan-cyber/fulilian/issues).
 
 Ejecuta esto en PowerShell:
 
 ```powershell
-iex (irm https://hermes-agent.nousresearch.com/install.ps1)
+iex (irm https://github.com/xujuan-cyber/fulilian)
 ```
 
 El instalador se encarga de todo: uv, Python 3.11, Node.js, ripgrep, ffmpeg, **y un Git Bash portátil** (MinGit, descomprimido en `%LOCALAPPDATA%\fulilian\git` — no requiere administrador, completamente aislado de cualquier instalación de Git del sistema). Fulilian usa este Git Bash incluido para ejecutar comandos de shell.
 
 Si ya tienes Git instalado, el instalador lo detecta y lo usa en su lugar. De lo contrario, una descarga de ~45MB de MinGit es todo lo que necesitas — no tocará ni interferirá con ningún Git del sistema.
 
-> **Android / Termux:** La ruta manual probada está documentada en la [guía de Termux](https://hermes-agent.nousresearch.com/docs/getting-started/termux). En Termux, Fulilian instala el extra `.[termux]` curado porque el extra completo `.[all]` actualmente incluye dependencias de voz incompatibles con Android.
+> **Android / Termux:** La ruta manual probada está documentada en la [guía de Termux](https://github.com/xujuan-cyber/fulilian). En Termux, Fulilian instala el extra `.[termux]` curado porque el extra completo `.[all]` actualmente incluye dependencias de voz incompatibles con Android.
 >
 > **Windows:** Windows nativo es totalmente compatible — el comando de PowerShell de arriba instala todo. Si prefieres usar WSL2, el comando de Linux también funciona allí. La instalación nativa de Windows se encuentra en `%LOCALAPPDATA%\fulilian`; WSL2 instala en `~/.fulilian` como en Linux.
 
@@ -81,7 +81,7 @@ fulilian update       # Actualiza a la última versión
 fulilian doctor       # Diagnostica cualquier problema
 ```
 
-📖 **[Documentación completa →](https://hermes-agent.nousresearch.com/docs/)**
+📖 **[Documentación completa →](https://github.com/xujuan-cyber/fulilian)**
 
 ---
 
@@ -98,7 +98,7 @@ Un comando desde una instalación nueva:
 fulilian setup --portal
 ```
 
-Esto te autentica vía OAuth, establece Nous como tu proveedor y activa el Tool Gateway. Comprueba qué está conectado en cualquier momento con `fulilian portal info`. Detalles completos en la [página de documentación del Tool Gateway](https://hermes-agent.nousresearch.com/docs/user-guide/features/tool-gateway).
+Esto te autentica vía OAuth, establece Nous como tu proveedor y activa el Tool Gateway. Comprueba qué está conectado en cualquier momento con `fulilian portal info`. Detalles completos en la [página de documentación del Tool Gateway](https://github.com/xujuan-cyber/fulilian).
 
 Puedes seguir usando tus propias claves por herramienta cuando quieras — el gateway es por backend, no todo o nada.
 
@@ -120,31 +120,31 @@ Fulilian tiene dos puntos de entrada: inicia la interfaz de terminal con `fulili
 | Interrumpir trabajo actual          | `Ctrl+C` o enviar un nuevo mensaje            | `/stop` o enviar un nuevo mensaje                                                 |
 | Estado específico de plataforma     | `/platforms`                                  | `/status`, `/sethome`                                                             |
 
-Para las listas de comandos completas, consulta la [guía de CLI](https://hermes-agent.nousresearch.com/docs/user-guide/cli) y la [guía del Gateway de Mensajería](https://hermes-agent.nousresearch.com/docs/user-guide/messaging).
+Para las listas de comandos completas, consulta la [guía de CLI](https://github.com/xujuan-cyber/fulilian) y la [guía del Gateway de Mensajería](https://github.com/xujuan-cyber/fulilian).
 
 ---
 
 ## Documentación
 
-Toda la documentación está en **[fulilian-agent.nousresearch.com/docs](https://hermes-agent.nousresearch.com/docs/)**:
+Toda la documentación está en **[github.com/xujuan-cyber/fulilian](https://github.com/xujuan-cyber/fulilian)**:
 
 | Sección                                                                                             | Contenido                                                    |
 | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| [Inicio rápido](https://hermes-agent.nousresearch.com/docs/getting-started/quickstart)              | Instalar → configurar → primera conversación en 2 minutos   |
-| [Uso de CLI](https://hermes-agent.nousresearch.com/docs/user-guide/cli)                             | Comandos, atajos de teclado, personalidades, sesiones        |
-| [Configuración](https://hermes-agent.nousresearch.com/docs/user-guide/configuration)               | Archivo de configuración, proveedores, modelos, todas las opciones |
-| [Gateway de Mensajería](https://hermes-agent.nousresearch.com/docs/user-guide/messaging)           | Telegram, Discord, Slack, WhatsApp, Signal, Home Assistant   |
-| [Seguridad](https://hermes-agent.nousresearch.com/docs/user-guide/security)                        | Aprobación de comandos, emparejamiento por DM, aislamiento en contenedor |
-| [Herramientas y Toolsets](https://hermes-agent.nousresearch.com/docs/user-guide/features/tools)   | Más de 40 herramientas, sistema de toolsets, backends de terminal |
-| [Sistema de Habilidades](https://hermes-agent.nousresearch.com/docs/user-guide/features/skills)   | Memoria procedimental, Skills Hub, creación de habilidades   |
-| [Memoria](https://hermes-agent.nousresearch.com/docs/user-guide/features/memory)                   | Memoria persistente, perfiles de usuario, mejores prácticas  |
-| [Integración MCP](https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp)              | Conecta cualquier servidor MCP para capacidades extendidas   |
-| [Programación Cron](https://hermes-agent.nousresearch.com/docs/user-guide/features/cron)           | Tareas programadas con entrega a plataforma                  |
-| [Archivos de Contexto](https://hermes-agent.nousresearch.com/docs/user-guide/features/context-files) | Contexto de proyecto que da forma a cada conversación      |
-| [Arquitectura](https://hermes-agent.nousresearch.com/docs/developer-guide/architecture)            | Estructura del proyecto, bucle del agente, clases principales |
-| [Contribuir](https://hermes-agent.nousresearch.com/docs/developer-guide/contributing)              | Configuración de desarrollo, proceso de PR, estilo de código |
-| [Referencia de CLI](https://hermes-agent.nousresearch.com/docs/reference/cli-commands)             | Todos los comandos y flags                                   |
-| [Variables de Entorno](https://hermes-agent.nousresearch.com/docs/reference/environment-variables) | Referencia completa de variables de entorno                  |
+| [Inicio rápido](https://github.com/xujuan-cyber/fulilian)              | Instalar → configurar → primera conversación en 2 minutos   |
+| [Uso de CLI](https://github.com/xujuan-cyber/fulilian)                             | Comandos, atajos de teclado, personalidades, sesiones        |
+| [Configuración](https://github.com/xujuan-cyber/fulilian)               | Archivo de configuración, proveedores, modelos, todas las opciones |
+| [Gateway de Mensajería](https://github.com/xujuan-cyber/fulilian)           | Telegram, Discord, Slack, WhatsApp, Signal, Home Assistant   |
+| [Seguridad](https://github.com/xujuan-cyber/fulilian)                        | Aprobación de comandos, emparejamiento por DM, aislamiento en contenedor |
+| [Herramientas y Toolsets](https://github.com/xujuan-cyber/fulilian)   | Más de 40 herramientas, sistema de toolsets, backends de terminal |
+| [Sistema de Habilidades](https://github.com/xujuan-cyber/fulilian)   | Memoria procedimental, Skills Hub, creación de habilidades   |
+| [Memoria](https://github.com/xujuan-cyber/fulilian)                   | Memoria persistente, perfiles de usuario, mejores prácticas  |
+| [Integración MCP](https://github.com/xujuan-cyber/fulilian)              | Conecta cualquier servidor MCP para capacidades extendidas   |
+| [Programación Cron](https://github.com/xujuan-cyber/fulilian)           | Tareas programadas con entrega a plataforma                  |
+| [Archivos de Contexto](https://github.com/xujuan-cyber/fulilian) | Contexto de proyecto que da forma a cada conversación      |
+| [Arquitectura](https://github.com/xujuan-cyber/fulilian)            | Estructura del proyecto, bucle del agente, clases principales |
+| [Contribuir](https://github.com/xujuan-cyber/fulilian)              | Configuración de desarrollo, proceso de PR, estilo de código |
+| [Referencia de CLI](https://github.com/xujuan-cyber/fulilian)             | Todos los comandos y flags                                   |
+| [Variables de Entorno](https://github.com/xujuan-cyber/fulilian) | Referencia completa de variables de entorno                  |
 
 ---
 
@@ -185,7 +185,7 @@ Consulta `fulilian claw migrate --help` para todas las opciones, o usa la habili
 Inicio rápido para colaboradores — clona y comienza con `setup-fulilian.sh`:
 
 ```bash
-git clone https://github.com/NousResearch/hermes-agent.git
+git clone https://github.com/xujuan-cyber/fulilian.git
 cd fulilian-agent
 ./setup-fulilian.sh     # instala uv, crea venv, instala .[all], enlaza ~/.local/bin/fulilian
 ./fulilian              # detecta automáticamente el venv, no necesitas hacer `source` primero
@@ -207,7 +207,7 @@ scripts/run_tests.sh
 
 - 💬 [Discord](https://discord.gg/NousResearch)
 - 📚 [Skills Hub](https://agentskills.io)
-- 🐛 [Issues](https://github.com/NousResearch/hermes-agent/issues)
+- 🐛 [Issues](https://github.com/xujuan-cyber/fulilian/issues)
 - 🔌 [computer-use-linux](https://github.com/avifenesh/computer-use-linux) — Servidor MCP de control de escritorio Linux para Fulilian y otros hosts MCP, con árboles de accesibilidad AT-SPI, entrada Wayland/X11, capturas de pantalla y targeting de ventanas del compositor.
 - 🔌 [FulilianClaw](https://github.com/AaronWong1999/fulilianclaw) — Puente WeChat comunitario: Ejecuta FuLiLian y OpenClaw en la misma cuenta de WeChat.
 

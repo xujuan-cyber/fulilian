@@ -6,7 +6,7 @@ Usage (via cron with --no-agent):
     fulilian cron create fulilian-issues \\
       --schedule "*/5 * * * *" --no-agent \\
       --script "$FULILIAN_HOME/skills/devops/watchers/scripts/watch_github.py" \\
-      --script-args "--name fulilian-issues --repo NousResearch/hermes-agent --scope issues"
+      --script-args "--name fulilian-issues --repo xujuan-cyber/fulilian --scope issues"
 
 Set GITHUB_TOKEN (or GH_TOKEN) in the Fulilian .env file
 (``${FULILIAN_HOME:-~/.fulilian}/.env``) to avoid the 60 req/hr

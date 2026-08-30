@@ -18,7 +18,7 @@ Fulilian discovers memory providers from four sources, in this precedence order:
 
 | Source | Location | Notes |
 |---|---|---|
-| Bundled | `plugins/memory/<name>/` | Ships with Fulilian. Closed to new providers — see [CONTRIBUTING](https://github.com/NousResearch/hermes-agent/blob/main/CONTRIBUTING.md). |
+| Bundled | `plugins/memory/<name>/` | Ships with Fulilian. Closed to new providers — see [CONTRIBUTING](https://github.com/xujuan-cyber/fulilian/blob/main/CONTRIBUTING.md). |
 | User | `$FULILIAN_HOME/plugins/<name>/` | Dropped in by the user, per profile. |
 | Project | `./.fulilian/plugins/<name>/` | Opt-in via `FULILIAN_ENABLE_PROJECT_PLUGINS=1`. |
 | Package | `fulilian_agent.memory_providers` entry point | `pip install`, nothing to copy. |

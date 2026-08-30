@@ -48,21 +48,21 @@ Pick the row that matches your goal:
 
 ## 1. Install FuLiLian
 ### With the Fulilian Desktop installer on macOS or Windows (recommended)
-To easily install the command-line and desktop applications, [download the Fulilian Desktop installer](https://hermes-agent.nousresearch.com/) from our website and run it.
+To easily install the command-line and desktop applications, [download the Fulilian Desktop installer](https://github.com/xujuan-cyber/fulilian) from our website and run it.
 
 ### Without Fulilian Desktop:
 For a command-line only install without Fulilian Desktop, run:
 
 #### Linux / macOS / WSL2 / Android (Termux)
 ```bash
-curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
+curl -fsSL https://github.com/xujuan-cyber/fulilian | bash
 ```
 
 #### Windows (native)
 
 Run in powershell:
 ```powershell
-iex (irm https://hermes-agent.nousresearch.com/install.ps1) 
+iex (irm https://github.com/xujuan-cyber/fulilian) 
 ```
 
 :::tip Android / Termux

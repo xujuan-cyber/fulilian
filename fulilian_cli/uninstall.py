@@ -113,9 +113,11 @@ def remove_wrapper_script():
     """Remove the fulilian wrapper script if it exists."""
     wrapper_paths = [
         Path.home() / ".local" / "bin" / "fulilian",
+        Path.home() / ".local" / "bin" / "fll",
         Path.home() / ".local" / "bin" / "fulilian-acp",
         Path.home() / ".local" / "bin" / "fulilian-agent",
         Path("/usr/local/bin/fulilian"),
+        Path("/usr/local/bin/fll"),
         Path("/usr/local/bin/fulilian-acp"),
         Path("/usr/local/bin/fulilian-agent"),
     ]
@@ -1002,9 +1004,9 @@ def _perform_uninstall(
         print()
         print("To reinstall later with your existing settings:")
         if _is_windows():
-            print(color("  iex (irm https://github.com/xujuan-cyber/fulilian/install.ps1)", Colors.DIM))
+            print(color("  iex (irm https://raw.githubusercontent.com/xujuan-cyber/fulilian/main/scripts/install.ps1)", Colors.DIM))
         else:
-            print(color("  curl -fsSL https://github.com/xujuan-cyber/fulilian/install.sh | bash", Colors.DIM))
+            print(color("  curl -fsSL https://raw.githubusercontent.com/xujuan-cyber/fulilian/main/scripts/install.sh | bash", Colors.DIM))
         print()
 
     if _is_windows():

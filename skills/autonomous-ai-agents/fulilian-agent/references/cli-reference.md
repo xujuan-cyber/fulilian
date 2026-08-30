@@ -1,7 +1,7 @@
 # Fulilian CLI Reference
 
 Live sources when anything looks stale: `fulilian --help`, `fulilian <command> --help`,
-https://hermes-agent.nousresearch.com/docs/reference/cli-commands
+https://github.com/xujuan-cyber/fulilian
 
 ### Global Flags
 
@@ -79,7 +79,7 @@ fulilian gateway run|install|start|stop|restart|status|setup
 ```
 
 20+ platforms: Telegram, Discord, Slack, WhatsApp (Baileys + Business Cloud API), iMessage (Photon — `fulilian photon setup`), Signal, Email, SMS, Matrix, Mattermost, Teams, LINE, SimpleX, ntfy, Google Chat, Home Assistant, DingTalk, Feishu, WeCom, Weixin, API Server, Webhooks. Open WebUI connects via the API Server adapter. Most adapters ship under `plugins/platforms/`.
-Docs: https://hermes-agent.nousresearch.com/docs/user-guide/messaging/
+Docs: https://github.com/xujuan-cyber/fulilian
 
 ### Sessions
 
@@ -141,10 +141,10 @@ Plugin- and provider-supplied subcommands (e.g. `fulilian photon setup`) only ap
 
 | Looking for... | Location |
 |---|---|
-| Config options | `fulilian config edit` · [Configuration docs](https://hermes-agent.nousresearch.com/docs/user-guide/configuration) |
-| Tools / toolsets | `fulilian tools list` · [Tools reference](https://hermes-agent.nousresearch.com/docs/reference/tools-reference) |
-| Skills catalog | `fulilian skills browse` · [Skills catalog](https://hermes-agent.nousresearch.com/docs/reference/skills-catalog) |
-| Provider setup | `fulilian model` · [Providers guide](https://hermes-agent.nousresearch.com/docs/integrations/providers) |
-| Env variables | `fulilian config env-path` · [Env vars reference](https://hermes-agent.nousresearch.com/docs/reference/environment-variables) |
+| Config options | `fulilian config edit` · [Configuration docs](https://github.com/xujuan-cyber/fulilian) |
+| Tools / toolsets | `fulilian tools list` · [Tools reference](https://github.com/xujuan-cyber/fulilian) |
+| Skills catalog | `fulilian skills browse` · [Skills catalog](https://github.com/xujuan-cyber/fulilian) |
+| Provider setup | `fulilian model` · [Providers guide](https://github.com/xujuan-cyber/fulilian) |
+| Env variables | `fulilian config env-path` · [Env vars reference](https://github.com/xujuan-cyber/fulilian) |
 | Gateway logs | `~/.fulilian/logs/gateway.log` (or `fulilian logs`) |
 | Sessions | `fulilian sessions browse` (reads state.db) |

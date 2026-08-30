@@ -83,7 +83,7 @@ Packaging/repository/signing problems for this option should be reported to the 
 Fulilian now ships a Termux-aware installer path:
 
 ```bash
-curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
+curl -fsSL https://github.com/xujuan-cyber/fulilian | bash
 ```
 
 On Termux, the installer automatically:
@@ -119,7 +119,7 @@ Why these packages?
 ### 2. Clone Fulilian
 
 ```bash
-git clone https://github.com/NousResearch/hermes-agent.git
+git clone https://github.com/xujuan-cyber/fulilian.git
 cd fulilian-agent
 ```
 

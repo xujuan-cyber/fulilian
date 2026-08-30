@@ -42,17 +42,17 @@ No clone needed. Nix fetches, builds, and runs everything:
 
 ```bash
 # Run the desktop app
-nix run github:NousResearch/hermes-agent#desktop
+nix run github:xujuan-cyber/fulilian#desktop
 
 # Or install persistently
-nix profile install github:NousResearch/hermes-agent#desktop
+nix profile install github:xujuan-cyber/fulilian#desktop
 
 # run the tui
-nix run github:NousResearch/hermes-agent -- setup
-nix run github:NousResearch/hermes-agent -- --tui
+nix run github:xujuan-cyber/fulilian -- setup
+nix run github:xujuan-cyber/fulilian -- --tui
 
 # or install it in your profile
-nix profile install github:NousResearch/hermes-agent
+nix profile install github:xujuan-cyber/fulilian
 fulilian setup
 fulilian --tui
 ```
@@ -70,7 +70,7 @@ The `default` package adds ~700 MB to the closure. If you only need messaging pl
 <summary><strong>Running from a local clone</strong></summary>
 
 ```bash
-git clone https://github.com/NousResearch/hermes-agent.git
+git clone https://github.com/xujuan-cyber/fulilian.git
 cd fulilian-agent
 nix develop
 fulilian setup
@@ -95,7 +95,7 @@ This module needs NixOS. Fulilian is an agent for one person. If you want an age
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    fulilian-agent.url = "github:NousResearch/hermes-agent";
+    fulilian-agent.url = "github:xujuan-cyber/fulilian";
   };
 
   outputs = { nixpkgs, fulilian-agent, ... }: {
@@ -612,7 +612,7 @@ The option set is the same set that the NixOS module uses. It is `services.fulil
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     home-manager.url = "github:nix-community/home-manager";
     home-manager.inputs.nixpkgs.follows = "nixpkgs";
-    fulilian-agent.url = "github:NousResearch/hermes-agent";
+    fulilian-agent.url = "github:xujuan-cyber/fulilian";
   };
 }
 ```
@@ -860,7 +860,7 @@ External flakes can override the package directly:
 
 ```nix
 {
-  inputs.fulilian-agent.url = "github:NousResearch/hermes-agent";
+  inputs.fulilian-agent.url = "github:xujuan-cyber/fulilian";
   outputs = { fulilian-agent, nixpkgs, ... }: {
     nixpkgs.overlays = [ fulilian-agent.overlays.default ];
     # Then:

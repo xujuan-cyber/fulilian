@@ -22,7 +22,7 @@ Pick whichever fits the moment. They share state, so you can start a session in 
 
 ## Install
 
-Download the app from the [Fulilian Desktop product page](https://hermes-agent.nousresearch.com/desktop), or follow the [installation instructions for Fulilian Desktop](../getting-started/installation.md).
+Download the app from the [Fulilian Desktop product page](https://github.com/xujuan-cyber/fulilian), or follow the [installation instructions for Fulilian Desktop](../getting-started/installation.md).
 
 If you already have Fulilian installed, simply run
 
@@ -267,7 +267,7 @@ The desktop app and the Fulilian backend it talks to update on separate clocks â
 
 After any backend update, the app also re-checks its own version and warns with a one-click **Update desktop app** action if the GUI is still behind â€” so updating a remote backend can never silently leave you on a stale desktop build.
 
-The [manual update process](https://hermes-agent.nousresearch.com/docs/getting-started/updating) also works with the GUI.
+The [manual update process](https://github.com/xujuan-cyber/fulilian) also works with the GUI.
 
 ## Uninstalling
 
