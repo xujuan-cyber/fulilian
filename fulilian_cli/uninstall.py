@@ -113,9 +113,11 @@ def remove_wrapper_script():
     """Remove the fulilian wrapper script if it exists."""
     wrapper_paths = [
         Path.home() / ".local" / "bin" / "fulilian",
+        Path.home() / ".local" / "bin" / "fll",
         Path.home() / ".local" / "bin" / "fulilian-acp",
         Path.home() / ".local" / "bin" / "fulilian-agent",
         Path("/usr/local/bin/fulilian"),
+        Path("/usr/local/bin/fll"),
         Path("/usr/local/bin/fulilian-acp"),
         Path("/usr/local/bin/fulilian-agent"),
     ]

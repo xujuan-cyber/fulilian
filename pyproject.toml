@@ -377,6 +377,7 @@ build-backend = "setuptools.build_meta"
 
 [project.scripts]
 fulilian = "fulilian_cli.main:main"
+fll = "fulilian_cli.main:main"
 fulilian-agent = "run_agent:main"
 fulilian-acp = "acp_adapter.entry:main"
 

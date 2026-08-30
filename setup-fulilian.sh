@@ -353,6 +353,8 @@ COMMAND_LINK_DISPLAY_DIR="$(get_command_link_display_dir)"
 mkdir -p "$COMMAND_LINK_DIR"
 ln -sf "$FULILIAN_BIN" "$COMMAND_LINK_DIR/fulilian"
 echo -e "${GREEN}✓${NC} Symlinked fulilian → $COMMAND_LINK_DISPLAY_DIR/fulilian"
+ln -sf "$FULILIAN_BIN" "$COMMAND_LINK_DIR/fll"
+echo -e "${GREEN}✓${NC} Symlinked fll → $COMMAND_LINK_DISPLAY_DIR/fll"
 
 if is_termux; then
     export PATH="$COMMAND_LINK_DIR:$PATH"
@@ -428,7 +430,7 @@ if is_termux; then
     echo "     fulilian setup"
     echo ""
     echo "  2. Start chatting:"
-    echo "     fulilian"
+    echo "     fulilian  (or the short alias: fll)"
     echo ""
 else
     echo "  1. Reload your shell:"
@@ -438,7 +440,7 @@ else
     echo "     fulilian setup"
     echo ""
     echo "  3. Start chatting:"
-    echo "     fulilian"
+    echo "     fulilian  (or the short alias: fll)"
     echo ""
 fi
 echo "Other commands:"

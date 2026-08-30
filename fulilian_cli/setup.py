@@ -794,7 +794,7 @@ def _print_setup_summary(config: dict, fulilian_home):
     print()
     print(color("🚀 Ready to go!", Colors.CYAN, Colors.BOLD))
     print()
-    print(f"   {color('fulilian', Colors.GREEN)}              Start chatting")
+    print(f"   {color('fulilian', Colors.GREEN)}              Start chatting (short alias: {color('fll', Colors.GREEN)})")
     print(f"   {color('fulilian gateway', Colors.GREEN)}      Start messaging gateway")
     print(f"   {color('fulilian doctor', Colors.GREEN)}       Check for issues")
     print()
