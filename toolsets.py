@@ -626,7 +626,7 @@ TOOLSETS = {
     "ctf_solve": {
         "description": "CTF mode solver tools — verify_flag, checkpoint, writeup generation, compile_check",
         "tools": ["verify_flag", "checkpoint", "generate_writeup", "compile_check"],
-        "includes": ["terminal", "file", "web", "read", "vision"],
+        "includes": ["terminal", "file", "web", "vision"],
     }
 }
 

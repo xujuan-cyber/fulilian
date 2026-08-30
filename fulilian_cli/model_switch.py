@@ -371,8 +371,8 @@ _FULILIAN_MODEL_WARNING = (
 #   NousResearch/Hermes-3-Llama-3.1-70B, hermes-4-405b, openrouter/hermes3:70b
 # Negative examples it must NOT match:
 #   fulilian-brain:qwen3-14b-ctx16k, qwen3:14b, claude-opus-4-6
-_NOUS_FULILIAN_NON_AGENTIC_RE = re.compile(
-    r"(?:^|[/:])fulilian[-_ ]?[34](?:[-_.:]|$)",
+_NOUS_HERMES_NON_AGENTIC_RE = re.compile(
+    r"(?:^|[/:])hermes[-_ ]?[34](?:[-_.:]|$)",
     re.IGNORECASE,
 )
 
@@ -431,7 +431,7 @@ def is_nous_fulilian_non_agentic(model_name: str) -> bool:
     """
     if not model_name:
         return False
-    return bool(_NOUS_FULILIAN_NON_AGENTIC_RE.search(model_name))
+    return bool(_NOUS_HERMES_NON_AGENTIC_RE.search(model_name))
 
 
 def _check_fulilian_model_warning(model_name: str) -> str:
@@ -2741,7 +2741,7 @@ def list_authenticated_providers(
     curated: dict[str, list[str]] = dict(_PROVIDER_MODELS)
     curated["openrouter"] = [mid for mid, _ in OPENROUTER_MODELS]
     # "nous" pulls from the remote model-catalog manifest published at
-    # https://hermes-agent.nousresearch.com/docs/api/model-catalog.json so
+    # https://github.com/xujuan-cyber/fulilian/docs/api/model-catalog.json so
     # newly added Portal models surface in the /model picker without
     # requiring a Fulilian release. Falls back to the in-repo
     # _PROVIDER_MODELS["nous"] snapshot when the manifest is unreachable.

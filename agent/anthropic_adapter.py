@@ -919,7 +919,7 @@ def build_anthropic_client(
         # HTTP-Referer + X-Title + FulilianAgent User-Agent.
         kwargs["api_key"] = api_key
         kwargs["default_headers"] = {
-            "HTTP-Referer": "https://hermes-agent.nousresearch.com",
+            "HTTP-Referer": "https://github.com/xujuan-cyber/fulilian",
             "X-Title": "FuLiLian",
             "User-Agent": f"FulilianAgent/{_FULILIAN_VERSION}",
             **( {"anthropic-beta": ",".join(common_betas)} if common_betas else {} )
@@ -966,7 +966,7 @@ def build_anthropic_client(
         # route builds its client right here and never sees the profile. Merge
         # the same set on top of whatever auth branch ran above.
         headers = dict(kwargs.get("default_headers") or {})
-        headers.setdefault("HTTP-Referer", "https://hermes-agent.nousresearch.com")
+        headers.setdefault("HTTP-Referer", "https://github.com/xujuan-cyber/fulilian")
         headers.setdefault("X-Title", "FuLiLian")
         headers.setdefault("User-Agent", f"FulilianAgent/{_FULILIAN_VERSION}")
         kwargs["default_headers"] = headers

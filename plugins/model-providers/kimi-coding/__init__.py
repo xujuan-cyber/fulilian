@@ -118,7 +118,7 @@ kimi = KimiProfile(
     fixed_temperature=OMIT_TEMPERATURE,
     default_max_tokens=32000,
     default_headers={
-        "HTTP-Referer": "https://hermes-agent.nousresearch.com",
+        "HTTP-Referer": "https://github.com/xujuan-cyber/fulilian",
         "X-Title": "FuLiLian",
         "User-Agent": f"FulilianAgent/{_FULILIAN_VERSION}",
     },
@@ -133,7 +133,7 @@ kimi_cn = KimiProfile(
     fixed_temperature=OMIT_TEMPERATURE,
     default_max_tokens=32000,
     default_headers={
-        "HTTP-Referer": "https://hermes-agent.nousresearch.com",
+        "HTTP-Referer": "https://github.com/xujuan-cyber/fulilian",
         "X-Title": "FuLiLian",
         "User-Agent": f"FulilianAgent/{_FULILIAN_VERSION}",
     },

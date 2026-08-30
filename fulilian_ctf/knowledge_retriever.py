@@ -24,7 +24,7 @@ from fulilian_constants import FULILIAN_HOME
 
 # ── 路径常量 ─────────────────────────────────────────────────────────────
 
-KB_PATH = Path("/home/xujuan/Des-CTF-Knowledge/Des-CTF-Knowledge-main")
+KB_PATH = Path(os.environ.get("FULILIAN_CTF_KB_PATH", str(FULILIAN_HOME / "ctf-knowledge")))
 DB_PATH = FULILIAN_HOME / "knowledge.db"
 
 # 需要跳过的文件（非正文）。

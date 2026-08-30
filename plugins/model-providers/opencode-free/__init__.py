@@ -20,7 +20,7 @@ from providers.base import ProviderProfile
 # off the wire (the free tier 401s any unrecognized bearer).
 _KEYLESS_HEADERS = {
     "Authorization": "",
-    "HTTP-Referer": "https://hermes-agent.nousresearch.com",
+    "HTTP-Referer": "https://github.com/xujuan-cyber/fulilian",
     "X-Title": "FuLiLian",
     "User-Agent": f"FulilianAgent/{_FULILIAN_VERSION}",
 }

@@ -4220,7 +4220,7 @@ def check_for_skill_updates(
 # Fulilian centralized index source
 # ---------------------------------------------------------------------------
 
-FULILIAN_INDEX_URL = "https://hermes-agent.nousresearch.com/docs/api/skills-index.json"
+FULILIAN_INDEX_URL = "https://github.com/xujuan-cyber/fulilian/docs/api/skills-index.json"
 FULILIAN_INDEX_TTL = 6 * 3600  # 6 hours
 
 
