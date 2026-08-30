@@ -27,13 +27,14 @@ from typing import Optional, Dict, Any, Callable
 from fulilian_cli.curses_ui import MenuNavigationEvent, MenuNavigationStart
 from fulilian_cli.nous_subscription import get_nous_subscription_features
 from tools.tool_backend_helpers import managed_nous_tools_enabled
+
 from fulilian_constants import get_optional_skills_dir
 
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).parent.parent.resolve()
 
-_DOCS_BASE = "https://hermes-agent.nousresearch.com/docs"
+_DOCS_BASE = "https://github.com/xujuan-cyber/fulilian/wiki"
 
 
 def _model_config_dict(config: Dict[str, Any]) -> Dict[str, Any]:
@@ -490,7 +491,7 @@ def _print_setup_summary(config: dict, fulilian_home):
         print_warning("No inference provider is configured — Fulilian cannot chat yet.")
         print_info("  Finish this one step with either of:")
         print_info("    fulilian model            (pick any provider/model)")
-        print_info("    fulilian setup --portal   (Nous Portal OAuth, no API key)")
+        
 
     # Tool availability summary
     print()
@@ -3119,11 +3120,6 @@ def _run_setup_wizard_impl(args):
         print_noninteractive_setup_guidance(
             "Running in a non-interactive environment (no TTY detected)."
         )
-        return
-
-    # --portal: one-shot Nous Portal setup. Skips the rest of the wizard.
-    if bool(getattr(args, "portal", False)):
-        _run_portal_one_shot(config)
         return
 
     # Check if a specific section was requested
