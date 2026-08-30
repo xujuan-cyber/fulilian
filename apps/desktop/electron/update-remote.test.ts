@@ -33,7 +33,7 @@ test('canonicalGitHubRemote normalizes SSH and HTTPS forms to the same value', (
   assert.equal(canonicalGitHubRemote('ssh://git@github.com/NousResearch/hermes-agent.git'), OFFICIAL_REPO_CANONICAL)
   assert.equal(canonicalGitHubRemote('https://github.com/NousResearch/hermes-agent.git'), OFFICIAL_REPO_CANONICAL)
   // Case-insensitive: an uppercased owner still canonicalizes to the same repo.
-  assert.equal(canonicalGitHubRemote('git@github.com:nousresearch/fulilian-agent.git'), OFFICIAL_REPO_CANONICAL)
+  assert.equal(canonicalGitHubRemote('git@github.com:xujuan-cyber/fulilian.git'), OFFICIAL_REPO_CANONICAL)
   // Trailing slashes are stripped.
   assert.equal(canonicalGitHubRemote('https://github.com/NousResearch/hermes-agent/'), OFFICIAL_REPO_CANONICAL)
 })
@@ -57,7 +57,7 @@ test('isOfficialSshRemote is true only for the official repo over SSH', () => {
   assert.equal(isOfficialSshRemote('git@github.com:NousResearch/hermes-agent'), true)
   assert.equal(isOfficialSshRemote('ssh://git@github.com/NousResearch/hermes-agent.git'), true)
   // Case-insensitive owner/repo match.
-  assert.equal(isOfficialSshRemote('git@github.com:nousresearch/fulilian-agent.git'), true)
+  assert.equal(isOfficialSshRemote('git@github.com:xujuan-cyber/fulilian.git'), true)
 })
 
 test('isOfficialSshRemote does NOT match forks, other hosts, or HTTPS', () => {

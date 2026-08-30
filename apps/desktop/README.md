@@ -2,7 +2,7 @@
 
 <p align="center">
   <a href="https://github.com/xujuan-cyber/fulilian/releases"><img src="https://img.shields.io/badge/Download-macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-FFD700?style=for-the-badge" alt="Download"></a>
-  <a href="https://github.com/xujuan-cyber/fulilians/"><img src="https://img.shields.io/badge/Docs-github.com--xujuan-cyber-fulilian-FFD700?style=for-the-badge" alt="Documentation"></a>
+  <a href="https://github.com/xujuan-cyber/fulilian/"><img src="https://img.shields.io/badge/Docs-github.com--xujuan-cyber-fulilian-FFD700?style=for-the-badge" alt="Documentation"></a>
   <a href="https://discord.gg/NousResearch"><img src="https://img.shields.io/badge/Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"></a>
   <a href="https://github.com/xujuan-cyber/fulilian/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License: MIT"></a>
 </p>
@@ -232,7 +232,7 @@ Remove-Item -Recurse -Force "$env:LOCALAPPDATA\fulilian\fulilian-agent\venv"
 ## Community
 
 - 💬 [Discord](https://discord.gg/NousResearch)
-- 📖 [Documentation](https://github.com/xujuan-cyber/fulilians/)
+- 📖 [Documentation](https://github.com/xujuan-cyber/fulilian/)
 - 🐛 [Issues](https://github.com/xujuan-cyber/fulilian/issues)
 
 ---

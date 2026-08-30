@@ -69,7 +69,7 @@ class TestCollectInventory:
         monkeypatch.setattr("fulilian_cli.config.detect_install_method", lambda *a, **k: "docker")
         monkeypatch.setattr(
             "fulilian_cli.config.recommended_update_command_for_method",
-            lambda m: "docker pull nousresearch/fulilian-agent:latest",
+            lambda m: "docker pull xujuan-cyber/fulilian:latest",
         )
         plan = ui.collect_runtime_inventory()
         assert plan.install_method == "docker"
@@ -140,7 +140,7 @@ class TestPrintPlan:
         monkeypatch.setattr("fulilian_cli.config.detect_install_method", lambda *a, **k: "docker")
         monkeypatch.setattr(
             "fulilian_cli.config.recommended_update_command_for_method",
-            lambda m: "docker pull nousresearch/fulilian-agent:latest",
+            lambda m: "docker pull xujuan-cyber/fulilian:latest",
         )
         ui.print_update_plan(ui.collect_runtime_inventory())
         out = capsys.readouterr().out

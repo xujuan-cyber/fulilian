@@ -31,7 +31,7 @@ class TestDoctorPlatformHints:
 
         hint = doctor._sqlite_upgrade_hint()
 
-        assert "docker pull nousresearch/fulilian-agent:latest" in hint
+        assert "docker pull xujuan-cyber/fulilian:latest" in hint
         assert "recreate all Fulilian containers" in hint
         assert "fulilian update" not in hint
 

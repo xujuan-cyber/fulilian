@@ -11,7 +11,7 @@
 #
 services:
   gateway:
-    image: nousresearch/fulilian-agent:latest
+    image: xujuan-cyber/fulilian:latest
     container_name: fulilian
     restart: unless-stopped
     volumes:
@@ -22,7 +22,7 @@ services:
     command: ["gateway", "run"]
 
   dashboard:
-    image: nousresearch/fulilian-agent:latest
+    image: xujuan-cyber/fulilian:latest
     container_name: fulilian-dashboard
     restart: unless-stopped
     depends_on:

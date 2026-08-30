@@ -27,7 +27,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  IMAGE_NAME: nousresearch/fulilian-agent
+  IMAGE_NAME: xujuan-cyber/fulilian
 
 jobs:
   # Classify the PR's changed files. ci.yml used to gate the docker call on

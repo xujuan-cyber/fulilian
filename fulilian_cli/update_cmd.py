@@ -1860,7 +1860,7 @@ def _update_via_zip(args, *, had_desktop_app_before_update: bool = False) -> boo
         _m().sys.exit(1)
     _abort_zip_update_if_dirty_tree()
     zip_url = (
-        f"https://github.com/xujuan-cyber/fulilians/heads/{branch}.zip"
+        f"https://github.com/xujuan-cyber/fulilian/archive/refs/heads/{branch}.zip"
     )
 
     print("→ Downloading latest version...")

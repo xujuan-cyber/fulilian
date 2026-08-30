@@ -339,7 +339,7 @@ RUN set -eu; \
         printf '%s\n' "${FULILIAN_GIT_SHA}" > /opt/fulilian/.fulilian_build_sha; \
     fi; \
     mkdir -p /etc/fulilian; \
-    FULILIAN_GIT_SHA="${FULILIAN_GIT_SHA}" python3 -c 'import json, os, pathlib, tomllib; project = tomllib.loads(pathlib.Path("/opt/fulilian/pyproject.toml").read_text(encoding="utf-8"))["project"]; marker = pathlib.Path("/etc/fulilian/image-provenance.json"); marker.write_text(json.dumps({"schema": 1, "deployment_kind": "image", "manager": "docker", "image": "nousresearch/fulilian-agent", "version": project["version"], "revision": os.environ.get("FULILIAN_GIT_SHA") or None}, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8"); marker.chmod(0o444)'
+    FULILIAN_GIT_SHA="${FULILIAN_GIT_SHA}" python3 -c 'import json, os, pathlib, tomllib; project = tomllib.loads(pathlib.Path("/opt/fulilian/pyproject.toml").read_text(encoding="utf-8"))["project"]; marker = pathlib.Path("/etc/fulilian/image-provenance.json"); marker.write_text(json.dumps({"schema": 1, "deployment_kind": "image", "manager": "docker", "image": "xujuan-cyber/fulilian", "version": project["version"], "revision": os.environ.get("FULILIAN_GIT_SHA") or None}, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8"); marker.chmod(0o444)'
 
 # ---------- s6-overlay service wiring ----------
 # Static services declared at build time: main-fulilian + dashboard.
