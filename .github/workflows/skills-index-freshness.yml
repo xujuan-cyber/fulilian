@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   check-freshness:
-    if: github.repository == 'NousResearch/hermes-agent'
+    if: github.repository == 'xujuan-cyber/fulilian'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: trusted-automation

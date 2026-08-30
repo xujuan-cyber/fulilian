@@ -275,7 +275,7 @@ fulilian-agent/
 ├── skills/                   # Bundled skills (copied to ~/.fulilian/skills/ on install)
 ├── optional-skills/          # Official optional skills (discoverable via hub, not activated by default)
 ├── tests/                    # Test suite
-├── website/                  # Documentation site (fulilian-agent.nousresearch.com)
+├── website/                  # Documentation site (published via GitHub Pages)
 │
 ├── cli-config.yaml.example   # Example configuration (copied to ~/.fulilian/config.yaml)
 └── AGENTS.md                 # Development guide for AI coding assistants

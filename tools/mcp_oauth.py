@@ -1304,7 +1304,7 @@ def remove_oauth_tokens(
 # deploy. The github.io origin is deliberate: an authorization server MUST NOT
 # follow HTTP redirects when fetching the document
 # (draft-ietf-oauth-client-id-metadata-document section 5), and
-# fulilian-agent.nousresearch.com/docs/* 301s here.
+# the upstream metadata host 301s here.
 _CIMD_CLIENT_METADATA_URL = (
     "https://nousresearch.github.io/fulilian-agent/docs/oauth/client-metadata.json"
 )

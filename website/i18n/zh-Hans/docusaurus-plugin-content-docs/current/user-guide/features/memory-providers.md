@@ -68,7 +68,7 @@ fulilian memory setup        # 选择 "honcho" — 运行 Honcho 专属的安装
 
 旧版 `fulilian honcho setup` 命令仍然有效（现在会重定向到 `fulilian memory setup`），但只有在 Honcho 被选为激活记忆提供者后才会注册。
 
-**配置：** `$FULILIAN_HOME/honcho.json`（profile 本地）或 `~/.honcho/config.json`（全局）。解析顺序：`$FULILIAN_HOME/honcho.json` > `~/.fulilian/honcho.json` > `~/.honcho/config.json`。参见[配置参考](https://github.com/fulilian-ai/fulilian-agent/blob/main/plugins/memory/honcho/README.md)和 [Honcho 集成指南](https://docs.honcho.dev/v3/guides/integrations/fulilian)。
+**配置：** `$FULILIAN_HOME/honcho.json`（profile 本地）或 `~/.honcho/config.json`（全局）。解析顺序：`$FULILIAN_HOME/honcho.json` > `~/.fulilian/honcho.json` > `~/.honcho/config.json`。参见[配置参考](https://github.com/xujuan-cyber/fulilian/blob/main/plugins/memory/honcho/README.md)和 [Honcho 集成指南](https://docs.honcho.dev/v3/guides/integrations/fulilian)。
 
 <details>
 <summary>完整配置参考</summary>
@@ -255,7 +255,7 @@ fulilian honcho sync
 
 </details>
 
-参见[配置参考](https://github.com/fulilian-ai/fulilian-agent/blob/main/plugins/memory/honcho/README.md)和 [Honcho 集成指南](https://docs.honcho.dev/v3/guides/integrations/fulilian)。
+参见[配置参考](https://github.com/xujuan-cyber/fulilian/blob/main/plugins/memory/honcho/README.md)和 [Honcho 集成指南](https://docs.honcho.dev/v3/guides/integrations/fulilian)。
 
 
 ---

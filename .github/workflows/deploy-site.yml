@@ -47,7 +47,7 @@ jobs:
         run: curl -fsS --retry 3 --retry-delay 10 -X POST "${{ secrets.VERCEL_DEPLOY_HOOK }}"
 
   deploy-docs:
-    if: github.repository == 'NousResearch/hermes-agent'
+    if: github.repository == 'xujuan-cyber/fulilian'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment:
@@ -179,7 +179,7 @@ jobs:
           mkdir -p _site/docs
           cp -r website/build/* _site/docs/
           # llms.txt / llms-full.txt are also published at the site root
-          # (https://github.com/xujuan-cyber/fulilians.txt) because some
+          # (the site root /llms.txt) because some
           # agents and IDE plugins probe the classic root-level path rather
           # than /docs/llms.txt. Same file, two URLs, one source of truth.
           if [ -f website/build/llms.txt ]; then

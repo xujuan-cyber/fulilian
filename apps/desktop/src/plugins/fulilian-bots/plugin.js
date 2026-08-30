@@ -9874,7 +9874,7 @@ function AdvancedProfileConfig({ bot, state, setState }) {
 }
 
 // ── skills hub section: the REAL hub page (docs) embedded as a picker ──────
-// https://github.com/xujuan-cyber/fulilians/skills?embed=picker hides the
+// The skills hub page served with ?embed=picker hides the
 // docs chrome and adds "+ Add to this Agent" per card, posting
 // {type: 'fulilian-skill-pick', ...} to us (fulilian-agent#86243). We validate
 // the origin, install via skills.manage, and bubble onInstalled so the

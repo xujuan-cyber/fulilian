@@ -22,7 +22,7 @@ class TestFulilianAgentHelpGuidance:
     def test_no_skills_variant_has_no_skill_view_reference(self):
         from agent.prompt_builder import FULILIAN_AGENT_HELP_GUIDANCE_NO_SKILLS
         assert "skill_view" not in FULILIAN_AGENT_HELP_GUIDANCE_NO_SKILLS
-        assert "fulilian-agent.nousresearch.com/docs" in FULILIAN_AGENT_HELP_GUIDANCE_NO_SKILLS
+        assert "github.com/xujuan-cyber/fulilian" in FULILIAN_AGENT_HELP_GUIDANCE_NO_SKILLS
 
 
 class TestExecutionGuidanceText:
