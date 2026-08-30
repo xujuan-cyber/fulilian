@@ -81,7 +81,7 @@ Esto no es una barra de calidad — es una decisión de acoplamiento y mantenimi
 ### Clonar e instalar
 
 ```bash
-git clone https://github.com/NousResearch/hermes-agent.git
+git clone https://github.com/xujuan-cyber/fulilian.git
 cd fulilian-agent
 
 # Crear venv con Python 3.11
@@ -581,7 +581,7 @@ test(tools): añadir tests unitarios para file_operations
 
 ## Reportar Issues
 
-- Usa [GitHub Issues](https://github.com/NousResearch/hermes-agent/issues)
+- Usa [GitHub Issues](https://github.com/xujuan-cyber/fulilian/issues)
 - Incluye: SO, versión de Python, versión de Fulilian (`fulilian --version`), traza de error completa
 - Incluye pasos para reproducir
 - Verifica los issues existentes antes de crear duplicados

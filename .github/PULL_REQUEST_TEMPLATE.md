@@ -44,7 +44,7 @@ Fixes #
 
 - [ ] I've read the [Contributing Guide](https://github.com/xujuan-cyber/fulilian/blob/main/CONTRIBUTING.md)
 - [ ] My commit messages follow [Conventional Commits](https://www.conventionalcommits.org/) (`fix(scope):`, `feat(scope):`, etc.)
-- [ ] I searched for [existing PRs](https://github.com/NousResearch/hermes-agent/pulls) to make sure this isn't a duplicate
+- [ ] I searched for [existing PRs](https://github.com/xujuan-cyber/fulilian/pulls) to make sure this isn't a duplicate
 - [ ] My PR contains **only** changes related to this fix/feature (no unrelated commits)
 - [ ] I've run `pytest tests/ -q` and all tests pass
 - [ ] I've added tests for my changes (required for bug fixes, strongly encouraged for features)

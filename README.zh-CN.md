@@ -195,7 +195,7 @@ python -m pytest tests/ -q
 
 - 💬 [Discord](https://discord.gg/NousResearch)
 - 📚 [技能中心](https://agentskills.io)
-- 🐛 [问题反馈](https://github.com/NousResearch/hermes-agent/issues)
+- 🐛 [问题反馈](https://github.com/xujuan-cyber/fulilian/issues)
 - 💡 [讨论区](https://github.com/xujuan-cyber/fulilian/discussions)
 - 🔌 [FulilianClaw](https://github.com/AaronWong1999/fulilianclaw) — 社区微信桥接：在同一微信账号上运行 FuLiLian 和 OpenClaw。
 

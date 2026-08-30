@@ -42,7 +42,7 @@ curl -fsSL https://github.com/xujuan-cyber/fulilian | bash
 
 ### Windows (native, PowerShell)
 
-> **Heads up:** Native Windows runs Fulilian without WSL — CLI, gateway, TUI, and tools all work natively. If you'd rather use WSL2, the Linux/macOS one-liner above works there too. Found a bug? Please [file issues](https://github.com/NousResearch/hermes-agent/issues).
+> **Heads up:** Native Windows runs Fulilian without WSL — CLI, gateway, TUI, and tools all work natively. If you'd rather use WSL2, the Linux/macOS one-liner above works there too. Found a bug? Please [file issues](https://github.com/xujuan-cyber/fulilian/issues).
 
 Run this in PowerShell:
 
@@ -251,7 +251,7 @@ scripts/run_tests.sh
 
 - 💬 [Discord](https://discord.gg/NousResearch)
 - 📚 [Skills Hub](https://agentskills.io)
-- 🐛 [Issues](https://github.com/NousResearch/hermes-agent/issues)
+- 🐛 [Issues](https://github.com/xujuan-cyber/fulilian/issues)
 - 🔌 [computer-use-linux](https://github.com/avifenesh/computer-use-linux) — Linux desktop-control MCP server for Fulilian and other MCP hosts, with AT-SPI accessibility trees, Wayland/X11 input, screenshots, and compositor window targeting.
 - 🔌 [FulilianClaw](https://github.com/AaronWong1999/fulilianclaw) — Community WeChat bridge: Run FuLiLian and OpenClaw on the same WeChat account.
 

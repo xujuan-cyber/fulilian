@@ -209,7 +209,7 @@ stdenv.mkDerivation {
 
   meta = with lib; {
     description = "Native Electron desktop shell for Fulilian Agent";
-    homepage = "https://github.com/NousResearch/hermes-agent";
+    homepage = "https://github.com/xujuan-cyber/fulilian";
     license = licenses.mit;
     platforms = platforms.unix;
     mainProgram = "fulilian-desktop";
