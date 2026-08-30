@@ -233,7 +233,7 @@ Remove-Item -Recurse -Force "$env:LOCALAPPDATA\fulilian\fulilian-agent\venv"
 
 - 💬 [Discord](https://discord.gg/NousResearch)
 - 📖 [Documentation](https://github.com/xujuan-cyber/fulilians/)
-- 🐛 [Issues](https://github.com/NousResearch/hermes-agent/issues)
+- 🐛 [Issues](https://github.com/xujuan-cyber/fulilian/issues)
 
 ---
 
