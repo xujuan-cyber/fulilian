@@ -35,11 +35,11 @@ FuLiLian 提供了一个 Nix flake，支持三个层级的集成：
 
 ```bash
 # 直接运行（首次使用时构建，之后使用缓存）
-nix run github:NousResearch/hermes-agent -- setup
-nix run github:NousResearch/hermes-agent -- chat
+nix run github:xujuan-cyber/fulilian -- setup
+nix run github:xujuan-cyber/fulilian -- chat
 
 # 或持久化安装
-nix profile install github:NousResearch/hermes-agent
+nix profile install github:xujuan-cyber/fulilian
 fulilian setup
 fulilian chat
 ```
@@ -50,7 +50,7 @@ fulilian chat
 <summary><strong>从本地克隆构建</strong></summary>
 
 ```bash
-git clone https://github.com/NousResearch/hermes-agent.git
+git clone https://github.com/xujuan-cyber/fulilian.git
 cd fulilian-agent
 nix build
 ./result/bin/fulilian setup
@@ -75,7 +75,7 @@ nix build
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    fulilian-agent.url = "github:NousResearch/hermes-agent";
+    fulilian-agent.url = "github:xujuan-cyber/fulilian";
   };
 
   outputs = { nixpkgs, fulilian-agent, ... }: {
@@ -685,7 +685,7 @@ services.fulilian-agent = {
 
 ```nix
 {
-  inputs.fulilian-agent.url = "github:NousResearch/hermes-agent";
+  inputs.fulilian-agent.url = "github:xujuan-cyber/fulilian";
   outputs = { fulilian-agent, nixpkgs, ... }: {
     nixpkgs.overlays = [ fulilian-agent.overlays.default ];
     # 然后：

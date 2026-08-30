@@ -49,7 +49,7 @@ development environment on the same layout the CLI, updater, lazy dependency
 installer, gateway, and docs assume.
 
 ```bash
-curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
+curl -fsSL https://github.com/xujuan-cyber/fulilian | bash
 cd "${FULILIAN_HOME:-$HOME/.fulilian}/fulilian-agent"
 
 # Add dev/test extras on top of the standard install.
@@ -89,7 +89,7 @@ which silently destroys the running runtime mid-session. Keeping it outside the
 tree means no relative path from the workspace resolves to it.
 
 ```bash
-git clone https://github.com/NousResearch/hermes-agent.git
+git clone https://github.com/xujuan-cyber/fulilian.git
 cd fulilian-agent
 
 # Create venv with Python 3.11, OUTSIDE the source tree
@@ -143,7 +143,7 @@ scripts/run_tests.sh
 - **Comments**: Only when explaining non-obvious intent, trade-offs, or API quirks
 - **Error handling**: Catch specific exceptions. Use `logger.warning()`/`logger.error()` with `exc_info=True` for unexpected errors
 - **Cross-platform**: Never assume Unix (see below)
-- **Profile-safe paths**: Never hardcode `~/.fulilian` — use `get_fulilian_home()` from `fulilian_constants` for code paths and `display_fulilian_home()` for user-facing messages. See [AGENTS.md](https://github.com/NousResearch/hermes-agent/blob/main/AGENTS.md#profiles-multi-instance-support) for full rules.
+- **Profile-safe paths**: Never hardcode `~/.fulilian` — use `get_fulilian_home()` from `fulilian_constants` for code paths and `display_fulilian_home()` for user-facing messages. See [AGENTS.md](https://github.com/xujuan-cyber/fulilian/blob/main/AGENTS.md#profiles-multi-instance-support) for full rules.
 
 ## Cross-Platform Compatibility
 
@@ -300,4 +300,4 @@ When you ask Fulilian to review a PR in a repository that has `.agents/checks/`,
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the [MIT License](https://github.com/NousResearch/hermes-agent/blob/main/LICENSE).
+By contributing, you agree that your contributions will be licensed under the [MIT License](https://github.com/xujuan-cyber/fulilian/blob/main/LICENSE).

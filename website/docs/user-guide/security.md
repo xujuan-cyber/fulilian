@@ -308,7 +308,7 @@ file bridge, background jobs with no human channel) fail closed. Private keys,
 
 When set, `write_file` and `patch` may only target paths inside the listed directory prefix(es). Anything outside is **hard-blocked** — not routed through dangerous-command approval.
 
-- Set automatically in the [official Docker image](https://github.com/NousResearch/hermes-agent) (`FULILIAN_WRITE_SAFE_ROOT=/opt/data`)
+- Set automatically in the [official Docker image](https://github.com/xujuan-cyber/fulilian) (`FULILIAN_WRITE_SAFE_ROOT=/opt/data`)
 - Supports multiple roots separated by `:` on Unix or `;` on Windows
 - **Do not add to `~/.fulilian/.env` casually.** If you set it to a project directory, the agent cannot write to `~/.fulilian/cron/jobs.json`, profile skills, or other Fulilian state outside that prefix
 

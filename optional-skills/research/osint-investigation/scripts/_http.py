@@ -13,7 +13,7 @@ import urllib.request
 
 DEFAULT_UA = (
     "fulilian-osint-investigation/0.2 "
-    "(+https://github.com/NousResearch/hermes-agent; "
+    "(+https://github.com/xujuan-cyber/fulilian; "
     "set FULILIAN_OSINT_UA env var to identify yourself per "
     "Wikimedia / SEC fair-use guidance)"
 )

@@ -657,7 +657,7 @@ From inside the Fulilian container, the sidecar is reachable at `http://my-tool:
 
 ### Broadly useful tools — open an issue or pull request
 
-If a tool is likely to be useful to most FuLiLian users, consider contributing it upstream rather than carrying it in a private derived image. Open an issue or pull request on the [fulilian-agent repository](https://github.com/NousResearch/hermes-agent) describing the tool and its use case. Tools that get bundled into the official image benefit every user and avoid the maintenance overhead of a downstream fork.
+If a tool is likely to be useful to most FuLiLian users, consider contributing it upstream rather than carrying it in a private derived image. Open an issue or pull request on the [fulilian-agent repository](https://github.com/xujuan-cyber/fulilian) describing the tool and its use case. Tools that get bundled into the official image benefit every user and avoid the maintenance overhead of a downstream fork.
 
 ## Connecting to local inference servers (vLLM, Ollama, etc.)
 

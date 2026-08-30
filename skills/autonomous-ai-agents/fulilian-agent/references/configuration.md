@@ -1,7 +1,7 @@
 # Configuration, Toolsets & Voice
 
 Edit with `fulilian config edit` or `fulilian config set section.key value`.
-Full reference: https://hermes-agent.nousresearch.com/docs/user-guide/configuration
+Full reference: https://github.com/xujuan-cyber/fulilian
 
 ### Config Sections (most-used keys)
 
