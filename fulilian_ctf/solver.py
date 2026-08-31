@@ -9,12 +9,17 @@
 3. chdir 到挑战工作目录，调用 run_agent 核心（stdout/stderr 重定向到 solver.log
    作为证据来源，供调度器 check_output_for_flag 扫描）
 4. 读取 FLAG 文件（声明式提交），连同结果经 Queue 上报
+
+另提供 ``tee_solver_log``：默认 solve 路径（cli.handle_solve_command 不经
+本模块 worker）复用同一证据来源——stdout/stderr 透传终端的同时 tee 进
+work_dir/solver.log，供 trace 回放 / stopper 停滞检测消费。
 """
 
 from __future__ import annotations
 
 import os
 import sys
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -121,6 +126,105 @@ def scan_log_for_flag(work_dir: str | Path) -> str:
         text = log_file.read_text(encoding="utf-8", errors="replace")
         return check_output_for_flag(text) or ""
     return ""
+
+
+class _TeeStream:
+    """把写入同时转发到原流与日志文件的流代理（write 级线程安全）。
+
+    print 每次调用都动态查 ``sys.stdout``，所以线程池里的工具 worker 打印
+    也能被捕获；其余属性（isatty/encoding/buffer…）透传原流，保持终端
+    语义不变。日志写失败只降级（不阻断终端输出），与「证据落盘不应影响
+    求解本身」的原则一致。
+    """
+
+    def __init__(self, stream, log_file) -> None:
+        self._stream = stream
+        self._log_file = log_file
+        self._lock = threading.Lock()
+
+    def write(self, text: str) -> int:
+        with self._lock:
+            if self._log_file is not None:
+                try:
+                    self._log_file.write(text)
+                    self._log_file.flush()
+                except (OSError, ValueError):
+                    pass  # 日志写失败不阻断终端输出
+            if self._stream is None:
+                return len(text)
+            return self._stream.write(text)
+
+    def flush(self) -> None:
+        with self._lock:
+            if self._log_file is not None:
+                try:
+                    self._log_file.flush()
+                except (OSError, ValueError):
+                    pass
+            if self._stream is not None:
+                self._stream.flush()
+
+    def __getattr__(self, name: str):
+        return getattr(self._stream, name)
+
+
+class tee_solver_log:
+    """solve 期间把 stdout/stderr 透传终端，同时 tee 进 ``work_dir/solver.log``。
+
+    默认 solve 路径（``fulilian solve`` 不带 ``--race``/``--multi-agent``）
+    此前不落 solver.log，导致 replay/writeup 无步骤、stopper 停滞检测无
+    数据源；本上下文管理器让该路径与 ``solver_worker``/``_run_solve_once``
+    共用同一证据来源（run_agent 全程 stdout/stderr）。用法::
+
+        with tee_solver_log(work_dir):
+            run_agent.main(query=..., mode="ctf", ...)
+
+    - 日志以 ``"w"`` 截断写（与 _run_solve_once/solver_worker 语义一致）
+    - 写入即时 flush，供 stopper 在求解中途读取
+    - 日志文件打不开（如只读目录）时静默降级为纯透传，不阻断求解
+    - 退出时按对象身份精确还原被替换的 sys.stdout/sys.stderr（支持嵌套），
+      异常安全，不吞异常
+    """
+
+    def __init__(self, work_dir: str | Path, filename: str = SOLVER_LOG) -> None:
+        self.log_path = Path(work_dir) / filename
+        self._log_file = None
+        self._saved: tuple = ()
+        self._out_tee = None
+        self._err_tee = None
+
+    def __enter__(self) -> Path:
+        self.log_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            self._log_file = open(
+                self.log_path, "w", encoding="utf-8", errors="replace"
+            )
+        except OSError:
+            # 证据落盘失败只降级：不换流、不阻断求解
+            self._log_file = None
+            return self.log_path
+        self._saved = (sys.stdout, sys.stderr)
+        self._out_tee = _TeeStream(self._saved[0], self._log_file)
+        self._err_tee = _TeeStream(self._saved[1], self._log_file)
+        sys.stdout = self._out_tee
+        sys.stderr = self._err_tee
+        return self.log_path
+
+    def __exit__(self, exc_type, exc, tb) -> bool:
+        # 按对象身份还原：期间若被第三方再替换则不动（支持嵌套 tee）
+        if self._out_tee is not None and sys.stdout is self._out_tee:
+            sys.stdout = self._saved[0]
+        if self._err_tee is not None and sys.stderr is self._err_tee:
+            sys.stderr = self._saved[1]
+        if self._log_file is not None:
+            try:
+                self._log_file.flush()
+            except (OSError, ValueError):
+                pass
+            self._log_file.close()
+            self._log_file = None
+        self._out_tee = self._err_tee = None
+        return False  # 不吞异常
 
 
 def bootstrap_blackboard(project, work_dir: str | Path, relay_text: Optional[str]) -> None:
@@ -310,4 +414,5 @@ __all__ = [
     "scan_log_for_flag",
     "solver_worker",
     "switch_solver_model",
+    "tee_solver_log",
 ]

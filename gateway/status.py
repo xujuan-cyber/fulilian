@@ -234,12 +234,16 @@ def _get_runtime_status_path() -> Path:
 
 
 def _get_lock_dir() -> Path:
-    """Return the machine-local directory for token-scoped gateway locks."""
+    """Return the machine-local directory for token-scoped gateway locks.
+
+    Default lives inside FULILIAN_HOME (``<home>/state/gateway-locks``) so
+    all Fulilian state is colocated; override via ``FULILIAN_GATEWAY_LOCK_DIR``
+    keeps the legacy XDG layout for existing deployments.
+    """
     override = os.getenv("FULILIAN_GATEWAY_LOCK_DIR")
     if override:
         return Path(override)
-    state_home = Path(os.getenv("XDG_STATE_HOME", Path.home() / ".local" / "state"))
-    return state_home / "fulilian" / _LOCKS_DIRNAME
+    return get_fulilian_home() / "state" / _LOCKS_DIRNAME
 
 
 def _utc_now_iso() -> str:

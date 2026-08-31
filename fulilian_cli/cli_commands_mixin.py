@@ -2306,12 +2306,12 @@ class CLICommandsMixin:
                         from fulilian_cli.skin_engine import get_active_skin
                         _skin = get_active_skin()
                         label = _skin.get_branding("response_label", "⚕ Fulilian")
-                        _resp_color = _maybe_remap_for_light_mode(_skin.get_color("response_border", "#CD7F32"))
-                        _resp_text = _maybe_remap_for_light_mode(_skin.get_color("banner_text", "#FFF8DC"))
+                        _resp_color = _maybe_remap_for_light_mode(_skin.get_color("response_border", "#2E77B9"))
+                        _resp_text = _maybe_remap_for_light_mode(_skin.get_color("banner_text", "#E9F1FC"))
                     except Exception:
                         label = "⚕ Fulilian"
-                        _resp_color = "#CD7F32"
-                        _resp_text = "#FFF8DC"
+                        _resp_color = "#2E77B9"
+                        _resp_text = "#E9F1FC"
 
                     _chat_console = ChatConsole()
                     _chat_console.print(Panel(

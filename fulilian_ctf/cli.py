@@ -158,6 +158,119 @@ def _run_solve_once(project, work_dir: Optional[Path], query: str, model: str,
     return 0 if solved else 1
 
 
+def _looks_like_path(challenge_id: str) -> bool:
+    """启发式：输入是否「看起来像路径」（区别于 web-01 这类裸挑战 id）。"""
+    if os.sep in challenge_id or (os.altsep and os.altsep in challenge_id):
+        return True
+    if challenge_id.startswith((".", "~")):
+        return True
+    return Path(challenge_id).suffix != ""
+
+
+def _solve_work_dir_for(project, challenge_id: str) -> str:
+    """纯读镜像 ``_prepare_work_dir`` 的目录选择（不落盘、不 mkdir）。
+
+    清单文件形态（challenge_id 指向 .json 且无独立 challenge_dir）在 cwd 求解，
+    其余返回 challenge_dir（expanduser + absolute 规范化）。
+    """
+    raw = Path(project.challenge_dir or challenge_id).expanduser()
+    if raw.suffix and not raw.is_dir():
+        return str(Path.cwd())
+    return str(raw.absolute())
+
+
+def _validate_solve_target(challenge_id: str) -> Optional[str]:
+    """solve 目标前置校验：合法返回将要使用的 work_dir（规范化字符串），否则 None。
+
+    解析顺序与 ``_resolve_project`` 保持一致（历史轨迹对齐 writeup/replay 的
+    ``_resolve_writeup_inputs``），避免误杀合法输入：
+
+    1. 存在的目录（裸挑战目录 / 含 challenge.json / 平台清单目录）→ 该目录
+    2. 平台清单文件（``load_challenges`` 可解析出挑战）→ 条目的 challenge_dir
+    3. 历史轨迹 ``FULILIAN_HOME/traces/<id>.json`` → solve 将新建的 cwd/<id> 目录
+    4. 相对裸 id（如 web-01）→ 既有机制：在 cwd 下建同名工作目录（见
+       ``_resolve_project`` 尾分支），放行
+
+    其余（不存在的路径形态输入、不可解析的非清单文件、空白 id）→ None：
+    放行只会让 ``_prepare_work_dir`` 在任意位置 mkdir 空目录并启动 agent
+    空烧 API token。纯只读检查，不创建任何目录。
+    """
+    if not challenge_id or not challenge_id.strip():
+        return None
+    path = Path(challenge_id).expanduser()
+    if path.is_dir():
+        # 目录本身就是挑战（含 challenge.json 的题目目录同样放行）
+        challenge_json = path / "challenge.json"
+        if not challenge_json.is_file():
+            return str(path.absolute())
+        try:
+            from fulilian_ctf.registry import challenge_to_project
+
+            project = challenge_to_project(
+                json.loads(challenge_json.read_text(encoding="utf-8")),
+                base_dir=path.parent,
+            )
+        except (OSError, ValueError, KeyError, TypeError):
+            # 损坏的 challenge.json：目标无效，拒绝并给出清晰报错
+            return None
+        return _solve_work_dir_for(project, challenge_id)
+    # 平台清单文件 / 其它 load_challenges 可解析形态
+    try:
+        from fulilian_ctf.registry import challenge_to_project, load_challenges
+
+        entries = [e for e in load_challenges(challenge_id) if e.get("id")]
+    except (ValueError, OSError, KeyError, TypeError):
+        entries = []
+    if entries:
+        return _solve_work_dir_for(challenge_to_project(entries[0]), challenge_id)
+    # 历史轨迹（与 writeup/replay 同源，record_solve_outcome 写入）
+    if _load_historical_trace(challenge_id) is not None:
+        return str(path.absolute())
+    # 相对裸 id：cwd 下建同名工作目录是既有机制，放行
+    if not _looks_like_path(challenge_id):
+        return str(path.absolute())
+    return None
+
+
+def _report_invalid_solve_target(challenge_id: str) -> None:
+    """打印 solve 目标无效的 stderr 详情（风格对齐 handle_replay_command 的 exit 2）。"""
+    if challenge_id and _looks_like_path(challenge_id):
+        path = Path(challenge_id).expanduser()
+        if path.exists():
+            print(
+                f"solve: '{challenge_id}' exists but is not a usable challenge "
+                "directory or platform manifest",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                f"solve: challenge path does not exist: '{challenge_id}'",
+                file=sys.stderr,
+            )
+        print(
+            "  (refusing to start the agent: it would explore an empty/wrong "
+            "work dir and burn API tokens)",
+            file=sys.stderr,
+        )
+    else:
+        print(
+            f"solve: cannot resolve challenge id: '{challenge_id}'",
+            file=sys.stderr,
+        )
+    print(
+        "  checked: existing directory, platform manifest "
+        "(platform.json / manifest.json / challenges.json / challenge.json), "
+        "historical trace (FULILIAN_HOME/traces/<id>.json)",
+        file=sys.stderr,
+    )
+    print(
+        "  usage: pass an existing challenge directory, or sync platform "
+        "challenges first (`fulilian ctfd sync <base_url> <out_dir>`) "
+        "and solve a challenge directory under <out_dir>",
+        file=sys.stderr,
+    )
+
+
 def handle_solve_command(args: argparse.Namespace) -> None:
     """Solve a single CTF challenge in CTF mode.
 
@@ -167,7 +280,16 @@ def handle_solve_command(args: argparse.Namespace) -> None:
     - ``--json``：输出结构化 JSON 事件流供脚本消费（F4-002）
     - ``--race``：多模型竞速（Phase 3, F3-005/006）
     - ``--multi-agent``：多 Agent 协作（Phase 3, F3-007/008/009）
+    - 目标前置校验：challenge id/路径无法解析时在启动 agent 前秒级报错
+      退出（exit 2），不发生任何 LLM API 调用
     """
+    challenge_id = args.id
+    # 前置校验：目标无效时秒级退出（exit 2），绝不启动 agent / 发 API 请求。
+    # --race / --multi-agent / 默认单 agent 三分支共用同一 args.id，统一在此拦截。
+    if _validate_solve_target(challenge_id) is None:
+        _report_invalid_solve_target(challenge_id)
+        sys.exit(2)
+
     if getattr(args, "race", False):
         result = _run_race(args)
         sys.exit(0 if result.solved else 1)
@@ -176,7 +298,6 @@ def handle_solve_command(args: argparse.Namespace) -> None:
         result = _run_multi_agent(args)
         sys.exit(0 if result.solved else 1)
 
-    challenge_id = args.id
     query = f"Solve the CTF challenge: {challenge_id}"
 
     # Phase 3 知识卡注入：从 challenge id 猜测分类（如 web-01 → web）

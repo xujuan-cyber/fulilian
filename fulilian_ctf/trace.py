@@ -4,7 +4,10 @@
 「追踪回放正确（命令 + 输出 + flag 验证结果完整记录）」。
 
 数据来源（全部是步骤 05-07 已存在的产物，不侵入原生代码）：
-- ``work_dir/solver.log`` — solver 全程 stdout/stderr（命令 + 输出）
+- ``work_dir/solver.log`` — solver 全程 stdout/stderr（命令 + 输出）；
+  既可以是 dispatcher/``_run_solve_once`` 的重定向落盘，也可以是默认
+  solve 路径用 ``fulilian_ctf.solver.tee_solver_log`` 透传 tee 的 run_agent
+  stdout（含 📞/✅ 工具进度行，``_split_log_steps`` 两种格式都认）
 - ``work_dir/blackboard.json`` — Fact/Intent/死路（flag 验证结论的来源）
 - ``work_dir/FLAG`` — 声明式提交的 flag
 
@@ -33,6 +36,20 @@ MAX_STEPS = 200
 _STEP_SPLIT = re.compile(
     r"\n(?=(?:\[\d+\]\s|执行的命令|Command:|\$\s|> ))", re.MULTILINE
 )
+
+# run_agent stdout 的工具进度行（默认 solve 的 tee 落盘与 dispatcher 的
+# stdout 重定向同源）。示例（agent/tool_executor.py 的进度打印）：
+#   📞 Tool 1: terminal(['command']) - {"command": "ls -la", "task_id": "default"}
+#   ✅ Tool 1 completed in 0.14s - {"output": "total 48...", "exit_code": 0}
+# verbose 模式下调用行没有 ` - 预览` 尾巴；display_index 缺省时无序号。
+_TOOL_CALL_LINE = re.compile(
+    r"^\s*📞\s*Tool\s*(?:\d+)?\s*:\s*(\S+?)\(([^)]*)\)(?:\s*-\s*(.*))?$"
+)
+_TOOL_DONE_LINE = re.compile(
+    r"^\s*✅\s*Tool\s*\d+\s+completed(?:\s+in\s+[\d.]+s)?(?:\s*-\s*(.*))?$"
+)
+# 参数预览 JSON 里的 terminal 命令值（预览可能被截断，尽力而为）
+_ARG_COMMAND_VALUE = re.compile(r'"command"\s*:\s*"((?:[^"\\]|\\.)*)"')
 
 
 @dataclass
@@ -106,35 +123,97 @@ class Trace:
         )
 
 
+def _push_step(steps: list, text: str, kind: str) -> None:
+    """追加一步（统一 strip / 截断 / 步号，空文本与超上限时跳过）。"""
+    text = text.strip()
+    if not text or len(steps) >= MAX_STEPS:
+        return
+    if len(text) > MAX_STEP_CHARS:
+        text = text[:MAX_STEP_CHARS] + f"\n... (truncated, {len(text)} chars)"
+    steps.append(TraceStep(index=len(steps) + 1, kind=kind, text=text))
+
+
+def _command_text_from_tool_call(tool: str, arglist: str, preview: str) -> str:
+    """从工具调用行提取可读命令文本。
+
+    terminal 工具优先抠出参数预览 JSON 里的 ``command`` 值（预览被截断时
+    尽力解码）；其余工具回退为 ``tool(args) - preview`` 原始内容。
+    """
+    m = _ARG_COMMAND_VALUE.search(preview or "")
+    if m:
+        try:
+            return json.loads(f'"{m.group(1)}"')
+        except ValueError:
+            return m.group(1)
+    raw = f"{tool}({arglist})"
+    if preview:
+        raw += f" - {preview}"
+    return raw
+
+
+def _split_stdout_steps(log_text: str) -> list[TraceStep]:
+    """按 run_agent stdout 的工具进度行切步。
+
+    📞 调用行 → command 步（terminal 命令优先），✅ 完成行 → 其输出预览
+    作为 output 步，其余非空行聚成段按空行边界落为 output 步。纯启发式：
+    agent 进度打印格式变化时最多退化为少切几步，不影响正确性。
+    """
+    steps: list[TraceStep] = []
+    buf: list[str] = []
+
+    def _flush_buf() -> None:
+        text = "\n".join(buf)
+        buf.clear()
+        _push_step(steps, text, "output")
+
+    for line in log_text.splitlines():
+        call = _TOOL_CALL_LINE.match(line)
+        done = _TOOL_DONE_LINE.match(line)
+        if call or done:
+            _flush_buf()
+            if call:
+                _push_step(
+                    steps,
+                    _command_text_from_tool_call(
+                        call.group(1), call.group(2), call.group(3) or ""
+                    ),
+                    "command",
+                )
+            else:
+                _push_step(steps, done.group(1) or "", "output")
+        else:
+            buf.append(line)
+    _flush_buf()
+    return steps
+
+
 def _split_log_steps(log_text: str) -> list[TraceStep]:
     """把 solver.log 切成回放步骤：命令行一步、其输出一步。
 
-    优先按命令标记行切块；块内第一行若是命令则拆出 command 步，
-    其余内容作为对应 output 步（无命令标记时整块按空行分段）。
+    run_agent stdout 格式（含 📞 工具进度行）优先按进度行切；否则按
+    ``$ ``/``[N] `` 等命令标记行切块，块内第一行若是命令则拆出 command
+    步，其余内容作为对应 output 步（无任何标记时整块按空行分段）。
     """
+    if not log_text.strip():
+        return []
+    if "📞" in log_text:
+        return _split_stdout_steps(log_text)
+
     chunks = _STEP_SPLIT.split(log_text)
     if len(chunks) <= 1:
         chunks = [c for c in re.split(r"\n\s*\n", log_text) if c.strip()]
 
     steps: list[TraceStep] = []
 
-    def _push(text: str, kind: str) -> None:
-        text = text.strip()
-        if not text:
-            return
-        if len(text) > MAX_STEP_CHARS:
-            text = text[:MAX_STEP_CHARS] + f"\n... (truncated, {len(text)} chars)"
-        steps.append(TraceStep(index=len(steps) + 1, kind=kind, text=text))
-
     for chunk in chunks[: MAX_STEPS * 2]:
         if not chunk.strip():
             continue
         lines = chunk.strip().splitlines()
         if lines and _looks_like_command(lines[0]):
-            _push(lines[0], "command")
-            _push("\n".join(lines[1:]), "output")
+            _push_step(steps, lines[0], "command")
+            _push_step(steps, "\n".join(lines[1:]), "output")
         else:
-            _push(chunk, "output")
+            _push_step(steps, chunk, "output")
         if len(steps) >= MAX_STEPS:
             break
     return steps

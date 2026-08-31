@@ -26,32 +26,32 @@ All fields are optional. Missing values inherit from the ``default`` skin.
       background: "#0e0e12"               # App/base surface — the seed the TUI
                                           # status bar and the desktop GUI derive
                                           # their whole palette from (see below).
-      banner_border: "#CD7F32"            # Panel border color
-      banner_title: "#FFD700"             # Panel title text color
-      banner_accent: "#FFBF00"            # Section headers (Available Tools, etc.)
-      banner_dim: "#B8860B"               # Dim/muted text (separators, labels)
-      banner_text: "#FFF8DC"              # Body text (tool names, skill names)
-      ui_accent: "#FFBF00"               # General UI accent
-      ui_label: "#DAA520"                # UI labels (warm gold; teal clashed w/ default banner gold)
+      banner_border: "#2E77B9"            # Panel border color
+      banner_title: "#5DB8F5"             # Panel title text color
+      banner_accent: "#339AF0"            # Section headers (Available Tools, etc.)
+      banner_dim: "#377EB9"               # Dim/muted text (separators, labels)
+      banner_text: "#E9F1FC"              # Body text (tool names, skill names)
+      ui_accent: "#339AF0"               # General UI accent
+      ui_label: "#3A86C5"                # UI labels (cool blue; warm gold clashed w/ the azure banner)
       ui_ok: "#4caf50"                   # Success indicators
       ui_error: "#ef5350"                # Error indicators
       ui_warn: "#ffa726"                 # Warning indicators
-      ui_tool: "#FFBF00"                 # Tool-call markers (● / spinner); falls back to ui_accent
-      ui_thinking: "#CC9B1F"             # Reasoning/thinking text; falls back to banner_dim
+      ui_tool: "#339AF0"                 # Tool-call markers (● / spinner); falls back to ui_accent
+      ui_thinking: "#377EB9"             # Reasoning/thinking text; falls back to banner_dim
       diff_added: "#dcffdc"              # Diff added-line background (TUI)
       diff_removed: "#ffdcdc"            # Diff removed-line background
       diff_added_word: "#248a3d"         # Diff added word-level foreground
       diff_removed_word: "#cf222e"       # Diff removed word-level foreground
-      syntax_string: "#FFBF00"           # Code strings; falls back to ui_accent
-      syntax_number: "#FFF8DC"           # Code numbers; falls back to ui_text
-      syntax_keyword: "#CD7F32"          # Code keywords; falls back to ui_border
-      syntax_comment: "#CC9B1F"          # Code comments; falls back to banner_dim
-      prompt: "#FFF8DC"                  # Prompt text color
-      input_rule: "#CD7F32"              # Input area horizontal rule
-      response_border: "#FFD700"         # Response box border (ANSI)
+      syntax_string: "#339AF0"           # Code strings; falls back to ui_accent
+      syntax_number: "#E9F1FC"           # Code numbers; falls back to ui_text
+      syntax_keyword: "#2E77B9"          # Code keywords; falls back to ui_border
+      syntax_comment: "#377EB9"          # Code comments; falls back to banner_dim
+      prompt: "#E9F1FC"                  # Prompt text color
+      input_rule: "#2E77B9"              # Input area horizontal rule
+      response_border: "#5DB8F5"         # Response box border (ANSI)
       status_bar_bg: "#1a1a2e"           # Status bar background
       status_bar_text: "#C0C0C0"         # Status bar default text
-      status_bar_strong: "#FFD700"       # Status bar highlighted text
+      status_bar_strong: "#5DB8F5"       # Status bar highlighted text
       status_bar_dim: "#8B8682"          # Status bar separators/muted text
       status_bar_good: "#8FBC8F"         # Healthy context usage
       status_bar_warn: "#FFD700"         # Warning context usage
@@ -74,7 +74,7 @@ All fields are optional. Missing values inherit from the ``default`` skin.
     # Without a paired block, the TUI adapts `colors` automatically
     # (contrast-clamped foregrounds, polarity-corrected fills).
     light_colors:
-      banner_title: "#8B6914"
+      banner_title: "#31A4F2"
       # ... same keys as `colors` ...
 
     # Spinner: customize the animated spinner during API calls
@@ -118,7 +118,7 @@ USAGE
     from fulilian_cli.skin_engine import get_active_skin, list_skins, set_active_skin
 
     skin = get_active_skin()
-    print(skin.colors["banner_title"])    # "#FFD700"
+    print(skin.colors["banner_title"])    # "#5DB8F5"
     print(skin.get_branding("agent_name"))  # "FuLiLian"
 
     set_active_skin("ares")               # Switch to built-in ares skin
@@ -127,7 +127,7 @@ USAGE
 BUILT-IN SKINS
 ==============
 
-- ``default`` — Classic Fulilian gold/kawaii (the current look)
+- ``default`` — Classic Fulilian azure/kawaii (the current look)
 - ``ares``    — Crimson/bronze war-god theme with custom spinner wings
 - ``mono``    — Clean grayscale monochrome
 - ``slate``   — Cool blue developer-focused theme
@@ -201,32 +201,32 @@ class SkinConfig:
 _BUILTIN_SKINS: Dict[str, Dict[str, Any]] = {
     "default": {
         "name": "default",
-        "description": "Classic Fulilian — gold and kawaii",
+        "description": "Classic Fulilian — azure blue and kawaii",
         # Dark-authored. Values match the TUI's DARK_THEME so the classic CLI
-        # and the TUI render the same Fulilian gold.
+        # and the TUI render the same Fulilian azure.
         "colors": {
-            "banner_border": "#CD7F32",
-            "banner_title": "#FFD700",
-            "banner_accent": "#FFBF00",
-            "banner_dim": "#B8860B",
-            "banner_text": "#FFF8DC",
-            "ui_accent": "#FFBF00",
-            "ui_label": "#DAA520",
+            "banner_border": "#2E77B9",
+            "banner_title": "#5DB8F5",
+            "banner_accent": "#339AF0",
+            "banner_dim": "#377EB9",
+            "banner_text": "#E9F1FC",
+            "ui_accent": "#339AF0",
+            "ui_label": "#3A86C5",
             "ui_ok": "#4caf50",
             "ui_error": "#ef5350",
             "ui_warn": "#ffa726",
-            "prompt": "#FFF8DC",
-            "input_rule": "#CD7F32",
-            "response_border": "#FFD700",
+            "prompt": "#E9F1FC",
+            "input_rule": "#2E77B9",
+            "response_border": "#5DB8F5",
             "status_bar_bg": "#1a1a2e",
             "status_bar_text": "#C0C0C0",
-            "status_bar_strong": "#FFD700",
-            "status_bar_dim": "#8A7A4A",
+            "status_bar_strong": "#5DB8F5",
+            "status_bar_dim": "#377EB9",
             "status_bar_good": "#8FBC8F",
             "status_bar_warn": "#FFD700",
             "status_bar_bad": "#FF8C00",
             "status_bar_critical": "#FF6B6B",
-            "session_label": "#DAA520",
+            "session_label": "#3A86C5",
             "session_border": "#8B8682",
             "completion_menu_bg": "#1a1a2e",
             "completion_menu_current_bg": "#333355",
@@ -235,29 +235,29 @@ _BUILTIN_SKINS: Dict[str, Dict[str, Any]] = {
             "voice_status_bg": "#1a1a2e",
         },
         # Light overlay (merged onto `colors`; dark mode renders the vivid
-        # block above untouched). The goldenrod ladder: on white, the vivid
-        # #FFD700/#FFBF00 read as glare and WCAG-darkened mustard (#867000)
-        # reads as mud — the sweet spot is the statusbar's goldenrod family
-        # (#B8860B/#DAA520): hue kept, saturation tamed, mid luminance.
-        # Hierarchy on white: ink body 8.9:1 > fade 5.2 > label 3.7 >
-        # muted 3.3 > title 2.7 > headers 2.4 (accents recede last, like
-        # slate's pastels — the raw-canon look, just not neon).
+        # block above untouched). The azure ladder: on white, light blues
+        # wash out and over-dark navy reads as mud — the sweet spot keeps
+        # the ~210° hue with luminance tuned per role. Hierarchy on white:
+        # ink body 8.6:1 > fade 5.2 > label 3.7 > title 2.7 > headers 2.4
+        # (accents recede last, like slate's pastels — the raw-canon look,
+        # just not neon). status_bar_warn stays goldenrod: warn semantics
+        # outlive the brand hue.
         "light_colors": {
-            "banner_title": "#C8961E",
-            "banner_accent": "#D89B04",
-            "banner_dim": "#B8860B",
-            "banner_text": "#5C4718",
-            "ui_accent": "#D89B04",
-            "ui_label": "#A97E10",
+            "banner_title": "#31A4F2",
+            "banner_accent": "#5AADF3",
+            "banner_dim": "#0E6FBF",
+            "banner_text": "#3A4E63",
+            "ui_accent": "#5AADF3",
+            "ui_label": "#1187EA",
             "ui_ok": "#2E7D32",
             "ui_error": "#C62828",
             "ui_warn": "#D97706",
-            "prompt": "#5C4718",
-            "response_border": "#C8961E",
-            "session_label": "#A97E10",
+            "prompt": "#3A4E63",
+            "response_border": "#31A4F2",
+            "session_label": "#1187EA",
             "status_bar_text": "#6F6F6F",
-            "status_bar_strong": "#C8961E",
-            "status_bar_dim": "#9A8A5A",
+            "status_bar_strong": "#31A4F2",
+            "status_bar_dim": "#6C99C0",
             "status_bar_good": "#2E7D32",
             "status_bar_warn": "#C8961E",
             "status_bar_bad": "#C2410C",
@@ -265,7 +265,7 @@ _BUILTIN_SKINS: Dict[str, Dict[str, Any]] = {
             "shell_dollar": "#1E6FC0",
             # Fills: flip the dark navy surfaces to light polarity.
             "completion_menu_bg": "#F5F5F5",
-            "completion_menu_current_bg": "#E0D1BF",
+            "completion_menu_current_bg": "#C5DEF4",
             "selection_bg": "#D4E4F7",
             "status_bar_bg": "#F5F5F5",
             "voice_status_bg": "#F5F5F5",
@@ -1001,9 +1001,9 @@ def get_prompt_toolkit_style_overrides() -> Dict[str, str]:
     # color schemes).  Skins can opt into a colored prompt by setting
     # `prompt` explicitly in their YAML.
     prompt = skin.get_color("prompt", "")
-    input_rule = skin.get_color("input_rule", "#CD7F32")
-    title = skin.get_color("banner_title", "#FFD700")
-    text = skin.get_color("banner_text", "#FFF8DC")
+    input_rule = skin.get_color("input_rule", "#2E77B9")
+    title = skin.get_color("banner_title", "#5DB8F5")
+    text = skin.get_color("banner_text", "#E9F1FC")
     dim = skin.get_color("banner_dim", "#555555")
     label = skin.get_color("ui_label", title)
     warn = skin.get_color("ui_warn", "#FF8C00")

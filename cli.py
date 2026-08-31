@@ -2947,14 +2947,14 @@ def _prune_orphaned_branches(repo_root: str) -> None:
 # ============================================================================
 
 # Color palette (hex colors for Rich markup):
-# - Gold: #FFD700 (headers, highlights)
-# - Amber: #FFBF00 (secondary highlights)
-# - Bronze: #CD7F32 (tertiary elements)
-# - Light: #FFF8DC (text)
-# - Dim: #B8860B (muted text)
+# - Azure: #5DB8F5 (headers, highlights)
+# - Blue: #339AF0 (secondary highlights)
+# - Steel: #2E77B9 (tertiary elements)
+# - Light: #E9F1FC (text)
+# - Dim: #377EB9 (muted text)
 
 # ANSI building blocks for conversation display
-_ACCENT_ANSI_DEFAULT = "\033[1;38;2;255;215;0m"  # True-color #FFD700 bold — fallback
+_ACCENT_ANSI_DEFAULT = "\033[1;38;2;93;184;245m"  # True-color #5DB8F5 bold — fallback
 _BOLD = "\033[1m"
 _RST = "\033[0m"
 _STREAM_PAD = ""  # No indent for streamed response text — leading whitespace pollutes
@@ -2979,14 +2979,14 @@ def _hex_to_ansi(hex_color: str, *, bold: bool = False) -> str:
         prefix = "1;" if bold else ""
         return f"\033[{prefix}38;2;{r};{g};{b}m"
     except (ValueError, IndexError):
-        return _ACCENT_ANSI_DEFAULT if bold else "\033[38;2;184;134;11m"
+        return _ACCENT_ANSI_DEFAULT if bold else "\033[38;2;55;126;185m"
 
 
 # ────────────────────────────────────────────────────────────────────────
 # Light/dark terminal mode detection.
 #
 # Mirrors ui-tui/src/theme.ts detectLightMode().  Used to decide whether
-# to remap "near-white" skin colors (e.g. #FFF8DC banner_text, #B8860B
+# to remap "near-white" skin colors (e.g. #E9F1FC banner_text, #377EB9
 # banner_dim) to darker equivalents that are readable on a light
 # Terminal.app / iTerm2 background.
 #
@@ -3268,6 +3268,13 @@ def _detect_light_mode() -> bool:
 # become invisible the OTHER direction (dark gray on dark navy).
 _LIGHT_MODE_REMAP: dict[str, str] = {
     # Original (dark-mode) -> Light-mode replacement (darker, readable)
+    "#E9F1FC": "#1A1A1A",   # porcelain -> near-black
+    "#5DB8F5": "#1E6FC0",   # azure -> deep blue (readable on cream)
+    "#339AF0": "#246FAE",   # blue -> deeper blue
+    "#2E77B9": "#296BA6",   # steel -> deeper steel
+    "#377EB9": "#246FAE",   # dim blue -> deeper blue
+    # Legacy gold-identity entries kept so user skins saved before the
+    # azure rebrand still remap correctly.
     "#FFF8DC": "#1A1A1A",   # cornsilk -> near-black
     "#FFD700": "#9A6B00",   # gold -> dark goldenrod (readable on cream)
     "#FFBF00": "#8A5A00",   # amber -> dark amber
@@ -3347,7 +3354,7 @@ class _SkinAwareAnsi:
     force re-resolution after a ``/skin`` switch.
     """
 
-    def __init__(self, skin_key: str, fallback_hex: str = "#FFD700", *, bold: bool = False):
+    def __init__(self, skin_key: str, fallback_hex: str = "#5DB8F5", *, bold: bool = False):
         self._skin_key = skin_key
         self._fallback_hex = fallback_hex
         self._bold = bold
@@ -3376,7 +3383,7 @@ class _SkinAwareAnsi:
         self._cached = None
 
 
-_ACCENT = _SkinAwareAnsi("response_border", "#FFD700", bold=True)
+_ACCENT = _SkinAwareAnsi("response_border", "#5DB8F5", bold=True)
 # Use ANSI dim+italic attributes (\x1b[2;3m) instead of a hardcoded
 # hex color so dim/thinking text inherits the terminal's default
 # foreground color and stays readable in both light and dark
@@ -3407,9 +3414,9 @@ def _accent_hex() -> str:
     """Return the active skin accent color for legacy CLI output lines."""
     try:
         from fulilian_cli.skin_engine import get_active_skin
-        return get_active_skin().get_color("ui_accent", "#FFBF00")
+        return get_active_skin().get_color("ui_accent", "#339AF0")
     except Exception:
-        return "#FFBF00"
+        return "#339AF0"
 
 
 def _rich_text_from_ansi(text: str) -> _RichText:
@@ -4708,29 +4715,29 @@ class ChatConsole:
         yield self
 
 # ASCII Art - FULILIAN-AGENT logo (full width, single line - requires ~95 char terminal)
-FULILIAN_AGENT_LOGO = """[bold #FFD700]██╗  ██╗███████╗██████╗ ███╗   ███╗███████╗███████╗       █████╗  ██████╗ ███████╗███╗   ██╗████████╗[/]
-[bold #FFD700]██║  ██║██╔════╝██╔══██╗████╗ ████║██╔════╝██╔════╝      ██╔══██╗██╔════╝ ██╔════╝████╗  ██║╚══██╔══╝[/]
-[#FFBF00]███████║█████╗  ██████╔╝██╔████╔██║█████╗  ███████╗█████╗███████║██║  ███╗█████╗  ██╔██╗ ██║   ██║[/]
-[#FFBF00]██╔══██║██╔══╝  ██╔══██╗██║╚██╔╝██║██╔══╝  ╚════██║╚════╝██╔══██║██║   ██║██╔══╝  ██║╚██╗██║   ██║[/]
-[#CD7F32]██║  ██║███████╗██║  ██║██║ ╚═╝ ██║███████╗███████║      ██║  ██║╚██████╔╝███████╗██║ ╚████║   ██║[/]
-[#CD7F32]╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝╚══════╝╚══════╝      ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝[/]"""
+FULILIAN_AGENT_LOGO = """[bold #5DB8F5]██╗  ██╗███████╗██████╗ ███╗   ███╗███████╗███████╗       █████╗  ██████╗ ███████╗███╗   ██╗████████╗[/]
+[bold #5DB8F5]██║  ██║██╔════╝██╔══██╗████╗ ████║██╔════╝██╔════╝      ██╔══██╗██╔════╝ ██╔════╝████╗  ██║╚══██╔══╝[/]
+[#339AF0]███████║█████╗  ██████╔╝██╔████╔██║█████╗  ███████╗█████╗███████║██║  ███╗█████╗  ██╔██╗ ██║   ██║[/]
+[#339AF0]██╔══██║██╔══╝  ██╔══██╗██║╚██╔╝██║██╔══╝  ╚════██║╚════╝██╔══██║██║   ██║██╔══╝  ██║╚██╗██║   ██║[/]
+[#2E77B9]██║  ██║███████╗██║  ██║██║ ╚═╝ ██║███████╗███████║      ██║  ██║╚██████╔╝███████╗██║ ╚████║   ██║[/]
+[#2E77B9]╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝╚══════╝╚══════╝      ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝[/]"""
 
 # ASCII Art - Fulilian Caduceus (compact, fits in left panel)
-FULILIAN_CADUCEUS = """[#CD7F32]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣀⡀⠀⣀⣀⠀⢀⣀⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
-[#CD7F32]⠀⠀⠀⠀⠀⠀⢀⣠⣴⣾⣿⣿⣇⠸⣿⣿⠇⣸⣿⣿⣷⣦⣄⡀⠀⠀⠀⠀⠀⠀[/]
-[#FFBF00]⠀⢀⣠⣴⣶⠿⠋⣩⡿⣿⡿⠻⣿⡇⢠⡄⢸⣿⠟⢿⣿⢿⣍⠙⠿⣶⣦⣄⡀⠀[/]
-[#FFBF00]⠀⠀⠉⠉⠁⠶⠟⠋⠀⠉⠀⢀⣈⣁⡈⢁⣈⣁⡀⠀⠉⠀⠙⠻⠶⠈⠉⠉⠀⠀[/]
-[#FFD700]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣴⣿⡿⠛⢁⡈⠛⢿⣿⣦⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
-[#FFD700]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠿⣿⣦⣤⣈⠁⢠⣴⣿⠿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
-[#FFBF00]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠉⠻⢿⣿⣦⡉⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
-[#FFBF00]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠘⢷⣦⣈⠛⠃⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
-[#CD7F32]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⣴⠦⠈⠙⠿⣦⡄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
-[#CD7F32]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠸⣿⣤⡈⠁⢤⣿⠇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
-[#B8860B]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠉⠛⠷⠄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
-[#B8860B]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣀⠑⢶⣄⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
-[#B8860B]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣿⠁⢰⡆⠈⡿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
-[#B8860B]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠳⠈⣡⠞⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
-[#B8860B]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]"""
+FULILIAN_CADUCEUS = """[#2E77B9]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣀⡀⠀⣀⣀⠀⢀⣀⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
+[#2E77B9]⠀⠀⠀⠀⠀⠀⢀⣠⣴⣾⣿⣿⣇⠸⣿⣿⠇⣸⣿⣿⣷⣦⣄⡀⠀⠀⠀⠀⠀⠀[/]
+[#339AF0]⠀⢀⣠⣴⣶⠿⠋⣩⡿⣿⡿⠻⣿⡇⢠⡄⢸⣿⠟⢿⣿⢿⣍⠙⠿⣶⣦⣄⡀⠀[/]
+[#339AF0]⠀⠀⠉⠉⠁⠶⠟⠋⠀⠉⠀⢀⣈⣁⡈⢁⣈⣁⡀⠀⠉⠀⠙⠻⠶⠈⠉⠀⠀[/]
+[#5DB8F5]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣴⣿⡿⠛⢁⡈⠛⢿⣿⣦⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
+[#5DB8F5]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠿⣿⣦⣤⣈⠁⢠⣴⣿⠿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
+[#339AF0]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠉⠻⢿⣿⣦⡉⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
+[#339AF0]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠘⢷⣦⣈⠛⠃⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
+[#2E77B9]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⣴⠦⠈⠙⠿⣦⡄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
+[#2E77B9]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠸⣿⣤⡈⠁⢤⣿⠇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
+[#377EB9]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠉⠛⠷⠄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
+[#377EB9]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣀⠑⢶⣄⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
+[#377EB9]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣿⠁⢰⡆⠈⡿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
+[#377EB9]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠳⠈⣡⠞⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
+[#377EB9]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]"""
 
 
 
@@ -4743,9 +4750,9 @@ def _build_compact_banner() -> str:
         _skin = None
 
     skin_name = getattr(_skin, "name", "default") if _skin else "default"
-    border_color = _skin.get_color("banner_border", "#FFD700") if _skin else "#FFD700"
-    title_color = _skin.get_color("banner_title", "#FFBF00") if _skin else "#FFBF00"
-    dim_color = _skin.get_color("banner_dim", "#B8860B") if _skin else "#B8860B"
+    border_color = _skin.get_color("banner_border", "#2E77B9") if _skin else "#2E77B9"
+    title_color = _skin.get_color("banner_title", "#5DB8F5") if _skin else "#5DB8F5"
+    dim_color = _skin.get_color("banner_dim", "#377EB9") if _skin else "#377EB9"
 
     if skin_name == "default":
         line1 = "⚕ NOUS FULILIAN - AI Agent Framework"
@@ -7912,10 +7919,10 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                 from fulilian_cli.skin_engine import get_active_skin
                 _skin = get_active_skin()
                 label = _skin.get_branding("response_label", "⚕ Fulilian")
-                _text_hex = _skin.get_color("banner_text", "#FFF8DC")
+                _text_hex = _skin.get_color("banner_text", "#E9F1FC")
             except Exception:
                 label = "⚕ Fulilian"
-                _text_hex = "#FFF8DC"
+                _text_hex = "#E9F1FC"
             # Build a true-color ANSI escape for the response text color
             # so streamed content matches the Rich Panel appearance.
             try:
@@ -9155,11 +9162,11 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         try:
             from fulilian_cli.skin_engine import get_active_skin
             skin = get_active_skin()
-            separator_color = skin.get_color("banner_dim", "#B8860B")
-            accent_color = skin.get_color("ui_accent", "#FFBF00")
+            separator_color = skin.get_color("banner_dim", "#377EB9")
+            accent_color = skin.get_color("ui_accent", "#339AF0")
             label_color = skin.get_color("ui_label", "#DAA520")
         except Exception:
-            separator_color, accent_color, label_color = "#B8860B", "#FFBF00", "cyan"
+            separator_color, accent_color, label_color = "#377EB9", "#339AF0", "cyan"
         toolsets_info = ""
         if self.enabled_toolsets and "all" not in self.enabled_toolsets:
             toolsets_info = f" [dim {separator_color}]·[/] [{label_color}]toolsets: {', '.join(self.enabled_toolsets)}[/]"
@@ -12094,9 +12101,9 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                     _tip = get_random_tip()
                     try:
                         from fulilian_cli.skin_engine import get_active_skin
-                        _tip_color = get_active_skin().get_color("banner_dim", "#B8860B")
+                        _tip_color = get_active_skin().get_color("banner_dim", "#377EB9")
                     except Exception:
-                        _tip_color = "#B8860B"
+                        _tip_color = "#377EB9"
                     cc.print(f"[dim {_tip_color}]✦ Tip: {_tip}[/]")
                 except Exception:
                     pass
@@ -12109,9 +12116,9 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                     _tip = get_random_tip()
                     try:
                         from fulilian_cli.skin_engine import get_active_skin
-                        _tip_color = get_active_skin().get_color("banner_dim", "#B8860B")
+                        _tip_color = get_active_skin().get_color("banner_dim", "#377EB9")
                     except Exception:
-                        _tip_color = "#B8860B"
+                        _tip_color = "#377EB9"
                     self._console_print(f"[dim {_tip_color}]✦ Tip: {_tip}[/]")
                 except Exception:
                     pass
@@ -16948,12 +16955,12 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                     from fulilian_cli.skin_engine import get_active_skin
                     _skin = get_active_skin()
                     label = _skin.get_branding("response_label", "⚕ Fulilian")
-                    _resp_color = _maybe_remap_for_light_mode(_skin.get_color("response_border", "#CD7F32"))
-                    _resp_text = _maybe_remap_for_light_mode(_skin.get_color("banner_text", "#FFF8DC"))
+                    _resp_color = _maybe_remap_for_light_mode(_skin.get_color("response_border", "#2E77B9"))
+                    _resp_text = _maybe_remap_for_light_mode(_skin.get_color("banner_text", "#E9F1FC"))
                 except Exception:
                     label = "⚕ Fulilian"
-                    _resp_color = _maybe_remap_for_light_mode("#CD7F32")
-                    _resp_text = _maybe_remap_for_light_mode("#FFF8DC")
+                    _resp_color = _maybe_remap_for_light_mode("#2E77B9")
+                    _resp_text = _maybe_remap_for_light_mode("#E9F1FC")
 
                 is_error_response = result and (result.get("failed") or result.get("partial"))
                 already_streamed = self._stream_started and self._stream_box_opened and not is_error_response
@@ -17007,9 +17014,9 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                     try:
                         ChatConsole().print(Panel(
                             "\n".join(_cta_lines),
-                            title="[#CD7F32 bold]⚡ Out of credits[/]",
+                            title="[#2E77B9 bold]⚡ Out of credits[/]",
                             title_align="left",
-                            border_style="#CD7F32",
+                            border_style="#2E77B9",
                             box=rich_box.HORIZONTALS,
                             padding=(1, 4),
                             width=self._scrollback_box_width(),
@@ -17597,10 +17604,10 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             from fulilian_cli.skin_engine import get_active_skin
             _welcome_skin = get_active_skin()
             _welcome_text = _welcome_skin.get_branding("welcome", "Welcome to FuLiLian! Type your message or /help for commands.")
-            _welcome_color = _welcome_skin.get_color("banner_text", "#FFF8DC")
+            _welcome_color = _welcome_skin.get_color("banner_text", "#E9F1FC")
         except Exception:
             _welcome_text = "Welcome to FuLiLian! Type your message or /help for commands."
-            _welcome_color = "#FFF8DC"
+            _welcome_color = "#E9F1FC"
         self._console_print(f"[{_welcome_color}]{_welcome_text}[/]")
 
         # Warm the /model picker's provider-models cache off-thread during this
@@ -17666,9 +17673,9 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             )
             if not is_seen(self.config, OPENCLAW_RESIDUE_FLAG) and detect_openclaw_residue():
                 try:
-                    _resid_color = _welcome_skin.get_color("banner_dim", "#B8860B")
+                    _resid_color = _welcome_skin.get_color("banner_dim", "#377EB9")
                 except Exception:
-                    _resid_color = "#B8860B"
+                    _resid_color = "#377EB9"
                 self._console_print(f"[{_resid_color}]{openclaw_residue_hint_cli()}[/]")
                 try:
                     from fulilian_cli.config import get_config_path as _get_cfg_path_resid
@@ -17682,9 +17689,9 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             from fulilian_cli.tips import get_random_tip
             _tip = get_random_tip()
             try:
-                _tip_color = _welcome_skin.get_color("banner_dim", "#B8860B")
+                _tip_color = _welcome_skin.get_color("banner_dim", "#377EB9")
             except Exception:
-                _tip_color = "#B8860B"
+                _tip_color = "#377EB9"
             self._console_print(f"[dim {_tip_color}]✦ Tip: {_tip}[/]")
         except Exception:
             pass  # Tips are non-critical — never break startup
@@ -20163,44 +20170,44 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             'prompt-working': '#888888 italic',
             'hint': '#888888 italic',
             'status-bar': 'bg:#1a1a2e #C0C0C0',
-            'status-bar-strong': 'bg:#1a1a2e #FFD700 bold',
+            'status-bar-strong': 'bg:#1a1a2e #5DB8F5 bold',
             'status-bar-dim': 'bg:#1a1a2e #8B8682',
             'status-bar-good': 'bg:#1a1a2e #8FBC8F bold',
             'status-bar-warn': 'bg:#1a1a2e #FFD700 bold',
             'status-bar-bad': 'bg:#1a1a2e #FF8C00 bold',
             'status-bar-critical': 'bg:#1a1a2e #FF6B6B bold',
             'status-bar-yolo': 'bg:#1a1a2e #FF4444 bold',
-            'status-bar-session-title': 'bg:#FFD700 #1a1a2e bold',
-            # Bronze horizontal rules around the input area
-            'input-rule': '#CD7F32',
+            'status-bar-session-title': 'bg:#5DB8F5 #1a1a2e bold',
+            # Steel-blue horizontal rules around the input area
+            'input-rule': '#2E77B9',
             # Clipboard image attachment badges
             'image-badge': '#87CEEB bold',
-            'completion-menu': 'bg:#1a1a2e #FFF8DC',
-            'completion-menu.completion': 'bg:#1a1a2e #FFF8DC',
-            'completion-menu.completion.current': 'bg:#333355 #FFD700',
+            'completion-menu': 'bg:#1a1a2e #E9F1FC',
+            'completion-menu.completion': 'bg:#1a1a2e #E9F1FC',
+            'completion-menu.completion.current': 'bg:#333355 #5DB8F5',
             'completion-menu.meta.completion': 'bg:#1a1a2e #888888',
-            'completion-menu.meta.completion.current': 'bg:#333355 #FFBF00',
+            'completion-menu.meta.completion.current': 'bg:#333355 #339AF0',
             # Clarify question panel
-            'clarify-border': '#CD7F32',
-            'clarify-title': '#FFD700 bold',
-            'clarify-question': '#FFF8DC bold',
+            'clarify-border': '#2E77B9',
+            'clarify-title': '#5DB8F5 bold',
+            'clarify-question': '#E9F1FC bold',
             'clarify-choice': '#AAAAAA',
-            'clarify-selected': '#FFD700 bold',
-            'clarify-active-other': '#FFD700 italic',
+            'clarify-selected': '#5DB8F5 bold',
+            'clarify-active-other': '#5DB8F5 italic',
             'clarify-answer': '#98FB98',
-            'clarify-countdown': '#CD7F32',
+            'clarify-countdown': '#2E77B9',
             # Sudo password panel
             'sudo-prompt': '#FF6B6B bold',
-            'sudo-border': '#CD7F32',
+            'sudo-border': '#2E77B9',
             'sudo-title': '#FF6B6B bold',
-            'sudo-text': '#FFF8DC',
+            'sudo-text': '#E9F1FC',
             # Dangerous command approval panel
-            'approval-border': '#CD7F32',
+            'approval-border': '#2E77B9',
             'approval-title': '#FF8C00 bold',
-            'approval-desc': '#FFF8DC bold',
+            'approval-desc': '#E9F1FC bold',
             'approval-cmd': '#AAAAAA italic',
             'approval-choice': '#AAAAAA',
-            'approval-selected': '#FFD700 bold',
+            'approval-selected': '#5DB8F5 bold',
             # Voice mode
             'voice-prompt': '#87CEEB',
             'voice-recording': '#FF4444 bold',

@@ -368,17 +368,17 @@ export function buildPalette(seeds: ThemeSeeds, isLight: boolean): ThemeColors {
 }
 
 export const DARK_SEEDS: ThemeSeeds = {
-  accent: '#FFBF00',
+  accent: '#339AF0',
   // The classic Fulilian navy surfaces are IDENTITY, not derivation drift —
   // keep them as explicit fill seeds (the ladder derives them for skins
   // that don't care).
   activeRow: '#333355',
   bg: '#101014',
-  border: '#CD7F32',
+  border: '#2E77B9',
   error: '#ef5350',
   ok: '#4caf50',
-  primary: '#FFD700',
-  prompt: '#FFF8DC',
+  primary: '#5DB8F5',
+  prompt: '#E9F1FC',
   selection: '#3a3a55',
   shellDollar: '#4dabf7',
   statusBad: '#FF8C00',
@@ -386,32 +386,30 @@ export const DARK_SEEDS: ThemeSeeds = {
   statusGood: '#8FBC8F',
   statusWarn: '#FFD700',
   surface: '#1a1a2e',
-  text: '#FFF8DC',
+  text: '#E9F1FC',
   warn: '#ffa726'
 }
 
-// Light-terminal seeds: darker golds/ambers that stay legible on white.
-// The classic light-mode Fulilian look was never hand-authored: for years the
-// TUI emitted the DARK golds and hosts with xterm's minimumContrastRatio
-// (Cursor defaults to 4.5) lifted them against white — hue and saturation
-// kept, luminance clamped. These seeds are those exact lifts
-// (liftForContrast(dark, '#ffffff', 4.5)), so hosts WITHOUT a contrast pass
-// render the same thing Cursor always showed. Text/prompt stay ink — body
-// copy historically rendered in the terminal's default near-black fg.
+// Light-terminal seeds: darker blues that stay legible on white.
+// Same construction as the gold lift canon: accent/primary/border are
+// liftForContrast(dark literal, '#ffffff', 4.5) — what xterm's
+// minimumContrastRatio shows on light hosts. Text/prompt stay ink — body
+// copy historically rendered in the terminal's default near-black fg —
+// now cool slate ink instead of warm brown to match the azure identity.
 export const LIGHT_SEEDS: ThemeSeeds = {
-  accent: '#956E00',
+  accent: '#246FAE',
   bg: '#ffffff',
-  border: '#A56628',
+  border: '#2E77B9',
   error: '#C14240',
   ok: '#367E39',
-  primary: '#867000',
-  prompt: '#2B2014',
+  primary: '#3B77A0',
+  prompt: '#16212D',
   shellDollar: '#377BB3',
   statusBad: '#A65A00',
   statusCritical: '#B94D4D',
   statusGood: '#5C7A5C',
   statusWarn: '#867000',
-  text: '#3D2F13',
+  text: '#22303F',
   warn: '#956115'
 }
 
@@ -446,14 +444,14 @@ export const LIGHT_THEME: Theme = {
 //     background — so a wrong-polarity fill (navy menu on a white terminal)
 //     falls back to the base palette even when the skin authored it.
 
-// Display shim — the "rendering gotcha" layer, calibrated against the look
-// the maintainers standardized on (pixel-sampled from the reference
-// screenshot): the beloved cross-polarity rendering is the AUTHORED palette
-// displayed RAW — slate's ~1.5:1 pastels on white read as deliberate airy
-// hierarchy, not a bug. So the floors are barely-visible rescues only:
+// Display shim — the "rendering gotcha" layer, calibrated so the authored
+// azure palette displays RAW: the beloved cross-polarity rendering is the
+// AUTHORED palette displayed raw — the light end of the ramp reads as
+// deliberate airy hierarchy, not a bug. So the floors are barely-visible
+// rescues only:
 //   * DISPLAY 1.45 sits just above slate-pastel territory (#c9d1d9 = 1.54,
 //     passes raw, byte-identical) but just below true invisibility
-//     (default's cream #FFF8DC = 1.08, gets rescued).
+//     (default's porcelain #E9F1FC = 1.13, gets rescued).
 //   * SEMANTIC 2.2 for alert colors (ok/error/warn/status) — they carry
 //     meaning and must never vanish.
 // The lift itself is xterm.js's own multiplicative algorithm
@@ -464,11 +462,10 @@ export const LIGHT_THEME: Theme = {
 // tone. On a LIGHT background — which in practice means a TRANSPARENT Cursor/
 // terminal window compositing over a light editor, where xterm applies NO
 // contrast lift of its own (there is no solid bg to measure against) — the
-// beloved classic look is the authored palette rendered essentially RAW:
-// vivid #FFD700 gold (~1.36:1), not a WCAG-darkened mustard. So the light
-// floor is a near-invisible rescue only (catches cream #FFF8DC at 1.08 but
-// leaves the golds untouched). Pixel-sampled target: #F5C242 (L61 S90),
-// which the previous 1.45 floor crushed to #867000 (L26) — the reported mud.
+// authored azure is rendered essentially RAW (#5DB8F5 ≈ 2.2:1 on white
+// passes the 1.18 floor untouched), not a WCAG-darkened navy. So the light
+// floor is a near-invisible rescue only (catches porcelain #E9F1FC at 1.13
+// but leaves the azures untouched).
 const DISPLAY_MIN_CONTRAST = 1.45
 const SEMANTIC_MIN_CONTRAST = 2.2
 const LIGHT_DISPLAY_MIN_CONTRAST = 1.18
@@ -585,28 +582,31 @@ export interface ThemeTones {
 }
 
 /**
- * The fitted tone ladder. Knobs are REVERSE-ENGINEERED from the original
- * hand-tuned palettes (grid-search over mix/desaturate formula families
- * against the pre-refactor literals + every authored skin palette; see the
- * "reproduces the original hand-tuned tones" test for the contract):
+ * The fitted tone ladder. Knobs were REVERSE-ENGINEERED from the original
+ * hand-tuned gold palettes (grid-search over mix/desaturate formula families;
+ * see the "reproduces the original hand-tuned tones" test for the contract).
+ * The same knobs applied to the azure identity seeds give (err 0 by
+ * construction — the values are DERIVED, then checked against the ladder):
  *
- *   dark muted  #CC9B1F ≈ desaturate(mix(accent, bg, .19), .16)  (err 3)
- *   dark label  #DAA520 ≈ desaturate(mix(accent, bg, .13), .16)  (err 3)
- *   dark status #C0C0C0 = grayOf(mix(text, bg, .24))             (err 0)
- *   light muted #946C08 ≈ desaturate(accent, .05)                (err 2)
- *   light label #8E6B13 ≈ desaturate(mix(accent, text, .03), .15) (err 2)
- *   light status #6F6F6F = grayOf(mix(text, bg, .30))            (err 1)
- *   light surface #F5F5F5 ≈ bg + softened accent                 (err 5)
- *   light chip  #E0D1BF = mix(surface, accent, .25)              (err 8)
- *   light selection #D4E4F7 ≈ mix(bg, shellDollar, .20)          (err 7)
+ *   dark muted  #377EB9 = desaturate(mix(accent, bg, .19), .16)
+ *   dark label  #3A86C5 = desaturate(mix(accent, bg, .13), .16)
+ *   dark status #BABABA = grayOf(mix(text, bg, .24))
+ *   light muted #276EAA ≈ desaturate(accent, .05)
+ *   light label #2D6D9F ≈ desaturate(mix(accent, text, .03), .15)
+ *   light status #6D6D6D = grayOf(mix(text, bg, .30))
+ *   light surface ≈ bg + softened accent
+ *   light chip  #C5DEF4 = mix(surface, accent, .25)
+ *   light selection #D5E4F7 ≈ mix(bg, shellDollar, .20)
  *
- * The light targets are the LIFT CANON: liftForContrast(dark literal,
- * white, 4.5) — what xterm's minimumContrastRatio showed on light hosts
- * for years — not hand-picked browns (those read as desaturated mud).
+ * The light gold targets were the LIFT CANON: liftForContrast(dark literal,
+ * white, 4.5); the azure light seeds follow the same rule
+ * (accent #246FAE / primary #3B77A0 are exactly that lift of their dark
+ * seeds), not hand-picked blues.
  *
  * The classic dark navy fills (#1a1a2e/#333355/#3a3a55) are IRREDUCIBLE from
- * gold seeds — the search bottoms out at gray, err 10–17 — so they remain
- * explicit identity seeds on DARK_SEEDS rather than pretending to be math.
+ * the seeds — they remain explicit identity seeds on DARK_SEEDS rather than
+ * pretending to be math. With the azure rebrand they double as the blue
+ * family's anchor: brand hue and surface family now agree.
  */
 export function deriveTones(seeds: {
   accent: string
@@ -622,10 +622,10 @@ export function deriveTones(seeds: {
   const surface = mix(bg, desaturate(accent, 0.15), isLight ? 0.045 : 0.09)
 
   return {
-    // Light knobs are fitted to the lift canon (xterm minimumContrastRatio
-    // 4.5 of the classic dark golds against white — see LIGHT_SEEDS), not
-    // to ink blends: muted #946C08 ≈ desat(accent .05), label #8E6B13 ≈
-    // desat(mix(accent, text, .03), .15), statusFg #6F6F6F ≈ gray 30% lift.
+    // Light knobs follow the lift canon (xterm minimumContrastRatio 4.5 of
+    // the dark seeds against white — see LIGHT_SEEDS), not ink blends:
+    // muted #276EAA ≈ desat(accent .05), label #2D6D9F ≈
+    // desat(mix(accent, text, .03), .15), statusFg #6D6D6D ≈ gray 30% lift.
     muted: isLight ? desaturate(accent, 0.05) : desaturate(mix(accent, bg, 0.19), 0.16),
     label: isLight ? desaturate(mix(accent, text, 0.03), 0.15) : desaturate(mix(accent, bg, 0.13), 0.16),
     statusFg: grayOf(mix(text, bg, isLight ? 0.3 : 0.24)),
@@ -858,7 +858,7 @@ export function fromSkin(
 
   // 1. Seeds: the skin's identity. Anything it doesn't define comes from the
   //    base seeds for this polarity. The base's IDENTITY FILLS (Fulilian navy
-  //    surfaces, gold muted) only carry over for the skinless default — a
+  //    surfaces, azure muted) only carry over for the skinless default — a
   //    skin with its own identity derives its fills from its own seeds.
   const identityFills: Partial<ThemeSeeds> = hasSkinColors
     ? {}

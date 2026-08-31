@@ -25,12 +25,105 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Rich markup color regex — matches [#RRGGBB] or [bold #RRGGBB] etc.
+_RICH_COLOR_RE = None  # lazy-compiled
+
+
+def _remap_rich_colors(markup: str) -> str:
+    """Remap hex colors in Rich markup for light-terminal readability.
+
+    On dark terminals this is a no-op.  On light terminals, every inline
+    ``[#RRGGBB]`` / ``[bold #RRGGBB]`` / ``[dim #RRGGBB]`` color is
+    replaced with a darker equivalent from the light-mode remap table so
+    the banner stays readable on white/cream backgrounds.
+    """
+    global _RICH_COLOR_RE
+    if _RICH_COLOR_RE is None:
+        import re
+        _RICH_COLOR_RE = re.compile(
+            r"(\[[^\]]*?)#([0-9A-Fa-f]{6})([^\]]*\])"
+        )
+
+    # Lazy import: cli.py is fully loaded by the time banner functions run.
+    from cli import _detect_light_mode, _maybe_remap_for_light_mode
+
+    if not _detect_light_mode():
+        return markup
+
+    def _replacer(m):
+        prefix, hex_val, suffix = m.group(1), m.group(2), m.group(3)
+        remapped = _maybe_remap_for_light_mode("#" + hex_val.upper())
+        return f"{prefix}#{remapped[1:]}{suffix}"
+
+    return _RICH_COLOR_RE.sub(_replacer, markup)
+
+
+def _print_minimal_banner(
+    console: "Console",
+    model: str,
+    cwd: str,
+    session_id: str = None,
+    context_length: int = None,
+    provider: str = None,
+) -> None:
+    """Print a minimal banner with left-right split layout (Claude Code style).
+
+    ::
+
+        ╭──────────────────────────────────────────────╮
+        │     ✦      FuLiLian  DeepSeek-V4-Flash  · 128K │
+        │            /home/xujuan/project                │
+        ╰──────────────────────────────────────────────╯
+
+    Star logo on the left, identity + cwd on the right — no tool/skill listings.
+    """
+    from rich.panel import Panel
+    from rich.table import Table
+
+    accent = _skin_color("banner_accent", "#339AF0")
+    dim = _skin_color("banner_dim", "#377EB9")
+    text = _skin_color("banner_text", "#E9F1FC")
+    title = _skin_color("banner_title", "#5DB8F5")
+    border = _skin_color("banner_border", "#2E77B9")
+
+    # Model short: strip provider prefix
+    model_short = model.split("/")[-1] if "/" in model else model
+    if model_short.endswith(".gguf"):
+        model_short = model_short[:-5]
+
+    # Right column: identity + model + context on one line
+    info_parts = [
+        f"[bold {title}]FuLiLian[/]",
+    ]
+    if model_short and model_short.lower() not in ("", "unknown"):
+        info_parts.append(f"[dim {dim}]{model_short}[/]")
+    if context_length:
+        info_parts.append(f"[dim {dim}]\u00b7[/]")
+        info_parts.append(f"[dim {dim}]{_format_context_length(context_length)}[/]")
+    right_lines = [" ".join(info_parts)]
+    if cwd:
+        right_lines.append(f"[dim {dim}]{cwd}[/]")
+    if session_id:
+        short_id = session_id[-12:] if len(session_id) > 12 else session_id
+        right_lines.append(f"[dim {dim}]session {short_id}[/]")
+
+    # Left-right layout: star logo centered, info left-aligned
+    tbl = Table.grid(padding=(0, 2), expand=False)
+    tbl.add_column(justify="center", width=6)
+    tbl.add_column(justify="left")
+    tbl.add_row(
+        f"[bold {accent}]\u2726[/]",
+        "\n".join(right_lines),
+    )
+
+    console.print(Panel(tbl, border_style=border, padding=(0, 2)))
+
 
 # =========================================================================
 # ANSI building blocks for conversation display
 # =========================================================================
 
-_GOLD = "\033[1;38;2;255;215;0m"  # True-color #FFD700 bold
+_PRIMARY = "\033[1;38;2;93;184;245m"  # True-color #5DB8F5 bold
 _BOLD = "\033[1m"
 _DIM = "\033[2m"
 _RST = "\033[0m"
@@ -67,28 +160,28 @@ def _skin_color(key: str, fallback: str) -> str:
 
 from fulilian_cli import __version__ as VERSION, __release_date__ as RELEASE_DATE
 
-FULILIAN_AGENT_LOGO = """[bold #FFD700]██╗  ██╗███████╗██████╗ ███╗   ███╗███████╗███████╗       █████╗  ██████╗ ███████╗███╗   ██╗████████╗[/]
-[bold #FFD700]██║  ██║██╔════╝██╔══██╗████╗ ████║██╔════╝██╔════╝      ██╔══██╗██╔════╝ ██╔════╝████╗  ██║╚══██╔══╝[/]
-[#FFBF00]███████║█████╗  ██████╔╝██╔████╔██║█████╗  ███████╗█████╗███████║██║  ███╗█████╗  ██╔██╗ ██║   ██║[/]
-[#FFBF00]██╔══██║██╔══╝  ██╔══██╗██║╚██╔╝██║██╔══╝  ╚════██║╚════╝██╔══██║██║   ██║██╔══╝  ██║╚██╗██║   ██║[/]
-[#CD7F32]██║  ██║███████╗██║  ██║██║ ╚═╝ ██║███████╗███████║      ██║  ██║╚██████╔╝███████╗██║ ╚████║   ██║[/]
-[#CD7F32]╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝╚══════╝╚══════╝      ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝[/]"""
+FULILIAN_AGENT_LOGO = """[bold #5DB8F5]██╗  ██╗███████╗██████╗ ███╗   ███╗███████╗███████╗       █████╗  ██████╗ ███████╗███╗   ██╗████████╗[/]
+[bold #5DB8F5]██║  ██║██╔════╝██╔══██╗████╗ ████║██╔════╝██╔════╝      ██╔══██╗██╔════╝ ██╔════╝████╗  ██║╚══██╔══╝[/]
+[#339AF0]███████║█████╗  ██████╔╝██╔████╔██║█████╗  ███████╗█████╗███████║██║  ███╗█████╗  ██╔██╗ ██║   ██║[/]
+[#339AF0]██╔══██║██╔══╝  ██╔══██╗██║╚██╔╝██║██╔══╝  ╚════██║╚════╝██╔══██║██║   ██║██╔══╝  ██║╚██╗██║   ██║[/]
+[#2E77B9]██║  ██║███████╗██║  ██║██║ ╚═╝ ██║███████╗███████║      ██║  ██║╚██████╔╝███████╗██║ ╚████║   ██║[/]
+[#2E77B9]╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝╚══════╝╚══════╝      ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝[/]"""
 
-FULILIAN_CADUCEUS = """[#CD7F32]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣀⡀⠀⣀⣀⠀⢀⣀⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
-[#CD7F32]⠀⠀⠀⠀⠀⠀⢀⣠⣴⣾⣿⣿⣇⠸⣿⣿⠇⣸⣿⣿⣷⣦⣄⡀⠀⠀⠀⠀⠀⠀[/]
-[#FFBF00]⠀⢀⣠⣴⣶⠿⠋⣩⡿⣿⡿⠻⣿⡇⢠⡄⢸⣿⠟⢿⣿⢿⣍⠙⠿⣶⣦⣄⡀⠀[/]
-[#FFBF00]⠀⠀⠉⠉⠁⠶⠟⠋⠀⠉⠀⢀⣈⣁⡈⢁⣈⣁⡀⠀⠉⠀⠙⠻⠶⠈⠉⠉⠀⠀[/]
-[#FFD700]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣴⣿⡿⠛⢁⡈⠛⢿⣿⣦⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
-[#FFD700]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠿⣿⣦⣤⣈⠁⢠⣴⣿⠿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
-[#FFBF00]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠉⠻⢿⣿⣦⡉⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
-[#FFBF00]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠘⢷⣦⣈⠛⠃⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
-[#CD7F32]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⣴⠦⠈⠙⠿⣦⡄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
-[#CD7F32]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠸⣿⣤⡈⠁⢤⣿⠇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
-[#B8860B]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠉⠛⠷⠄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
-[#B8860B]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣀⠑⢶⣄⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
-[#B8860B]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣿⠁⢰⡆⠈⡿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
-[#B8860B]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠳⠈⣡⠞⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
-[#B8860B]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]"""
+FULILIAN_CADUCEUS = """[#2E77B9]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣀⡀⠀⣀⣀⠀⢀⣀⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
+[#2E77B9]⠀⠀⠀⠀⠀⠀⢀⣠⣴⣾⣿⣿⣇⠸⣿⣿⠇⣸⣿⣿⣷⣦⣄⡀⠀⠀⠀⠀⠀⠀[/]
+[#339AF0]⠀⢀⣠⣴⣶⠿⠋⣩⡿⣿⡿⠻⣿⡇⢠⡄⢸⣿⠟⢿⣿⢿⣍⠙⠿⣶⣦⣄⡀⠀[/]
+[#339AF0]⠀⠀⠉⠉⠁⠶⠟⠋⠀⠉⠀⢀⣈⣁⡈⢁⣈⣁⡀⠀⠉⠀⠙⠻⠶⠈⠉⠀⠀[/]
+[#5DB8F5]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣴⣿⡿⠛⢁⡈⠛⢿⣿⣦⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
+[#5DB8F5]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠿⣿⣦⣤⣈⠁⢠⣴⣿⠿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
+[#339AF0]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠉⠻⢿⣿⣦⡉⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
+[#339AF0]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠘⢷⣦⣈⠛⠃⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
+[#2E77B9]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⣴⠦⠈⠙⠿⣦⡄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
+[#2E77B9]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠸⣿⣤⡈⠁⢤⣿⠇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
+[#377EB9]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠉⠛⠷⠄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
+[#377EB9]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣀⠑⢶⣄⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
+[#377EB9]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣿⠁⢰⡆⠈⡿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
+[#377EB9]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠳⠈⣡⠞⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]
+[#377EB9]⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀[/]"""
 
 
 
@@ -1003,6 +1096,19 @@ def build_welcome_banner(console: "Console", model: str, cwd: str,
     tools = tools or []
     enabled_toolsets = enabled_toolsets or []
 
+    # Minimal banner mode: single-line identity (Claude Code / Codex style).
+    # Controlled by display.minimal_banner in config.yaml (default: true).
+    try:
+        from fulilian_cli.config import load_config as _lc
+        _cfg = _lc() or {}
+        if (_cfg.get("display") or {}).get("minimal_banner", True):
+            _print_minimal_banner(
+                console, model, cwd, session_id, context_length, provider
+            )
+            return
+    except Exception:
+        pass  # Fall through to full banner on config error
+
     if availability is None:
         availability = compute_toolset_availability(enabled_toolsets)
     unavailable_toolsets = availability.get("unavailable_toolsets", [])
@@ -1015,19 +1121,19 @@ def build_welcome_banner(console: "Console", model: str, cwd: str,
     layout_table.add_column("right", justify="left")
 
     # Resolve skin colors once for the entire banner
-    accent = _skin_color("banner_accent", "#FFBF00")
-    dim = _skin_color("banner_dim", "#B8860B")
-    text = _skin_color("banner_text", "#FFF8DC")
+    accent = _skin_color("banner_accent", "#339AF0")
+    dim = _skin_color("banner_dim", "#377EB9")
+    text = _skin_color("banner_text", "#E9F1FC")
     session_color = _skin_color("session_border", "#8B8682")
 
     # Use skin's custom caduceus art if provided
     try:
         from fulilian_cli.skin_engine import get_active_skin
         _bskin = get_active_skin()
-        _hero = _bskin.banner_hero if hasattr(_bskin, 'banner_hero') and _bskin.banner_hero else FULILIAN_CADUCEUS
+        _hero = _bskin.banner_hero if hasattr(_bskin, 'banner_hero') and _bskin.banner_hero else _remap_rich_colors(FULILIAN_CADUCEUS)
     except Exception:
         _bskin = None
-        _hero = FULILIAN_CADUCEUS
+        _hero = _remap_rich_colors(FULILIAN_CADUCEUS)
     left_lines = ["", _hero, ""]
     if (provider or "").strip().lower() == "moa":
         # MoA virtual provider: ``model`` is a preset name. Show the preset and
@@ -1287,8 +1393,8 @@ def build_welcome_banner(console: "Console", model: str, cwd: str,
     right_content = "\n".join(right_lines)
     layout_table.add_row(left_content, right_content)
 
-    title_color = _skin_color("banner_title", "#FFD700")
-    border_color = _skin_color("banner_border", "#CD7F32")
+    title_color = _skin_color("banner_title", "#5DB8F5")
+    border_color = _skin_color("banner_border", "#2E77B9")
     version_label = format_banner_version_label()
     release_info = get_latest_release_tag()
     if release_info:
@@ -1306,7 +1412,7 @@ def build_welcome_banner(console: "Console", model: str, cwd: str,
     console.print()
     term_width = shutil.get_terminal_size().columns
     if term_width >= 95:
-        _logo = _bskin.banner_logo if _bskin and hasattr(_bskin, 'banner_logo') and _bskin.banner_logo else FULILIAN_AGENT_LOGO
-        console.print(_logo)
+        _logo = _bskin.banner_logo if _bskin and hasattr(_bskin, 'banner_logo') and _bskin.banner_logo else _remap_rich_colors(FULILIAN_AGENT_LOGO)
+        console.print(_remap_rich_colors(_logo))
         console.print()
     console.print(outer_panel)

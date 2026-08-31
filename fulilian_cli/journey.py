@@ -34,9 +34,9 @@ def _primary_hex() -> str:
         from fulilian_cli.skin_engine import get_active_skin
 
         skin = get_active_skin()
-        return skin.get_color("ui_primary", "") or skin.get_color("banner_title", "#FFD700")
+        return skin.get_color("ui_primary", "") or skin.get_color("banner_title", "#5DB8F5")
     except Exception:
-        return "#FFD700"
+        return "#5DB8F5"
 
 
 @lru_cache(maxsize=1)

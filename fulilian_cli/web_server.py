@@ -16680,8 +16680,9 @@ def _resolve_chat_argv(
     # SERVER process env — and hosted/cloud deploys run the dashboard under
     # a process manager (container init, systemd) with no COLORTERM, so
     # chalk downgrades every hex color to the xterm 256 palette. The skin's
-    # bronze border #CD7F32 snaps to palette 173 (#D7875F, salmon-red) and
-    # the banner reads red/yellow instead of gold. Local launches dodge
+    # steel border #2E77B9 snaps to a flat palette blue and the banner's
+    # azure ramp loses its gradient — or worse, off-hue colors (the old
+    # bronze border snapped to salmon-red #D7875F). Local launches dodge
     # this only because the operator's interactive terminal leaks
     # COLORTERM=truecolor into os.environ. Backfill it for the PTY child;
     # setdefault so an explicit operator value still wins.

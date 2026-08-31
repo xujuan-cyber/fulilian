@@ -1350,6 +1350,7 @@ DEFAULT_CONFIG = {
     
     "display": {
         "compact": False,
+        "minimal_banner": True,       # Minimal startup banner (Claude Code / Codex style)
         "personality": "",
         "resume_display": "full",
         # Recap tuning for /resume and startup resume. The defaults match the
