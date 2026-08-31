@@ -496,9 +496,9 @@ def load_cli_config() -> Dict[str, Any]:
             "resume_max_assistant_chars": 200,
             "resume_max_assistant_lines": 3,
             "resume_skip_tool_only": True,
-            # Live reasoning display default ON — keep in sync with
+            # Live reasoning display default OFF — keep in sync with
             # fulilian_cli/config.py DEFAULT_CONFIG (display.show_reasoning).
-            "show_reasoning": True,
+            "show_reasoning": False,
             "reasoning_full": False,
             "streaming": True,
             "busy_input_mode": "interrupt",

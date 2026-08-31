@@ -1395,11 +1395,10 @@ DEFAULT_CONFIG = {
         # dashboard. Set false to suppress the hint.
         "tui_agents_nudge": True,
         "bell_on_complete": False,
-        # Stream the model's reasoning/thinking live before the response.
-        # Default ON: on thinking models the reasoning phase can run tens of
-        # seconds, and with this off the user stares at a spinner the whole
-        # time even though tokens are streaming. Set false for quiet output.
-        "show_reasoning": True,
+        # Keep private model reasoning out of the user-facing transcript.
+        # Tool lifecycle/progress remains visible independently, so the user
+        # can follow concrete work without exposing internal thought text.
+        "show_reasoning": False,
         # When reasoning display is on, the post-response "Reasoning" recap box
         # collapses long thinking to the first 10 lines. Set true to print the
         # complete thinking text uncollapsed (live streaming is always full).
