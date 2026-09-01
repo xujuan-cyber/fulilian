@@ -1,3 +1,4 @@
+import { fulilianApi } from '@/fulilian'
 import type {
   FulilianGitBaseBranch,
   FulilianGitBranch,
@@ -7,7 +8,6 @@ import type {
   FulilianReviewList,
   FulilianReviewShipInfo
 } from '@/global'
-import { fulilianApi } from '@/fulilian'
 
 import { desktopFsProfile, isDesktopFsRemoteMode } from './desktop-fs'
 

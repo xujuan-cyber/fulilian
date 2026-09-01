@@ -1045,7 +1045,8 @@ export const zh: Translations = {
       intro:
         'Fulilian Desktop 默认会启动自己的本地网关。当你希望此应用控制另一台机器上或可信代理后的现有 Fulilian 后端时，可以使用远程网关。网关连接属于本机级设置；profile 是从所连接的网关中发现的。',
       envOverrideTitle: '环境变量正在控制此桌面会话。',
-      envOverrideDesc: '取消设置 FULILIAN_DESKTOP_REMOTE_URL 和 FULILIAN_DESKTOP_REMOTE_TOKEN 后才会使用下面保存的设置。',
+      envOverrideDesc:
+        '取消设置 FULILIAN_DESKTOP_REMOTE_URL 和 FULILIAN_DESKTOP_REMOTE_TOKEN 后才会使用下面保存的设置。',
       modeTitle: '连接模式',
       localTitle: '本地网关',
       localDesc: '在 localhost 启动私有 Fulilian 后端。这是默认方式，并且可离线工作。',

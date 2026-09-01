@@ -1,6 +1,6 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 
-import { getFulilianConfigRecord, type FulilianConfigRecord, saveFulilianConfig } from '@/fulilian'
+import { type FulilianConfigRecord, getFulilianConfigRecord, saveFulilianConfig } from '@/fulilian'
 
 import { TRANSLATIONS } from './catalog'
 import { DEFAULT_LOCALE, localeConfigValue, normalizeLocale } from './languages'

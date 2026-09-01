@@ -153,7 +153,9 @@ test('normalizeFulilianHomeRoot maps profile homes back to the global Fulilian r
     '/Users/test/.fulilian'
   )
   assert.equal(
-    normalizeFulilianHomeRoot('C:\\Users\\test\\AppData\\Local\\fulilian\\profiles\\oracle', { pathModule: path.win32 }),
+    normalizeFulilianHomeRoot('C:\\Users\\test\\AppData\\Local\\fulilian\\profiles\\oracle', {
+      pathModule: path.win32
+    }),
     'C:\\Users\\test\\AppData\\Local\\fulilian'
   )
   assert.equal(normalizeFulilianHomeRoot('/Users/test/.fulilian', { pathModule: path.posix }), '/Users/test/.fulilian')

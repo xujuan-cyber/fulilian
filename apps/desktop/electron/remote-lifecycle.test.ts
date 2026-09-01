@@ -94,7 +94,11 @@ function fakeSsh(rules: any[] = []) {
       // Existing lifecycle fixtures predate the install-wide relaunch gate.
       // Their default remote has no update marker; focused marker tests below
       // use explicit SSH doubles to exercise live/uncertain transitions.
-      if (cmd.includes('.fulilian-update-in-progress') && !cmd.includes('marker_clear()') && !/setsid|nohup/.test(cmd)) {
+      if (
+        cmd.includes('.fulilian-update-in-progress') &&
+        !cmd.includes('marker_clear()') &&
+        !/setsid|nohup/.test(cmd)
+      ) {
         return 'CLEAR'
       }
 
@@ -330,7 +334,10 @@ test('locateFulilian returns an explicit remoteFulilianPath unchanged', async ()
   ])
 
   assert.equal(await locateFulilian(ssh, '~/.local/bin/fulilian'), '~/.local/bin/fulilian')
-  assert.ok(!ssh.calls.some(cmd => cmd.includes('python3 -c')), 'an explicit remoteFulilianPath must never be rewritten')
+  assert.ok(
+    !ssh.calls.some(cmd => cmd.includes('python3 -c')),
+    'an explicit remoteFulilianPath must never be rewritten'
+  )
 })
 
 test('locateFulilian falls back to ~/.local/bin/fulilian when the login-shell probe misses', async () => {
@@ -545,7 +552,10 @@ test('pidIsOurDashboard requires the exact serve ownership nonce', async () => {
     ),
     false
   )
-  assert.equal(await pidIsOurDashboard(fakeSsh([[/print\("OWNED"/, 'FOREIGN\n']]), 5, SPAWN_NONCE, '/x/fulilian'), false)
+  assert.equal(
+    await pidIsOurDashboard(fakeSsh([[/print\("OWNED"/, 'FOREIGN\n']]), 5, SPAWN_NONCE, '/x/fulilian'),
+    false
+  )
 })
 
 test('pidIsOurDashboard accepts the venv entrypoint an installer wrapper execs into', async () => {
@@ -924,7 +934,8 @@ test('spawnRemoteDashboard rejects when no pid is returned', async () => {
   ])
 
   await assert.rejects(
-    () => spawnRemoteDashboard(ssh, { fulilianPath: '/x/fulilian', profile: '', token: 't', ownershipId: OWNERSHIP_ID }),
+    () =>
+      spawnRemoteDashboard(ssh, { fulilianPath: '/x/fulilian', profile: '', token: 't', ownershipId: OWNERSHIP_ID }),
     (err: any) => {
       assert.equal(err.kind, 'spawn-failed')
 
@@ -1516,7 +1527,8 @@ test('spawnRemoteDashboard removes a token file when upload reporting fails', as
   ])
 
   await assert.rejects(
-    () => spawnRemoteDashboard(ssh, { fulilianPath: '/x/fulilian', profile: '', token: 'tok', ownershipId: OWNERSHIP_ID }),
+    () =>
+      spawnRemoteDashboard(ssh, { fulilianPath: '/x/fulilian', profile: '', token: 'tok', ownershipId: OWNERSHIP_ID }),
     /channel closed/
   )
   assert.ok(ssh.calls.some(command => /rm -f .*\.token/.test(command)))
@@ -1662,7 +1674,8 @@ test('spawnRemoteDashboard fails with update-required when remote lacks --ssh-se
   const ssh = fakeSsh([[/--ssh-session-token-file/, 'NO\n']])
 
   await assert.rejects(
-    () => spawnRemoteDashboard(ssh, { fulilianPath: '/x/fulilian', profile: '', token: 'tk', ownershipId: OWNERSHIP_ID }),
+    () =>
+      spawnRemoteDashboard(ssh, { fulilianPath: '/x/fulilian', profile: '', token: 'tk', ownershipId: OWNERSHIP_ID }),
     (err: any) => {
       assert.match(err.message, /update|upgrade/i)
       assert.equal(err.kind, 'update-required')
@@ -1691,8 +1704,14 @@ test('cleanupStale never deletes a lock-supplied unexpected log path', async () 
 test('pidIsOurDashboard requires an exact nonce option value', async () => {
   const prefix = `/x/fulilian serve --isolated --ssh-owner-nonce ${SPAWN_NONCE}ff`
   const suffix = `/x/fulilian serve --isolated --ssh-owner-nonce xx${SPAWN_NONCE}`
-  assert.equal(await pidIsOurDashboard(fakeSsh([[/print\("OWNED"/, 'FOREIGN\n']]), 5, SPAWN_NONCE, '/x/fulilian'), false)
-  assert.equal(await pidIsOurDashboard(fakeSsh([[/print\("OWNED"/, 'FOREIGN\n']]), 5, SPAWN_NONCE, '/x/fulilian'), false)
+  assert.equal(
+    await pidIsOurDashboard(fakeSsh([[/print\("OWNED"/, 'FOREIGN\n']]), 5, SPAWN_NONCE, '/x/fulilian'),
+    false
+  )
+  assert.equal(
+    await pidIsOurDashboard(fakeSsh([[/print\("OWNED"/, 'FOREIGN\n']]), 5, SPAWN_NONCE, '/x/fulilian'),
+    false
+  )
 })
 
 test('connect removes the token file when a fresh backend fails after returning a pid', async () => {

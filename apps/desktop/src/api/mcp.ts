@@ -137,7 +137,13 @@ export function installMcpCatalogEntry(
   env: Record<string, string> = {},
   profile?: ProfileScope
 ): Promise<{ ok: boolean; name?: string; pid?: number; action?: string; background?: boolean }> {
-  return window.fulilianDesktop.api<{ ok: boolean; name?: string; pid?: number; action?: string; background?: boolean }>({
+  return window.fulilianDesktop.api<{
+    ok: boolean
+    name?: string
+    pid?: number
+    action?: string
+    background?: boolean
+  }>({
     ...capabilityScoped(profile),
     path: '/api/mcp/catalog/install',
     method: 'POST',

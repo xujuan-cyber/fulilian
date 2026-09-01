@@ -2,8 +2,8 @@ import { isGatewayReauthRequired, JsonRpcGatewayError, resolveGatewayWsUrl } fro
 import { useEffect, useRef } from 'react'
 
 import { shouldApplyPostBootProgressError } from '@/components/boot-failure-reauth'
-import type { FulilianConnection } from '@/global'
 import { FulilianGateway } from '@/fulilian'
+import type { FulilianConnection } from '@/global'
 import { translateNow } from '@/i18n'
 import { desktopDefaultCwd } from '@/lib/desktop-fs'
 import { decideLivenessForceClose, LIVENESS_REPROBE_DELAY_MS } from '@/lib/gateway-liveness-policy'
@@ -125,7 +125,9 @@ const BOOT_RETRY_BASE_DELAY_MS = 2_000
 // own connect timeout.
 
 /** Registry identity whose runtimes died with the primary connection. */
-export function primaryRuntimeConnectionId(connection: Pick<FulilianConnection, 'connectionId' | 'mode'>): null | string {
+export function primaryRuntimeConnectionId(
+  connection: Pick<FulilianConnection, 'connectionId' | 'mode'>
+): null | string {
   const connectionId = connection.connectionId?.trim()
 
   if (connectionId) {

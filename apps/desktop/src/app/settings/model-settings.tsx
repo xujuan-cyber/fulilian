@@ -31,7 +31,11 @@ import { setMainModelAssignment } from '@/store/cron-model-impact'
 import { notifyError } from '@/store/notifications'
 import { startManualLocalEndpoint, startManualOnboarding, startManualProviderOAuth } from '@/store/onboarding'
 
-import { fulilianConfigCacheWriter, invalidateFulilianConfig, useFulilianConfigRecord } from '../hooks/use-config-record'
+import {
+  fulilianConfigCacheWriter,
+  invalidateFulilianConfig,
+  useFulilianConfigRecord
+} from '../hooks/use-config-record'
 import { useOnProfileSwitch } from '../hooks/use-on-profile-switch'
 
 import { CONTROL_TEXT } from './constants'

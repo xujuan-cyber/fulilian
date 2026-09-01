@@ -94,7 +94,13 @@ function ConfigSettingsInner({
   // from — and saved back through — the shared config cache, so edits are visible
   // in the MCP/model surfaces and reopening the page doesn't reload-flash.
   const [config, setConfig] = useState<FulilianConfigRecord | null>(null)
-  const { data: loadedConfig, isError: configLoadFailed, refetch: refetchConfig } = useFulilianConfigRecord(scopeProfile)
+
+  const {
+    data: loadedConfig,
+    isError: configLoadFailed,
+    refetch: refetchConfig
+  } = useFulilianConfigRecord(scopeProfile)
+
   // Writes land on the same cache key the query above reads (base key when
   // following the active profile, suffixed when a scope override is set).
   const writeConfigCache = useMemo(() => fulilianConfigCacheWriter(scopeProfile), [scopeProfile])

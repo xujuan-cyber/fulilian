@@ -1,4 +1,4 @@
-import { getGlobalModelOptions, type FulilianGateway, type ModelOptionsResponse } from '@/fulilian'
+import { type FulilianGateway, getGlobalModelOptions, type ModelOptionsResponse } from '@/fulilian'
 import type { ModelOptionProvider } from '@/types/fulilian'
 
 /**

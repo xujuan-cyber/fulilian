@@ -10,7 +10,7 @@ import type {
   SessionSearchResponse
 } from '@/types/fulilian'
 
-import { capabilityScoped, getApiRequestConnection, fulilianApi, type ProfileScope, profileScoped } from './client'
+import { capabilityScoped, fulilianApi, getApiRequestConnection, type ProfileScope, profileScoped } from './client'
 
 const SESSION_LIST_REQUEST_TIMEOUT_MS = 60_000
 

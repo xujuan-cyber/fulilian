@@ -18,12 +18,12 @@ import { Textarea } from '@/components/ui/textarea'
 import { Tip } from '@/components/ui/tooltip'
 import {
   authMcpServer,
+  type FulilianGateway,
   getActionStatus,
   getLogs,
   getMcpCatalog,
   getMcpOAuthFlow,
   getUsageAnalytics,
-  type FulilianGateway,
   installMcpCatalogEntry,
   type McpCatalogEntry,
   type McpTestResult,

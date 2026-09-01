@@ -5,6 +5,7 @@
 
 import { atom } from 'nanostores'
 
+import { checkFulilianUpdate, getActionStatus, updateFulilian } from '@/fulilian'
 import type {
   DesktopUpdateApplyOptions,
   DesktopUpdateApplyResult,
@@ -14,7 +15,6 @@ import type {
   DesktopUpdateStatus,
   DesktopVersionInfo
 } from '@/global'
-import { checkFulilianUpdate, getActionStatus, updateFulilian } from '@/fulilian'
 import { translateNow } from '@/i18n'
 import { persistString, storedString } from '@/lib/storage'
 import { $connectionsRegistry, refreshConnectionsRegistry } from '@/store/connections'

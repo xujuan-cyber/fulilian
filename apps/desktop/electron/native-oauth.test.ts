@@ -173,7 +173,10 @@ test('buildNativeAuthorizeUrl omits provider when not given and preserves prefix
 
 test('nativeTokenUrl / nativeRefreshUrl build the right endpoints', () => {
   assert.equal(nativeTokenUrl('https://gw.example.com'), 'https://gw.example.com/auth/native/token')
-  assert.equal(nativeRefreshUrl('https://gw.example.com/fulilian'), 'https://gw.example.com/fulilian/auth/native/refresh')
+  assert.equal(
+    nativeRefreshUrl('https://gw.example.com/fulilian'),
+    'https://gw.example.com/fulilian/auth/native/refresh'
+  )
 })
 
 // --- loopback callback parsing ---

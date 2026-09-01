@@ -5,8 +5,8 @@ import {
   NO_PROJECT_ID,
   type SidebarProjectTree
 } from '@/app/chat/sidebar/projects/workspace-groups'
+import { fulilianApi, type FulilianGateway, getFulilianConfig } from '@/fulilian'
 import type { FulilianGitBaseBranch, FulilianGitBranch } from '@/global'
-import { getFulilianConfig, fulilianApi, type FulilianGateway } from '@/fulilian'
 import { translateNow } from '@/i18n'
 import { desktopDefaultCwd, isDesktopFsRemoteMode, selectDesktopPaths, writeDesktopFileText } from '@/lib/desktop-fs'
 import { desktopGit } from '@/lib/desktop-git'

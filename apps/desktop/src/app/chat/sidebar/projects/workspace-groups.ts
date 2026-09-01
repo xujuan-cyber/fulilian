@@ -1,5 +1,5 @@
-import type { FulilianGitWorktree } from '@/global'
 import type { ProjectInfo, SessionInfo } from '@/fulilian'
+import type { FulilianGitWorktree } from '@/global'
 import { normalize } from '@/lib/text'
 
 import { rankSessions } from '../order'

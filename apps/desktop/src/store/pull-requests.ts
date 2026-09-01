@@ -1,7 +1,7 @@
 import { atom } from 'nanostores'
 
-import type { FulilianBranchPullRequest } from '@/global'
 import { scanSessionPullRequests, type SessionInfo } from '@/fulilian'
+import type { FulilianBranchPullRequest } from '@/global'
 import { desktopGit } from '@/lib/desktop-git'
 import { Codecs, persistentAtom } from '@/lib/persisted'
 

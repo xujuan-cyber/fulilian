@@ -96,13 +96,18 @@ test('resolveRemovableAppPath returns null for an unrecognized Windows dir', () 
 
 test('resolveRemovableAppPath uses APPIMAGE on Linux when set', () => {
   assert.equal(
-    resolveRemovableAppPath('/tmp/.mount_FulilianXXXX/fulilian', 'linux', { APPIMAGE: '/home/x/Apps/Fulilian.AppImage' }),
+    resolveRemovableAppPath('/tmp/.mount_FulilianXXXX/fulilian', 'linux', {
+      APPIMAGE: '/home/x/Apps/Fulilian.AppImage'
+    }),
     '/home/x/Apps/Fulilian.AppImage'
   )
 })
 
 test('resolveRemovableAppPath finds the unpacked dir on Linux', () => {
-  assert.equal(resolveRemovableAppPath('/opt/fulilian/linux-unpacked/fulilian', 'linux', {}), '/opt/fulilian/linux-unpacked')
+  assert.equal(
+    resolveRemovableAppPath('/opt/fulilian/linux-unpacked/fulilian', 'linux', {}),
+    '/opt/fulilian/linux-unpacked'
+  )
   // A system-package install (/usr/bin) → null, left to apt/dnf.
   assert.equal(resolveRemovableAppPath('/usr/bin/fulilian', 'linux', {}), null)
 })

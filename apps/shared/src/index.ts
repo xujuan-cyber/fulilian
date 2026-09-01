@@ -102,11 +102,11 @@ export {
 } from './translucency'
 export {
   buildFulilianWebSocketUrl,
+  type FulilianWebSocketUrlOptions,
   type GatewayAuthMode,
   GatewayReauthRequiredError,
   type GatewayWsConnection,
   type GatewayWsUrlResult,
-  type FulilianWebSocketUrlOptions,
   isGatewayReauthRequired,
   resolveGatewayWsUrl,
   type ResolveGatewayWsUrlDeps,

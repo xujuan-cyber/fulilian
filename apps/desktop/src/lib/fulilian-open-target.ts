@@ -155,7 +155,11 @@ export function resolveFulilianOpenPath(target: FulilianOpenTarget | null | unde
  * Build a navigate path from a parsed deep-link payload
  * (`fulilian://<kind>/<name>?…` → kind/name/params).
  */
-export function pathFromFulilianDeepLink(kind: string, name: string, params: Record<string, string> = {}): string | null {
+export function pathFromFulilianDeepLink(
+  kind: string,
+  name: string,
+  params: Record<string, string> = {}
+): string | null {
   if (!kind || !name) {
     return null
   }

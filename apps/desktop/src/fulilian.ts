@@ -5,10 +5,10 @@
 // capabilityScoped are shared across api/ but must not reach call sites, or
 // request scoping stops having a single owner.
 export {
-  getApiRequestConnection,
-  getApiRequestProfile,
   fulilianApi,
   FulilianGateway,
+  getApiRequestConnection,
+  getApiRequestProfile,
   profileScopeKey,
   PROMPT_SUBMIT_REQUEST_TIMEOUT_MS,
   setApiRequestConnection,
@@ -62,9 +62,9 @@ export type {
   ElevenLabsVoice,
   ElevenLabsVoicesResponse,
   EnvVarInfo,
-  GatewayReadyPayload,
   FulilianConfig,
   FulilianConfigRecord,
+  GatewayReadyPayload,
   LogsResponse,
   McpCatalogEntry,
   McpCatalogResponse,

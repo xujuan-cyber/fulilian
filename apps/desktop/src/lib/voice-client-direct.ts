@@ -1,5 +1,5 @@
 import { profileScoped } from '@/api/client'
-import { getApiRequestConnection, getApiRequestProfile, fulilianApi } from '@/fulilian'
+import { fulilianApi, getApiRequestConnection, getApiRequestProfile } from '@/fulilian'
 
 /**
  * Client-direct voice: call the active profile's STT/TTS providers straight

@@ -1861,7 +1861,8 @@ export const en: Translations = {
       menuItem: 'Connect to a remote host…',
       badge: (host: string) => `Runs on ${host}`,
       title: (profile: string) => `Connect ${profile} to a remote host`,
-      description: 'Sessions in this profile will run on the remote Fulilian you point it at, instead of this computer.',
+      description:
+        'Sessions in this profile will run on the remote Fulilian you point it at, instead of this computer.',
       urlLabel: 'Remote address',
       urlPlaceholder: 'https://fulilian.example.com',
       urlInvalid: 'Enter a full address starting with http:// or https://',
@@ -2598,7 +2599,8 @@ export const en: Translations = {
     maybeLater: 'Maybe later',
     moreChanges: count => `+ ${count} more change${count === 1 ? '' : 's'} included.`,
     manualTitle: 'Update from your terminal',
-    manualBody: 'You installed Fulilian from the command line, so updates run there too. Paste this into your terminal:',
+    manualBody:
+      'You installed Fulilian from the command line, so updates run there too. Paste this into your terminal:',
     manualPickedUp: 'Fulilian will pick up the new version next time you launch it.',
     guiSkewTitle: 'Update the desktop app',
     guiSkewBody:
@@ -2672,7 +2674,8 @@ export const en: Translations = {
     installLocalDesc: 'Download Fulilian, create its Python environment, and run the backend on this computer.',
     localStartUnavailable: 'Local installation could not start. Restart Fulilian Desktop and try again.',
     remoteSetupTitle: 'Connect to existing Fulilian',
-    remoteSetupDesc: 'Enter your gateway URL. Fulilian Desktop will detect whether it needs a token or browser sign-in.',
+    remoteSetupDesc:
+      'Enter your gateway URL. Fulilian Desktop will detect whether it needs a token or browser sign-in.',
     remoteUrlTitle: 'Gateway URL',
     remoteUrlDesc: 'Use the base URL of the Fulilian gateway, including https:// when remote.',
     remoteUrlPlaceholder: 'https://gateway.example.com/fulilian',
@@ -2748,7 +2751,8 @@ export const en: Translations = {
       xai: { short: 'Grok models', description: 'Direct access to xAI Grok models.' },
       local: {
         short: 'self-hosted',
-        description: 'Point Fulilian at a local or self-hosted OpenAI-compatible endpoint (vLLM, llama.cpp, Ollama, etc).'
+        description:
+          'Point Fulilian at a local or self-hosted OpenAI-compatible endpoint (vLLM, llama.cpp, Ollama, etc).'
       }
     },
     backToSignIn: 'Back to sign in',

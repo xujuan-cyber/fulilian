@@ -88,10 +88,13 @@ test('detectRemoteDisplay honors the FULILIAN_DESKTOP_DISABLE_GPU override both 
 
 test('resolveLinuxPasswordStore applies known backends on linux', () => {
   for (const store of ['gnome-libsecret', 'kwallet', 'kwallet5', 'kwallet6', 'basic']) {
-    assert.deepEqual(resolveLinuxPasswordStore({ env: { FULILIAN_DESKTOP_PASSWORD_STORE: store }, platform: 'linux' }), {
-      store,
-      warning: null
-    })
+    assert.deepEqual(
+      resolveLinuxPasswordStore({ env: { FULILIAN_DESKTOP_PASSWORD_STORE: store }, platform: 'linux' }),
+      {
+        store,
+        warning: null
+      }
+    )
   }
 })
 

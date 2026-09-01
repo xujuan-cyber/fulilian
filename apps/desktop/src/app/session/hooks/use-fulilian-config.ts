@@ -65,7 +65,10 @@ export function useFulilianConfig({ activeSessionIdRef }: FulilianConfigOptions)
       const selectionGeneration = getComposerSelectionGeneration()
 
       try {
-        const [config, defaults] = await Promise.all([getFulilianConfig(), getFulilianConfigDefaults().catch(() => ({}))])
+        const [config, defaults] = await Promise.all([
+          getFulilianConfig(),
+          getFulilianConfigDefaults().catch(() => ({}))
+        ])
 
         const canPublish = () => profileRefreshEpochRef.current === profileRefreshEpoch && shouldPublish()
 

@@ -4634,7 +4634,8 @@ function createActiveBackend(backendArgs) {
 function resolveFulilianBackend(backendArgs) {
   // 1. Explicit override -- FULILIAN_DESKTOP_FULILIAN_ROOT points at a developer
   //    checkout. Honour it as-is (no bootstrap; the user is driving).
-  const overrideRoot = process.env.FULILIAN_DESKTOP_FULILIAN_ROOT && path.resolve(process.env.FULILIAN_DESKTOP_FULILIAN_ROOT)
+  const overrideRoot =
+    process.env.FULILIAN_DESKTOP_FULILIAN_ROOT && path.resolve(process.env.FULILIAN_DESKTOP_FULILIAN_ROOT)
 
   if (overrideRoot && isFulilianSourceRoot(overrideRoot)) {
     const backend = createPythonBackend(overrideRoot, `Fulilian source at ${overrideRoot}`, backendArgs)
@@ -4730,7 +4731,10 @@ function resolveFulilianBackend(backendArgs) {
       // the Nix wrapper), not a discovered PATH candidate. It must not fall
       // through to the install-script bootstrap if the optional probe times
       // out under load; the pinned backend is the only valid runtime there.
-      if (shouldTrustFulilianOverride(fulilianOverride) || verifyFulilianCli(fulilianCommand, { shell: shellForProbe })) {
+      if (
+        shouldTrustFulilianOverride(fulilianOverride) ||
+        verifyFulilianCli(fulilianCommand, { shell: shellForProbe })
+      ) {
         // `unwrapped` above already answered "is this a Windows venv shim?" —
         // it was null (not a shim, or its import probe failed). Do NOT re-run
         // unwrapWindowsVenvFulilianCommand here: the second call repeats the
@@ -17161,7 +17165,9 @@ ipcMain.handle('fulilian:uninstall:run', async (_event, payload) => {
 ipcMain.handle('fulilian:vscode-theme:fetch', async (_event, id) => fetchMarketplaceThemes(String(id || '')))
 
 // Search the Marketplace for color-theme extensions (empty query = top installs).
-ipcMain.handle('fulilian:vscode-theme:search', async (_event, query) => searchMarketplaceThemes(String(query || ''), 20))
+ipcMain.handle('fulilian:vscode-theme:search', async (_event, query) =>
+  searchMarketplaceThemes(String(query || ''), 20)
+)
 
 // ---------------------------------------------------------------------------
 // fulilian:// deep links (e.g. fulilian://blueprint/morning-brief?time=08:00,

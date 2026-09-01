@@ -969,11 +969,19 @@ test('cookiesHaveSession handles non-arrays', () => {
 })
 
 test('AT_COOKIE_VARIANTS covers all three deploy shapes', () => {
-  assert.deepEqual(AT_COOKIE_VARIANTS, ['__Host-fulilian_session_at', '__Secure-fulilian_session_at', 'fulilian_session_at'])
+  assert.deepEqual(AT_COOKIE_VARIANTS, [
+    '__Host-fulilian_session_at',
+    '__Secure-fulilian_session_at',
+    'fulilian_session_at'
+  ])
 })
 
 test('RT_COOKIE_VARIANTS covers all three deploy shapes', () => {
-  assert.deepEqual(RT_COOKIE_VARIANTS, ['__Host-fulilian_session_rt', '__Secure-fulilian_session_rt', 'fulilian_session_rt'])
+  assert.deepEqual(RT_COOKIE_VARIANTS, [
+    '__Host-fulilian_session_rt',
+    '__Secure-fulilian_session_rt',
+    'fulilian_session_rt'
+  ])
 })
 
 // --- cookiesHaveLiveSession (AT or RT — the connectivity check) ---

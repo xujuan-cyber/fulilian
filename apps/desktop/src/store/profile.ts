@@ -1,8 +1,8 @@
 import { LOCAL_CONNECTION_ID } from '@fulilian/shared'
 import { atom, batch, computed } from 'nanostores'
 
+import { fulilianApi, getProfiles, setApiRequestProfile, STARTUP_REQUEST_TIMEOUT_MS } from '@/fulilian'
 import type { FulilianConnection } from '@/global'
-import { getProfiles, fulilianApi, setApiRequestProfile, STARTUP_REQUEST_TIMEOUT_MS } from '@/fulilian'
 import { invalidateProfileScopedQueries } from '@/lib/query-client'
 import {
   arraysEqual,

@@ -1043,7 +1043,10 @@ function buildSpawnCommand(fulilianPath, profile, opts: any = {}) {
   const tokenArg = tokenFilePath ? ` --ssh-session-token-file ${expandRemotePath(tokenFilePath)}` : ''
   const ownerArg = opts.spawnNonce ? ` --ssh-owner-nonce ${validateSpawnNonce(opts.spawnNonce)}` : ''
   const subCmd = `serve --isolated --host 127.0.0.1 --port 0${tokenArg}${ownerArg}`
-  const marker = expandRemotePath(`${remoteInstallRoot(opts.fulilianHome || '~/.fulilian')}/.fulilian-update-in-progress`)
+
+  const marker = expandRemotePath(
+    `${remoteInstallRoot(opts.fulilianHome || '~/.fulilian')}/.fulilian-update-in-progress`
+  )
 
   const updateMutex = expandRemotePath(
     `${remoteInstallRoot(opts.fulilianHome || '~/.fulilian')}/.fulilian-update-in-progress.mutex`

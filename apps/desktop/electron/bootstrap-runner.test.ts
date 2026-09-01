@@ -91,7 +91,16 @@ test('fresh bootstrap args include the packaged commit pin', () => {
       activeRoot: '/tmp/fulilian-agent',
       fulilianHome: '/tmp/fulilian'
     }),
-    ['--dir', '/tmp/fulilian-agent', '--fulilian-home', '/tmp/fulilian', '--branch', 'main', '--commit', installStamp.commit]
+    [
+      '--dir',
+      '/tmp/fulilian-agent',
+      '--fulilian-home',
+      '/tmp/fulilian',
+      '--branch',
+      'main',
+      '--commit',
+      installStamp.commit
+    ]
   )
 })
 

@@ -44,7 +44,12 @@ const profile = (name: string, isDefault = false): ProfileInfo => ({
 })
 
 const remoteConn = (over: Partial<FulilianConnection> = {}): FulilianConnection =>
-  ({ baseUrl: 'https://fulilian-roy.tail.ts.net', mode: 'remote', profile: 'vps-remote', ...over }) as FulilianConnection
+  ({
+    baseUrl: 'https://fulilian-roy.tail.ts.net',
+    mode: 'remote',
+    profile: 'vps-remote',
+    ...over
+  }) as FulilianConnection
 
 const localConn = (over: Partial<FulilianConnection> = {}): FulilianConnection =>
   ({ baseUrl: '', mode: 'local', profile: 'default', ...over }) as FulilianConnection

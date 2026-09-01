@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { FulilianReadDirResult } from '@/global'
 import type * as FulilianModule from '@/fulilian'
+import type { FulilianReadDirResult } from '@/global'
 
 import { $pluginRecords, publishPlugin, setPluginEnabled } from './plugins-store'
 import { discoverRuntimePlugins, loadRuntimePlugin, watchRuntimePlugins } from './runtime-loader'
@@ -88,7 +88,9 @@ describe('scanDiskPlugins (#66899)', () => {
 
       if (dir === '/local/.fulilian/plugins/my-feature') {
         return {
-          entries: [{ isDirectory: false, name: 'plugin.yaml', path: '/local/.fulilian/plugins/my-feature/plugin.yaml' }]
+          entries: [
+            { isDirectory: false, name: 'plugin.yaml', path: '/local/.fulilian/plugins/my-feature/plugin.yaml' }
+          ]
         }
       }
 
