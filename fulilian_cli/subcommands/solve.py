@@ -25,6 +25,10 @@ def build_solve_parser(subparsers, *, cmd_solve: Callable, cmd_solve_all: Callab
                               help="Comma-separated models for --race "
                                    "(default: ctf.race_models config or model.default)")
     solve_parser.add_argument("--multi-agent", action="store_true", help="Multi-agent mode")
+    solve_parser.add_argument("--boomerang", action="store_true",
+                              help="Round-trip multi-agent exploration")
+    solve_parser.add_argument("--max-rounds", type=int, default=2,
+                              help="Maximum Boomerang exploration rounds")
     solve_parser.add_argument("--directions", default=None,
                               help="Comma-separated exploration directions for --multi-agent "
                                    "(default: blackboard open intents or built-in defaults)")

@@ -760,6 +760,44 @@ def run_multi_agent_for_challenge(challenge_id: str, **kwargs) -> MultiAgentResu
     return run_multi_agent(project, **kwargs)
 
 
+def run_boomerang(project, *, max_rounds: int = 2, max_explorers: int = 4,
+                  work_dir: Optional[str | Path] = None, **kwargs) -> MultiAgentResult:
+    """Run bounded round-trip exploration (F4-009).
+
+    Each completed fan-out is a checkpoint. OPEN blackboard intents become the
+    next fan-out's directions; a confirmed flag ends the loop immediately.
+    """
+    base = Path(work_dir or project.challenge_dir or project.challenge_id)
+    base.mkdir(parents=True, exist_ok=True)
+    directions = kwargs.pop("directions", None)
+    final = MultiAgentResult()
+    seen: set[str] = set()
+    for round_no in range(max(1, int(max_rounds))):
+        round_dir = base / f"boomerang-round-{round_no}"
+        result = run_multi_agent(
+            project, directions=directions, n_direct_explorers=max_explorers,
+            work_dir=round_dir, **kwargs,
+        )
+        final = result
+        if result.solved:
+            return result
+        board = load_blackboard(round_dir / BLACKBOARD_FILENAME)
+        if board is None:
+            break
+        directions = []
+        for intent in board.get_open_intents():
+            text = " ".join(
+                part for part in (str(intent.goal).strip(), str(intent.approach).strip())
+                if part
+            )
+            if text and text not in seen:
+                seen.add(text)
+                directions.append(text)
+        if not directions:
+            break
+    return final
+
+
 __all__ = [
     "COMPRESS_THRESHOLD",
     "DEFAULT_DIRECTIONS",
@@ -775,4 +813,5 @@ __all__ = [
     "resolve_directions",
     "run_multi_agent",
     "run_multi_agent_for_challenge",
+    "run_boomerang",
 ]

@@ -36,6 +36,28 @@ from fulilian_ctf.multi_agent import (
     resolve_directions,
     run_multi_agent,
 )
+
+
+def test_boomerang_requeues_open_intents(monkeypatch, tmp_path):
+    from fulilian_ctf.blackboard import Blackboard, Intent, save_blackboard
+    from fulilian_ctf.dispatcher import Project
+    from fulilian_ctf.multi_agent import MultiAgentResult, run_boomerang
+
+    seen = []
+
+    def fake_round(project, directions=None, work_dir=None, **kwargs):
+        seen.append((str(work_dir), directions))
+        board = Blackboard(challenge_id=project.challenge_id)
+        if len(seen) == 1:
+            board.add_intent(Intent(goal="inspect hidden endpoint", approach="HTTP headers"))
+        save_blackboard(board, Path(work_dir) / "blackboard.json")
+        return MultiAgentResult()
+
+    monkeypatch.setattr("fulilian_ctf.multi_agent.run_multi_agent", fake_round)
+    result = run_boomerang(Project("demo", challenge_dir=str(tmp_path)),
+                           max_rounds=2, max_explorers=2)
+    assert not result.solved
+    assert seen[1][1] == ["inspect hidden endpoint HTTP headers"]
 from fulilian_ctf.solver import SolverResult
 
 

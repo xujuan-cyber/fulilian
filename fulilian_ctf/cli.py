@@ -68,6 +68,18 @@ def _run_multi_agent(args) -> "MultiAgentResult":
     )
 
 
+def _run_boomerang(args) -> "MultiAgentResult":
+    from fulilian_ctf.multi_agent import run_boomerang
+    return run_boomerang(
+        _resolve_project(args.id),
+        max_rounds=getattr(args, "max_rounds", 2),
+        max_explorers=getattr(args, "explorers", None) or 4,
+        directions=getattr(args, "directions", None) or None,
+        model=args.model or "",
+        quiet=False,
+    )
+
+
 def _prepare_work_dir(project, challenge_id: str) -> Optional[Path]:
     """保证题目工作目录存在并自动生成 AGENTS.md（F4-001），返回工作目录。
 
@@ -302,6 +314,10 @@ def handle_solve_command(args: argparse.Namespace) -> None:
 
     if getattr(args, "race", False):
         result = _run_race(args)
+        sys.exit(0 if result.solved else 1)
+
+    if getattr(args, "boomerang", False):
+        result = _run_boomerang(args)
         sys.exit(0 if result.solved else 1)
 
     if getattr(args, "multi_agent", False):

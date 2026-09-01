@@ -42,6 +42,7 @@ from .multi_agent import (
     detect_hallucinations,
     run_multi_agent,
     run_multi_agent_for_challenge,
+    run_boomerang,
 )
 from .racer import (
     COORDINATOR_INTERVAL,
@@ -220,6 +221,7 @@ __all__ = [
     "detect_hallucinations",
     "run_multi_agent",
     "run_multi_agent_for_challenge",
+    "run_boomerang",
     # writeup (Phase 3, F3-010)
     "generate_writeup",
     "save_writeup",
