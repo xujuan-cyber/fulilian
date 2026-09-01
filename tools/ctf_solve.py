@@ -8,6 +8,7 @@ Registered in the ``ctf_solve`` toolset.
 from __future__ import annotations
 
 import inspect
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -28,19 +29,46 @@ def _unpack(handler):
     """
     accepted = set(inspect.signature(handler).parameters)
 
-    def wrapper(args, **_context_kw):
-        return handler(**{k: v for k, v in (args or {}).items() if k in accepted})
+    def wrapper(args, **context_kw):
+        values = {k: v for k, v in (args or {}).items() if k in accepted}
+        values.update({k: v for k, v in context_kw.items() if k in accepted})
+        return handler(**values)
 
     return wrapper
 
 
 # ── 工具实现 ─────────────────────────────────────────────────────────
 
-def _verify_flag_impl(candidate: str, evidence: str = "") -> str:
+def _llm_negator(candidate: str, evidence: str, parent_agent) -> bool:
+    """Ask a leaf skeptic; fail closed unless it explicitly supports the flag."""
+    from tools.delegate_tool import delegate_task
+
+    response = delegate_task(
+        goal=(
+            "Act as a skeptical CTF flag verifier. Decide whether the candidate "
+            "is genuinely supported by the evidence. Return exactly PASS or REBUT, "
+            "with a brief reason. Do not run tools."
+        ),
+        context=f"Candidate: {candidate}\nEvidence:\n{evidence}",
+        role="leaf",
+        background=False,
+        parent_agent=parent_agent,
+    )
+    text = response if isinstance(response, str) else json.dumps(response)
+    upper = text.upper()
+    if "REBUT" in upper or "REJECT" in upper or "HALLUCIN" in upper:
+        return True
+    return not any(token in upper for token in ("PASS", "CONFIRMED", "SUPPORTED"))
+
+
+def _verify_flag_impl(candidate: str, evidence: str = "", parent_agent=None) -> str:
     """Verify a flag candidate through the triple-verification gate."""
     from fulilian_ctf.verify import VerificationResult, verify_flag
 
-    result = verify_flag(candidate, evidence)
+    negator = None
+    if parent_agent is not None:
+        negator = lambda c, e: _llm_negator(c, e, parent_agent)
+    result = verify_flag(candidate, evidence, negator=negator)
     return f"verify_flag: candidate={candidate!r} → {result.value}"
 
 

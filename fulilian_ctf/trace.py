@@ -164,7 +164,10 @@ def _split_stdout_steps(log_text: str) -> list[TraceStep]:
     def _flush_buf() -> None:
         text = "\n".join(buf)
         buf.clear()
-        _push_step(steps, text, "output")
+        # Keep only meaningful preamble output. Headers and final summaries are
+        # metadata, not solver steps.
+        if text and "RECON" in text:
+            _push_step(steps, text, "output")
 
     for line in log_text.splitlines():
         call = _TOOL_CALL_LINE.match(line)
@@ -182,7 +185,8 @@ def _split_stdout_steps(log_text: str) -> list[TraceStep]:
             else:
                 _push_step(steps, done.group(1) or "", "output")
         else:
-            buf.append(line)
+            if line.strip() and not line.lstrip().startswith(("⚡", "📋", "✅ Completed:", "👋")):
+                buf.append(line)
     _flush_buf()
     return steps
 

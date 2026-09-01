@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import os
 from pathlib import Path
 
 HOOKS_DIR = Path(__file__).resolve().parents[2] / "fulilian_ctf" / "hooks"
@@ -169,6 +170,24 @@ def test_inprocess_post_hook_context(monkeypatch, tmp_path):
     )
     assert directive and "flag{abc123def456}" in directive["context"]
     assert _ctf_post_tool_hook(tool_name="terminal", result={"output": "nothing"}) is None
+
+
+def test_inprocess_post_hook_autocommits_only_in_ctf_mode(monkeypatch, tmp_path):
+    from fulilian_ctf.hooks import _ctf_post_tool_hook
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("FULILIAN_CTF_MODE", "1")
+    (tmp_path / "progress.txt").write_text("step 1", encoding="utf-8")
+    _ctf_post_tool_hook(tool_name="terminal", result={"output": "ok"}, status="ok")
+    commits = subprocess.run(
+        ["git", "rev-list", "--count", "HEAD"],
+        cwd=tmp_path, capture_output=True, text=True, check=True,
+    )
+    assert commits.stdout.strip() == "1"
+
+    other = tmp_path / "other"
+    other.mkdir()
+    assert not (other / ".git").exists()
 
 
 class _FakeManager:

@@ -77,6 +77,19 @@ def _ctf_post_tool_hook(*, tool_name=None, result=None, **_kw):
     if tool_name != "terminal":
         return None
     text = _extract_result_text(result)
+    # F1-007: checkpoint every successful terminal step. The helper is bound
+    # to the solver's current cwd and never accepts a model-supplied path.
+    try:
+        status = str(_kw.get("status") or "ok").lower()
+        if (
+            os.environ.get("FULILIAN_CTF_MODE") == "1"
+            and status == "ok"
+            and os.environ.get("FULILIAN_CTF_AUTOCOMMIT", "1") != "0"
+        ):
+            from tools.ctf_solve import _git_auto_commit_impl
+            _git_auto_commit_impl(os.getcwd(), "ctf: auto checkpoint after terminal step")
+    except Exception:  # noqa: BLE001 — checkpoint failure must not stop solving
+        pass
     if not text:
         return None
     try:

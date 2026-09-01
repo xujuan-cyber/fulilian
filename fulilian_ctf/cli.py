@@ -90,7 +90,8 @@ def _prepare_work_dir(project, challenge_id: str) -> Optional[Path]:
 
 
 def _run_solve_once(project, work_dir: Optional[Path], query: str, model: str,
-                    oneshot: bool, as_json: bool) -> int:
+                    oneshot: bool, as_json: bool,
+                    architect_model: str = "", executor_model: str = "") -> int:
     """非交互求解一次（F4-002：``-p`` / ``--json``）。
 
     agent 输出重定向进工作目录 solver.log（与 solver_worker 同一证据来源），
@@ -121,7 +122,13 @@ def _run_solve_once(project, work_dir: Optional[Path], query: str, model: str,
             os.chdir(work_dir)
         with open(log_path, "w", encoding="utf-8", errors="replace") as log:
             sys.stdout, sys.stderr = log, log
-            code = int(solver_main(query=query, mode="ctf", model=model) or 0)
+            code = int(solver_main(
+                query=query,
+                mode="ctf",
+                model=model,
+                architect_model=architect_model or "",
+                executor_model=executor_model or "",
+            ) or 0)
     finally:
         sys.stdout, sys.stderr = old_out, old_err
         os.chdir(old_cwd)
@@ -284,6 +291,9 @@ def handle_solve_command(args: argparse.Namespace) -> None:
       退出（exit 2），不发生任何 LLM API 调用
     """
     challenge_id = args.id
+    if getattr(args, "rpc", False):
+        from .solve_rpc import serve
+        sys.exit(serve())
     # 前置校验：目标无效时秒级退出（exit 2），绝不启动 agent / 发 API 请求。
     # --race / --multi-agent / 默认单 agent 三分支共用同一 args.id，统一在此拦截。
     if _validate_solve_target(challenge_id) is None:
@@ -320,6 +330,7 @@ def handle_solve_command(args: argparse.Namespace) -> None:
     # F4-003/F4-004：进程内注册 CTF 危险命令拦截 + flag 检测 hooks
     # （不写 ~/.fulilian 任何配置/白名单；FULILIAN_SAFE_MODE=1 时自动跳过）
     try:
+        os.environ["FULILIAN_CTF_MODE"] = "1"
         from fulilian_ctf.hooks import register_ctf_tool_hooks
 
         register_ctf_tool_hooks()
@@ -334,7 +345,11 @@ def handle_solve_command(args: argparse.Namespace) -> None:
     oneshot = bool(getattr(args, "oneshot", False))
     as_json = bool(getattr(args, "json", False))
     if oneshot or as_json:
-        sys.exit(_run_solve_once(project, work_dir, query, model, oneshot, as_json))
+        sys.exit(_run_solve_once(
+            project, work_dir, query, model, oneshot, as_json,
+            architect_model=getattr(args, "architect_model", "") or "",
+            executor_model=getattr(args, "executor_model", "") or "",
+        ))
 
     from run_agent import main as solver_main
 
@@ -346,6 +361,8 @@ def handle_solve_command(args: argparse.Namespace) -> None:
             query=query,
             mode="ctf",
             model=model,
+            architect_model=str(getattr(args, "architect_model", "") or ""),
+            executor_model=str(getattr(args, "executor_model", "") or ""),
         )
     finally:
         os.chdir(old_cwd)

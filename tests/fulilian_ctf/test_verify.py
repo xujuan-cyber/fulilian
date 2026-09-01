@@ -19,6 +19,27 @@ from fulilian_ctf.verify import (
 )
 
 
+def test_ctf_verify_tool_uses_parent_agent_negator(monkeypatch):
+    """The model-facing verifier asks a skeptical child before accepting a rewrite."""
+    import tools.ctf_solve as ctf_solve
+
+    calls = []
+
+    def fake_delegate(**kwargs):
+        calls.append(kwargs)
+        return '{"results":[{"summary":"PASS: evidence supports candidate"}]}'
+
+    monkeypatch.setattr("tools.delegate_tool.delegate_task", fake_delegate)
+    result = ctf_solve._verify_flag_impl(
+        "Flag{ABC}",
+        "output: flag{abc}",
+        parent_agent=object(),
+    )
+    assert "confirmed" in result
+    assert calls and calls[0]["parent_agent"] is not None
+    assert calls[0]["role"] == "leaf"
+
+
 # ── 文档自带 5 个用例 ────────────────────────────────────────────────────────
 
 def test_exact_match():

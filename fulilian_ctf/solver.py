@@ -332,6 +332,7 @@ def solver_worker(project, work_dir: str, model: str, queue, solver_impl=None) -
     work_dir = Path(work_dir)
     try:
         work_dir.mkdir(parents=True, exist_ok=True)
+        os.environ["FULILIAN_CTF_MODE"] = "1"
         # F4-001：题目目录自动生成 AGENTS.md（chdir 后由 _load_agents_md 注入）
         try:
             from .agents_md import ensure_agents_md

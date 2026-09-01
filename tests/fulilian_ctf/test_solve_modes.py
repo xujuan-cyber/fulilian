@@ -27,7 +27,7 @@ class _StubRunAgent(types.ModuleType):
 
     @staticmethod
     def main(query=None, mode="", model="", **kw):  # noqa: A002
-        _StubRunAgent.calls.append({"query": query, "mode": mode, "model": model})
+        _StubRunAgent.calls.append({"query": query, "mode": mode, "model": model, **kw})
         from pathlib import Path
 
         flag = Path.cwd() / "FLAG"
@@ -110,3 +110,17 @@ def test_sandbox_env_default_set(stub_run_agent):
     with pytest.raises(SystemExit):
         cli.handle_solve_command(_ns(oneshot=True))
     assert os.environ.get(ENV_SANDBOX_MODE) == "workspace-write"
+
+
+def test_architect_models_reach_run_agent(stub_run_agent):
+    """Architect CLI options must reach the run_agent planning/execution path."""
+    with pytest.raises(SystemExit) as exc:
+        cli.handle_solve_command(_ns(
+            oneshot=True,
+            architect_model="expensive/model",
+            executor_model="cheap/model",
+        ))
+    assert exc.value.code == 0
+    call = stub_run_agent.calls[0]
+    assert call["architect_model"] == "expensive/model"
+    assert call["executor_model"] == "cheap/model"

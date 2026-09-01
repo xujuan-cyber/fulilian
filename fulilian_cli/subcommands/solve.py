@@ -34,6 +34,8 @@ def build_solve_parser(subparsers, *, cmd_solve: Callable, cmd_solve_all: Callab
                               help="Non-interactive mode (print result)")
     solve_parser.add_argument("--json", action="store_true",
                               help="Output structured JSON progress")
+    solve_parser.add_argument("--rpc", action="store_true",
+                              help="Serve newline-delimited JSON-RPC requests")
     solve_parser.set_defaults(func=cmd_solve)
 
     solve_all_parser = subparsers.add_parser(
