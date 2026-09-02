@@ -310,6 +310,7 @@ def _emit_terminal_post_tool_call(
     error_type: str | None = None,
     error_message: str | None = None,
     middleware_trace: Optional[list[dict[str, Any]]] = None,
+    tool_may_still_be_running: bool | None = None,
 ) -> None:
     try:
         from model_tools import _emit_post_tool_call_hook
@@ -327,6 +328,7 @@ def _emit_terminal_post_tool_call(
             error_type=error_type,
             error_message=error_message,
             middleware_trace=list(middleware_trace or []),
+            tool_may_still_be_running=tool_may_still_be_running,
         )
     except Exception:
         pass
@@ -337,6 +339,7 @@ def _cancelled_tool_result(reason: str = "user interrupt") -> str:
         {
             "error": f"Tool execution cancelled by {reason}",
             "status": "cancelled",
+            "side_effects_unknown": True,
         },
         ensure_ascii=False,
     )
@@ -367,6 +370,7 @@ def _emit_cancelled_terminal_post_tool_call(
         error_type=error_type,
         error_message=f"Tool execution cancelled by {reason}",
         middleware_trace=list(middleware_trace or []),
+        tool_may_still_be_running=True,
     )
     return result
 
@@ -431,7 +435,14 @@ class _ManagedToolResult:
 
 
 class _ToolTimeoutResult(str):
-    """Marker for a synthesized sequential-tool timeout result."""
+    """Marker for a synthesized sequential-tool timeout result.
+
+    When ``side_effects_unknown`` is True, the underlying tool may still
+    be running in a daemon thread — the timeout/interrupt only stopped
+    *waiting* for it, not the execution itself.
+    """
+
+    side_effects_unknown: bool = True
 
 
 class _ToolCancelledResult(str):
@@ -441,7 +452,12 @@ class _ToolCancelledResult(str):
     post_tool_call event for this call (status="cancelled"), so downstream
     emission must be suppressed — an abandoned worker finishing late must not
     report success for a call the user already cancelled.
+
+    ``side_effects_unknown`` is True because the daemon thread may still
+    be executing.
     """
+
+    side_effects_unknown: bool = True
 
 
 class _ConcurrentToolAuthorizationGate:
@@ -951,6 +967,7 @@ def _run_sequential_tool_execution_middleware(
                 error_type="tool_interrupted",
                 error_message=f"Tool execution cancelled: {interrupt_reason}",
                 middleware_trace=list(trace),
+                tool_may_still_be_running=True,
             )
             return _ManagedToolResult(
                 result=_ToolCancelledResult(message),
@@ -988,6 +1005,7 @@ def _run_sequential_tool_execution_middleware(
             error_type="tool_timeout",
             error_message=message,
             middleware_trace=list(trace),
+            tool_may_still_be_running=True,
         )
         return _ManagedToolResult(
             result=_ToolTimeoutResult(message),
@@ -1727,6 +1745,7 @@ def execute_tool_calls_concurrent(agent, assistant_message, messages: list, effe
                 error_type="tool_timeout",
                 error_message=function_result,
                 middleware_trace=list(middleware_trace),
+                tool_may_still_be_running=True,
             )
             tool_duration = float(timeout_s or 0.0)
         elif r is None:
@@ -1744,6 +1763,7 @@ def execute_tool_calls_concurrent(agent, assistant_message, messages: list, effe
                     error_type="keyboard_interrupt",
                     error_message="Tool execution cancelled by user interrupt",
                     middleware_trace=list(middleware_trace),
+                    tool_may_still_be_running=True,
                 )
             else:
                 function_result = f"Error executing tool '{name}': thread did not return a result"

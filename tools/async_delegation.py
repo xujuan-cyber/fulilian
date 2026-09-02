@@ -78,6 +78,9 @@ _DEFAULT_MAX_ASYNC_CHILDREN = 3
 _MAX_RETAINED_COMPLETED = 50
 _DURABLE_RETENTION_SECONDS = 7 * 24 * 60 * 60
 _MAX_DURABLE_PENDING = 1000
+# Grace period before deleting pending records: allows time for delivery
+# even after pruning, prevents deleting newly created pending results
+_PENDING_DELETION_GRACE_SECONDS = 3600
 # A pending completion whose delivery keeps failing is retried across claim
 # cycles (and across restarts via restore_undelivered_completions). Cap the
 # attempts so an unroutable row converges to a terminal 'dropped' state
@@ -310,14 +313,29 @@ def _prune_durable_records() -> None:
         ).fetchone()[0]
         overflow = max(0, pending_count - _MAX_DURABLE_PENDING)
         if overflow:
+            # Mark overflow pending records as 'dropped' instead of deleting them
+            # This preserves the data while keeping pending count under limit
+            now = time.time()
+            grace_cutoff = now - _PENDING_DELETION_GRACE_SECONDS
             conn.execute(
-                """DELETE FROM async_delegations WHERE delegation_id IN (
+                """UPDATE async_delegations SET delivery_state='dropped' WHERE delegation_id IN (
                      SELECT delegation_id FROM async_delegations
                      WHERE state NOT IN ('running','finalizing') AND delivery_state='pending'
                      ORDER BY updated_at ASC LIMIT ?
                    )""",
                 (overflow,),
             )
+        # Delete pending records that have exceeded the grace period
+        # Only clean up truly stale pending records after giving time for delivery
+        now = time.time()
+        grace_cutoff = now - _PENDING_DELETION_GRACE_SECONDS
+        conn.execute(
+            """DELETE FROM async_delegations
+               WHERE state NOT IN ('running','finalizing')
+                 AND delivery_state='pending'
+                 AND updated_at < ?""",
+            (grace_cutoff,),
+        )
 
 
 def _persist_completion(event: Dict[str, Any], result: Dict[str, Any]) -> None:

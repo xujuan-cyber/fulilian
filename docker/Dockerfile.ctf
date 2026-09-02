@@ -1,0 +1,162 @@
+# CTF 沙箱工具链镜像
+# 基于 Kali Linux，预装完整 CTF 解题工具链
+# 按类别分层安装：基础 → Pwn → Reverse → Forensics → Crypto → Web → Misc → Python 包
+
+FROM kalilinux/kali-rolling:latest AS base
+
+LABEL maintainer="fulilian"
+LABEL description="FuLiLian CTF sandbox with full toolchain"
+
+# 避免交互式配置提示
+ENV DEBIAN_FRONTEND=noninteractive
+ENV LC_ALL=C.UTF-8
+ENV LANG=C.UTF-8
+
+# ═══════════════════════════════════════════════
+# 第 1 层：基础工具
+# ═══════════════════════════════════════════════
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # 基础
+    curl \
+    wget \
+    git \
+    vim \
+    nano \
+    ca-certificates \
+    sudo \
+    # 编译工具链
+    build-essential \
+    gcc \
+    g++ \
+    make \
+    cmake \
+    # 脚本语言
+    python3 \
+    python3-pip \
+    python3-venv \
+    python3-dev \
+    # 调试
+    gdb \
+    strace \
+    ltrace \
+    netcat-openbsd \
+    net-tools \
+    && rm -rf /var/lib/apt/lists/*
+
+# ═══════════════════════════════════════════════
+# 第 2 层：Pwn / Binary 工具
+# ═══════════════════════════════════════════════
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gdb-multiarch \
+    radare2 \
+    checksec \
+    ropper \
+    binutils \
+    nasm \
+    && rm -rf /var/lib/apt/lists/*
+
+# ═══════════════════════════════════════════════
+# 第 3 层：Reverse 工具
+# ═══════════════════════════════════════════════
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    rizin \
+    binutils \
+    file \
+    && rm -rf /var/lib/apt/lists/*
+
+# ═══════════════════════════════════════════════
+# 第 4 层：Forensics 工具
+# ═══════════════════════════════════════════════
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    foremost \
+    sleuthkit \
+    binwalk \
+    exiftool \
+    steghide \
+    testdisk \
+    && rm -rf /var/lib/apt/lists/*
+
+# ═══════════════════════════════════════════════
+# 第 5 层：Crypto 工具
+# ═══════════════════════════════════════════════
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    hashcat \
+    john \
+    openssl \
+    xxd \
+    && rm -rf /var/lib/apt/lists/*
+
+# ═══════════════════════════════════════════════
+# 第 6 层：Web 工具
+# ═══════════════════════════════════════════════
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    sqlmap \
+    nikto \
+    gobuster \
+    ffuf \
+    hydra \
+    wfuzz \
+    dirb \
+    && rm -rf /var/lib/apt/lists/*
+
+# ═══════════════════════════════════════════════
+# 第 7 层：Misc 工具
+# ═══════════════════════════════════════════════
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    imagemagick \
+    ffmpeg \
+    sox \
+    tesseract-ocr \
+    tesseract-ocr-chi-sim \
+    tesseract-ocr-eng \
+    poppler-utils \
+    p7zip-full \
+    unzip \
+    zip \
+    zstd \
+    && rm -rf /var/lib/apt/lists/*
+
+# ═══════════════════════════════════════════════
+# 第 8 层：Python 包
+# ═══════════════════════════════════════════════
+RUN pip3 install --no-cache-dir --break-system-packages \
+    pwntools \
+    pycryptodome \
+    gmpy2 \
+    z3-solver \
+    angr \
+    capstone \
+    unicorn \
+    volatility3 \
+    numpy \
+    scipy \
+    matplotlib \
+    requests \
+    beautifulsoup4 \
+    pillow \
+    opencv-python-headless \
+    cryptography
+
+# ═══════════════════════════════════════════════
+# 第 9 层：SageMath（单独安装，体积大~1GB）
+# ═══════════════════════════════════════════════
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    sagemath \
+    && rm -rf /var/lib/apt/lists/*
+
+# ═══════════════════════════════════════════════
+# 配置非 root 用户
+# ═══════════════════════════════════════════════
+RUN useradd -m -s /bin/bash ctfuser \
+    && echo "ctfuser ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+USER ctfuser
+WORKDIR /workspace
+
+# 验证安装
+RUN python3 -c "import pwntools; print('pwntools OK')" \
+    && python3 -c "import z3; print('z3 OK')" \
+    && python3 -c "import capstone; print('capstone OK')" \
+    && python3 -c "import volatility3; print('volatility3 OK')"
+
+CMD ["/bin/bash"]

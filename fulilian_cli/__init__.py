@@ -13,9 +13,51 @@ Provides subcommands for:
 
 import os
 import sys
+from typing import TYPE_CHECKING
+
+# Re-export backward compatibility symbols from top-level cli.py for CLI modules
+# that expect these symbols to be available from fulilian_cli.
+# Lazy import at runtime to avoid circular import since cli imports us.
+def __getattr__(name: str):
+    if name in [
+        "_estimate_tui_input_height",
+        "_status_bar_visible_from_display_config",
+        "_b",
+        "_d",
+    ]:
+        import cli
+        value = getattr(cli, name)
+        globals()[name] = value
+        return value
+    if name in ["resolve_command", "COMMAND_REGISTRY"]:
+        from .commands import resolve_command, COMMAND_REGISTRY
+        globals()["resolve_command"] = resolve_command
+        globals()["COMMAND_REGISTRY"] = COMMAND_REGISTRY
+        if name == "resolve_command":
+            return resolve_command
+        return COMMAND_REGISTRY
+    raise AttributeError(f"module {__name__} has no attribute {name}")
+
+if TYPE_CHECKING:
+    from cli import (
+        _b,
+        _d,
+        _estimate_tui_input_height,
+        _status_bar_visible_from_display_config,
+    )
+    from .commands import resolve_command, COMMAND_REGISTRY
 
 __version__ = "1.2.0"
 __release_date__ = "2026.8.30"
+
+__all__ = [
+    "_estimate_tui_input_height",
+    "_status_bar_visible_from_display_config",
+    "_b",
+    "_d",
+    "resolve_command",
+    "COMMAND_REGISTRY",
+]
 
 
 def _ensure_utf8():
