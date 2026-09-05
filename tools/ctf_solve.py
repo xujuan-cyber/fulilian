@@ -1,8 +1,8 @@
-"""CTF solver tools — verify_flag, submit_flag, git_auto_commit, checkpoint, generate_writeup.
+"""CTF solver tools — verify_flag, submit_flag, record_fact, git_auto_commit, compile_check.
 
 Registered in the ``ctf_solve`` toolset.
-- Phase 1: verify_flag (三重校验门), submit_flag（声明式提交）, git_auto_commit.
-- Phase 2/3: checkpoint（续接）, generate_writeup（自动报告）.
+- Phase 1: verify_flag (三重校验门), submit_flag（声明式提交）, record_fact, git_auto_commit.
+- F4-008: compile_check（编译诊断）.
 """
 
 from __future__ import annotations
@@ -39,8 +39,28 @@ def _unpack(handler):
 
 # ── 工具实现 ─────────────────────────────────────────────────────────
 
+def _bound_work_dir(work_dir: str) -> str | None:
+    """统一 work_dir 边界校验（H-2）。
+
+    返回规范化后的合法路径；非法/越界返回 None。
+    FULILIAN_CTF_WORK_DIR 未绑定时只做基本合法性检查（保持单题直调兼容）。
+    绑定时与规范化后的绑定路径**严格相等**才放行（子目录也拒绝，
+    与 _git_auto_commit_impl 原实现语义一致，不许放松）。
+    """
+    if not work_dir or not isinstance(work_dir, str):
+        return None
+    resolved = Path(work_dir).expanduser().resolve()
+    bound = os.environ.get("FULILIAN_CTF_WORK_DIR")
+    if bound:
+        allowed = Path(bound).expanduser().resolve()
+        if resolved != allowed:
+            return None
+    return str(resolved)
+
+
 def _llm_negator(candidate: str, evidence: str, parent_agent) -> bool:
     """Ask a leaf skeptic; fail closed unless it explicitly supports the flag."""
+    import re
     from tools.delegate_tool import delegate_task
 
     response = delegate_task(
@@ -55,10 +75,15 @@ def _llm_negator(candidate: str, evidence: str, parent_agent) -> bool:
         parent_agent=parent_agent,
     )
     text = response if isinstance(response, str) else json.dumps(response)
-    upper = text.upper()
-    if "REBUT" in upper or "REJECT" in upper or "HALLUCIN" in upper:
+    # Only parse the first line (or first sentence), ignore subsequent explanations
+    first_line = text.split("\n")[0].strip()
+    first_sentence = re.split(r"(?<=[.!?])\s+", first_line)[0] if first_line else first_line
+    upper = first_sentence.upper()
+    # Use word-boundary matching to avoid substring false positives
+    if re.search(r"\bREBUT\b", upper) or re.search(r"\bREJECT\b", upper) or re.search(r"\bHALLUCIN\b", upper):
         return True
-    return not any(token in upper for token in ("PASS", "CONFIRMED", "SUPPORTED"))
+    # Fail-closed: return True (reject) unless a clear PASS/CONFIRMED/SUPPORTED token is found
+    return not (re.search(r"\bPASS\b", upper) or re.search(r"\bCONFIRMED\b", upper) or re.search(r"\bSUPPORTED\b", upper))
 
 
 def _verify_flag_impl(candidate: str, evidence: str = "", parent_agent=None) -> str:
@@ -77,10 +102,11 @@ def _submit_flag_impl(work_dir: str) -> str:
 
     Agent 必须先在工作区写入 FLAG 文件，本工具才会读取并提交。
     """
-    try:
-        flag_file = Path(work_dir) / FLAG_FILENAME
-    except (TypeError, ValueError):
-        return "submit_flag: invalid work_dir"
+    work_dir = _bound_work_dir(work_dir)
+    if work_dir is None:
+        return "submit_flag: work_dir is outside the bound CTF workspace"
+
+    flag_file = Path(work_dir) / FLAG_FILENAME
 
     if not flag_file.exists():
         return (
@@ -115,6 +141,9 @@ def _record_fact_impl(work_dir: str, content: str, tags: str = "") -> str:
     content = (content or "").strip()
     if not work_dir or not content:
         return "record_fact: work_dir and content are required"
+    work_dir = _bound_work_dir(work_dir)
+    if work_dir is None:
+        return "record_fact: work_dir is outside the bound CTF workspace"
     try:
         from fulilian_ctf.blackboard import (
             BLACKBOARD_FILENAME,
@@ -141,6 +170,10 @@ def _git_auto_commit_impl(work_dir: str, message: str) -> str:
     """自动提交解题进度到 git（每个步骤一个 commit，便于回滚与追踪）。"""
     if not work_dir:
         return "git_auto_commit: work_dir is required"
+    bound = _bound_work_dir(work_dir)
+    if bound is None:
+        return "git_auto_commit: work_dir is outside the bound CTF workspace"
+    work_dir = bound
     try:
         work_path = Path(work_dir)
         work_path.mkdir(parents=True, exist_ok=True)
@@ -155,6 +188,17 @@ def _git_auto_commit_impl(work_dir: str, message: str) -> str:
             )
             if init.returncode != 0:
                 return f"git_auto_commit: git init failed: {init.stderr.strip()}"
+
+            # 创建 .gitignore 排除大文件和不必要的构建产物
+            gitignore_path = work_path / ".gitignore"
+            if not gitignore_path.exists():
+                gitignore_content = (
+                    "solver.log\n"
+                    "__pycache__/\n"
+                    "*.pyc\n"
+                    ".DS_Store\n"
+                )
+                gitignore_path.write_text(gitignore_content)
 
         # 配置本地身份（无全局配置时避免 commit 失败）
         for key, value in (("user.email", "fulilian@local"), ("user.name", "fulilian")):
@@ -188,17 +232,10 @@ def _git_auto_commit_impl(work_dir: str, message: str) -> str:
         return f"git_auto_commit failed: {e}"
 
 
-def _checkpoint_impl(state: str = "") -> str:
-    """Save the current solve state to a checkpoint (Phase 2 stub)."""
-    return f"checkpoint: state={state!r} (Phase 2 stub)"
-
-
-def _generate_writeup_impl(challenge_id: str = "") -> str:
-    """Auto-generate a CTF writeup from session history (Phase 3 stub)."""
-    return f"generate_writeup: challenge_id={challenge_id!r} (Phase 3 stub)"
-
-
 # ── 工具注册 ─────────────────────────────────────────────────────────
+# M-5：原 checkpoint / generate_writeup 两个 stub 工具已移除——它们对真实
+# 调用返回假成功文本（"(Phase 2/3 stub)"），浪费 agent 轮次。真实 checkpoint
+# 能力在 tools/checkpoint_manager.py（接线属 P2 决策项）。
 
 registry.register(
     name="verify_flag",
@@ -324,31 +361,6 @@ registry.register(
     description="Auto-commit solve progress to git",
 )
 
-registry.register(
-    name="checkpoint",
-    toolset="ctf_solve",
-    schema={
-        "type": "function",
-        "function": {
-            "name": "checkpoint",
-            "description": "Save the current solve state to the persistent checkpoint. "
-                           "Useful for long-running solves so progress is not lost on crash.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "state": {
-                        "type": "string",
-                        "description": "JSON-encoded state summary to checkpoint",
-                    },
-                },
-                "required": [],
-            },
-        },
-    },
-    handler=_unpack(_checkpoint_impl),
-    description="Save current solve state checkpoint",
-)
-
 
 def _compile_check_impl(source_file: str = "", language: str = "") -> str:
     """编译诊断（F4-008）：gcc/g++ -fsyntax-only / cargo check，报错喂回 agent。"""
@@ -394,29 +406,4 @@ registry.register(
     },
     handler=_unpack(_compile_check_impl),
     description="Syntax-check a source file and return compiler diagnostics",
-)
-
-registry.register(
-    name="generate_writeup",
-    toolset="ctf_solve",
-    schema={
-        "type": "function",
-        "function": {
-            "name": "generate_writeup",
-            "description": "Auto-generate a CTF writeup from the current session's "
-                           "solution trajectory. Returns a structured writeup.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "challenge_id": {
-                        "type": "string",
-                        "description": "Challenge ID for the writeup",
-                    },
-                },
-                "required": [],
-            },
-        },
-    },
-    handler=_unpack(_generate_writeup_impl),
-    description="Auto-generate CTF writeup from session",
 )
