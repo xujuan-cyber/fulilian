@@ -244,7 +244,7 @@ def bootstrap_blackboard(project, work_dir: str | Path, relay_text: Optional[str
         load_blackboard,
         save_blackboard,
     )
-    from .relay import parse_relay
+    from .relay import is_relay_meta_text, parse_relay
 
     work_dir = Path(work_dir)
     board = load_blackboard(work_dir / BLACKBOARD_FILENAME) or Blackboard(
@@ -256,7 +256,8 @@ def bootstrap_blackboard(project, work_dir: str | Path, relay_text: Optional[str
         for d in relay["dead_ends"]:
             board.mark_dead_end(d)
         for p in relay["achieved_primitives"]:
-            if p.startswith("solver ran ") or p in existing:
+            # P1-3 / A-4：与 dispatcher._write_relay 共用同一谓词口径
+            if is_relay_meta_text(p) or p in existing:
                 continue
             board.add_fact(Fact(content=p, source="relay"))
             existing.add(p)

@@ -10,7 +10,9 @@
 
 from __future__ import annotations
 
+import os
 import re
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -23,6 +25,48 @@ RELAY_SECTIONS = {
     "dead_ends": DEAD_END_HEADER,
     "next_steps": NEXT_HEADER,
 }
+
+
+# P1-3 / A-4：运行时元信息前缀。solver 每次尝试都会往黑板写
+# "solver attempt N started" 元 Fact，_write_relay 若不过滤，这些行会
+# 进入 RELAY「已达成原语」并被回注黑板，随重试线性膨胀（滚雪球）。
+RELAY_META_FACT_PREFIX = "solver attempt "
+
+
+def is_relay_meta_text(text: str) -> bool:
+    """判断接力块条目是否为运行时元信息（不是解题原语）。"""
+    t = text or ""
+    return t.startswith("solver ran ") or t.startswith(RELAY_META_FACT_PREFIX)
+
+
+def relay_worthy_fact(fact) -> bool:
+    """A-4：Fact 是否可进 RELAY「已达成原语」（dispatcher / solver 共用谓词）。
+
+    过滤 source=="solver" 的元 Fact 与 content 以 "solver attempt " 开头
+    的条目；宁窄勿宽——其他一切 Fact（含任意自定义 source）都放行。
+    dead_ends 不经过本谓词，永不过滤。
+    """
+    if getattr(fact, "source", "") == "solver":
+        return False
+    content = getattr(fact, "content", "") or ""
+    return not content.startswith(RELAY_META_FACT_PREFIX)
+
+
+def atomic_write_text(path: Path, text: str) -> None:
+    """tmp + os.replace 原子写（与 blackboard.save_blackboard 同模式）。
+
+    中断时旧文件完好，不会留下截断文件；异常路径允许 .tmp 残留（下次覆盖）。
+    tmp 文件名带 pid+线程 id：并发写者各用各的 tmp，避免共享 tmp 被并发
+    截断后把半截内容 replace 进正式文件（P1-3 契约 6 的竞态窗口由此消除；
+    跨写者仍是 last-writer-wins，无锁语义不变）。
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(
+        f"{path.suffix}.{os.getpid()}.{threading.get_ident()}.tmp"
+    )
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, path)
 
 
 def build_relay(
@@ -84,10 +128,8 @@ def parse_relay(relay_text: str) -> dict:
 
 
 def write_relay_file(work_dir: Path, relay_text: str) -> None:
-    """将接力块写入 work_dir/RELAY.md。"""
-    work_dir = Path(work_dir)
-    work_dir.mkdir(parents=True, exist_ok=True)
-    (work_dir / "RELAY.md").write_text(relay_text, encoding="utf-8")
+    """将接力块写入 work_dir/RELAY.md（原子写，P1-3）。"""
+    atomic_write_text(Path(work_dir) / "RELAY.md", relay_text)
 
 
 def read_relay_file(work_dir: Path) -> Optional[str]:

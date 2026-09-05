@@ -28,7 +28,15 @@ from typing import Callable, Optional
 
 from .blackboard import BLACKBOARD_FILENAME, Fact, State, load_blackboard, save_blackboard
 from .probe import ProbeResult, probe_challenge
-from .relay import build_relay, parse_relay, read_relay_file, write_relay_file
+from .relay import (
+    atomic_write_text,
+    build_relay,
+    is_relay_meta_text,
+    parse_relay,
+    read_relay_file,
+    relay_worthy_fact,
+    write_relay_file,
+)
 from .solver import SOLVER_LOG, SolverResult, read_flag_file, scan_log_for_flag, solver_worker
 from .verify import VerificationResult, check_output_for_flag, verify_flag
 from .stopper import (
@@ -536,7 +544,8 @@ class Dispatcher:
         # （Fact 每次 new uuid）；运行时元信息行（"solver ran ..."）不是原语，不注入。
         existing = {f.content for f in board.get_facts()}
         for p in relay["achieved_primitives"]:
-            if p.startswith("solver ran ") or p in existing:
+            # P1-3 / A-4：回注通道与 _write_relay 用同一谓词口径，防滚雪球
+            if is_relay_meta_text(p) or p in existing:
                 continue
             try:
                 board.add_fact(Fact(content=p, source="relay"))
@@ -856,7 +865,11 @@ class Dispatcher:
         dead_ends: list[str] = []
         board = load_blackboard(work_dir / BLACKBOARD_FILENAME)
         if board:
-            achieved.extend(f.content for f in board.get_facts())
+            # P1-3 / A-4：过滤 source=="solver" 与 "solver attempt " 元 Fact，
+            # 防止运行时垃圾随重试线性膨胀进 RELAY 与回注 prompt
+            achieved.extend(
+                f.content for f in board.get_facts() if relay_worthy_fact(f)
+            )
             dead_ends = sorted(board.dead_ends)
 
         hint = "read solver.log for progress and continue from where it stopped"
@@ -892,9 +905,8 @@ class Dispatcher:
     # ── 状态持久化（供后续 status 命令复用）─────────────────────────────
 
     def save_state(self, summary: dict, path: str | Path) -> None:
-        Path(path).write_text(
-            json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8"
-        )
+        # P1-3：原子写，中断不留截断 JSON
+        atomic_write_text(Path(path), json.dumps(summary, indent=2, ensure_ascii=False))
 
 
 __all__ = [
