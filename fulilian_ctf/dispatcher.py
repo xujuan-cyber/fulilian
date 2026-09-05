@@ -668,16 +668,30 @@ class Dispatcher:
         slot["board_cache"] = (key, board)
         return board
 
+    def _budget_tokens(self, work_dir: Path, token_counter) -> int:
+        """运行中预算判定值（P1-1 / H-3）。
+
+        = usage.json（已完成尝试累计，可能缺失）+ solver.log 估算（当前
+        尝试）。两口径相加而非互斥取一：usage.json 只在尝试结束后写，
+        运行中只有 log 估算覆盖当前尝试，相加才是总消耗。尝试结束瞬间
+        可能双计一次（窗口 <1s），只会提前触发预算止损（安全侧），不
+        去重——任何情况下判定值不低于修复前。注入计数器仍最高优先。
+        """
+        if token_counter is not None:
+            return int(token_counter(work_dir) or 0)
+        exact = usage_tokens(work_dir)
+        est = estimate_tokens_from_log(work_dir)
+        return (exact or 0) + est
+
     def _stop_reason_for(self, slot: dict) -> Optional[str]:
         """计算单个 solver 的止损原因（无命中返回 None）。"""
         project: Project = slot["project"]
         work_dir: Path = slot["work_dir"]
 
-        # 维度 1 — 预算超限：token 计数（可注入精确计数器；默认按日志估算）
-        if self.token_counter is not None:
-            tokens = int(self.token_counter(work_dir) or 0)
-        else:
-            tokens = estimate_tokens_from_log(work_dir)
+        # 维度 1 — 预算超限：token 计数。优先级：注入计数器 > （usage.json
+        # 已完成尝试累计 + solver.log 当前尝试估算）相加（P1-1 / H-3，见
+        # _budget_tokens）。solver.log 每次尝试被截断重写，只反映当前尝试。
+        tokens = self._budget_tokens(work_dir, self.token_counter)
 
         # 维度 2/4 — 无产出 / 假设空间重复：需要黑板数据源
         # （P0-2：mtime 缓存，未变时复用上次反序列化对象，语义等同重载）

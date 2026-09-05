@@ -162,6 +162,7 @@ from agent.usage_pricing import normalize_usage
 from agent.context_compressor import (  # noqa: F401
     COMPRESSED_SUMMARY_METADATA_KEY,
     ContextCompressor,
+    resolve_model_threshold,
     user_originated_turn_view,
 )
 from agent.retry_utils import jittered_backoff  # noqa: F401
@@ -9146,6 +9147,42 @@ def _build_ctf_system_prompt() -> str:
     )
 
 
+def _cap_ctf_compression_threshold(agent) -> None:
+    """M-1：CTF 模式把压缩阈值封顶为一等配置（≤0.6）。
+
+    封顶写在 ``_config_threshold_percent``——update_model 换模型/fallback
+    激活时重派生 threshold_percent 的源头——而非 threshold_percent 运行值，
+    因此换模型后自动继承、不回弹（与 threshold_tokens_cap 的 #43547 重放
+    机制同理）。重算运行值时与 update_model 同序，含绝对 cap 重放。
+    非 CTF 模式不调用本函数，行为零变化。
+    """
+    compressor = getattr(agent, "context_compressor", None)
+    if compressor is None:
+        return
+    current_cfg = float(
+        getattr(compressor, "_config_threshold_percent",
+                getattr(compressor, "threshold_percent", 0.5)) or 0.5
+    )
+    ctf_cap = 0.60
+    if current_cfg <= ctf_cap:
+        return
+    compressor._config_threshold_percent = ctf_cap
+    base = resolve_model_threshold(
+        compressor.model, getattr(compressor, "model_thresholds", None), ctf_cap,
+    )
+    compressor._base_threshold_percent = base
+    compressor.threshold_percent = compressor._effective_threshold_percent(
+        compressor.context_length, base,
+    )
+    compressor.threshold_tokens = compressor._compute_threshold_tokens(
+        compressor.context_length, compressor.threshold_percent,
+        compressor.max_tokens,
+    )
+    if hasattr(compressor, "_apply_threshold_tokens_cap"):
+        compressor._apply_threshold_tokens_cap()
+    print(f"🧩 CTF mode: compression threshold capped {current_cfg:.2f} → {ctf_cap:.2f}")
+
+
 def _run_solver_turn(
     query: str,
     model: str,
@@ -9192,16 +9229,10 @@ def _run_solver_turn(
 
     # F4-006：CTF 模式上下文压缩更激进（长解题轨迹）——阈值钳到 ≤0.6。
     # 全局默认 0.50 本就低于 0.6（此时不生效）；用户把 threshold 调高时
-    # CTF 模式仍封顶 0.6。只动 compressor 的 threshold_percent，不碰配置。
+    # CTF 模式仍封顶 0.6。封顶写在一等配置源头（M-1，见 helper），不碰配置。
     if ctf_prompt is not None:
         try:
-            compressor = getattr(agent, "context_compressor", None)
-            if compressor is not None:
-                current = float(getattr(compressor, "threshold_percent", 0.5) or 0.5)
-                ctf_cap = 0.60
-                if current > ctf_cap:
-                    compressor.threshold_percent = ctf_cap
-                    print(f"🧩 CTF mode: compression threshold capped {current:.2f} → {ctf_cap:.2f}")
+            _cap_ctf_compression_threshold(agent)
         except Exception:
             pass  # 压缩调优失败不阻断求解
 
