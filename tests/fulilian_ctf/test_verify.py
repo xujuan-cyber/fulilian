@@ -71,9 +71,14 @@ def test_wrong_format():
 # ── 4 种验证结果全覆盖 ───────────────────────────────────────────────────────
 
 def test_pending_when_format_unknown():
-    """结构是 flag 但不匹配任何已知格式 → PENDING（降级待定，不提交）。"""
-    # CTF{zzz}：前缀合法但内容 zzz 不匹配 hex/字母数字模式
-    assert verify_flag("CTF{zzz}", "output: CTF{zzz}") == VerificationResult.PENDING
+    """显式传入窄表且无一命中 → PENDING（降级待定，不提交）。
+
+    S-1 修复后，默认路径"形状对 + 强置信（含声明式提交）"即放行；
+    PENDING 仅在调用方显式传 flag_patterns 收紧语义时可达。
+    """
+    custom = [r"flag\{[a-fA-F0-9\-]+\}"]
+    assert verify_flag("CTF{zzz}", "output: CTF{zzz}",
+                       flag_patterns=custom) == VerificationResult.PENDING
 
 
 def test_all_four_results_covered():
@@ -81,7 +86,8 @@ def test_all_four_results_covered():
     assert verify_flag("flag{abc}", "out: flag{abc}") == VerificationResult.CONFIRMED
     assert verify_flag("flag{abc}", "out: nothing") == VerificationResult.HALLUCINATION
     assert verify_flag("abc", "out: abc") == VerificationResult.REJECTED
-    assert verify_flag("CTF{zzz}", "out: CTF{zzz}") == VerificationResult.PENDING
+    assert verify_flag("CTF{zzz}", "out: CTF{zzz}",
+                       flag_patterns=[r"flag\{[a-fA-F0-9\-]+\}"]) == VerificationResult.PENDING
 
 
 # ── 4 种置信级别全覆盖（classify_confidence） ───────────────────────────────
@@ -165,9 +171,9 @@ def test_known_prefix_families():
     assert verify_flag("hkcert24{abc_1}", "out: hkcert24{abc_1}") == VerificationResult.CONFIRMED
 
 
-def test_unknown_prefix_pending():
-    """未知前缀但结构完整 → 不直接拒，降级待定。"""
-    assert verify_flag("NSSCTF{abc}", "out: NSSCTF{abc}") == VerificationResult.PENDING
+def test_unknown_prefix_confirmed_after_s1():
+    """S-1 修复：未知平台前缀逐字命中 → CONFIRMED（修复前为 PENDING 永久卡死）。"""
+    assert verify_flag("NSSCTF{abc}", "out: NSSCTF{abc}") == VerificationResult.CONFIRMED
 
 
 # ── 形状检查 ────────────────────────────────────────────────────────────────
@@ -254,7 +260,10 @@ def test_check_output_for_flag_rejects_bad_format(tmp_path):
 def test_check_output_for_flag_attempts_log():
     attempts: list = []
     out = "noise CTF{zzz} and real flag{abc123}"
-    result = check_output_for_flag(out, attempts=attempts)
+    # S-1 修复后默认路径下 CTF{zzz} 会被形状放行（首个 CONFIRMED 即返回）；
+    # 此处显式传窄表以保留「PENDING 记入 attempts、首个 CONFIRMED 返回」的覆盖意图。
+    result = check_output_for_flag(out, attempts=attempts,
+                                   flag_patterns=[r"flag\{[a-fA-F0-9\-]+\}"])
     assert result == "flag{abc123}"
     assert len(attempts) == 2
     assert attempts[0].result is VerificationResult.PENDING

@@ -184,12 +184,16 @@ class VerificationReport:
 def _verify(
     candidate: str,
     evidence: str,
-    flag_patterns: List[str],
+    flag_patterns: Optional[List[str]],
     use_negation_llm: bool,
     require_grounding: bool,
     negator: Optional[Callable[[str, str], bool]],
 ) -> VerificationReport:
-    """三重校验门内部实现（verify_flag / verify_flag_with_report 共用）。"""
+    """三重校验门内部实现（verify_flag / verify_flag_with_report 共用）。
+
+    ``flag_patterns`` 保留原始 Optional 语义：None 表示调用方未显式收紧；
+    非 None 表示调用方显式传表，第三门严格按该表 fullmatch，不放宽。
+    """
     candidate = (candidate or "").strip()
     evidence = evidence or ""
     gates: List[GateOutcome] = []
@@ -234,9 +238,24 @@ def _verify(
         return VerificationReport(candidate, VerificationResult.REJECTED,
                                   confidence, gates)
 
-    format_ok = _interrogation_check(candidate, flag_patterns)
-    gates.append(GateOutcome("interrogation", format_ok,
-                             "format ok" if format_ok else "no pattern matched"))
+    # S-1 修复：平台前缀远多于模式表（NSSCTF/CTFshow/DASCTF...）。
+    # 形状正则本就接受任意前缀，模式表只是历史窄表——当 grounding 已给出
+    # 强置信（EXACT/REWRITTEN）或为声明式提交路径（confidence=None，对抗门
+    # 已过）且非占位符时，形状即格式。显式传入 flag_patterns 的调用方保持
+    # 窄表收紧语义。宁可漏、不可误判：占位符已在 is_flag_shaped 过滤，
+    # BAIT/HALLUCINATION 在前两门已返回。
+    strong_confidence = confidence is None or confidence in (
+        ConfidenceLevel.EXACT_MATCH, ConfidenceLevel.REWRITTEN)
+    if flag_patterns is None and strong_confidence:
+        format_ok = True
+        gates.append(GateOutcome("interrogation", True,
+                                 "format ok (shape-based, platform-agnostic)"))
+    else:
+        format_ok = _interrogation_check(
+            candidate,
+            flag_patterns if flag_patterns is not None else DEFAULT_FLAG_PATTERNS)
+        gates.append(GateOutcome("interrogation", format_ok,
+                                 "format ok" if format_ok else "no pattern matched"))
     if not format_ok:
         return VerificationReport(candidate, VerificationResult.PENDING,
                                   confidence, gates)
@@ -267,8 +286,6 @@ def verify_flag_with_report(
         negator: 可插拔对抗函数 ``(candidate, evidence) -> bool``，返回
             True 表示反驳。Phase 2 注入 delegate_task 怀疑者。
     """
-    if flag_patterns is None:
-        flag_patterns = DEFAULT_FLAG_PATTERNS
     return _verify(candidate, evidence, flag_patterns,
                    use_negation_llm, require_grounding, negator)
 
@@ -288,7 +305,8 @@ def verify_flag(
     - 诱饵 / 弱匹配 / 结构不成 flag / 对抗被反驳 → REJECTED
     - 逐字命中真实输出且格式合规 → CONFIRMED（直接提交，跳过对抗门）
     - 改写命中 → 对抗门 → 通过且格式合规 → CONFIRMED
-    - 结构是 flag 但格式不匹配任何已知模式 → PENDING（降级待定）
+    - 结构是 flag 但调用方显式传窄表且无一命中 → PENDING（降级待定）；
+      默认路径下形状对 + 强置信（S-1 修复）→ CONFIRMED
     """
     return verify_flag_with_report(
         candidate, evidence, flag_patterns=flag_patterns,
