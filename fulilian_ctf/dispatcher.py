@@ -33,6 +33,7 @@ from .stopper import (
     DEFAULT_MAX_NO_OUTPUT_ROUNDS,
     DEFAULT_MAX_TOKENS,
     DEFAULT_MAX_VARIANT_FAILURES,
+    STOP_REASONS,
     Stopper,
     TokenCounter,
     count_variant_failures,
@@ -52,6 +53,17 @@ class ChallengeStatus(str, Enum):
 
 # 收割轮可回收的状态（已放弃/超时，等待按 EV 重评）
 HARVESTABLE = (ChallengeStatus.ABANDONED, ChallengeStatus.TIMEOUT)
+
+# P0-3：收割轮 respawn 升级路由（(status, stop_reason_key) → 升级动作）。
+# stop_reason 前缀匹配 "STOPPED: <KEY>"（_interrupt_stopped 写入）；
+# 时间盒自然超时（_interrupt 写 "timebox expired ..."）无 STOPPED 前缀 → key=None。
+ESCALATION_ROUTES = {
+    ("*", "HYPOTHESIS_REPEATED"): "switch_attack_class",
+    ("*", "NO_OUTPUT"): "extend_timebox",
+    ("*", "BUDGET_EXCEEDED"): "switch_model",
+    (ChallengeStatus.TIMEOUT.value, None): "switch_approach",
+}
+DEFAULT_ROUTE = "plain_retry"  # 无匹配 → 现状行为（同模型同 prompt 重试）
 
 # 难度因子（EV 计算用）：越难的题回收价值越低
 DIFFICULTY_FACTORS = {"easy": 1.0, "medium": 0.7, "hard": 0.4}
@@ -272,6 +284,7 @@ class Dispatcher:
             "duration": round(time.time() - started, 1),
             "max_workers": self.max_workers,
             "spawns": self._spawns,
+            "escalations": getattr(self, "escalations", 0),
             "projects": [p.to_dict() for p in self.projects.values()],
             "totals": self._totals(),
         }
@@ -319,6 +332,85 @@ class Dispatcher:
             reachable = list(ex.map(self._probe_and_maybe_spawn, targets))
         # ex.map 已按序完成探活+分配；返回 False 的已被标记 INFRA_BLOCKED
 
+    def _escalation_for(self, project: Project) -> tuple[str, str]:
+        """P0-3：收割轮 respawn 升级决策。返回 (route, stop_reason 原文)。
+
+        必须在 project.status 被重置为 IN_PROGRESS 之前调用（_spawn 开头、
+        注入与预算计算之前），否则 (status, stop_reason) 快照失真。
+        """
+        sr = project.stop_reason or ""
+        key = None
+        for k in STOP_REASONS:
+            if f"STOPPED: {k}" in sr:
+                key = k
+                break
+        status_name = project.status.value if project.status else ""
+        route = ESCALATION_ROUTES.get((status_name, key)) \
+            or ESCALATION_ROUTES.get(("*", key), DEFAULT_ROUTE)
+        return route, sr
+
+    def _inject_block(self, project: Project, marker: str, block: str) -> None:
+        """剥旧注新注入指令块（与 [Specialist Prompt] 同款 marker 模式）。
+
+        从 marker 首次出现处截断，再在末尾追加新块——块不随重试累积。
+        """
+        base_desc = project.description or ""
+        prev = base_desc.find(marker)
+        if prev != -1:
+            base_desc = base_desc[:prev]
+        project.description = base_desc + marker + block
+
+    def _apply_escalation(self, project: Project, route: str, detail: str) -> None:
+        """P0-3：按路由执行升级动作。
+
+        v1 边界（契约 4）：只做 prompt 级升级 + timebox 1.5× 调整 + model
+        换名；不在调度主循环同步调用 run_boomerang / race 多进程机制。
+        """
+        if route == "switch_attack_class":
+            block = (
+                "上一轮因假设空间重复被止损：\n"
+                f"{detail}\n"
+                "本轮强制换攻击类：\n"
+                "- 禁止重复黑板 dead_ends / RELAY.md「已证死路」清单中已证死路的方法；\n"
+                "- 先读 RELAY.md 与黑板，选一条本轮未尝试的攻击路线；\n"
+                "- 若 10 个工具调用内仍无新 Fact，立即换下一路线，不要死磕。\n"
+                "（多方向并行探索可参考 boomerang 模式；多模型竞赛可参考 racer 模式。）"
+            )
+            self._inject_block(project, "\n\n[Escalation]\n", block)
+        elif route == "switch_approach":
+            block = (
+                "上一轮时间盒自然到期，本轮换路线重试：\n"
+                f"{detail}\n"
+                "- 上一轮路线未在时限内产出 flag，必须换一条差异化路线；\n"
+                "- 禁止重复 RELAY.md「已证死路」与黑板 dead_ends 中已尝试的攻击类；\n"
+                "- 开局先规划本轮路线与时间分配，不要重复上一轮的侦察步骤。"
+            )
+            self._inject_block(project, "\n\n[Escalation]\n", block)
+        elif route == "extend_timebox":
+            # 1.5 倍延长：只对本次 respawn 生效（_spawn 消费后复位）
+            self._timebox_multiplier = 1.5
+        elif route == "switch_model":
+            try:
+                from .racer import resolve_race_models
+
+                models = [
+                    m for m in resolve_race_models()
+                    if m != (project.model or self.model)
+                ]
+                if models:
+                    project.model = models[0]
+                else:
+                    route = DEFAULT_ROUTE  # 取不到备选 → 退化为现状重试
+            except Exception:  # noqa: BLE001 — racer 不可用 → 退化为现状重试
+                route = DEFAULT_ROUTE
+        if route != DEFAULT_ROUTE:
+            self.escalations = getattr(self, "escalations", 0) + 1
+            if not self.quiet:
+                print(
+                    f"[dispatch] {project.challenge_id}: "
+                    f"escalate({detail[:60]}) → {route}"
+                )
+
     def _spawn(self, project: Project) -> None:
         """启动一个 solver 独立进程。"""
         work_dir = Path(project.challenge_dir or project.challenge_id)
@@ -330,11 +422,20 @@ class Dispatcher:
             ensure_agents_md(work_dir, project)
         except Exception:  # noqa: BLE001 — 生成失败不阻断调度
             pass
+        # P0-3：升级决策在状态重置前读取快照（status 此时仍为 ABANDONED/TIMEOUT）
+        route, detail = self._escalation_for(project)
+        if route != DEFAULT_ROUTE:
+            self._apply_escalation(project, route, detail)
         budget = (
             project.timebox_override
             or self.timebox_override
             or difficulty_adjusted_budget(project.difficulty)
         )
+        # P0-3：extend_timebox 路由的 1.5× 延长，只对本次 respawn 生效
+        multiplier = getattr(self, "_timebox_multiplier", 1.0)
+        if multiplier != 1.0:
+            budget = int(budget * multiplier)
+            self._timebox_multiplier = 1.0
         incremental = not (project.timebox_override or self.timebox_override)
         tb = Timebox(initial_budget=budget, incremental=incremental)
         tb.start()
