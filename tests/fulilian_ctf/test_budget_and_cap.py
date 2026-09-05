@@ -14,7 +14,11 @@ from types import SimpleNamespace
 import pytest
 
 from fulilian_ctf.dispatcher import Dispatcher
-from fulilian_ctf.stopper import USAGE_FILE
+
+try:
+    from fulilian_ctf.stopper import USAGE_FILE
+except ImportError:  # 旧版 stopper 无 usage.json 支持
+    USAGE_FILE = "usage.json"
 
 
 @pytest.fixture

@@ -718,7 +718,13 @@ class Dispatcher:
         """
         if token_counter is not None:
             return int(token_counter(work_dir) or 0)
-        exact = usage_tokens(work_dir)
+        # usage.json 精确口径依赖 stopper.usage_tokens（旧版 stopper 无此
+        # 函数）：缺失时退化为纯 log 估算（修复前行为，仍满足"只早不晚"）。
+        try:
+            from .stopper import usage_tokens
+        except ImportError:  # pragma: no cover - 旧版 stopper 兼容
+            usage_tokens = None
+        exact = usage_tokens(work_dir) if usage_tokens is not None else None
         est = estimate_tokens_from_log(work_dir)
         return (exact or 0) + est
 
