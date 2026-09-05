@@ -28,7 +28,7 @@ from .blackboard import BLACKBOARD_FILENAME, Fact, State, load_blackboard, save_
 from .probe import ProbeResult, probe_challenge
 from .relay import build_relay, parse_relay, read_relay_file, write_relay_file
 from .solver import SOLVER_LOG, SolverResult, read_flag_file, scan_log_for_flag, solver_worker
-from .verify import VerificationResult, verify_flag
+from .verify import VerificationResult, check_output_for_flag, verify_flag
 from .stopper import (
     DEFAULT_MAX_NO_OUTPUT_ROUNDS,
     DEFAULT_MAX_TOKENS,
@@ -372,6 +372,11 @@ class Dispatcher:
                 if board
                 else 0
             ),
+            # P0-2 增量扫描状态（H-1）：止损轮询只扫 solver.log 新增字节、
+            # 黑板按 mtime 缓存，语义与全量扫描等价（见 _stop_reason_for）
+            "scan_offset": 0,     # solver.log 已扫描到的字节 offset
+            "scan_tail": "",      # 上次扫描末尾残留（候选跨块时拼接用）
+            "board_cache": None,  # ((mtime_ns, size), Board) 缓存对
         }
         if not self.quiet:
             print(
@@ -511,6 +516,57 @@ class Dispatcher:
             if reason:
                 self._interrupt_stopped(cid, slot, reason)
 
+    def _incremental_flag_scan(self, slot: dict, work_dir: Path) -> bool:
+        """只扫 solver.log 新增字节（P0-2 / H-1）；返回本轮是否检出过三门 flag。
+
+        语义等价于 ``scan_log_for_flag(work_dir)`` 的布尔结果，成本 O(增量)。
+        日志被截断重写（新尝试 ``open(..., "w")``）时 size < offset，自动
+        重置 offset 从头扫。``scan_tail`` 保留末尾 1024 字符做跨块拼接
+        （候选正则上限 256 内容字符 + 前缀，余量充足）。
+        """
+        log_file = work_dir / SOLVER_LOG
+        try:
+            size = log_file.stat().st_size if log_file.is_file() else 0
+        except OSError:
+            return False
+        offset = slot.get("scan_offset", 0)
+        if size < offset:  # 截断重写 → 从头扫
+            offset = 0
+            slot["scan_offset"] = 0
+            slot["scan_tail"] = ""
+        if size == offset:
+            return False
+        try:
+            with open(log_file, "rb") as f:
+                f.seek(offset)
+                chunk = f.read()
+        except OSError:
+            return False
+        slot["scan_offset"] = size
+        text = slot.get("scan_tail", "") + chunk.decode("utf-8", errors="replace")
+        slot["scan_tail"] = text[-1024:]
+        return check_output_for_flag(text) is not None
+
+    def _cached_board(self, slot: dict, work_dir: Path):
+        """mtime 缓存的黑板加载（P0-2 / H-1）：未变复用对象，变了才重载。
+
+        缓存 key 为 (mtime_ns, size)，黑板写入是 tmp+replace 原子写，
+        落盘必引起 mtime/size 变化，不会读到旧数据。文件缺失返回 None
+        （与 load_blackboard 直调语义一致）。
+        """
+        board_path = work_dir / BLACKBOARD_FILENAME
+        try:
+            st = board_path.stat()
+            key = (st.st_mtime_ns, st.st_size)
+        except OSError:
+            return None
+        cached = slot.get("board_cache")
+        if cached is not None and cached[0] == key:
+            return cached[1]
+        board = load_blackboard(board_path)
+        slot["board_cache"] = (key, board)
+        return board
+
     def _stop_reason_for(self, slot: dict) -> Optional[str]:
         """计算单个 solver 的止损原因（无命中返回 None）。"""
         project: Project = slot["project"]
@@ -523,7 +579,8 @@ class Dispatcher:
             tokens = estimate_tokens_from_log(work_dir)
 
         # 维度 2/4 — 无产出 / 假设空间重复：需要黑板数据源
-        board = load_blackboard(work_dir / BLACKBOARD_FILENAME)
+        # （P0-2：mtime 缓存，未变时复用上次反序列化对象，语义等同重载）
+        board = self._cached_board(slot, work_dir)
         if board is None:
             rounds_without_fact = 0
             variant_failures = 0
@@ -566,7 +623,9 @@ class Dispatcher:
             declared, evidence="", require_grounding=False
         ) is not VerificationResult.CONFIRMED:
             declared = ""
-        has_partial_flag = bool(declared) or bool(scan_log_for_flag(work_dir))
+        # P0-2：日志改增量扫描（offset + tail 拼接），布尔语义与全量一致；
+        # FLAG 文件极小且低频写，保留全量读取。
+        has_partial_flag = bool(declared) or self._incremental_flag_scan(slot, work_dir)
 
         return self.stopper.check(
             project_tokens=tokens,
