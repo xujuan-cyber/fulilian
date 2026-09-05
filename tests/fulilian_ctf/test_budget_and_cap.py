@@ -20,6 +20,17 @@ try:
 except ImportError:  # 旧版 stopper 无 usage.json 支持
     USAGE_FILE = "usage.json"
 
+try:
+    from fulilian_ctf.stopper import usage_tokens as _usage_tokens
+    _HAS_USAGE_TOKENS = True
+except ImportError:  # 旧版 stopper：预算判定退化为纯 log 估算
+    _HAS_USAGE_TOKENS = False
+
+# 依赖 usage.json 精确口径的用例在旧版 stopper 下跳过
+_requires_usage = pytest.mark.skipif(
+    not _HAS_USAGE_TOKENS, reason="stopper.usage_tokens 不存在（旧版 stopper）"
+)
+
 
 @pytest.fixture
 def dispatcher():
@@ -28,6 +39,7 @@ def dispatcher():
 
 # ── H-3：预算口径相加 ────────────────────────────────────────────────
 
+@_requires_usage
 def test_budget_tokens_sums_usage_and_log(dispatcher, tmp_path):
     (tmp_path / USAGE_FILE).write_text(
         json.dumps({"total_tokens": 100000}), encoding="utf-8"
@@ -48,6 +60,7 @@ def test_budget_tokens_without_usage_file(dispatcher, tmp_path):
     assert dispatcher._budget_tokens(tmp_path, None) == 10_000  # 0 + est
 
 
+@_requires_usage
 def test_budget_tokens_with_empty_log(dispatcher, tmp_path):
     (tmp_path / USAGE_FILE).write_text(
         json.dumps({"total_tokens": 77_000}), encoding="utf-8"
@@ -55,6 +68,7 @@ def test_budget_tokens_with_empty_log(dispatcher, tmp_path):
     assert dispatcher._budget_tokens(tmp_path, None) == 77_000  # exact + 0
 
 
+@_requires_usage
 def test_budget_tokens_never_below_either_source(dispatcher, tmp_path):
     # 契约 2：判定值 >= max(exact, est)（双计窗口只提前不推迟）
     (tmp_path / USAGE_FILE).write_text(
