@@ -1,8 +1,9 @@
-"""CTF solver tools — verify_flag, submit_flag, record_fact, git_auto_commit, compile_check.
+"""CTF solver tools — verify_flag, submit_flag, record_fact, git_auto_commit, compile_check, http_session.
 
 Registered in the ``ctf_solve`` toolset.
-- Phase 1: verify_flag (三重校验门), submit_flag（声明式提交）, record_fact, git_auto_commit.
+- Phase 1: verify_flag (flag 校验门), submit_flag（声明式提交）, record_fact, git_auto_commit.
 - F4-008: compile_check（编译诊断）.
+- P2-3(部分): http_session（web 题跨调用 HTTP 会话保持）.
 """
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ from __future__ import annotations
 import inspect
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -197,6 +199,7 @@ def _git_auto_commit_impl(work_dir: str, message: str) -> str:
                     "__pycache__/\n"
                     "*.pyc\n"
                     ".DS_Store\n"
+                    ".http_sessions/\n"
                 )
                 gitignore_path.write_text(gitignore_content)
 
@@ -377,6 +380,140 @@ def _guess_language(source_file: str) -> str:
             ".hpp": "cpp", ".rs": "rust"}.get(suffix, "")
 
 
+# ── http_session：web 题跨调用 HTTP 会话保持（P2-3 部分，ctf_solve 扩展）──
+#
+# 会话（cookies/自定义 headers）落盘到 work_dir/.http_sessions/<sid>.json，
+# 跨工具调用保持登录态/会话连续性；进程重启不要求保留——文件在即续用，
+# 删除即新会话。响应 body 截断到上限（FULILIAN_HTTP_BODY_LIMIT，默认 4000
+# 字符），防止大响应爆上下文。work_dir 边界校验与 submit_flag 同口径（P0-4）。
+
+HTTP_SESSION_DIR = ".http_sessions"
+HTTP_DEFAULT_BODY_LIMIT = 4000
+
+
+def _new_session():
+    """requests.Session 工厂（单测 monkeypatch 点，不打真实网络的替换入口）。"""
+    import requests
+
+    return requests.Session()
+
+
+def _http_body_limit() -> int:
+    try:
+        return max(200, int(os.environ.get("FULILIAN_HTTP_BODY_LIMIT")
+                            or HTTP_DEFAULT_BODY_LIMIT))
+    except (TypeError, ValueError):
+        return HTTP_DEFAULT_BODY_LIMIT
+
+
+def _session_file(work_dir: str, session_id: str) -> Path:
+    safe = re.sub(r"[^A-Za-z0-9_-]", "_", session_id or "default") or "default"
+    return Path(work_dir) / HTTP_SESSION_DIR / f"{safe}.json"
+
+
+def _load_session(path: Path):
+    session = _new_session()
+    if path.is_file():
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            session.headers.update(data.get("headers") or {})
+            for c in data.get("cookies") or []:
+                session.cookies.set(c["name"], c["value"],
+                                    domain=c.get("domain") or "",
+                                    path=c.get("path") or "/")
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):
+            pass  # 会话文件损坏 → 视为新建会话（不阻断求解）
+    return session
+
+
+def _save_session(path: Path, session) -> None:
+    from fulilian_ctf.relay import atomic_write_text
+
+    try:
+        cookies = [
+            {"name": c.name, "value": c.value,
+             "domain": getattr(c, "domain", "") or "",
+             "path": getattr(c, "path", "") or "/"}
+            for c in session.cookies
+        ]
+        atomic_write_text(path, json.dumps(
+            {"headers": dict(session.headers), "cookies": cookies},
+            ensure_ascii=False, indent=2))
+    except Exception:  # noqa: BLE001 — 会话落盘失败不阻断请求本身
+        pass
+
+
+def _parse_header_text(headers_text: str) -> dict:
+    headers = {}
+    for line in (headers_text or "").splitlines():
+        if ":" in line:
+            key, _, value = line.partition(":")
+            if key.strip():
+                headers[key.strip()] = value.strip()
+    return headers
+
+
+def _summarize_response_headers(headers) -> list:
+    interesting = ("content-type", "location", "server", "set-cookie",
+                   "www-authenticate")
+    return [f"{k}: {str(v)[:200]}" for k, v in headers.items()
+            if k.lower() in interesting]
+
+
+def _http_session_impl(work_dir: str, action: str = "request",
+                       session_id: str = "default", method: str = "GET",
+                       url: str = "", headers: str = "", data: str = "",
+                       timeout: int = 10, allow_redirects: bool = True) -> str:
+    """web 题跨调用 HTTP 会话保持。
+
+    action:
+      - "request"（默认）：用命名会话发一次请求（会话不存在则惰性创建），
+        响应 Set-Cookie 自动延续到后续调用并落盘。
+      - "close"：丢弃该命名会话（删除落盘状态），下次 request 从新会话开始。
+    """
+    work_dir = _bound_work_dir(work_dir)
+    if work_dir is None:
+        return "http_session: work_dir is outside the bound CTF workspace"
+    session_file = _session_file(work_dir, session_id)
+
+    if action == "close":
+        try:
+            session_file.unlink(missing_ok=True)
+        except OSError as e:
+            return f"http_session: failed to close session: {e}"
+        return f"http_session: session {session_id!r} closed"
+    if action != "request":
+        return f"http_session: unknown action {action!r} (use 'request' or 'close')"
+    if not url:
+        return "http_session: url is required for action='request'"
+
+    session = _load_session(session_file)
+    try:
+        resp = session.request(
+            method=(method or "GET").upper(), url=url,
+            headers=_parse_header_text(headers) or None,
+            data=data or None,
+            timeout=max(1, int(timeout or 10)),
+            allow_redirects=bool(allow_redirects),
+        )
+    except Exception as e:  # noqa: BLE001 — 网络失败返回错误文本，不抛
+        _save_session(session_file, session)  # 已建立的会话状态仍保留
+        return f"http_session: request failed: {e}"
+    _save_session(session_file, session)
+
+    limit = _http_body_limit()
+    body = resp.text or ""
+    truncated = len(body) > limit
+    if truncated:
+        body = body[:limit]
+    lines = [f"status: {resp.status_code}", f"url: {resp.url}"]
+    lines.extend(f"header: {h}" for h in _summarize_response_headers(resp.headers))
+    lines.append(f"body{' (truncated at %d chars, use range/partial GET for more)' % limit
+                 if truncated else ''}:")
+    lines.append(body)
+    return "\n".join(lines)
+
+
 registry.register(
     name="compile_check",
     toolset="ctf_solve",
@@ -406,4 +543,69 @@ registry.register(
     },
     handler=_unpack(_compile_check_impl),
     description="Syntax-check a source file and return compiler diagnostics",
+)
+
+registry.register(
+    name="http_session",
+    toolset="ctf_solve",
+    schema={
+        "type": "function",
+        "function": {
+            "name": "http_session",
+            "description": "Stateful HTTP client for web challenges: keeps cookies/session "
+                           "across calls (persisted per challenge workspace). Use "
+                           "action='request' with method/url (extra headers/data optional); "
+                           "action='close' drops the session. Response body is truncated to a "
+                           "cap (FULILIAN_HTTP_BODY_LIMIT, default 4000 chars) — use range "
+                           "requests or targeted endpoints for large responses.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "work_dir": {
+                        "type": "string",
+                        "description": "Challenge workspace directory (session state is "
+                                       "persisted here)",
+                    },
+                    "action": {
+                        "type": "string",
+                        "enum": ["request", "close"],
+                        "description": "request (default) = send an HTTP request with the "
+                                       "named session; close = drop the named session",
+                    },
+                    "session_id": {
+                        "type": "string",
+                        "description": "Named session (default 'default') — use separate ids "
+                                       "to keep parallel logins apart",
+                    },
+                    "method": {
+                        "type": "string",
+                        "description": "HTTP method (default GET)",
+                    },
+                    "url": {
+                        "type": "string",
+                        "description": "Absolute URL to request (required for action=request)",
+                    },
+                    "headers": {
+                        "type": "string",
+                        "description": "Extra request headers, one 'Name: value' per line",
+                    },
+                    "data": {
+                        "type": "string",
+                        "description": "Raw request body (e.g. urlencoded or JSON text)",
+                    },
+                    "timeout": {
+                        "type": "integer",
+                        "description": "Request timeout in seconds (default 10)",
+                    },
+                    "allow_redirects": {
+                        "type": "boolean",
+                        "description": "Follow redirects (default true)",
+                    },
+                },
+                "required": ["work_dir"],
+            },
+        },
+    },
+    handler=_unpack(_http_session_impl),
+    description="Persistent HTTP session for web challenges",
 )
