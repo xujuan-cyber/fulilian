@@ -53,9 +53,22 @@ class _FakeCtx:
         return _FakeProc()
 
 
+class _FakeMpModule:
+    """旧版 dispatcher 无 _SAFE_MP_CONTEXT 时替身 multiprocessing。"""
+
+    def Queue(self):
+        return None
+
+    def Process(self, target=None, args=(), name=None):
+        return _FakeProc()
+
+
 @pytest.fixture
 def fake_mp(monkeypatch):
-    monkeypatch.setattr(dispatcher_mod, "_SAFE_MP_CONTEXT", _FakeCtx())
+    if hasattr(dispatcher_mod, "_SAFE_MP_CONTEXT"):
+        monkeypatch.setattr(dispatcher_mod, "_SAFE_MP_CONTEXT", _FakeCtx())
+    else:
+        monkeypatch.setattr(dispatcher_mod, "multiprocessing", _FakeMpModule())
 
 
 # ── 1. 路由表：参数化 (status, stop_reason) → route ─────────────────
