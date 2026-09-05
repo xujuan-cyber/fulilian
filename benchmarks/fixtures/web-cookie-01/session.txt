@@ -1,0 +1,3 @@
+GET /profile HTTP/1.1
+Host: challenge.local
+Cookie: admin_session=TlNTQ1RGe2Nvb2tpZV9iYXNlNjRfd2lufQ==

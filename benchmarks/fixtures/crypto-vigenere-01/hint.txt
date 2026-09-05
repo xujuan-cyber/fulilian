@@ -1,0 +1,1 @@
+ops memo: the dev used our team name "fulilian" as the vigenere key

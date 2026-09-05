@@ -1,0 +1,41 @@
+# P1-4 smoke 层 manifest 骨架 — 真题冒烟（3 题真解）
+#
+# ⚠️ 本层【默认拒绝运行】：`python3 -m fulilian_ctf.benchmark --suite smoke`
+# 会打印拒绝提示并退出（exit 2）。真解真题消耗 API 配额并访问外网靶机，
+# 需要用户显式确认：
+#   1) 在下方骨架里填好真题题号 / 附件路径 / 期望 flag 前缀；
+#   2) 确认 fulilian 已配置可用模型与 API key；
+#   3) 设置 FULILIAN_BENCHMARK_SMOKE_CONFIRM=yes 后重试（runner 后续版本
+#      读取该变量放行；当前版本一律拒绝，防止误触发）。
+#
+# 字段约定：
+#   platform   真题平台（BUUCTF / NSSCTF / ...）
+#   challenge  平台题号或题名
+#   attachment 本地附件路径（只读参考 ~/Exchange 由用户勾选后填入）
+#   flag_prefix 期望 flag 前缀（P0-1 flag 门多平台语义的真 API 冒烟回归点）
+#   expected   solved / pending（未提供 flag 时只能断言链路不崩）
+#
+# 骨架条目（占位，跑前必须由用户补全 attachment 与确认配额）：
+- id: smoke-web-01
+  category: web
+  platform: BUUCTF
+  challenge: "[BUUCTF 题号待填]"
+  attachment: ""          # 待填：本地附件路径
+  flag_prefix: "flag{"
+  expected: solved
+
+- id: smoke-crypto-01
+  category: crypto
+  platform: NSSCTF
+  challenge: "[NSSCTF 题号待填]"
+  attachment: ""          # 待填
+  flag_prefix: "NSSCTF{"
+  expected: solved
+
+- id: smoke-misc-01
+  category: misc
+  platform: NSSCTF
+  challenge: "[NSSCTF 题号待填]"
+  attachment: ""          # 待填
+  flag_prefix: "CTFshow{"
+  expected: solved

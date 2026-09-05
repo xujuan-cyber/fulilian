@@ -1,0 +1,111 @@
+meta:
+  comment: 'P1-4 检索金标（20 条）— 由 benchmarks/sampling/build_retrieval_golden.py 生成；种子=20260905; 生成日期=2026-09-06; 库=/home/xujuan/.fulilian/knowledge.db; 判定: knowledge_retriever.search(query, limit=5, auto_build=False) 的 top-5 source_path 含 expected_source_path 即命中（hit@5）。只读检索。'
+  seed: 20260905
+  stratum_quota:
+    web: 6
+    crypto: 4
+    pwn: 3
+    reverse: 3
+    forensics: 2
+    misc: 2
+golden:
+- id: golden-01
+  category: web
+  title: 官方WP｜2023数字中国·数据安全产业人才能力挑战赛初赛
+  query: '"官方WP" OR "2023数字中国" OR "数据安全产业人才能力挑战赛初赛"'
+  expected_source_path: /home/xujuan/.fulilian/ctf-knowledge/CTF大赛WP集合/articles/官方WP｜2023数字中国·数据安全产业人才能力挑战赛初赛.md
+- id: golden-02
+  category: web
+  title: 第三届“香山杯“网络安全大赛初赛Writeup
+  query: '"第三届" OR "香山杯" OR "网络安全大赛初赛Writeup"'
+  expected_source_path: /home/xujuan/.fulilian/ctf-knowledge/CTF大赛WP集合/articles/第三届“香山杯“网络安全大赛初赛Writeup.md
+- id: golden-03
+  category: pwn
+  title: '[2024长城杯初赛]_Pwn题SomeHash_SomeTime_shutup题解'
+  query: '"2024长城杯初赛" OR "_Pwn题SomeHash_SomeTime_shutup题解"'
+  expected_source_path: /home/xujuan/.fulilian/ctf-knowledge/CTF大赛WP集合/articles/[2024长城杯初赛]_Pwn题SomeHash_SomeTime_shutup题解.md
+- id: golden-04
+  category: crypto
+  title: 2024数信杯北部赛区wp
+  query: '"2024数信杯北部赛区wp"'
+  expected_source_path: /home/xujuan/.fulilian/ctf-knowledge/CTF大赛WP集合/articles/2024数信杯北部赛区wp.md
+- id: golden-05
+  category: web
+  title: 2023黑盾杯-WriteUp
+  query: '"2023黑盾杯" OR "WriteUp"'
+  expected_source_path: /home/xujuan/.fulilian/ctf-knowledge/CTF大赛WP集合/articles/2023黑盾杯-WriteUp.md
+- id: golden-06
+  category: crypto
+  title: 解析2025LitCTF-math
+  query: '"解析2025LitCTF" OR "math"'
+  expected_source_path: /home/xujuan/.fulilian/ctf-knowledge/CTF大赛WP集合/articles/解析2025LitCTF-math.md
+- id: golden-07
+  category: forensics
+  title: 2023年全国网络安全行业职业技能大赛-电子数据取证分析师（淘汰赛C卷）-WP
+  query: '"2023年全国网络安全行业职业技能大赛" OR "电子数据取证分析师" OR "淘汰赛C卷"'
+  expected_source_path: /home/xujuan/.fulilian/ctf-knowledge/CTF大赛WP集合/articles/2023年全国网络安全行业职业技能大赛-电子数据取证分析师（淘汰赛C卷）-WP.md
+- id: golden-08
+  category: reverse
+  title: 2024_KCTF_大赛_-_第十题《试探》设计思路及解析
+  query: '"2024_KCTF_大赛_" OR "_第十题" OR "设计思路及解析"'
+  expected_source_path: /home/xujuan/.fulilian/ctf-knowledge/CTF大赛WP集合/articles/2024_KCTF_大赛_-_第十题《试探》设计思路及解析.md
+- id: golden-09
+  category: forensics
+  title: Hack.lu_2023_两道k8s题解
+  query: '"Hack" OR "lu_2023_两道k8s题解"'
+  expected_source_path: /home/xujuan/.fulilian/ctf-knowledge/CTF大赛WP集合/articles/Hack.lu_2023_两道k8s题解.md
+- id: golden-10
+  category: web
+  title: N1CTF_Junior_2026_1-2-WEB
+  query: '"N1CTF_Junior_2026_1" OR "WEB"'
+  expected_source_path: /home/xujuan/.fulilian/ctf-knowledge/CTF大赛WP集合/articles/N1CTF_Junior_2026_1-2-WEB.md
+- id: golden-11
+  category: web
+  title: 第三届黄河流域公安院校网络空间安全技能挑战赛官方Writeup
+  query: '"第三届黄河流域公安院校网络空间安全技能挑战赛官方Writeup"'
+  expected_source_path: /home/xujuan/.fulilian/ctf-knowledge/CTF大赛WP集合/articles/第三届黄河流域公安院校网络空间安全技能挑战赛官方Writeup.md
+- id: golden-12
+  category: crypto
+  title: DASCTF_X_GFCTF_2022十月挑战赛_cuteRE_WriteUp
+  query: '"DASCTF_X_GFCTF_2022十月挑战赛_cuteRE_WriteUp"'
+  expected_source_path: /home/xujuan/.fulilian/ctf-knowledge/CTF大赛WP集合/articles/DASCTF_X_GFCTF_2022十月挑战赛_cuteRE_WriteUp.md
+- id: golden-13
+  category: pwn
+  title: Nepctf2025_PWN部分题解
+  query: '"Nepctf2025_PWN部分题解"'
+  expected_source_path: /home/xujuan/.fulilian/ctf-knowledge/CTF大赛WP集合/articles/Nepctf2025_PWN部分题解.md
+- id: golden-14
+  category: reverse
+  title: 【2026春节】初十Windows高级题目WriteUp&提示词分享
+  query: '"2026春节" OR "初十Windows高级题目WriteUp" OR "提示词分享"'
+  expected_source_path: /home/xujuan/.fulilian/ctf-knowledge/CTF大赛WP集合/articles/【2026春节】初十Windows高级题目WriteUp&提示词分享.md
+- id: golden-15
+  category: reverse
+  title: ACTF_flutter逆向学习
+  query: '"ACTF_flutter逆向学习"'
+  expected_source_path: /home/xujuan/.fulilian/ctf-knowledge/CTF大赛WP集合/articles/ACTF_flutter逆向学习.md
+- id: golden-16
+  category: pwn
+  title: 2025_强网杯_pwn_adventure
+  query: '"2025_强网杯_pwn_adventure"'
+  expected_source_path: /home/xujuan/.fulilian/ctf-knowledge/CTF大赛WP集合/articles/2025_强网杯_pwn_adventure.md
+- id: golden-17
+  category: misc
+  title: 0CTF_2022_TCTF_NFT_Market
+  query: '"0CTF_2022_TCTF_NFT_Market"'
+  expected_source_path: /home/xujuan/.fulilian/ctf-knowledge/CTF大赛WP集合/articles/0CTF_2022_TCTF_NFT_Market.md
+- id: golden-18
+  category: web
+  title: SUCTF_2025_Writeup
+  query: '"SUCTF_2025_Writeup"'
+  expected_source_path: /home/xujuan/.fulilian/ctf-knowledge/CTF大赛WP集合/articles/SUCTF_2025_Writeup.md
+- id: golden-19
+  category: misc
+  title: 关于迷宫题的一些求解思路
+  query: '"关于迷宫题的一些求解思路"'
+  expected_source_path: /home/xujuan/.fulilian/ctf-knowledge/CTF大赛WP集合/articles/关于迷宫题的一些求解思路.md
+- id: golden-20
+  category: crypto
+  title: 【二等奖方案】数据湖流批一体性能优化「TT」团队思路
+  query: '"二等奖方案" OR "数据湖流批一体性能优化" OR "团队思路"'
+  expected_source_path: /home/xujuan/.fulilian/ctf-knowledge/CTF大赛WP集合/articles/【二等奖方案】数据湖流批一体性能优化「TT」团队思路.md

@@ -1,0 +1,435 @@
+{
+  "suite": "unit",
+  "date": "2026-09-06",
+  "totals": {
+    "solved": 25,
+    "total": 25,
+    "pass_rate": 1.0
+  },
+  "categories": {
+    "web": {
+      "solved": 5,
+      "total": 5,
+      "pass_rate": 1.0,
+      "avg_seconds": 0.0655,
+      "avg_tokens": null,
+      "avg_tool_calls": 3.4,
+      "skipped_fixture_invalid": 0
+    },
+    "crypto": {
+      "solved": 5,
+      "total": 5,
+      "pass_rate": 1.0,
+      "avg_seconds": 0.0324,
+      "avg_tokens": null,
+      "avg_tool_calls": 3.6,
+      "skipped_fixture_invalid": 0
+    },
+    "pwn": {
+      "solved": 5,
+      "total": 5,
+      "pass_rate": 1.0,
+      "avg_seconds": 0.0406,
+      "avg_tokens": null,
+      "avg_tool_calls": 3.2,
+      "skipped_fixture_invalid": 0
+    },
+    "reverse": {
+      "solved": 5,
+      "total": 5,
+      "pass_rate": 1.0,
+      "avg_seconds": 0.0331,
+      "avg_tokens": null,
+      "avg_tool_calls": 3.2,
+      "skipped_fixture_invalid": 0
+    },
+    "misc": {
+      "solved": 5,
+      "total": 5,
+      "pass_rate": 1.0,
+      "avg_seconds": 0.0254,
+      "avg_tokens": null,
+      "avg_tool_calls": 3.0,
+      "skipped_fixture_invalid": 0
+    }
+  },
+  "cases": [
+    {
+      "id": "web-info-leak-01",
+      "category": "web",
+      "status": "solved",
+      "detail": "",
+      "flag_returned": "NSSCTF{unit_web_bak_leak}",
+      "seconds": 0.2176,
+      "tokens": null,
+      "tool_calls": 3,
+      "solved": true
+    },
+    {
+      "id": "web-robots-01",
+      "category": "web",
+      "status": "solved",
+      "detail": "",
+      "flag_returned": "CTFshow{robots_hidden_path}",
+      "seconds": 0.0361,
+      "tokens": null,
+      "tool_calls": 4,
+      "solved": true
+    },
+    {
+      "id": "web-source-comment-01",
+      "category": "web",
+      "status": "solved",
+      "detail": "",
+      "flag_returned": "DASCTF{html_comment_leak}",
+      "seconds": 0.0195,
+      "tokens": null,
+      "tool_calls": 3,
+      "solved": true
+    },
+    {
+      "id": "web-http-header-01",
+      "category": "web",
+      "status": "solved",
+      "detail": "",
+      "flag_returned": "flag{header_debug_leak}",
+      "seconds": 0.0211,
+      "tokens": null,
+      "tool_calls": 3,
+      "solved": true
+    },
+    {
+      "id": "web-cookie-01",
+      "category": "web",
+      "status": "solved",
+      "detail": "",
+      "flag_returned": "NSSCTF{cookie_base64_win}",
+      "seconds": 0.033,
+      "tokens": null,
+      "tool_calls": 4,
+      "solved": true
+    },
+    {
+      "id": "crypto-caesar-01",
+      "category": "crypto",
+      "status": "solved",
+      "detail": "",
+      "flag_returned": "CTFshow{caesar_shift_3}",
+      "seconds": 0.0396,
+      "tokens": null,
+      "tool_calls": 3,
+      "solved": true
+    },
+    {
+      "id": "crypto-base64-01",
+      "category": "crypto",
+      "status": "solved",
+      "detail": "",
+      "flag_returned": "flag{base64_chain_three}",
+      "seconds": 0.0313,
+      "tokens": null,
+      "tool_calls": 3,
+      "solved": true
+    },
+    {
+      "id": "crypto-xor-01",
+      "category": "crypto",
+      "status": "solved",
+      "detail": "",
+      "flag_returned": "NSSCTF{xor_single_byte}",
+      "seconds": 0.0382,
+      "tokens": null,
+      "tool_calls": 3,
+      "solved": true
+    },
+    {
+      "id": "crypto-rsa-01",
+      "category": "crypto",
+      "status": "solved",
+      "detail": "",
+      "flag_returned": "DASCTF{small_rsa_factor}",
+      "seconds": 0.0315,
+      "tokens": null,
+      "tool_calls": 4,
+      "solved": true
+    },
+    {
+      "id": "crypto-vigenere-01",
+      "category": "crypto",
+      "status": "solved",
+      "detail": "",
+      "flag_returned": "ISCC{vigenere_leaked_key}",
+      "seconds": 0.0213,
+      "tokens": null,
+      "tool_calls": 5,
+      "solved": true
+    },
+    {
+      "id": "pwn-ret2win-01",
+      "category": "pwn",
+      "status": "solved",
+      "detail": "",
+      "flag_returned": "flag{ret2win_easy}",
+      "seconds": 0.0418,
+      "tokens": null,
+      "tool_calls": 3,
+      "solved": true
+    },
+    {
+      "id": "pwn-bof-01",
+      "category": "pwn",
+      "status": "solved",
+      "detail": "",
+      "flag_returned": "DASCTF{bof_static_strings}",
+      "seconds": 0.0471,
+      "tokens": null,
+      "tool_calls": 3,
+      "solved": true
+    },
+    {
+      "id": "pwn-format-01",
+      "category": "pwn",
+      "status": "solved",
+      "detail": "",
+      "flag_returned": "NSSCTF{format_string_static}",
+      "seconds": 0.0298,
+      "tokens": null,
+      "tool_calls": 3,
+      "solved": true
+    },
+    {
+      "id": "pwn-encoded-01",
+      "category": "pwn",
+      "status": "solved",
+      "detail": "",
+      "flag_returned": "CTFshow{pwn_encoded_rodata}",
+      "seconds": 0.0431,
+      "tokens": null,
+      "tool_calls": 4,
+      "solved": true
+    },
+    {
+      "id": "pwn-secret-check-01",
+      "category": "pwn",
+      "status": "solved",
+      "detail": "",
+      "flag_returned": "flag{pwn_static_secret}",
+      "seconds": 0.0412,
+      "tokens": null,
+      "tool_calls": 3,
+      "solved": true
+    },
+    {
+      "id": "reverse-xor-brute-01",
+      "category": "reverse",
+      "status": "solved",
+      "detail": "",
+      "flag_returned": "NSSCTF{reverse_xor_brute}",
+      "seconds": 0.0471,
+      "tokens": null,
+      "tool_calls": 3,
+      "solved": true
+    },
+    {
+      "id": "reverse-rot13-01",
+      "category": "reverse",
+      "status": "solved",
+      "detail": "",
+      "flag_returned": "flag{rot13_reverse_me}",
+      "seconds": 0.0237,
+      "tokens": null,
+      "tool_calls": 3,
+      "solved": true
+    },
+    {
+      "id": "reverse-stackstr-01",
+      "category": "reverse",
+      "status": "solved",
+      "detail": "",
+      "flag_returned": "DASCTF{reverse_string_stack}",
+      "seconds": 0.0319,
+      "tokens": null,
+      "tool_calls": 3,
+      "solved": true
+    },
+    {
+      "id": "reverse-encchain-01",
+      "category": "reverse",
+      "status": "solved",
+      "detail": "",
+      "flag_returned": "CTFshow{reverse_chain_decode}",
+      "seconds": 0.0419,
+      "tokens": null,
+      "tool_calls": 3,
+      "solved": true
+    },
+    {
+      "id": "reverse-subst-01",
+      "category": "reverse",
+      "status": "solved",
+      "detail": "",
+      "flag_returned": "ISCC{reverse_subst_table}",
+      "seconds": 0.0211,
+      "tokens": null,
+      "tool_calls": 4,
+      "solved": true
+    },
+    {
+      "id": "misc-morse-01",
+      "category": "misc",
+      "status": "solved",
+      "detail": "",
+      "flag_returned": "flag{morsecodebegin}",
+      "seconds": 0.022,
+      "tokens": null,
+      "tool_calls": 3,
+      "solved": true
+    },
+    {
+      "id": "misc-hexdump-01",
+      "category": "misc",
+      "status": "solved",
+      "detail": "",
+      "flag_returned": "NSSCTF{hexdump_rebuild}",
+      "seconds": 0.0297,
+      "tokens": null,
+      "tool_calls": 3,
+      "solved": true
+    },
+    {
+      "id": "misc-base85-01",
+      "category": "misc",
+      "status": "solved",
+      "detail": "",
+      "flag_returned": "CTFshow{ascii85_decoded}",
+      "seconds": 0.019,
+      "tokens": null,
+      "tool_calls": 3,
+      "solved": true
+    },
+    {
+      "id": "misc-brainfuck-01",
+      "category": "misc",
+      "status": "solved",
+      "detail": "",
+      "flag_returned": "DASCTF{bf_interpreter_done}",
+      "seconds": 0.0274,
+      "tokens": null,
+      "tool_calls": 3,
+      "solved": true
+    },
+    {
+      "id": "misc-rot47-01",
+      "category": "misc",
+      "status": "solved",
+      "detail": "",
+      "flag_returned": "NSSCTF{rot47_shift_magic}",
+      "seconds": 0.0287,
+      "tokens": null,
+      "tool_calls": 3,
+      "solved": true
+    }
+  ],
+  "validation": {
+    "web-info-leak-01": {
+      "ok": true,
+      "error": ""
+    },
+    "web-robots-01": {
+      "ok": true,
+      "error": ""
+    },
+    "web-source-comment-01": {
+      "ok": true,
+      "error": ""
+    },
+    "web-http-header-01": {
+      "ok": true,
+      "error": ""
+    },
+    "web-cookie-01": {
+      "ok": true,
+      "error": ""
+    },
+    "crypto-caesar-01": {
+      "ok": true,
+      "error": ""
+    },
+    "crypto-base64-01": {
+      "ok": true,
+      "error": ""
+    },
+    "crypto-xor-01": {
+      "ok": true,
+      "error": ""
+    },
+    "crypto-rsa-01": {
+      "ok": true,
+      "error": ""
+    },
+    "crypto-vigenere-01": {
+      "ok": true,
+      "error": ""
+    },
+    "pwn-ret2win-01": {
+      "ok": true,
+      "error": ""
+    },
+    "pwn-bof-01": {
+      "ok": true,
+      "error": ""
+    },
+    "pwn-format-01": {
+      "ok": true,
+      "error": ""
+    },
+    "pwn-encoded-01": {
+      "ok": true,
+      "error": ""
+    },
+    "pwn-secret-check-01": {
+      "ok": true,
+      "error": ""
+    },
+    "reverse-xor-brute-01": {
+      "ok": true,
+      "error": ""
+    },
+    "reverse-rot13-01": {
+      "ok": true,
+      "error": ""
+    },
+    "reverse-stackstr-01": {
+      "ok": true,
+      "error": ""
+    },
+    "reverse-encchain-01": {
+      "ok": true,
+      "error": ""
+    },
+    "reverse-subst-01": {
+      "ok": true,
+      "error": ""
+    },
+    "misc-morse-01": {
+      "ok": true,
+      "error": ""
+    },
+    "misc-hexdump-01": {
+      "ok": true,
+      "error": ""
+    },
+    "misc-base85-01": {
+      "ok": true,
+      "error": ""
+    },
+    "misc-brainfuck-01": {
+      "ok": true,
+      "error": ""
+    },
+    "misc-rot47-01": {
+      "ok": true,
+      "error": ""
+    }
+  }
+}

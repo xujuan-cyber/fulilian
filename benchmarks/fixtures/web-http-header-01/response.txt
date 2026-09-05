@@ -1,0 +1,7 @@
+HTTP/1.1 200 OK
+Server: nginx/1.24.0
+Content-Type: text/html; charset=utf-8
+X-Debug-Flag: flag{header_debug_leak}
+X-Powered-By: PHP/8.2.0
+
+<html><body>ok</body></html>

@@ -1,0 +1,216 @@
+# P1-4 unit 层 manifest — mini-corpus（5 题型 × 5 = 25 题，全离线）
+#
+# 字段：
+#   id            用例 ID（与 fixtures/ 目录同名）
+#   category      web / crypto / pwn / reverse / misc
+#   fixture       fixtures/ 下相对 benchmarks/ 的材料目录（含 solve_reference.py 参考解）
+#   expected_flag 期望 flag（多平台前缀覆盖：NSSCTF / CTFshow / DASCTF / flag / ISCC
+#                 —— P0-1 flag 门修复的回归锁）
+#   expect        solved（当前全部期望可解；fixture 跑不通会被 runner 如实标
+#                 skipped: fixture-invalid，不许放宽断言）
+#   level         static（pwn 层静态分析档：strings/反编译层可解）
+#   title/description  题面元信息（进入 solver 查询，mock 层用于 AGENTS.md 构造）
+- id: web-info-leak-01
+  category: web
+  fixture: fixtures/web-info-leak-01/
+  expected_flag: "NSSCTF{unit_web_bak_leak}"
+  expect: solved
+  title: "简单信息泄露-备份文件"
+  description: "运维上线时把开发版 PHP 备份留在了 web 目录。找出泄露的 flag。"
+
+- id: web-robots-01
+  category: web
+  fixture: fixtures/web-robots-01/
+  expected_flag: "CTFshow{robots_hidden_path}"
+  expect: solved
+  title: "robots.txt 隐藏路径"
+  description: "站点 robots.txt 不想让爬虫看到某些路径。顺着线索找到内部笔记。"
+
+- id: web-source-comment-01
+  category: web
+  fixture: fixtures/web-source-comment-01/
+  expected_flag: "DASCTF{html_comment_leak}"
+  expect: solved
+  title: "页面源码注释泄露"
+  description: "首页看着平平无奇，但源码里有开发没删干净的东西。"
+
+- id: web-http-header-01
+  category: web
+  fixture: fixtures/web-http-header-01/
+  expected_flag: "flag{header_debug_leak}"
+  expect: solved
+  title: "响应头调试泄露"
+  description: "调试开关忘关了，响应头里多了点东西。"
+
+- id: web-cookie-01
+  category: web
+  fixture: fixtures/web-cookie-01/
+  expected_flag: "NSSCTF{cookie_base64_win}"
+  expect: solved
+  title: "Cookie 会话泄露"
+  description: "抓包看请求，admin_session 有点可疑。"
+
+- id: crypto-caesar-01
+  category: crypto
+  fixture: fixtures/crypto-caesar-01/
+  expected_flag: "CTFshow{caesar_shift_3}"
+  expect: solved
+  title: "凯撒密码"
+  description: "古典密码第一课。密文在 cipher.txt。"
+
+- id: crypto-base64-01
+  category: crypto
+  fixture: fixtures/crypto-base64-01/
+  expected_flag: "flag{base64_chain_three}"
+  expect: solved
+  title: "多层 base64"
+  description: "编码套了一层又一层，共三层。"
+
+- id: crypto-xor-01
+  category: crypto
+  fixture: fixtures/crypto-xor-01/
+  expected_flag: "NSSCTF{xor_single_byte}"
+  expect: solved
+  title: "单字节异或"
+  description: "密文是 hex 字符串，密钥只有一个字节。"
+
+- id: crypto-rsa-01
+  category: crypto
+  fixture: fixtures/crypto-rsa-01/
+  expected_flag: "DASCTF{small_rsa_factor}"
+  expect: solved
+  title: "小模数 RSA"
+  description: "n 小到可以试除分解，明文按字节加密。"
+
+- id: crypto-vigenere-01
+  category: crypto
+  fixture: fixtures/crypto-vigenere-01/
+  expected_flag: "ISCC{vigenere_leaked_key}"
+  expect: solved
+  title: "维吉尼亚（密钥泄露）"
+  description: "运维备忘里不小心写了密钥提示。"
+
+- id: pwn-ret2win-01
+  category: pwn
+  fixture: fixtures/pwn-ret2win-01/
+  expected_flag: "flag{ret2win_easy}"
+  expect: solved
+  level: static
+  title: "ret2win（静态档）"
+  description: "经典 ret2win：存在 win() 后门函数。离线 corpus 取静态分析档，strings 层可解。"
+
+- id: pwn-bof-01
+  category: pwn
+  fixture: fixtures/pwn-bof-01/
+  expected_flag: "DASCTF{bof_static_strings}"
+  expect: solved
+  level: static
+  title: "栈溢出（静态档）"
+  description: "read 256 into buf[16]。离线 corpus 取静态分析档。"
+
+- id: pwn-format-01
+  category: pwn
+  fixture: fixtures/pwn-format-01/
+  expected_flag: "NSSCTF{format_string_static}"
+  expect: solved
+  level: static
+  title: "格式化字符串（静态档）"
+  description: "格式化字符串漏洞题的离线静态档。"
+
+- id: pwn-encoded-01
+  category: pwn
+  fixture: fixtures/pwn-encoded-01/
+  expected_flag: "CTFshow{pwn_encoded_rodata}"
+  expect: solved
+  level: static
+  title: "编码 rodata（静态档）"
+  description: "win() 输出前对 .rodata 做单字节 XOR，需结合反编译产物解码。"
+
+- id: pwn-secret-check-01
+  category: pwn
+  fixture: fixtures/pwn-secret-check-01/
+  expected_flag: "flag{pwn_static_secret}"
+  expect: solved
+  level: static
+  title: "密钥校验（静态档）"
+  description: "程序校验输入为内置密钥后打印 flag，静态可见。"
+
+- id: reverse-xor-brute-01
+  category: reverse
+  fixture: fixtures/reverse-xor-brute-01/
+  expected_flag: "NSSCTF{reverse_xor_brute}"
+  expect: solved
+  title: "单字节异或爆破"
+  description: "encoded.bin 是单字节异或产物，密钥未知。"
+
+- id: reverse-rot13-01
+  category: reverse
+  fixture: fixtures/reverse-rot13-01/
+  expected_flag: "flag{rot13_reverse_me}"
+  expect: solved
+  title: "ROT13"
+  description: "最经典的字母表旋转。"
+
+- id: reverse-stackstr-01
+  category: reverse
+  fixture: fixtures/reverse-stackstr-01/
+  expected_flag: "DASCTF{reverse_string_stack}"
+  expect: solved
+  title: "逆序存放的字符串"
+  description: "程序把敏感字符串逆序压栈，dump 出来是反的。"
+
+- id: reverse-encchain-01
+  category: reverse
+  fixture: fixtures/reverse-encchain-01/
+  expected_flag: "CTFshow{reverse_chain_decode}"
+  expect: solved
+  title: "base32→base64 编码链"
+  description: "两层编码链，逐层解开。"
+
+- id: reverse-subst-01
+  category: reverse
+  fixture: fixtures/reverse-subst-01/
+  expected_flag: "ISCC{reverse_subst_table}"
+  expect: solved
+  title: "替换表解密"
+  description: "从程序数据段提取替换表，构造逆映射解密。"
+
+- id: misc-morse-01
+  category: misc
+  fixture: fixtures/misc-morse-01/
+  expected_flag: "flag{morsecodebegin}"
+  expect: solved
+  title: "摩斯电码"
+  description: "内容为纯字母数字，外层包裹格式见 README。"
+
+- id: misc-hexdump-01
+  category: misc
+  fixture: fixtures/misc-hexdump-01/
+  expected_flag: "NSSCTF{hexdump_rebuild}"
+  expect: solved
+  title: "hexdump 还原"
+  description: "xxd 风格的 dump 文件，还原出明文。"
+
+- id: misc-base85-01
+  category: misc
+  fixture: fixtures/misc-base85-01/
+  expected_flag: "CTFshow{ascii85_decoded}"
+  expect: solved
+  title: "base85 解码"
+  description: "字符集范围很宽的编码。"
+
+- id: misc-brainfuck-01
+  category: misc
+  fixture: fixtures/misc-brainfuck-01/
+  expected_flag: "DASCTF{bf_interpreter_done}"
+  expect: solved
+  title: "brainfuck 解释器"
+  description: "手写一个最小 BF 解释器跑 program.b。"
+
+- id: misc-rot47-01
+  category: misc
+  fixture: fixtures/misc-rot47-01/
+  expected_flag: "NSSCTF{rot47_shift_magic}"
+  expect: solved
+  title: "ROT47"
+  description: "可打印 ASCII 的 94 字符轮转，自逆变换。"

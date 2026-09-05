@@ -1,0 +1,2 @@
+internal notes — 2026-08-30
+prod key: CTFshow{robots_hidden_path}

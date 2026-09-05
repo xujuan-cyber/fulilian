@@ -1,0 +1,73 @@
+{
+  "suite": "fault-injection",
+  "date": "2026-09-06",
+  "passed": true,
+  "scenarios": [
+    {
+      "scenario": "empty-model",
+      "passed": true,
+      "checks": {
+        "challengeA_degraded_without_crash": true,
+        "challengeA_result": {
+          "ok": false,
+          "flag": "",
+          "error": "RuntimeError: empty model name: provider request would fail with 400"
+        },
+        "challengeB_continued": true,
+        "warnings_emitted": [
+          "no default model configured (resolve_default_model -> '') — solver will request API with empty model name (HTTP 400); expecting graceful degradation to a failed attempt",
+          "empty model name for challenge 'web-info-leak-01' — solver would request API with empty model (HTTP 400); degrading to failed attempt"
+        ]
+      }
+    },
+    {
+      "scenario": "corrupt-blackboard",
+      "passed": true,
+      "checks": {
+        "challengeA_degraded_without_crash": true,
+        "challengeA_result": {
+          "ok": true,
+          "flag": "NSSCTF{unit_web_bak_leak}",
+          "error": ""
+        },
+        "challengeB_continued": true,
+        "warnings_emitted": [
+          "blackboard.json is corrupt JSON in 'challengeA'; solver blackboard bootstrap will degrade (load_blackboard raised JSONDecodeError (expected))"
+        ]
+      }
+    },
+    {
+      "scenario": "missing-fts5",
+      "passed": true,
+      "checks": {
+        "challengeA_degraded_without_crash": true,
+        "challengeA_result": {
+          "ok": true,
+          "flag": "NSSCTF{unit_web_bak_leak}",
+          "error": ""
+        },
+        "challengeB_continued": true,
+        "warnings_emitted": [
+          "FTS5 database not found at '/tmp/bench-missing-fts5-15rz1dvj/knowledge.db' — knowledge retrieval degrades to no-op; solve continues without WP refs"
+        ]
+      }
+    },
+    {
+      "scenario": "remote-down",
+      "passed": true,
+      "checks": {
+        "challengeA_degraded_without_crash": true,
+        "challengeA_result": {
+          "ok": true,
+          "flag": "NSSCTF{unit_web_bak_leak}",
+          "error": ""
+        },
+        "challengeB_continued": true,
+        "warnings_emitted": [
+          "remote target 127.0.0.1:1 refused connection — degrading from remote interaction to local static analysis",
+          "probe 127.0.0.1:1 failed: [Errno 111] Connection refused — falling back to local file inspection"
+        ]
+      }
+    }
+  ]
+}
