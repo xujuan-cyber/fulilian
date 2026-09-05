@@ -14,6 +14,15 @@ import pytest
 import tools.ctf_solve as ctf_solve
 
 
+@pytest.fixture(autouse=True)
+def _clear_bound_env(monkeypatch):
+    """隔离全量回归的环境泄漏：进程内跑过 solver_worker 的测试会把
+    FULILIAN_CTF_WORK_DIR 留在 os.environ（solver.py:457 无清除），
+    导致本文件所有用例意外进入绑定模式。除非用例显式 setenv，一律清除。
+    """
+    monkeypatch.delenv("FULILIAN_CTF_WORK_DIR", raising=False)
+
+
 class FakeCookie:
     def __init__(self, name, value, domain="", path="/"):
         self.name, self.value, self.domain, self.path = name, value, domain, path
