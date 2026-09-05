@@ -9382,7 +9382,7 @@ def main(
         print("  ")
         print("  # Run with trajectory saving enabled")
         print("  python run_agent.py --save_trajectories --query='your question here'")
-        return
+        return 0  # usage/help 正常早退（M-2：显式退出码）
     
     # Parse toolset selection arguments
     enabled_toolsets_list = None
@@ -9508,6 +9508,12 @@ def main(
             print(f"\n⚠️ Failed to save sample: {e}")
     
     print("\n👋 Agent execution completed!")
+
+    # M-2：向调用方（solver._default_solver_impl、CLI）返回进程级退出码。
+    # main 原先所有路径无 return（恒 None），SolverResult.ok 恒真——初始化
+    # 失败/API 全挂/会话未完成全部报成功。agent 构造失败（agent=None）或
+    # 会话未完成（completed=False）→ 1；正常完成 → 0。
+    return 0 if (agent is not None and result.get("completed")) else 1
 
 
 if __name__ == "__main__":

@@ -296,6 +296,19 @@ def publish_result_fact(project, work_dir: str | Path, result: "SolverResult") -
     save_blackboard(board, work_dir / BLACKBOARD_FILENAME)
 
 
+def _solver_result_from_code(code) -> SolverResult:
+    """把 run_agent.main 的退出码转为 SolverResult（M-2）。
+
+    ``None`` 视为失败：main 修复前所有路径无 return（恒 None），旧语义
+    下 ``ok=(code == 0)`` 恒真——初始化失败/API 全挂都报成功。本防线保证
+    即使上游又退化为无返回值，也不会误报 ok。
+    （注意：卡面参考式 ``ok=((code or 1) == 0)`` 会把 0 也误判为失败
+    —— ``0 or 1`` 求值为 1——故按契约语义用 ``is None`` 显式判空。）
+    """
+    exit_code = 1 if code is None else int(code)
+    return SolverResult(ok=(exit_code == 0), exit_code=exit_code)
+
+
 def _default_solver_impl(project, work_dir: Path, query: str) -> int:
     """真实求解：复用 Fulilian run_agent 核心（CTF 模式），stdout/stderr 进 solver.log。"""
     from run_agent import main as run_agent_main
@@ -365,7 +378,7 @@ def solver_worker(project, work_dir: str, model: str, queue, solver_impl=None) -
         else:
             code = solver_impl(project, work_dir, query)
 
-        result = SolverResult(ok=(code == 0), exit_code=int(code or 0))
+        result = _solver_result_from_code(code)
     except SystemExit as e:  # run_agent 以 sys.exit 退出
         result = SolverResult(ok=False, exit_code=int(e.code or 1), error=f"SystemExit: {e.code}")
     except Exception as e:  # noqa: BLE001 — 进程隔离：任何异常都不影响其他 solver

@@ -15,8 +15,10 @@ EV 公式（收割轮排序）：EV = score * difficulty_factor * attempts_penal
 
 from __future__ import annotations
 
+import functools
 import json
 import multiprocessing
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -199,6 +201,9 @@ class Dispatcher:
         self.projects: dict[str, Project] = {}
         self._running: dict[str, dict] = {}  # challenge_id → slot
         self._spawns = 0
+        # P1-2 / M-3：_spawns / attempts 的读改写发生在 _spawn_candidates
+        # 的线程池并发上下文中，+= 非原子——计数器读写统一走此锁。
+        self._counters_lock = threading.Lock()
 
     # ── 项目管理 ────────────────────────────────────────────────────────
 
@@ -297,7 +302,8 @@ class Dispatcher:
 
     # ── 内部：探针 + 分配 ───────────────────────────────────────────────
 
-    def _probe_and_maybe_spawn(self, project: Project) -> bool:
+    def _probe_and_maybe_spawn(self, project: Project,
+                               limit: Optional[int] = None) -> bool:
         """探活单个候选；可达则分配 solver，不可达标记 INFRA_BLOCKED。"""
         if project.target_host:
             if not self.quiet:
@@ -317,8 +323,7 @@ class Dispatcher:
             if result == ProbeResult.UNKNOWN:
                 if not self.quiet:
                     print(f"[probe] {project.challenge_id}: UNKNOWN — proceeding anyway")
-        self._spawn(project)
-        return True
+        return self._spawn(project, limit)
 
     def _spawn_candidates(self, candidates: list[Project], limit: Optional[int]) -> None:
         """并行探活候选（≤4 并发），可达的分配 solver。"""
@@ -329,7 +334,14 @@ class Dispatcher:
         if not targets:
             return
         with ThreadPoolExecutor(max_workers=min(PROBE_CONCURRENCY, self.max_workers)) as ex:
-            reachable = list(ex.map(self._probe_and_maybe_spawn, targets))
+            # P1-2 / M-3：limit 透传到 _spawn，名额在锁内原子消耗
+            # （remaining_limit 只是启发式预过滤，硬上限由锁内判断保证）
+            reachable = list(
+                ex.map(
+                    functools.partial(self._probe_and_maybe_spawn, limit=limit),
+                    targets,
+                )
+            )
         # ex.map 已按序完成探活+分配；返回 False 的已被标记 INFRA_BLOCKED
 
     def _escalation_for(self, project: Project) -> tuple[str, str]:
@@ -411,9 +423,25 @@ class Dispatcher:
                     f"escalate({detail[:60]}) → {route}"
                 )
 
-    def _spawn(self, project: Project) -> None:
-        """启动一个 solver 独立进程。"""
-        work_dir = Path(project.challenge_dir or project.challenge_id)
+    def _try_consume_spawn_slot(self, limit: Optional[int]) -> bool:
+        """原子消耗一个 spawn 名额（P1-2 / M-3）；达到 limit 返回 False。
+
+        limit 判断与自增在同一临界区内完成；锁粒度只包计数器读写，
+        proc.start() / 网络 IO 一律在锁外（性能红线）。
+        """
+        with self._counters_lock:
+            if limit is not None and self._spawns >= limit:
+                return False
+            self._spawns += 1
+            return True
+
+    def _spawn(self, project: Project, limit: Optional[int] = None) -> bool:
+        """启动一个 solver 独立进程。返回 False 表示达到 limit 未启动。"""
+        # P1-2 / M-3：名额在进程创建前原子消耗——达到 limit 不再 spawn，
+        # 对外语义与原 run() 层的 limit 判断一致（此处是最终收口）。
+        if not self._try_consume_spawn_slot(limit):
+            return False
+
         work_dir.mkdir(parents=True, exist_ok=True)
         # F4-001：spawn 时即生成 AGENTS.md（solver_worker 内 ensure 幂等兜底）
         try:
@@ -447,10 +475,12 @@ class Dispatcher:
         )
         proc.start()
         project.status = ChallengeStatus.IN_PROGRESS
-        project.attempts += 1
+        with self._counters_lock:
+            project.attempts += 1
         project.started_at = time.time()
         project.last_tier = tb.tier_label
-        self._spawns += 1
+        # P1-2 / M-3：_spawns 已在 _spawn 入口经 _try_consume_spawn_slot
+        # 原子消耗，此处不再自增。
         # 续接注入：RELAY.md 的死路/已达成原语 → 黑板（07 指南集成步骤 1）
         self._inject_relay_into_board(work_dir)
         board = load_blackboard(work_dir / BLACKBOARD_FILENAME)
