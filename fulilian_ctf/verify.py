@@ -1,16 +1,25 @@
-"""三重校验门核心模块 (F1-001)。
+"""flag 校验门核心模块 (F1-001)。
 
-候选 flag 出现 → Grounding 门（纯代码）→ Negation 门（LLM 怀疑者）
+候选 flag 出现 → Grounding 门（纯代码）→ Negation 门（规则对抗）
              → Interrogation 门（格式校验）→ 提交
                                          ↓ 失败
                                      待定（不提交）
+
+诚实声明（P2-5）：本模块设计为三重门，但 Negation（对抗）门当前是
+**规则实现**（结构校验，见 ``_negation_check``）——LLM 怀疑者 negator
+是**未接线的可选层**（``verify_flag(..., negator=...)`` 可注入；
+tools/ctf_solve._verify_flag_impl 在有 parent_agent 时注入，dispatcher
+声明式提交与 submit_flag 均未注入）。实际语义为「双重门（规则对抗）
++ 格式复核」。是否接线真 LLM 对抗属 P2-5 决策项（成本 + fail-closed
+拒真风险，见修复计划 10 卡）。
 
 设计遵循「宁可漏、不可误判」原则：
 - 幻觉（不存于任何输出）→ HALLUCINATION，直接拒
 - 诱饵 / 弱匹配（片段、截断、非 flag 结构）→ REJECTED，不交
 - 逐字命中真实输出 → EXACT_MATCH，跳过对抗门直接进格式门
 - 大小写/改写命中 → REWRITTEN，走对抗门
-- 格式不符 → PENDING，降级待定（不提交但保留）
+- 调用方未显式收紧窄表时，形状对 + 强置信 → CONFIRMED（P0-1/S-1）
+- 格式不符（显式窄表无一命中）→ PENDING，降级待定（不提交但保留）
 
 参考：hxbai（https://github.com/inwpu/hxbai）
 实现指南：02-实施指南/02-P1-三重校验门.md
@@ -137,6 +146,8 @@ def _negation_check(candidate: str, evidence: str) -> bool:
     Phase 1 简化：候选不具备完整 flag 结构 → 反驳（拒绝）。
     Phase 2 将替换为 ``delegate_task`` 起「怀疑者」子 agent 的真实对抗，
     通过 ``verify_flag(..., negator=...)`` 注入即可，本函数签名保持不变。
+    注意（P2-5）：Phase 2 尚未落地——dispatcher 声明式提交与 submit_flag
+    都不传 negator，本规则实现就是当前对抗门的全部。
     """
     return not is_flag_shaped(candidate)
 

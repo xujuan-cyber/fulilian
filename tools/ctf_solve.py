@@ -100,7 +100,11 @@ def _verify_flag_impl(candidate: str, evidence: str = "", parent_agent=None) -> 
 
 
 def _submit_flag_impl(work_dir: str) -> str:
-    """声明式提交：只提交 FLAG 文件中的候选，提交前走三重校验门。
+    """声明式提交：只提交 FLAG 文件中的候选，提交前走 flag 校验门。
+
+    门语义（P2-5 诚实声明）：grounding + 规则对抗门 + 格式门；对抗门为
+    规则实现（结构校验），LLM 怀疑者 negator 未接线（可选层，见
+    fulilian_ctf/verify.py 模块 docstring）。
 
     Agent 必须先在工作区写入 FLAG 文件，本工具才会读取并提交。
     """
@@ -124,7 +128,8 @@ def _submit_flag_impl(work_dir: str) -> str:
     if not candidate:
         return "FLAG file is empty."
 
-    # 走三重校验门（声明式提交路径：无工具输出作证据，require_grounding=False）
+    # 走 flag 校验门（声明式提交路径：无工具输出作证据，require_grounding=False；
+    # 对抗门为规则实现，LLM negator 未接线——见 P2-5）
     from fulilian_ctf.verify import VerificationResult, verify_flag
 
     result = verify_flag(candidate, evidence="", require_grounding=False)

@@ -65,7 +65,8 @@ def build_solve_parser(subparsers, *, cmd_solve: Callable, cmd_solve_all: Callab
     solve_all_parser.add_argument("--max-variant-failures", type=int,
                                   help="Force-switch attack class after N failed variants (default: 3)")
     solve_all_parser.add_argument("--no-stop-loss", action="store_true",
-                                  help="Disable 4-dimension stop-loss governance")
+                                  help="Disable 4-dimension stop-loss governance "
+                                       "(timeboxes still apply; 仅关闭四维止损，时间盒仍生效)")
     solve_all_parser.add_argument("--json", action="store_true",
                                   help="Output structured JSON progress")
     solve_all_parser.set_defaults(func=cmd_solve_all)

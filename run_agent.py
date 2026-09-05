@@ -9137,7 +9137,7 @@ def _build_ctf_system_prompt() -> str:
         "- 你必须将候选 flag 写入工作区的 FLAG 文件才算声明提交\n"
         "- 不要自动从输出中提取 flag 字符串\n"
         "- 只有 FLAG 文件中的内容才会被提交\n"
-        "- 提交前会走三重校验门验证\n"
+        "- 提交前会走 flag 校验门验证（grounding/规则对抗/格式复核）\n"
         "- 每次有意义的步骤后用 git_auto_commit 记录进度\n"
         "\n"
         "## 黑板进度共享\n"
