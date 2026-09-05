@@ -449,7 +449,7 @@ class Dispatcher:
         # 对外语义与原 run() 层的 limit 判断一致（此处是最终收口）。
         if not self._try_consume_spawn_slot(limit):
             return False
-
+        work_dir = Path(project.challenge_dir or project.challenge_id)
         work_dir.mkdir(parents=True, exist_ok=True)
         # F4-001：spawn 时即生成 AGENTS.md（solver_worker 内 ensure 幂等兜底）
         try:
