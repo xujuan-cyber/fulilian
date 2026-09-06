@@ -389,11 +389,11 @@ def _guess_language(source_file: str) -> str:
 #
 # 会话（cookies/自定义 headers）落盘到 work_dir/.http_sessions/<sid>.json，
 # 跨工具调用保持登录态/会话连续性；进程重启不要求保留——文件在即续用，
-# 删除即新会话。响应 body 截断到上限（FULILIAN_HTTP_BODY_LIMIT，默认 4000
+# 删除即新会话。响应 body 截断到上限（FULILIAN_HTTP_BODY_LIMIT，默认 8000
 # 字符），防止大响应爆上下文。work_dir 边界校验与 submit_flag 同口径（P0-4）。
 
 HTTP_SESSION_DIR = ".http_sessions"
-HTTP_DEFAULT_BODY_LIMIT = 4000
+HTTP_DEFAULT_BODY_LIMIT = 8000
 
 
 def _new_session():
@@ -561,7 +561,7 @@ registry.register(
                            "across calls (persisted per challenge workspace). Use "
                            "action='request' with method/url (extra headers/data optional); "
                            "action='close' drops the session. Response body is truncated to a "
-                           "cap (FULILIAN_HTTP_BODY_LIMIT, default 4000 chars) — use range "
+                           "cap (FULILIAN_HTTP_BODY_LIMIT, default 8000 chars) — use range "
                            "requests or targeted endpoints for large responses.",
             "parameters": {
                 "type": "object",

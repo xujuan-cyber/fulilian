@@ -117,7 +117,7 @@ def test_close_drops_session(tmp_path, fake_http):
 def test_body_truncated_and_limit_configurable(tmp_path, fake_http, monkeypatch):
     work = str(tmp_path)
     monkeypatch.setattr(FakeSession, "server_cookie", ("x", "y"))
-    big = "A" * 4000 + "B" * 6000  # 截断点后必须是可区分字符
+    big = "A" * 8000 + "B" * 6000  # 截断点后必须是可区分字符
 
     class BigSession(FakeSession):
         def request(self, *a, **kw):
@@ -128,8 +128,8 @@ def test_body_truncated_and_limit_configurable(tmp_path, fake_http, monkeypatch)
     monkeypatch.setattr(ctf_solve, "_new_session", lambda: BigSession())
 
     out = ctf_solve._http_session_impl(work_dir=work, url="http://target/big")
-    assert "(truncated at 4000 chars" in out
-    assert big[:4000] in out and "BBBBBB" not in out
+    assert "(truncated at 8000 chars" in out
+    assert big[:8000] in out and "BBBBBB" not in out
 
     monkeypatch.setenv("FULILIAN_HTTP_BODY_LIMIT", "500")
     out2 = ctf_solve._http_session_impl(work_dir=work, url="http://target/big")
