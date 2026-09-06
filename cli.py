@@ -3269,6 +3269,7 @@ def _detect_light_mode() -> bool:
 _LIGHT_MODE_REMAP: dict[str, str] = {
     # Original (dark-mode) -> Light-mode replacement (darker, readable)
     "#E9F1FC": "#1A1A1A",   # porcelain -> near-black
+    "#FFFFFF": "#1A1A1A",   # banner text white -> near-black (light mode)
     "#5DB8F5": "#1E6FC0",   # azure -> deep blue (readable on cream)
     "#339AF0": "#246FAE",   # blue -> deeper blue
     "#2E77B9": "#296BA6",   # steel -> deeper steel
@@ -3283,6 +3284,9 @@ _LIGHT_MODE_REMAP: dict[str, str] = {
     "#F1E6CF": "#1A1A1A",   # cream -> near-black
     "#c9d1d9": "#24292F",   # github-light fg
     "#EAF7FF": "#0F1B26",   # ice
+    "#D4CDE0": "#6E6485",   # gradient-start lavender -> dark mauve (light mode)
+    "#D77757": "#B05332",   # Clawd body orange -> darker orange (light mode)
+    "#B4A7C9": "#5C5275",   # gradient-end mauve -> darker mauve (light mode)
     "#F5F5F5": "#1A1A1A",
     "#FFF0D4": "#1A1A1A",
     "#CD7F32": "#8A4F1A",   # bronze -> darker bronze
@@ -4565,6 +4569,72 @@ def _strip_leaked_terminal_responses(text: str) -> str:
     return cleaned
 
 
+def _gradient_frame_line(left_char: str, right_char: str, width: int) -> list:
+    """Return formatted-text fragments for a horizontal gradient frame line.
+
+    The line spans the terminal width with a gradient from #e0e7ff (left)
+    to #94a3b8 (right). Corners use the start color.  In light mode the
+    endpoints are remapped to darker equivalents for contrast.
+    """
+    _GS = 8  # gradient segments
+    start_hex = _maybe_remap_for_light_mode("#e0e7ff")
+    end_hex = _maybe_remap_for_light_mode("#94a3b8")
+    _R0, _G0, _B0 = int(start_hex[1:3], 16), int(start_hex[3:5], 16), int(start_hex[5:7], 16)
+    _R1, _G1, _B1 = int(end_hex[1:3], 16), int(end_hex[3:5], 16), int(end_hex[5:7], 16)
+    inner = max(0, width - 2)
+    if inner <= 0:
+        return [(start_hex, f'{left_char}{right_char}')]
+    seg_len = max(1, inner // _GS)
+    n_segs = (inner + seg_len - 1) // seg_len
+    remaining = inner
+    frags = [(start_hex, left_char)]
+    for i in range(n_segs):
+        t = i / max(1, n_segs - 1)
+        r = int(_R0 + (_R1 - _R0) * t)
+        g = int(_G0 + (_G1 - _G0) * t)
+        b = int(_B0 + (_B1 - _B0) * t)
+        count = min(seg_len, remaining)
+        if count <= 0:
+            break
+        frags.append((f'#{r:02x}{g:02x}{b:02x}', '─' * count))
+        remaining -= count
+    frags.append((start_hex, right_char))
+    return frags
+
+
+def _gradient_hint_text(text: str) -> list:
+    """Return hint text with horizontal gradient colors spanning the text.
+
+    Each logical segment of the text gets an interpolated color between
+    #e0e7ff (left) and #94a3b8 (right), matching the frame-line gradient.
+    """
+    if not text or not text.strip():
+        return [("", text or "")]
+    _GS = 4  # gradient segments for hint text (shorter than frame lines)
+    start_hex = _maybe_remap_for_light_mode("#e0e7ff")
+    end_hex = _maybe_remap_for_light_mode("#94a3b8")
+    _R0, _G0, _B0 = int(start_hex[1:3], 16), int(start_hex[3:5], 16), int(start_hex[5:7], 16)
+    _R1, _G1, _B1 = int(end_hex[1:3], 16), int(end_hex[3:5], 16), int(end_hex[5:7], 16)
+    text_len = len(text)
+    seg_len = max(1, text_len // _GS)
+    n_segs = (text_len + seg_len - 1) // seg_len
+    remaining = text_len
+    offset = 0
+    frags = []
+    for i in range(n_segs):
+        t = i / max(1, n_segs - 1) if n_segs > 1 else 0
+        r = int(_R0 + (_R1 - _R0) * t)
+        g = int(_G0 + (_G1 - _G0) * t)
+        b = int(_B0 + (_B1 - _B0) * t)
+        count = min(seg_len, remaining)
+        if count <= 0:
+            break
+        frags.append((f'#{r:02x}{g:02x}{b:02x}', text[offset:offset+count]))
+        offset += count
+        remaining -= count
+    return frags
+
+
 def _estimate_tui_input_height(
     lines: list[str] | tuple[str, ...],
     prompt_text: str,
@@ -5543,6 +5613,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         self._secret_state = None
         self._secret_deadline = 0
         self._spinner_text: str = ""  # thinking spinner text for TUI
+        self._thinking_start_time: float = 0.0  # monotonic timestamp for the live Thinking line
         self._tool_start_time: float = 0.0  # monotonic timestamp when current tool started (for live elapsed)
         self._pending_tool_info: dict = {}  # function_name -> list of (preview, args) for stacked scrollback
         self._last_scrollback_tool: str = ""  # last tool name printed to scrollback (for "new" dedup)
@@ -5569,6 +5640,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         self._pet_reasoning: bool = False
         self._pet_turn_error: bool = False
         self._attached_images: list[Path] = []
+        self._attached_files: list[Path] = []
         self._image_counter = 0
         # Ctrl+S prompt stash — park a half-written draft, send something
         # else, bring the draft back.  Session-scoped and in-memory only:
@@ -6281,10 +6353,64 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         if len(model_short) > 26:
             model_short = f"{model_short[:23]}..."
 
+        # Provider label for the status bar.  Prefer the agent's provider so
+        # the display follows _try_activate_fallback() mid-session (the CLI's
+        # own self.provider stays at the originally configured provider).
+        # Bare "custom" is uninformative, so for custom endpoints we show the
+        # base_url hostname (e.g. token.sensenova.cn) or the custom: suffix
+        # (e.g. scnet.cn); canonical providers get their friendly label.
+        provider_val = getattr(agent, "provider", None) or getattr(self, "provider", None) or ""
+        provider_short = ""
+        # provider can be a dict when the config carries both a default and an
+        # image model (see _split_model_config_default callers); only str makes
+        # sense for display, and the whole block must stay crash-proof since
+        # _build_status_bar_text's compact path has no try/except.
+        if isinstance(provider_val, str) and provider_val.strip():
+            provider_raw = provider_val.strip()
+            try:
+                from urllib.parse import urlparse
+
+                p_lower = provider_raw.lower()
+                if p_lower == "custom" or p_lower.startswith("custom:"):
+                    suffix = ""
+                    if p_lower.startswith("custom:") and ":" in provider_raw:
+                        suffix = provider_raw.split(":", 1)[1]
+                    base = (
+                        getattr(agent, "base_url", "")
+                        or getattr(self, "base_url", "")
+                        or getattr(self, "config_base_url", "")
+                        or ""
+                    )
+                    host = urlparse(base).hostname or ""
+                    provider_short = (
+                        host
+                        or suffix
+                        or ("custom" if p_lower == "custom" else "")
+                    )
+                else:
+                    from fulilian_cli.models import provider_label
+                    provider_short = provider_label(provider_raw)
+                if len(provider_short) > 20:
+                    provider_short = f"{provider_short[:17]}..."
+            except Exception:
+                provider_short = ""
+
+        # Reasoning effort (e.g. medium, high, none).  Follows the CLI's
+        # reasoning_config so /reasoning changes appear live in the bar.
+        _rc = getattr(self, "reasoning_config", None)
+        if _rc is None:
+            reasoning_effort = ""
+        elif _rc.get("enabled") is False:
+            reasoning_effort = "none"
+        else:
+            reasoning_effort = (_rc.get("effort", "") or "").strip()
+
         elapsed_seconds = max(0.0, (datetime.now() - self.session_start).total_seconds())
         snapshot = {
             "model_name": model_name,
             "model_short": model_short,
+            "provider_short": provider_short,
+            "reasoning_effort": reasoning_effort,
             "duration": format_duration_compact(elapsed_seconds),
             "session_title": self._get_status_bar_session_title(),
             "prompt_elapsed": self._format_prompt_elapsed(
@@ -6620,12 +6746,14 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         return 1
 
     def _render_spinner_text(self) -> str:
-        """Return the live spinner/status text exactly as rendered in the TUI."""
+        """Return the live Thinking status exactly as rendered in the TUI."""
         txt = getattr(self, "_spinner_text", "")
         if not txt:
             return ""
+        frame = _COMMAND_SPINNER_FRAMES[int(time.monotonic() * 10) % len(_COMMAND_SPINNER_FRAMES)]
         flow = self._spinner_token_flow()
-        t0 = getattr(self, "_tool_start_time", 0) or 0
+        t0 = getattr(self, "_tool_start_time", 0) or getattr(self, "_thinking_start_time", 0) or 0
+        detail = txt.strip()
         if t0 > 0:
             elapsed = time.monotonic() - t0
             if elapsed >= 60:
@@ -6637,11 +6765,11 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                 # Keep width stable before the 60s rollover as well.
                 elapsed_str = f"{elapsed:5.1f}s"
             if flow:
-                return f"  {txt}  ({elapsed_str} · {flow})"
-            return f"  {txt}  ({elapsed_str})"
+                return f"  {frame} Thinking · {detail}  ({elapsed_str} · {flow})"
+            return f"  {frame} Thinking · {detail}  ({elapsed_str})"
         if flow:
-            return f"  {txt}  ({flow})"
-        return f"  {txt}"
+            return f"  {frame} Thinking · {detail}  ({flow})"
+        return f"  {frame} Thinking · {detail}"
 
     # ── Per-turn accounting (display.turn_summary / spinner_token_flow) ──
     #
@@ -7028,6 +7156,27 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
 
     def _build_status_bar_text(self, width: Optional[int] = None) -> str:
         """Return a compact one-line session status string for the TUI footer."""
+        snapshot = self._get_status_bar_snapshot()
+        if width is None:
+            width = self._get_tui_terminal_width()
+        model = snapshot.get("model_short") or "Fulilian"
+        provider = snapshot.get("provider_short") or ""
+        reasoning = snapshot.get("reasoning_effort") or ""
+        model_label = f"{provider}/{model}" if provider else model
+        if reasoning:
+            model_label = f"{model_label} · {reasoning}"
+        parts = [f"⚕ {model_label}", snapshot.get("duration", "0s")]
+        goal_segment = self._status_bar_goal_segment(snapshot)
+        if goal_segment:
+            # Match legacy width-tier ordering (goal sits before duration).
+            parts.insert(1, goal_segment)
+        subagent_count = snapshot.get("active_background_subagents", 0)
+        if subagent_count:
+            parts.insert(len(parts) - 1, f"↻ {subagent_count}")
+        text = " │ ".join(parts)
+        return self._right_align_status_title(text, snapshot.get("session_title") or "", width)
+        # Legacy width-tier rendering retained below for reference during
+        # migration; the compact summary above is the only active path.
         try:
             snapshot = self._get_status_bar_snapshot()
             if width is None:
@@ -7126,6 +7275,33 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             # actually renders, causing the fragments to overflow to a second
             # line and produce duplicated status bar rows over long sessions.
             width = self._get_tui_terminal_width()
+            provider = snapshot.get("provider_short") or ""
+            model_short = snapshot.get("model_short") or "Fulilian"
+            reasoning = snapshot.get("reasoning_effort") or ""
+            model_label = f"{provider}/{model_short}" if provider else model_short
+            if reasoning:
+                model_label = f"{model_label} · {reasoning}"
+            meta_parts = [model_label, snapshot.get("duration", "0s")]
+            goal_segment = self._status_bar_goal_segment(snapshot)
+            if goal_segment:
+                # Match legacy width-tier ordering (goal sits before duration).
+                meta_parts.insert(1, goal_segment)
+            subagent_count = snapshot.get("active_background_subagents", 0)
+            if subagent_count:
+                meta_parts.insert(len(meta_parts) - 1, f"↻ {subagent_count}")
+            summary = f" ⚕ {' │ '.join(meta_parts)} "
+            frags = [("class:status-bar", summary)]
+            try:
+                stash_indicator = self._prompt_stash.indicator()
+            except Exception:
+                stash_indicator = ""
+            if stash_indicator:
+                frags.append(("class:status-bar-strong", f" · {stash_indicator}"))
+            frags = self._right_align_status_title_fragments(frags, snapshot.get("session_title") or "", width)
+            if sum(self._status_bar_display_width(text) for _, text in frags) > width:
+                plain_text = "".join(text for _, text in frags)
+                return [("class:status-bar", self._trim_status_bar_text(plain_text, width))]
+            return frags
             duration_label = snapshot["duration"]
             yolo_active = self._is_session_yolo_active()
             goal_segment = self._status_bar_goal_segment(snapshot)
@@ -7293,6 +7469,33 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             return frags
         except Exception:
             return [("class:status-bar", f" {self._build_status_bar_text()} ")]
+
+    def _get_input_meta_fragments(self):
+        """Return compact context and token usage below the composer."""
+        try:
+            snapshot = self._get_status_bar_snapshot()
+            context_length = snapshot.get("context_length")
+            ctx_pct = snapshot.get("context_percent")
+            ctx_tokens = snapshot.get("context_tokens", 0)
+            if context_length:
+                pct_label = f" ({ctx_pct}%)" if ctx_pct is not None else ""
+                context_text = (
+                    f"Context {format_token_count_compact(ctx_tokens)}"
+                    f"/{_format_context_length(context_length)}{pct_label}"
+                )
+            else:
+                context_text = "Context --"
+            tokens_text = (
+                f"Tokens {format_token_count_compact(snapshot.get('session_input_tokens', 0))} in"
+                f" / {format_token_count_compact(snapshot.get('session_output_tokens', 0))} out"
+                f" / {format_token_count_compact(snapshot.get('session_total_tokens', 0))} total"
+            )
+            return [
+                ("class:input-meta-context", f"  {context_text}  "),
+                ("class:input-meta", f"·  {tokens_text}"),
+            ]
+        except Exception:
+            return []
 
     @staticmethod
     def _fmt_stash_age(stashed_at: float) -> str:
@@ -7485,6 +7688,9 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         """Called by agent when thinking starts/stops. Updates TUI spinner."""
         if not text:
             self._flush_reasoning_preview(force=True)
+            self._thinking_start_time = 0.0
+        elif not getattr(self, "_thinking_start_time", 0):
+            self._thinking_start_time = time.monotonic()
         self._spinner_text = text or ""
         self._tool_start_time = 0.0  # clear tool timer when switching to thinking
         self._invalidate()
@@ -10821,7 +11027,8 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         preview_lines = []
         for line in detail.splitlines():
             preview_lines.extend(_wrap_panel_text(line, 72))
-        for idx, (_value, label, desc) in enumerate(choices):
+        for idx, choice in enumerate(choices):
+            _value, label, desc = choice[0], choice[1], choice[2]
             marker = "❯" if idx == selected else " "
             preview_lines.extend(_wrap_panel_text(f"{marker} [{idx + 1}] {label} — {desc}", 72, subsequent_indent="    "))
         preview_lines.append("Type 1/2/3 or use ↑/↓ then Enter. ESC/Ctrl+C cancels.")
@@ -10832,7 +11039,8 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         for line in detail.splitlines():
             detail_wrapped.extend(_wrap_panel_text(line, inner_text_width))
         choice_wrapped: list[tuple[int, str]] = []
-        for idx, (_value, label, desc) in enumerate(choices):
+        for idx, choice in enumerate(choices):
+            _value, label, desc = choice[0], choice[1], choice[2]
             marker = "❯" if idx == selected else " "
             for wrapped in _wrap_panel_text(f"{marker} [{idx + 1}] {label} — {desc}", inner_text_width, subsequent_indent="    "):
                 choice_wrapped.append((idx, wrapped))
@@ -10855,7 +11063,12 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             _append_panel_line(lines, 'class:approval-border', 'class:approval-desc', wrapped, box_width)
         _append_blank_panel_line(lines, 'class:approval-border', box_width)
         for idx, wrapped in choice_wrapped:
-            style = 'class:approval-selected' if idx == selected else 'class:approval-choice'
+            if idx == selected:
+                style = 'class:approval-selected'
+            else:
+                _c = choices[idx]
+                _override = _c[3] if len(_c) > 3 else None
+                style = f'class:approval-choice {_override}' if _override else 'class:approval-choice'
             _append_panel_line(lines, 'class:approval-border', style, wrapped, box_width)
         _append_blank_panel_line(lines, 'class:approval-border', box_width)
         _append_panel_line(lines, 'class:approval-border', 'class:approval-cmd', 'Type 1/2/3 or use ↑/↓ then Enter. ESC/Ctrl+C cancels.', box_width)
@@ -11985,6 +12198,14 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         cmd_lower = command.lower().strip()
         cmd_original = command.strip()
 
+        # Bare slash is a quick reference for all registered slash commands.
+        # Keep it outside COMMANDS so it cannot be confused with a command
+        # alias or prefix match.
+        if cmd_original == "/":
+            _cprint("\n  Slash command reference — use /help <name> to filter.\n")
+            self.show_help("")
+            return True
+
         # Resolve aliases via central registry so adding an alias is a one-line
         # change in fulilian_cli/commands.py instead of touching every dispatch site.
         from fulilian_cli.commands import resolve_command as _resolve_cmd
@@ -12254,6 +12475,10 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             self._handle_branch_command(cmd_original)
         elif canonical == "worktree":
             self._handle_worktree_command(cmd_original)
+        elif canonical == "workspace":
+            self._handle_workspace_command(cmd_original)
+        elif canonical == "attach":
+            self._handle_attach_command(cmd_original)
         elif canonical == "save":
             self.save_conversation(cmd_original)
         elif canonical == "cron":
@@ -14420,6 +14645,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         if event_type == "moa.aggregating":
             agg = function_name or ""
             self._spinner_text = f"◆ aggregating ({agg})" if agg else "◆ aggregating"
+            self._thinking_start_time = self._thinking_start_time or time.monotonic()
             self._invalidate()
             return
 
@@ -14514,6 +14740,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                 label = label[:_pl - 3] + "..."
             self._spinner_text = f"{emoji} {label}"
             self._tool_start_time = time.monotonic()
+            self._thinking_start_time = 0.0
             # Store args for stacked scrollback line on completion
             self._pending_tool_info.setdefault(function_name, []).append(
                 function_args if function_args is not None else {}
@@ -17413,7 +17640,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         if self._command_running:
             return _state_fragment("class:prompt-working", self._command_spinner_frame())
         if self._agent_running:
-            return _state_fragment("class:prompt-working", "⚕")
+            return _state_fragment("class:prompt-working", "✦", "Thinking")
         if self._voice_mode:
             return _state_fragment("class:voice-prompt", "🎤")
         return [("class:prompt", symbol)]
@@ -17520,6 +17747,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         input_rule_bot,
         voice_status_bar,
         completions_menu,
+        input_meta_widget=None,
     ) -> list:
         """Assemble the ordered list of children for the root ``HSplit``.
 
@@ -17527,6 +17755,13 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         this method.  Override this only when you need full control over widget
         ordering.
         """
+        input_composer = input_area
+        if hasattr(input_area, "buffer"):
+            input_composer = HSplit([
+                Window(content=FormattedTextControl(lambda: _gradient_frame_line("╭", "╮", self._get_tui_terminal_width())), height=1),
+                input_area,
+                Window(content=FormattedTextControl(lambda: _gradient_frame_line("╰", "╯", self._get_tui_terminal_width())), height=1),
+            ])
         return [
             item for item in [
                 Window(height=0),
@@ -17545,7 +17780,8 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                 status_bar,
                 input_rule_top,
                 image_bar,
-                input_area,
+                input_composer,
+                input_meta_widget,
                 input_rule_bot,
                 voice_status_bar,
                 completions_menu,
@@ -17800,6 +18036,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
 
         # Clipboard image attachments (paste images into the CLI)
         self._attached_images: list[Path] = []
+        self._attached_files: list[Path] = []
         self._image_counter = 0
 
         # Voice mode state (protected by _voice_lock for cross-thread access)
@@ -19170,7 +19407,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             skill_bundles_provider=lambda: get_skill_bundles(),
         )
         input_area = TextArea(
-            height=Dimension(min=1, max=8, preferred=1),
+            height=Dimension(min=1, preferred=1),
             prompt=get_prompt,
             style='class:input-area',
             multiline=True,
@@ -19196,21 +19433,32 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         # EEXIST. The suffix keeps markdown highlighting without that bug.
         input_area.buffer.tempfile_suffix = '.md'
 
+        # Pi-style composer: frame only the editable surface, keeping the
+        # TextArea object intact for keybindings, completion, and paste logic.
         # Dynamic height: accounts for both explicit newlines AND visual
         # wrapping of long lines so the input area always fits its content.
+        # Also allows the input box to grow with the terminal window (up to
+        # ~35% of terminal height) rather than being capped at a fixed 8 rows.
+        _INPUT_HEIGHT_RATIO = 0.35  # fraction of terminal rows for max height
+
         def _input_height():
             try:
                 from prompt_toolkit.application import get_app
 
                 doc = input_area.buffer.document
+                app = get_app()
                 try:
-                    terminal_columns = get_app().output.get_size().columns
+                    output_size = app.output.get_size()
+                    terminal_columns = output_size.columns
+                    terminal_rows = output_size.rows
                 except Exception:
                     terminal_columns = shutil.get_terminal_size((80, 24)).columns
+                    terminal_rows = shutil.get_terminal_size((80, 24)).lines
                 return _estimate_tui_input_height(
                     doc.lines,
                     self._get_tui_prompt_text(),
                     terminal_columns,
+                    max_height=max(4, int(terminal_rows * _INPUT_HEIGHT_RATIO)),
                 )
             except Exception:
                 return 1
@@ -19443,8 +19691,20 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             align=WindowAlign.RIGHT,
         )
 
+        def get_gradient_hint_text():
+            raw = get_hint_text()
+            if not raw:
+                return raw
+            out = []
+            for style, text in raw:
+                if style == 'class:hint' and text:
+                    out.extend(_gradient_hint_text(text))
+                else:
+                    out.append((style, text))
+            return out
+
         spacer = Window(
-            content=FormattedTextControl(get_hint_text),
+            content=FormattedTextControl(get_gradient_hint_text),
             height=get_hint_height,
         )
 
@@ -20039,17 +20299,17 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             filter=Condition(lambda: cli_ref._command_palette_state is not None),
         )
 
-        # Horizontal rules above and below the input.
+        # Lightweight Claude Code-style composer chrome.
         # On narrow/mobile terminals we keep the top separator for structure but
         # hide the bottom one to recover a full row for conversation content.
         input_rule_top = Window(
             char='─',
-            height=lambda: cli_ref._tui_input_rule_height("top"),
+            height=lambda: 0,
             style='class:input-rule',
         )
         input_rule_bot = Window(
             char='─',
-            height=lambda: cli_ref._tui_input_rule_height("bottom"),
+            height=lambda: 0,
             style='class:input-rule',
         )
 
@@ -20068,6 +20328,12 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         image_bar = Window(
             content=FormattedTextControl(_get_image_bar),
             height=Condition(lambda: bool(cli_ref._attached_images)),
+        )
+
+        input_meta_widget = Window(
+            content=FormattedTextControl(lambda: cli_ref._get_input_meta_fragments()),
+            height=1,
+            wrap_lines=False,
         )
 
         # Persistent voice mode status bar (visible only when voice mode is on)
@@ -20150,6 +20416,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                     input_rule_top=input_rule_top,
                     image_bar=image_bar,
                     input_area=input_area,
+                    input_meta_widget=input_meta_widget,
                     input_rule_bot=input_rule_bot,
                     voice_status_bar=voice_status_bar,
                     completions_menu=completions_menu,
@@ -20165,6 +20432,9 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             # color schemes.  (Hardcoding a near-white #FFF8DC made
             # input invisible on light backgrounds.)
             'input-area': '',
+            'input-frame': '#2E77B9',
+            'input-meta': '#777777',
+            'input-meta-context': '#8FBC8F bold',
             'placeholder': '#888888 italic',
             'prompt': '',
             'prompt-working': '#888888 italic',
@@ -20330,7 +20600,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                 if not self._app:
                     time.sleep(0.1)
                     continue
-                if self._command_running:
+                if self._command_running or self._agent_running:
                     self._invalidate(min_interval=0.1)
                     time.sleep(0.1)
                 else:
@@ -20480,6 +20750,22 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                     paste_refs = list(_paste_ref_re.finditer(user_input)) if isinstance(user_input, str) else []
                     if paste_refs:
                         user_input = self._expand_paste_references(user_input)
+                    attached_files = list(self._attached_files)
+                    self._attached_files.clear()
+                    if attached_files:
+                        sections = []
+                        for attached_file in attached_files:
+                            try:
+                                content = attached_file.read_text(encoding="utf-8")
+                            except (OSError, UnicodeDecodeError):
+                                _cprint(f"  {_DIM}Could not read attached file: {attached_file.name}{_RST}")
+                                continue
+                            sections.append(
+                                f"\n\n[Attached file: {attached_file}]\n"
+                                f"```\n{content}\n```"
+                            )
+                        if sections:
+                            user_input = (str(user_input) + "".join(sections)).strip()
                     print()
                     self._print_user_message_preview(user_input)
                     

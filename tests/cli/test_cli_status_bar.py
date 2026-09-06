@@ -115,8 +115,10 @@ class TestCLIStatusBar:
         text = cli_obj._build_status_bar_text(width=120)
 
         assert "claude-sonnet-4-20250514" in text
-        assert "12.4K/200K" in text
-        assert "6%" in text
+        assert "ctx " not in text
+        assert "tok " not in text
+        assert "[" not in text
+        assert "%" not in text
         assert "$0.06" not in text  # cost hidden by default
         assert "15m" in text
 
@@ -149,7 +151,25 @@ class TestCLIStatusBar:
 
         text = cli_obj._build_status_bar_text(width=120)
 
-        assert "🗜️ 3" in text
+        assert "🗜️ 3" not in text
+
+        meta = "".join(value for _, value in cli_obj._get_input_meta_fragments())
+        assert "Context 12.4K/200K" in meta
+        assert "(6%)" in meta
+        assert "Tokens 10.2K in / 2.22K out / 12.4K total" in meta
+
+    def test_input_meta_shows_context_and_token_usage(self):
+        cli_obj = _attach_agent(
+            _make_cli(),
+            prompt_tokens=10_230,
+            completion_tokens=2_220,
+            total_tokens=12_450,
+            api_calls=7,
+            context_tokens=12_450,
+            context_length=200_000,
+        )
+        meta = "".join(value for _, value in cli_obj._get_input_meta_fragments())
+        assert meta == "  Context 12.4K/200K (6%)  ·  Tokens 10.2K in / 2.22K out / 12.4K total"
 
 
 

@@ -77,14 +77,11 @@ def _print_minimal_banner(
 
     Star logo on the left, identity + cwd on the right — no tool/skill listings.
     """
-    from rich.panel import Panel
     from rich.table import Table
 
     accent = _skin_color("banner_accent", "#339AF0")
     dim = _skin_color("banner_dim", "#377EB9")
-    text = _skin_color("banner_text", "#E9F1FC")
     title = _skin_color("banner_title", "#5DB8F5")
-    border = _skin_color("banner_border", "#2E77B9")
 
     # Model short: strip provider prefix
     model_short = model.split("/")[-1] if "/" in model else model
@@ -116,7 +113,99 @@ def _print_minimal_banner(
         "\n".join(right_lines),
     )
 
-    console.print(Panel(tbl, border_style=border, padding=(0, 2)))
+    # Gradient frame instead of a solid-color Panel border.
+    from cli import _gradient_frame_line
+    from rich.text import Text
+
+    # Clawd — Claude Code's crab mascot, 3 rows x 9 cols, cyan->white gradient.
+    # Each row is [(text, has_bg), ...]:
+    # segments with has_bg get a black background for the crab's body/eyes.
+    _CLAWD_BG = "#000000"
+    _CLAWD_GRAD_START = "#00e5ff"  # cyan
+    _CLAWD_GRAD_END = "#ffffff"    # white
+
+    _CLAWD_SEGMENTS = [
+        [(" \u2590", False), ("\u259b\u2588\u2588\u2588\u259c", True), ("\u258c", False)],
+        [("\u259d\u259c", False), ("\u2588\u2588\u2588\u2588\u2588", True), ("\u259b\u2598", False)],
+    ]
+
+    from cli import _maybe_remap_for_light_mode
+    _grad_s = _maybe_remap_for_light_mode(_CLAWD_GRAD_START)
+    _grad_e = _maybe_remap_for_light_mode(_CLAWD_GRAD_END)
+    _g0 = (int(_grad_s[1:3], 16), int(_grad_s[3:5], 16), int(_grad_s[5:7], 16))
+    _g1 = (int(_grad_e[1:3], 16), int(_grad_e[3:5], 16), int(_grad_e[5:7], 16))
+    _cb = _maybe_remap_for_light_mode(_CLAWD_BG)
+
+    def _clawd_gradient_color(col: int) -> str:
+        """Interpolate cyan->white by column position (0..8)."""
+        t = col / 8.0
+        r = int(_g0[0] + (_g1[0] - _g0[0]) * t)
+        g = int(_g0[1] + (_g1[1] - _g0[1]) * t)
+        b = int(_g0[2] + (_g1[2] - _g0[2]) * t)
+        return f"#{r:02x}{g:02x}{b:02x}"
+
+    def _clawd_row(row: int) -> Text:
+        """Clawd row with cyan->white gradient per character column.
+        Rows padded to 9 cols so right-side text column stays aligned.
+        """
+        if row == 2:
+            segs = [(" \u2598\u2598 \u259d\u259d", False)]
+        else:
+            segs = _CLAWD_SEGMENTS[row]
+        t = Text()
+        col = 0
+        for seg_text, has_bg in segs:
+            for ch in seg_text:
+                style = _clawd_gradient_color(col)
+                if has_bg:
+                    style = f"{style} on {_cb}"
+                t.append(ch, style=style)
+                col += 1
+        while col < 9:  # pad to 9 cols for alignment
+            t.append(" ")
+            col += 1
+        return t
+
+    # Build content as Text objects with Clawd on the left, white text on the right.
+    # After the 2-char panel padding, Clawd occupies 9 cols; text starts at col 12.
+    _TEXT_STYLE = "#ffffff"
+    from cli import _maybe_remap_for_light_mode
+    _ts = _maybe_remap_for_light_mode(_TEXT_STYLE)
+
+    title_text = f"FuLiLian"
+    if model_short and model_short.lower() not in ("", "unknown"):
+        title_text += f" {model_short}"
+    if context_length:
+        title_text += f" \u00b7 {_format_context_length(context_length)}"
+    content_lines = [
+        Text.assemble(_clawd_row(0), (f" {title_text}", _ts)),
+    ]
+    if cwd:
+        content_lines.append(Text.assemble(_clawd_row(1), (f" {cwd}", _ts)))
+    if session_id:
+        short_id = session_id[-12:] if len(session_id) > 12 else session_id
+        content_lines.append(Text.assemble(_clawd_row(2), (f" session {short_id}", _ts)))
+
+    # Full-width frame like the original Panel (expand=True): span the
+    # console width, at least as wide as the content.
+    try:
+        console_width = int(getattr(console, "width", 0) or 0)
+    except Exception:
+        console_width = 0
+    inner_width = max(len(str(l)) for l in content_lines) if content_lines else 20
+    box_width = max(console_width, inner_width + 2)
+
+    frags = _gradient_frame_line("\u256d", "\u256e", box_width)
+    console.print(Text.assemble(*[(t, s) for s, t in frags]))
+    for line in content_lines:
+        t = Text("\u2502")
+        t.append_text(line)
+        text_str = str(line)
+        remaining = max(0, box_width - 2 - len(text_str))
+        t.append(" " * remaining + "\u2502")
+        console.print(t)
+    frags = _gradient_frame_line("\u2570", "\u256f", box_width)
+    console.print(Text.assemble(*[(t, s) for s, t in frags]))
 
 
 # =========================================================================

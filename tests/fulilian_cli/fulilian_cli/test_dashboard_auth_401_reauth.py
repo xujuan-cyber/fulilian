@@ -41,7 +41,7 @@ from fulilian_cli.dashboard_auth.cookies import (
     clear_session_cookies,
     set_session_cookies,
 )
-from tests.fulilian_cli.conftest_dashboard_auth import StubAuthProvider
+from tests.fulilian_cli.fulilian_cli.conftest_dashboard_auth import StubAuthProvider
 
 
 # ---------------------------------------------------------------------------
@@ -197,7 +197,7 @@ class TestTransparentRefreshOnAccessTokenEviction:
         signature + exp), then send ONLY that RT cookie.
         """
         import time as _t
-        from tests.fulilian_cli.conftest_dashboard_auth import _sign
+        from tests.fulilian_cli.fulilian_cli.conftest_dashboard_auth import _sign
 
         clear_providers()
         provider = StubAuthProvider(default_ttl=900)
@@ -255,7 +255,7 @@ class TestTransparentRefreshOnAccessTokenEviction:
         gated_app.cookies.clear()
         # A syntactically-real but expired RT (signed with exp<=now).
         import time as _t
-        from tests.fulilian_cli.conftest_dashboard_auth import _sign
+        from tests.fulilian_cli.fulilian_cli.conftest_dashboard_auth import _sign
         dead_rt = _sign({"sub": "u", "kind": "refresh", "exp": int(_t.time()) - 1})
         gated_app.cookies.set(SESSION_RT_COOKIE, dead_rt)
         r = gated_app.get("/api/sessions")

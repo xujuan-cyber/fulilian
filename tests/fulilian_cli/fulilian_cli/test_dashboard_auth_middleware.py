@@ -21,7 +21,7 @@ from fastapi.testclient import TestClient
 from fulilian_cli import web_server
 from fulilian_cli.dashboard_auth import clear_providers, register_provider
 from fulilian_cli.dashboard_auth.cookies import SESSION_AT_COOKIE
-from tests.fulilian_cli.conftest_dashboard_auth import StubAuthProvider
+from tests.fulilian_cli.fulilian_cli.conftest_dashboard_auth import StubAuthProvider
 
 
 @pytest.fixture

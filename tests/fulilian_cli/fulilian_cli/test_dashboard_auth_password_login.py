@@ -31,7 +31,7 @@ from fulilian_cli.dashboard_auth import (
 from fulilian_cli.dashboard_auth.cookies import SESSION_AT_COOKIE, SESSION_RT_COOKIE
 from fulilian_cli.dashboard_auth.login_page import render_login_html
 from fulilian_cli.dashboard_auth.routes import _reset_password_rate_limit
-from tests.fulilian_cli.conftest_dashboard_auth import StubAuthProvider
+from tests.fulilian_cli.fulilian_cli.conftest_dashboard_auth import StubAuthProvider
 
 
 # ---------------------------------------------------------------------------

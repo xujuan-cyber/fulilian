@@ -22,6 +22,7 @@ import time
 import uuid
 from datetime import datetime
 from urllib.parse import urlparse
+from pathlib import Path
 
 from rich import box as rich_box
 from rich.markup import escape as _escape
@@ -742,6 +743,86 @@ class CLICommandsMixin:
             _cprint(f"  {_DIM}Now type your prompt (or use --image in single-query mode): {_remainder}{_RST}")
         elif _is_termux_environment():
             _cprint(f"  {_DIM}Tip: type your next message, or run fulilian chat -q --image {_termux_example_image_path(image_path.name)} \"What do you see?\"{_RST}")
+
+    def _handle_workspace_command(self, cmd_original: str):
+        """Handle /workspace [path] — select the active local workspace."""
+        from cli import _DIM, _RST, _cprint
+
+        raw = cmd_original.split(None, 1)[1].strip() if " " in cmd_original else ""
+        if not raw:
+            current = os.getenv("TERMINAL_CWD", os.getcwd())
+            _cprint(f"  Workspace: {current}")
+            _cprint(f"  {_DIM}Usage: /workspace <directory>  (alias: /cwd){_RST}")
+            return
+
+        from cli import _resolve_attachment_path
+        candidate = _resolve_attachment_path(raw)
+        # Attachment resolution deliberately requires a file, so resolve the
+        # directory independently while retaining its quoting/env semantics.
+        token = raw.strip().strip("'\"")
+        token = os.path.expandvars(os.path.expanduser(token)).replace("\\ ", " ")
+        path = Path(token)
+        if not path.is_absolute():
+            path = Path(os.getenv("TERMINAL_CWD", os.getcwd())) / path
+        try:
+            path = path.resolve()
+        except OSError:
+            pass
+        if not path.is_dir():
+            _cprint(f"  {_DIM}Workspace is not an existing directory: {raw}{_RST}")
+            return
+        try:
+            os.chdir(path)
+            os.environ["TERMINAL_CWD"] = str(path)
+        except OSError as exc:
+            _cprint(f"  {_DIM}Could not switch workspace: {exc}{_RST}")
+            return
+        _cprint(f"  Workspace: {path}")
+        _cprint(f"  {_DIM}Terminal and file tools now use this directory.{_RST}")
+
+    def _handle_attach_command(self, cmd_original: str):
+        """Handle /attach <file...> — queue readable files for the next prompt."""
+        import shlex
+        from cli import _DIM, _RST, _cprint, _resolve_attachment_path
+
+        raw = cmd_original.split(None, 1)[1].strip() if " " in cmd_original else ""
+        if not raw:
+            _cprint(f"  {_DIM}Usage: /attach <file> [file...]{_RST}")
+            return
+        try:
+            tokens = shlex.split(raw)
+        except ValueError as exc:
+            _cprint(f"  {_DIM}Invalid file path quoting: {exc}{_RST}")
+            return
+        queued = []
+        total_bytes = sum(getattr(p, "stat", lambda: None)().st_size for p in getattr(self, "_attached_files", []) if getattr(p, "exists", lambda: False)())
+        for token in tokens:
+            path = _resolve_attachment_path(token)
+            if path is None:
+                _cprint(f"  {_DIM}File not found: {token}{_RST}")
+                continue
+            try:
+                size = path.stat().st_size
+            except OSError as exc:
+                _cprint(f"  {_DIM}Cannot inspect {path.name}: {exc}{_RST}")
+                continue
+            if size > 1_000_000 or total_bytes + size > 4_000_000:
+                _cprint(f"  {_DIM}File too large (limit 1 MB each, 4 MB total): {path.name}{_RST}")
+                continue
+            try:
+                path.read_text(encoding="utf-8")
+            except (UnicodeDecodeError, OSError):
+                _cprint(f"  {_DIM}Only UTF-8 text files can be attached: {path.name}{_RST}")
+                continue
+            if path not in self._attached_files:
+                self._attached_files.append(path)
+                total_bytes += size
+                queued.append(path)
+        if queued:
+            names = ", ".join(path.name for path in queued)
+            _cprint(f"  Attached for next prompt: {names}")
+        elif not tokens:
+            _cprint(f"  {_DIM}No files supplied.{_RST}")
 
     def _handle_tools_command(self, cmd: str):
         """Handle /tools [list|disable|enable] slash commands.
@@ -3446,13 +3527,56 @@ class CLICommandsMixin:
             pass
 
     def _handle_approvals_command(self, cmd_original: str) -> None:
-        """Show or persist the profile-wide dangerous-command approval mode."""
+        """Show or persist the profile-wide dangerous-command approval mode.
+
+        No argument opens an interactive picker — ↑/↓ (or 1/2/3) to select,
+        Enter to confirm, ESC to cancel. Each choice carries a color whose
+        depth encodes caution: lightest = least cautious (full access),
+        deepest = most cautious (manual approval).
+        """
         from cli import _cprint
-        from fulilian_cli.approval_mode import run_approval_mode_command
+        from fulilian_cli.approval_mode import _effective_mode, run_approval_mode_command
 
         parts = (cmd_original or "").strip().split(None, 1)
         requested = parts[1] if len(parts) > 1 else None
-        result = run_approval_mode_command(requested)
+
+        # Explicit argument: persist directly (same as before).
+        if requested:
+            result = run_approval_mode_command(requested)
+            _cprint(f"  {result.message}")
+            return
+
+        # Interactive picker. Choices ordered most→least cautious; the current
+        # mode is marked so the selection default stays obvious.
+        current = _effective_mode()
+        choices = [
+            ("manual", "手动审批 (manual)", "每个危险命令都需你确认 — 最谨慎", "#E53935"),
+            ("smart", "自动审批 (smart)", "低风险自动放行，高风险仍需确认", "#FB8C00"),
+            ("off", "完全访问 (off)", "跳过所有危险命令审批 — 最不谨慎", "#66BB6A"),
+        ]
+        # Mark the current mode (mirrors the model picker's "← current").
+        choices = [
+            (value, label + ("  ← 当前" if value == current else ""), desc, color)
+            for (value, label, desc, color) in choices
+        ]
+
+        raw = self._prompt_text_input_modal(
+            title="⚙ 审批策略",
+            detail=(
+                f"当前: {current} — 用 ↑/↓ 或数字键选择，Enter 确认，ESC 取消。\n"
+                "颜色由浅到深 = 谨慎程度由低到高。"
+            ),
+            choices=choices,
+            timeout=120,
+        )
+        if raw is None:
+            _cprint(f"  已取消 — 保持当前模式: {current}")
+            return
+        chosen = self._normalize_slash_confirm_choice(raw, choices)
+        if chosen not in ("manual", "smart", "off"):
+            _cprint(f"  已取消 — 保持当前模式: {current}")
+            return
+        result = run_approval_mode_command(chosen)
         _cprint(f"  {result.message}")
 
     def _handle_footer_command(self, cmd_original: str) -> None:
@@ -3574,7 +3698,34 @@ class CLICommandsMixin:
         parts = cmd.strip().split(maxsplit=1)
 
         if len(parts) < 2:
-            # Show current state
+            # Bare /reasoning uses the same prompt_toolkit modal list as the
+            # /model picker. The modal blocks the command worker until Enter
+            # or Escape, while the active TUI thread owns all terminal input.
+            choices = (
+                ("none", "None", "Disable model reasoning"),
+                ("minimal", "Minimal", "Use the smallest reasoning budget"),
+                ("low", "Low", "Light reasoning"),
+                ("medium", "Medium", "Balanced reasoning (default)"),
+                ("high", "High", "Deep reasoning"),
+                ("xhigh", "XHigh", "Extra-deep reasoning"),
+                ("max", "Max", "Maximum reasoning budget"),
+                ("ultra", "Ultra", "Highest available reasoning budget"),
+            )
+            try:
+                selected = self._prompt_text_input_modal(
+                    title="⚙ Reasoning Picker",
+                    detail="Select reasoning intensity for this session.",
+                    choices=list(choices),
+                    timeout=120,
+                )
+            except Exception as exc:
+                selected = None
+                _cprint(f"  {_DIM}Reasoning picker failed: {exc}{_RST}")
+            if selected:
+                self._handle_reasoning_command(f"/reasoning {selected}")
+                return
+
+            # Non-interactive calls retain the old status/help behavior.
             rc = self.reasoning_config
             if rc is None:
                 level = "medium (default)"

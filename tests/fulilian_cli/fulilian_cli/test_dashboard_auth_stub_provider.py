@@ -11,7 +11,7 @@ import pytest
 from fulilian_cli.dashboard_auth.base import (
     InvalidCodeError, RefreshExpiredError, assert_protocol_compliance,
 )
-from tests.fulilian_cli.conftest_dashboard_auth import StubAuthProvider
+from tests.fulilian_cli.fulilian_cli.conftest_dashboard_auth import StubAuthProvider
 
 
 def _pkce_payload(ls) -> dict:

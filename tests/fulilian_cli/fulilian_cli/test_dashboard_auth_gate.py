@@ -218,7 +218,7 @@ def test_start_server_gate_with_provider_proceeds_and_sets_proxy_headers(monkeyp
     from Fly's TLS terminator is honoured for cookie Secure-flag decisions.
     """
     from fulilian_cli.dashboard_auth import clear_providers, register_provider
-    from tests.fulilian_cli.conftest_dashboard_auth import StubAuthProvider
+    from tests.fulilian_cli.fulilian_cli.conftest_dashboard_auth import StubAuthProvider
 
     clear_providers()
     register_provider(StubAuthProvider())
@@ -243,7 +243,7 @@ def test_start_server_gate_with_provider_proceeds_and_sets_proxy_headers(monkeyp
 def test_start_server_passes_bounded_trusted_proxy_networks(monkeypatch, caplog):
     """A configured proxy network reaches uvicorn without broadening to all peers."""
     from fulilian_cli.dashboard_auth import clear_providers, register_provider
-    from tests.fulilian_cli.conftest_dashboard_auth import StubAuthProvider
+    from tests.fulilian_cli.fulilian_cli.conftest_dashboard_auth import StubAuthProvider
 
     clear_providers()
     register_provider(StubAuthProvider())
@@ -353,7 +353,7 @@ def test_public_url_aware_gate_preserves_local_only_mode(monkeypatch):
 def test_start_server_loopback_public_url_enables_gate(monkeypatch):
     """A declared external URL turns a loopback reverse proxy into gated mode."""
     from fulilian_cli.dashboard_auth import clear_providers, register_provider
-    from tests.fulilian_cli.conftest_dashboard_auth import StubAuthProvider
+    from tests.fulilian_cli.fulilian_cli.conftest_dashboard_auth import StubAuthProvider
 
     monkeypatch.setenv(
         "FULILIAN_DASHBOARD_PUBLIC_URL",
