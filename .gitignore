@@ -197,3 +197,6 @@ website/static/api/skills-meta.json
 # Working directory for the Fulilian Agent's session state (~/.fulilian/ at runtime;
 .worktrees/
 .zed/
+
+# mimosa security-scan local state
+.mimosa/

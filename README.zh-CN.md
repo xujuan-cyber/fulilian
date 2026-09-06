@@ -5,204 +5,55 @@
 # FuLiLian ☤
 
 <p align="center">
-  <a href="https://github.com/xujuan-cyber/fulilian"><img src="https://img.shields.io/badge/Docs-github.com/xujuan--cyber/fulilian-8A2BE2?style=for-the-badge" alt="Documentation"></a>
-  <a href="https://discord.gg/NousResearch"><img src="https://img.shields.io/badge/Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"></a>
+  <a href="https://github.com/xujuan-cyber/fulilian"><img src="https://img.shields.io/badge/CTF%20%26%20取证-Agent%20CLI-339AF0?style=for-the-badge" alt="CTF & Forensics Agent CLI"></a>
   <a href="https://github.com/xujuan-cyber/fulilian/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License: MIT"></a>
-  <a href="https://nousresearch.com"><img src="https://img.shields.io/badge/Built%20by-Nous%20Research-blueviolet?style=for-the-badge" alt="Built by Nous Research"></a>
   <a href="README.md"><img src="https://img.shields.io/badge/Lang-English-lightgrey?style=for-the-badge" alt="English"></a>
-  <a href="README.ur-pk.md"><img src="https://img.shields.io/badge/Lang-اردو-green?style=for-the-badge" alt="اردو"></a>
 </p>
 
-**由 [Nous Research](https://nousresearch.com) 构建的自进化 AI 代理。** 它是唯一内置学习闭环的智能代理——从经验中创建技能，在使用中改进技能，主动持久化知识，搜索过往对话，并在跨会话中逐步构建对你的深度理解。可以在 $5 的 VPS 上运行，也可以在 GPU 集群上运行，或者使用几乎零成本的 Serverless 基础设施。它不绑定你的笔记本——你可以在 Telegram 上与它对话，而它在云端 VM 上工作。
+**FuLiLian — 一个专注 CTF（夺旗赛）与数字取证的智能体 CLI。** 基于 Hermes Agent 代码库构建，面向安全竞赛、取证分析与渗透测试工作流做了深度定制。
 
-支持任意模型——[Nous Portal](https://portal.nousresearch.com)、[OpenRouter](https://openrouter.ai)（200+ 模型）、[NVIDIA NIM](https://build.nvidia.com)（Nemotron）、[小米 MiMo](https://platform.xiaomimimo.com)、[z.ai/GLM](https://z.ai)、[Kimi/Moonshot](https://platform.moonshot.ai)、[MiniMax](https://www.minimax.io)、[Hugging Face](https://huggingface.co)、OpenAI，或自定义端点。使用 `fulilian model` 即可切换——无需改代码，无锁定。
+内置调度引擎、校验门与知识系统，FuLiLian 能自动完成重复性的 CTF 任务、持续追踪已发现的工件，让你专注于解题本身。
 
 <table>
-<tr><td><b>真正的终端界面</b></td><td>完整的 TUI，支持多行编辑、斜杠命令自动补全、对话历史、中断重定向和流式工具输出。</td></tr>
-<tr><td><b>随你所在</b></td><td>Telegram、Discord、Slack、WhatsApp、Signal 和 CLI——全部从单个网关进程运行。语音备忘录转写、跨平台对话连续性。</td></tr>
-<tr><td><b>闭环学习</b></td><td>代理管理记忆并定期自我提醒。复杂任务后自动创建技能。技能在使用中自我改进。FTS5 会话搜索配合 LLM 摘要实现跨会话回溯。<a href="https://github.com/plastic-labs/honcho">Honcho</a> 辩证式用户建模。兼容 <a href="https://agentskills.io">agentskills.io</a> 开放标准。</td></tr>
-<tr><td><b>定时自动化</b></td><td>内置 cron 调度器，支持向任何平台投递。日报、夜间备份、周审计——全部用自然语言描述，无人值守运行。</td></tr>
-<tr><td><b>委派与并行</b></td><td>生成隔离子代理处理并行工作流。编写 Python 脚本通过 RPC 调用工具，将多步管道压缩为零上下文开销的轮次。</td></tr>
-<tr><td><b>随处运行</b></td><td>六种终端后端——本地、Docker、SSH、Daytona、Singularity 和 Modal。Daytona 和 Modal 提供 Serverless 持久化——代理环境空闲时休眠、按需唤醒，空闲期间几乎零成本。$5 VPS 或 GPU 集群都能跑。</td></tr>
-<tr><td><b>研究就绪</b></td><td>批量轨迹生成、轨迹压缩——用于训练下一代工具调用模型。</td></tr>
+<tr><td><b>CTF 题目自动化</b></td><td>自动提取 Flag、搭建题目环境、管理工具链，并生成附带证据的结构化 Writeup。</td></tr>
+<tr><td><b>取证分析</b></td><td>磁盘镜像分析、内存取证、日志分析、文件雕刻与时间线重建 —— 全部通过自然语言指令完成。</td></tr>
+<tr><td><b>调度引擎</b></td><td>内置 cron 调度器，支持周期性侦察、自动化扫描与无人值守监控。</td></tr>
+<tr><td><b>校验门</b></td><td>对潜在破坏性操作执行多步审批工作流，也可安全用于生产环境。</td></tr>
+<tr><td><b>知识系统</b></td><td>跨会话持久记忆，自动记录发现的 Flag、已利用的漏洞与取证工件，随时回查。</td></tr>
+<tr><td><b>多平台</b></td><td>Telegram、Discord、Slack、WhatsApp 与 CLI —— 单个网关进程全部搞定，手机上也能跟进解题进度。</td></tr>
+<tr><td><b>随处运行</b></td><td>本地、Docker、SSH 或云 VPS，智能体环境跨会话持久保存。</td></tr>
 </table>
 
----
+## 本 Fork 的增强
 
-## 快速安装
+在上游 Hermes Agent 的基础上，本 Fork 增加了一层面向 CTF 的能力：
 
-```bash
-curl -fsSL https://github.com/xujuan-cyber/fulilian | bash
-```
+- **多智能体解题** —— racer/relay 编排，六类题型专家（crypto / pwn / reverse / web / forensics / misc）并行攻坚，配套时间盒与止损控制。
+- **校验门** —— Flag 形状校验与依据检查，答案被接受前先过一道关。
+- **CTF 知识卡** —— 按题型整理的考点卡（`skills/ctf-knowledge/`），附策略手册（playbook）、可复用片段，以及从历史 Writeup 提炼知识卡的工具。
+- **上下文压缩调优** —— 锚点索引保留、分段压缩与 prune 重臂锁定，长会话、重工具的 CTF 场景下依然稳定。
+- **CLI 体验** —— `/workspace` 目录切换、`/attach` 文件附加、渐变横幅与浅色模式配色适配。
 
-支持 Linux、macOS、WSL2 和 Android (Termux)。安装程序会自动处理平台特定的配置。
-
-> **Android / Termux：** 已测试的手动安装路径请参考 [Termux 指南](https://github.com/xujuan-cyber/fulilian)。在 Termux 上，Fulilian 会安装精选的 `.[termux]` 扩展，因为完整的 `.[all]` 扩展会拉取 Android 不兼容的语音依赖。
->
-> **Windows：** 在 PowerShell 中运行：
-> ```powershell
-> iex (irm https://github.com/xujuan-cyber/fulilian)
-> ```
-> 安装完成后，可能需要重启终端，然后运行 `fulilian` 开始对话。
-
-安装后：
+## 快速开始
 
 ```bash
-source ~/.bashrc    # 重新加载 shell（或: source ~/.zshrc）
-fulilian              # 开始对话！
+# 从源码安装
+git clone https://github.com/xujuan-cyber/fulilian.git
+cd fulilian
+pip install -e .
+
+# 配置模型提供商
+fulilian model
+
+# 启动 CTF 会话
+fulilian chat
 ```
-
----
-
-## 快速入门
-
-```bash
-fulilian              # 交互式 CLI — 开始对话
-fulilian model        # 选择 LLM 提供商和模型
-fulilian tools        # 配置启用的工具
-fulilian config set   # 设置单个配置项
-fulilian gateway      # 启动消息网关（Telegram、Discord 等）
-fulilian setup        # 运行完整设置向导（一次性配置所有内容）
-fulilian claw migrate # 从 OpenClaw 迁移（如果来自 OpenClaw）
-fulilian update       # 更新到最新版本
-fulilian doctor       # 诊断问题
-```
-
-📖 **[完整文档 →](https://github.com/xujuan-cyber/fulilian)**
-
----
-
-## 省去到处收集 API Key — Nous Portal
-
-Fulilian 始终允许你使用任意服务商，这点不会改变。但如果你不想为模型、网页搜索、图像生成、TTS、云浏览器分别去申请五个不同的 API Key，**[Nous Portal](https://portal.nousresearch.com)** 用一个订阅就能覆盖全部：
-
-- **300+ 模型** — 用 `/model <name>` 随时切换
-- **Tool Gateway** — 网页搜索（Firecrawl）、图像生成（FAL）、文本转语音（OpenAI）、云浏览器（Browser Use），全部通过订阅托管。无需额外注册任何账户。
-
-全新安装时一条命令即可：
-
-```bash
-fulilian setup --portal
-```
-
-它会通过 OAuth 登录、把 Nous 设为推理服务商，并启用 Tool Gateway。随时用 `fulilian portal info` 查看路由状态。完整说明见 [Tool Gateway 文档](https://github.com/xujuan-cyber/fulilian)。
-
-你随时可以按工具单独切回自己的 API Key — Gateway 是按工具粒度生效的，不是一刀切。
-
----
-
-## CLI 与消息平台 快速对照
-
-Fulilian 有两种入口：用 `fulilian` 启动终端 UI，或运行网关从 Telegram、Discord、Slack、WhatsApp、Signal 或 Email 与之对话。进入对话后，许多斜杠命令在两种界面中通用。
-
-| 操作 | CLI | 消息平台 |
-|------|-----|----------|
-| 开始对话 | `fulilian` | 运行 `fulilian gateway setup` + `fulilian gateway start`，然后给机器人发消息 |
-| 开始新对话 | `/new` 或 `/reset` | `/new` 或 `/reset` |
-| 更换模型 | `/model [provider:model]` | `/model [provider:model]` |
-| 设置人格 | `/personality [name]` | `/personality [name]` |
-| 重试或撤销上一轮 | `/retry`、`/undo` | `/retry`、`/undo` |
-| 压缩上下文 / 查看用量 | `/compress`、`/usage`、`/insights [--days N]` | `/compress`、`/usage`、`/insights [days]` |
-| 浏览技能 | `/skills` 或 `/<skill-name>` | `/skills` 或 `/<skill-name>` |
-| 中断当前工作 | `Ctrl+C` 或发送新消息 | `/stop` 或发送新消息 |
-| 平台特定状态 | `/platforms` | `/status`、`/sethome` |
-
-完整命令列表请参阅 [CLI 指南](https://github.com/xujuan-cyber/fulilian) 和 [消息网关指南](https://github.com/xujuan-cyber/fulilian)。
-
----
 
 ## 文档
 
-所有文档位于 **[github.com/xujuan-cyber/fulilian](https://github.com/xujuan-cyber/fulilian)**：
-
-| 章节 | 内容 |
-|------|------|
-| [快速开始](https://github.com/xujuan-cyber/fulilian) | 安装 → 设置 → 2 分钟内开始首次对话 |
-| [CLI 使用](https://github.com/xujuan-cyber/fulilian) | 命令、快捷键、人格、会话 |
-| [配置](https://github.com/xujuan-cyber/fulilian) | 配置文件、提供商、模型、所有选项 |
-| [消息网关](https://github.com/xujuan-cyber/fulilian) | Telegram、Discord、Slack、WhatsApp、Signal、Home Assistant |
-| [安全](https://github.com/xujuan-cyber/fulilian) | 命令审批、DM 配对、容器隔离 |
-| [工具与工具集](https://github.com/xujuan-cyber/fulilian) | 40+ 工具、工具集系统、终端后端 |
-| [技能系统](https://github.com/xujuan-cyber/fulilian) | 过程记忆、技能中心、创建技能 |
-| [记忆](https://github.com/xujuan-cyber/fulilian) | 持久记忆、用户画像、最佳实践 |
-| [MCP 集成](https://github.com/xujuan-cyber/fulilian) | 连接任意 MCP 服务器扩展能力 |
-| [定时调度](https://github.com/xujuan-cyber/fulilian) | 定时任务与平台投递 |
-| [上下文文件](https://github.com/xujuan-cyber/fulilian) | 影响每次对话的项目上下文 |
-| [架构](https://github.com/xujuan-cyber/fulilian) | 项目结构、代理循环、关键类 |
-| [贡献](https://github.com/xujuan-cyber/fulilian) | 开发设置、PR 流程、代码风格 |
-| [CLI 参考](https://github.com/xujuan-cyber/fulilian) | 所有命令和标志 |
-| [环境变量](https://github.com/xujuan-cyber/fulilian) | 完整环境变量参考 |
-
----
-
-## 从 OpenClaw 迁移
-
-如果你来自 OpenClaw，Fulilian 可以自动导入你的设置、记忆、技能和 API 密钥。
-
-**首次安装时：** 安装向导（`fulilian setup`）会自动检测 `~/.openclaw` 并在配置开始前提供迁移选项。
-
-**安装后任意时间：**
-
-```bash
-fulilian claw migrate              # 交互式迁移（完整预设）
-fulilian claw migrate --dry-run    # 预览将要迁移的内容
-fulilian claw migrate --preset user-data   # 仅迁移用户数据，不含密钥
-fulilian claw migrate --overwrite  # 覆盖已有冲突
-```
-
-导入内容：
-- **SOUL.md** — 人格文件
-- **记忆** — MEMORY.md 和 USER.md 条目
-- **技能** — 用户创建的技能 → `~/.fulilian/skills/openclaw-imports/`
-- **命令白名单** — 审批模式
-- **消息设置** — 平台配置、允许用户、工作目录
-- **API 密钥** — 白名单中的密钥（Telegram、OpenRouter、OpenAI、Anthropic、ElevenLabs）
-- **TTS 资产** — 工作区音频文件
-- **工作区指令** — AGENTS.md（使用 `--workspace-target`）
-
-使用 `fulilian claw migrate --help` 查看所有选项，或使用 `openclaw-migration` 技能进行交互式代理引导迁移（含干运行预览）。
-
----
-
-## 贡献
-
-欢迎贡献！请参阅 [贡献指南](https://github.com/xujuan-cyber/fulilian) 了解开发设置、代码风格和 PR 流程。
-
-贡献者快速开始——使用标准安装器，然后在它创建的完整 git checkout 中开发：
-`$FULILIAN_HOME/fulilian-agent`（通常是 `~/.fulilian/fulilian-agent`）。这会匹配
-`fulilian update`、托管 venv、lazy dependencies、gateway 和 docs tooling 使用的布局。
-
-```bash
-curl -fsSL https://github.com/xujuan-cyber/fulilian | bash
-cd "${FULILIAN_HOME:-$HOME/.fulilian}/fulilian-agent"
-uv pip install -e ".[all,dev]"
-scripts/run_tests.sh
-```
-
-手动克隆备用路径（用于一次性 clone / CI，或你明确不想使用 managed install layout 时）：
-
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-uv venv venv --python 3.11
-source venv/bin/activate
-uv pip install -e ".[all,dev]"
-python -m pytest tests/ -q
-```
-
----
-
-## 社区
-
-- 💬 [Discord](https://discord.gg/NousResearch)
-- 📚 [技能中心](https://agentskills.io)
-- 🐛 [问题反馈](https://github.com/xujuan-cyber/fulilian/issues)
-- 💡 [讨论区](https://github.com/xujuan-cyber/fulilian/discussions)
-- 🔌 [FulilianClaw](https://github.com/AaronWong1999/fulilianclaw) — 社区微信桥接：在同一微信账号上运行 FuLiLian 和 OpenClaw。
-
----
+- [GitHub Wiki](https://github.com/xujuan-cyber/fulilian/wiki) — 安装指南、CTF 工作流与 API 参考
+- [Issues](https://github.com/xujuan-cyber/fulilian/issues) — 缺陷反馈与功能建议
 
 ## 许可证
 
 MIT — 详见 [LICENSE](LICENSE)。
-
-由 [Nous Research](https://nousresearch.com) 构建。
