@@ -13,6 +13,7 @@ import json
 import os
 import re
 import subprocess
+import threading
 from pathlib import Path
 
 from tools.registry import registry
@@ -389,11 +390,19 @@ def _guess_language(source_file: str) -> str:
 #
 # 会话（cookies/自定义 headers）落盘到 work_dir/.http_sessions/<sid>.json，
 # 跨工具调用保持登录态/会话连续性；进程重启不要求保留——文件在即续用，
-# 删除即新会话。响应 body 截断到上限（FULILIAN_HTTP_BODY_LIMIT，默认 8000
-# 字符），防止大响应爆上下文。work_dir 边界校验与 submit_flag 同口径（P0-4）。
+# 删除即新会话。work_dir 边界校验与 submit_flag 同口径（P0-4）。
+#
+# 上下文防护分流：
+# - 小内容（≤ 截断点）读进上下文；截断点按 token 计（默认 4096 token，
+#   FULILIAN_HTTP_BODY_TOKENS 可调），换算按项目估算器约定 1 token ≈ 4 字符
+#   （中文密度更高，只会更早截断，安全侧）。
+# - 大文件用 save_to 落盘到 work_dir 后本地分析（strings/binwalk/...），
+#   上下文里只回一行摘要，不占窗口。下载有总量上限（默认 200MB）防跑飞。
 
 HTTP_SESSION_DIR = ".http_sessions"
-HTTP_DEFAULT_BODY_LIMIT = 8000
+HTTP_DEFAULT_BODY_TOKENS = 4096
+HTTP_DOWNLOAD_MAX_MB = 200
+_CHARS_PER_TOKEN = 4  # 与 stopper.estimate_tokens_from_log 同一估算约定
 
 
 def _new_session():
@@ -403,12 +412,23 @@ def _new_session():
     return requests.Session()
 
 
-def _http_body_limit() -> int:
+def _http_body_limits() -> tuple:
+    """上下文截断点：(token 上限, 对应字符数)。1 token ≈ 4 字符。"""
     try:
-        return max(200, int(os.environ.get("FULILIAN_HTTP_BODY_LIMIT")
-                            or HTTP_DEFAULT_BODY_LIMIT))
+        tokens = max(64, int(os.environ.get("FULILIAN_HTTP_BODY_TOKENS")
+                             or HTTP_DEFAULT_BODY_TOKENS))
     except (TypeError, ValueError):
-        return HTTP_DEFAULT_BODY_LIMIT
+        tokens = HTTP_DEFAULT_BODY_TOKENS
+    return tokens, tokens * _CHARS_PER_TOKEN
+
+
+def _download_max_bytes() -> int:
+    try:
+        mb = max(1, int(os.environ.get("FULILIAN_HTTP_DOWNLOAD_MAX_MB")
+                        or HTTP_DOWNLOAD_MAX_MB))
+    except (TypeError, ValueError):
+        mb = HTTP_DOWNLOAD_MAX_MB
+    return mb * 1024 * 1024
 
 
 def _session_file(work_dir: str, session_id: str) -> Path:
@@ -460,21 +480,87 @@ def _parse_header_text(headers_text: str) -> dict:
 
 def _summarize_response_headers(headers) -> list:
     interesting = ("content-type", "location", "server", "set-cookie",
+                   "content-length", "content-range",
                    "www-authenticate")
     return [f"{k}: {str(v)[:200]}" for k, v in headers.items()
             if k.lower() in interesting]
 
 
+def _iter_content(resp, chunk_size: int = 65536):
+    """响应体字节迭代：requests 流式优先，退化到整块 content（兼容测试替身）。"""
+    it = getattr(resp, "iter_content", None)
+    if it is not None:
+        try:
+            for chunk in it(chunk_size=chunk_size):
+                if chunk:
+                    yield chunk
+            return
+        except TypeError:
+            pass  # 测试替身的 iter_content 签名不同 → 退化
+    content = getattr(resp, "content", None)
+    if content:
+        yield content
+
+
+def _download_to_file(work_dir: str, session, method: str, url: str,
+                      extra_headers, data, timeout: int, allow_redirects: bool,
+                      save_to: str) -> str:
+    """大文件分流：响应体流式落盘到 work_dir/<basename>，上下文只回摘要。"""
+    filename = Path(save_to).name  # 只取 basename，防目录穿越
+    if not filename or filename in (".", ".."):
+        return "http_session: save_to must be a plain filename (no path)"
+    dest = Path(work_dir) / filename
+    tmp = dest.with_suffix(f"{dest.suffix}.{os.getpid()}.{threading.get_ident()}.part")
+    max_bytes = _download_max_bytes()
+    try:
+        resp = session.request(
+            method=method, url=url, headers=extra_headers, data=data,
+            timeout=timeout, allow_redirects=allow_redirects, stream=True,
+        )
+        written = 0
+        with open(tmp, "wb") as f:
+            for chunk in _iter_content(resp):
+                written += len(chunk)
+                if written > max_bytes:
+                    raise ValueError(
+                        f"download exceeded FULILIAN_HTTP_DOWNLOAD_MAX_MB "
+                        f"({_download_max_bytes()} bytes) — aborted"
+                    )
+                f.write(chunk)
+        os.replace(tmp, dest)
+    except Exception as e:  # noqa: BLE001 — 下载失败返回错误文本，不抛
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return f"http_session: download failed: {e}"
+    lines = [
+        f"saved: {dest} ({written} bytes)",
+        f"status: {resp.status_code}",
+        f"url: {resp.url}",
+        "body: (not included — file saved to workspace; analyze it locally with "
+        "strings/binwalk/etc. instead of pulling it into context)",
+    ]
+    lines.extend(f"header: {h}" for h in _summarize_response_headers(resp.headers))
+    return "\n".join(lines)
+
+
 def _http_session_impl(work_dir: str, action: str = "request",
                        session_id: str = "default", method: str = "GET",
                        url: str = "", headers: str = "", data: str = "",
-                       timeout: int = 10, allow_redirects: bool = True) -> str:
+                       timeout: int = 10, allow_redirects: bool = True,
+                       save_to: str = "") -> str:
     """web 题跨调用 HTTP 会话保持。
 
     action:
       - "request"（默认）：用命名会话发一次请求（会话不存在则惰性创建），
         响应 Set-Cookie 自动延续到后续调用并落盘。
       - "close"：丢弃该命名会话（删除落盘状态），下次 request 从新会话开始。
+    上下文分流：
+      - save_to 为空：body 读进上下文，超过截断点（默认 4096 token）截断，
+        提示改用 Range 分段或 save_to 落盘。
+      - save_to 给出文件名：body 流式写入 work_dir/<文件名>，上下文只回
+        摘要（大小/状态/头），用本地工具分析。
     """
     work_dir = _bound_work_dir(work_dir)
     if work_dir is None:
@@ -493,12 +579,23 @@ def _http_session_impl(work_dir: str, action: str = "request",
         return "http_session: url is required for action='request'"
 
     session = _load_session(session_file)
+    req_headers = _parse_header_text(headers) or None
+    req_method = (method or "GET").upper()
+    req_timeout = max(1, int(timeout or 10))
+
+    if save_to:
+        result = _download_to_file(
+            work_dir, session, req_method, url, req_headers, data or None,
+            req_timeout, bool(allow_redirects), save_to)
+        _save_session(session_file, session)  # 下载响应的 Set-Cookie 也延续
+        return result
+
     try:
         resp = session.request(
-            method=(method or "GET").upper(), url=url,
-            headers=_parse_header_text(headers) or None,
+            method=req_method, url=url,
+            headers=req_headers,
             data=data or None,
-            timeout=max(1, int(timeout or 10)),
+            timeout=req_timeout,
             allow_redirects=bool(allow_redirects),
         )
     except Exception as e:  # noqa: BLE001 — 网络失败返回错误文本，不抛
@@ -506,16 +603,24 @@ def _http_session_impl(work_dir: str, action: str = "request",
         return f"http_session: request failed: {e}"
     _save_session(session_file, session)
 
-    limit = _http_body_limit()
+    limit_tokens, limit = _http_body_limits()
     body = resp.text or ""
     truncated = len(body) > limit
     if truncated:
         body = body[:limit]
     lines = [f"status: {resp.status_code}", f"url: {resp.url}"]
     lines.extend(f"header: {h}" for h in _summarize_response_headers(resp.headers))
-    lines.append(f"body{' (truncated at %d chars, use range/partial GET for more)' % limit
-                 if truncated else ''}:")
-    lines.append(body)
+    if truncated:
+        lines.append(
+            f"body (truncated at {limit_tokens} tokens ≈ {limit} chars):")
+        lines.append(body)
+        lines.append(
+            "[truncated] continue with a Range header (bytes=%d-...) for text, "
+            "or retry with save_to=<filename> to download the full body to the "
+            "workspace and analyze it locally." % limit)
+    else:
+        lines.append("body:")
+        lines.append(body)
     return "\n".join(lines)
 
 
@@ -560,9 +665,10 @@ registry.register(
             "description": "Stateful HTTP client for web challenges: keeps cookies/session "
                            "across calls (persisted per challenge workspace). Use "
                            "action='request' with method/url (extra headers/data optional); "
-                           "action='close' drops the session. Response body is truncated to a "
-                           "cap (FULILIAN_HTTP_BODY_LIMIT, default 8000 chars) — use range "
-                           "requests or targeted endpoints for large responses.",
+                           "action='close' drops the session. Context safety: small bodies "
+                           "are truncated at 4096 tokens (FULILIAN_HTTP_BODY_TOKENS) — for "
+                           "large files pass save_to=<filename> to download the body into "
+                           "the workspace and analyze it locally instead.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -605,6 +711,14 @@ registry.register(
                     "allow_redirects": {
                         "type": "boolean",
                         "description": "Follow redirects (default true)",
+                    },
+                    "save_to": {
+                        "type": "string",
+                        "description": "Plain filename (relative to the workspace): stream "
+                                       "the response body to work_dir/<filename> instead of "
+                                       "returning it in context (preferred for large or "
+                                       "binary files — pcaps, archives, images). Only a "
+                                       "one-line summary is returned.",
                     },
                 },
                 "required": ["work_dir"],

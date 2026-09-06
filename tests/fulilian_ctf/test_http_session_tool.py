@@ -61,7 +61,7 @@ class FakeSession:
         self.calls = []
 
     def request(self, method, url, headers=None, data=None,
-                timeout=10, allow_redirects=True):
+                timeout=10, allow_redirects=True, stream=False):
         self.calls.append({
             "method": method, "url": url, "headers": dict(headers or {}),
             "data": data, "cookies_sent": self.cookies.dump(),
@@ -117,7 +117,8 @@ def test_close_drops_session(tmp_path, fake_http):
 def test_body_truncated_and_limit_configurable(tmp_path, fake_http, monkeypatch):
     work = str(tmp_path)
     monkeypatch.setattr(FakeSession, "server_cookie", ("x", "y"))
-    big = "A" * 8000 + "B" * 6000  # 截断点后必须是可区分字符
+    # 默认截断点 4096 token ≈ 16384 字符（4 字符/token 估算约定）
+    big = "A" * 16384 + "B" * 6000  # 截断点后必须是可区分字符
 
     class BigSession(FakeSession):
         def request(self, *a, **kw):
@@ -128,12 +129,78 @@ def test_body_truncated_and_limit_configurable(tmp_path, fake_http, monkeypatch)
     monkeypatch.setattr(ctf_solve, "_new_session", lambda: BigSession())
 
     out = ctf_solve._http_session_impl(work_dir=work, url="http://target/big")
-    assert "(truncated at 8000 chars" in out
-    assert big[:8000] in out and "BBBBBB" not in out
+    assert "(truncated at 4096 tokens ≈ 16384 chars)" in out
+    assert big[:16384] in out and "BBBBBB" not in out
+    # 截断提示给出两条分流路径
+    assert "Range header" in out and "save_to" in out
 
-    monkeypatch.setenv("FULILIAN_HTTP_BODY_LIMIT", "500")
+    monkeypatch.setenv("FULILIAN_HTTP_BODY_TOKENS", "500")
     out2 = ctf_solve._http_session_impl(work_dir=work, url="http://target/big")
-    assert "(truncated at 500 chars" in out2
+    assert "(truncated at 500 tokens ≈ 2000 chars)" in out2
+
+
+def test_save_to_downloads_to_workspace(tmp_path, fake_http, monkeypatch):
+    work = str(tmp_path)
+    payload = b"PK\x03\x04" + b"\x00" * 100_000  # 模拟二进制附件
+
+    class FileSession(FakeSession):
+        def request(self, method, url, headers=None, data=None,
+                    timeout=10, allow_redirects=True, stream=False):
+            self.calls.append({"url": url})
+            self.cookies.set("sid", "s3cret", domain="target")  # 服务端 Set-Cookie
+            resp = FakeResponse(text="")
+            resp.content = payload
+            resp.iter_content = lambda chunk_size=65536: (
+                payload[i:i + chunk_size] for i in range(0, len(payload), chunk_size)
+            )
+            return resp
+
+    monkeypatch.setattr(ctf_solve, "_new_session", lambda: FileSession())
+    out = ctf_solve._http_session_impl(
+        work_dir=work, url="http://target/attach.zip", save_to="attach.zip")
+
+    dest = tmp_path / "attach.zip"
+    assert dest.is_file() and dest.read_bytes() == payload
+    assert f"saved: {dest} ({len(payload)} bytes)" in out
+    assert "not included" in out  # body 不进上下文
+    # 没有临时残留
+    assert list(tmp_path.glob("*.part")) == []
+    # cookie 照常延续（下载响应的 Set-Cookie 也落盘）
+    cookies = json.loads((tmp_path / ".http_sessions" / "default.json")
+                         .read_text())["cookies"]
+    assert any(c["name"] == "sid" and c["value"] == "s3cret" for c in cookies)
+
+
+def test_save_to_sanitizes_path_traversal(tmp_path, fake_http):
+    work = str(tmp_path)
+    out = ctf_solve._http_session_impl(
+        work_dir=work, url="http://target/f", save_to="../../etc/evil")
+    assert "saved" in out
+    assert (tmp_path / "evil").is_file()  # 只取 basename，落在 work_dir 内
+    assert not (tmp_path.parent.parent / "etc" / "evil").exists()
+
+
+def test_save_to_enforces_download_cap(tmp_path, fake_http, monkeypatch):
+    work = str(tmp_path)
+    payload = b"x" * (2 * 1024 * 1024)
+
+    class FileSession(FakeSession):
+        def request(self, method, url, headers=None, data=None,
+                    timeout=10, allow_redirects=True, stream=False):
+            resp = FakeResponse(text="")
+            resp.content = payload
+            resp.iter_content = lambda chunk_size=65536: (
+                payload[i:i + chunk_size] for i in range(0, len(payload), chunk_size)
+            )
+            return resp
+
+    monkeypatch.setattr(ctf_solve, "_new_session", lambda: FileSession())
+    monkeypatch.setenv("FULILIAN_HTTP_DOWNLOAD_MAX_MB", "1")
+    out = ctf_solve._http_session_impl(
+        work_dir=work, url="http://target/big.bin", save_to="big.bin")
+    assert "download failed" in out and "exceeded" in out
+    assert not (tmp_path / "big.bin").exists()  # 失败不落半截文件
+    assert list(tmp_path.glob("*.part")) == []
 
 
 def test_headers_passthrough(tmp_path, fake_http):
