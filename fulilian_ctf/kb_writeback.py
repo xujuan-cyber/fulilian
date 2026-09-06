@@ -1,38 +1,32 @@
-"""难题 WP 自动回灌知识库（F3-011+）。
+"""难题 WP 自动回灌统一知识库（自学习闭环·卡E，2026-09-06 规范对齐版）。
 
 解题成功且耗时达到"难题"门槛（默认 600 秒，env
-``FULILIAN_CTF_WP_MIN_SECONDS`` 可覆盖）时，把本次解题轨迹自动生成
-Writeup，写入知识库（``KB_PATH / "WP汇总" / "自产WP"``）并做 FTS5
-增量索引，使自产 WP 立即可被 ``knowledge_retriever.search`` 检索。
+``FULILIAN_CTF_WP_MIN_SECONDS`` 覆盖）时，把 generate_writeup 产出的
+WP 落到统一知识库自产 WP 唯一区 ``CTF大赛WP集合/self-solved/``，
+元数据单源登记 ``wp_technique_index.json``（similar_by_technique 的
+唯一数据源），并做 FTS5 增量索引，使 ``fulilian knowledge query`` /
+``kr.search`` / ``kr.similar_by_technique`` 立即可查。
 
-设计约束：
-- **fail-open**：任何失败（时钟缺失/生成失败/写盘失败/索引失败）只返回
-  None 或打印 stderr 告警，绝不抛异常——不影响解题主流程与调度。
-- **防泄漏**：flag 明文不写入 WP（frontmatter 与正文均写"已验证 ✔"）。
-- **去重**：同 challenge 同日同名 WP 已存在则跳过（宁缺毋滥）。
-- KB_PATH / DB_PATH 取 ``knowledge_retriever`` 的运行时解析值（模块属性
-  访问，测试可 monkeypatch），不硬编码仓库路径。
+规范依据：~/Exchange/fulilian-知识沉淀规范-20260906.md
+- 纯正文（无 frontmatter），元数据单源进 technique index；
+- 题级去重（同 challenge_id 已存在即跳过，不带日期后缀）；
+- 本地自产库允许 flag 明文（区别于对外分享）；
+- fail-open：任何失败只返回 None / stderr 告警，绝不影响求解退出码；
+- KB_PATH 取 knowledge_retriever 运行时解析值，测试可 monkeypatch。
 """
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import sqlite3
 import sys
-from datetime import date
 from pathlib import Path
 from typing import Optional
 
 # 难题门槛默认值（秒）：解出耗时 >= 该值才视为"难题"回灌 WP
 DEFAULT_MIN_SECONDS = 600
-
-# FTS5 增量索引写入的表结构，镜像 knowledge_retriever.CREATE_TABLE_SQL：
-# writeups(title, category, content, source_path UNINDEXED)
-_INCREMENTAL_INSERT_SQL = (
-    "INSERT INTO writeups (title, category, content, source_path) "
-    "VALUES (?, ?, ?, ?)"
-)
 
 # challenge_id 中的路径不安全字符（防目录穿越/非法文件名）
 _UNSAFE_CHARS_RE = re.compile(r"[^0-9A-Za-z._\-]+")
@@ -59,59 +53,56 @@ def _safe_filename_stem(challenge_id: str) -> str:
     return stem or "challenge"
 
 
-def _redact_flag(text: str, flags: list[str]) -> str:
-    """把 flag 明文从 WP 文本中替换为"已验证 ✔"（防泄漏）。"""
-    for flag in flags:
-        if flag and flag in text:
-            text = text.replace(flag, "已验证 ✔")
-    return text
+def _register_technique_index(wp_path: Path, title: str, category: str,
+                              challenge_id: str) -> None:
+    """把自产 WP 登记进 wp_technique_index.json（元数据单源）。
 
-
-def _build_frontmatter(
-    challenge_id: str,
-    category: str,
-    elapsed: int,
-    model_hint: str,
-) -> str:
-    """frontmatter 风格头部：来源/题目/分类/日期/耗时/模型（flag 防泄漏）。"""
-    minutes = max(0, elapsed) // 60
-    lines = [
-        "---",
-        "source: fulilian 自动沉淀",
-        f"challenge_id: {challenge_id}",
-        f"category: {category}",
-        f"date: {date.today().isoformat()}",
-        f"solve_minutes: {minutes}",
-        "flag: 已验证 ✔",
-        f"model: {model_hint or 'n/a'}",
-        "---",
-        "",
-    ]
-    return "\n".join(lines)
+    该文件是 kr.similar_by_technique() 的唯一数据源，不登记则"按考点找
+    相似题"永远搜不到本篇。已存在时读入合并追加，绝不覆盖既有条目。
+    自动通道 tags 最少给 [category, challenge_id]，人工复盘可补全。
+    """
+    index_path = wp_path.parent.parent / "wp_technique_index.json"
+    try:
+        data = {}
+        if index_path.exists():
+            data = json.loads(index_path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            data = {}
+        data[wp_path.name] = {
+            "title": title,
+            "source_path": str(wp_path),
+            "tags": [tag for tag in (category, challenge_id) if tag],
+        }
+        index_path.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    except (OSError, ValueError) as exc:
+        print(
+            f"[kb_writeback] technique index 登记失败"
+            f"（similar_by_technique 将搜不到本篇）: {exc}",
+            file=sys.stderr,
+        )
 
 
 def _incremental_index(file_path: Path, category: str, content: str) -> bool:
-    """把单篇 WP 直接 INSERT 进 FTS5 writeups 表（增量索引）。
+    """把单篇 WP 增量插入 FTS5 writeups 表。
 
-    行结构镜像 knowledge_retriever.build_index() 的 INSERT 语句：
-    (title=文件名 stem, category, content=正文截断, source_path=绝对路径)。
-
-    失败（表结构不符 / DB 锁 / 表不存在）降级：stderr 告警，返回 False——
-    文件已在库中，下次 force 重建自然入索引。
+    行结构镜像 knowledge_retriever.build_index()：title=文件名 stem、
+    category、content 截 200k、source_path=绝对路径。SQL 为常量字面量，
+    所有运行时值经 sqlite3 参数绑定传入。失败（表结构不符 / DB 锁 /
+    表不存在）降级：stderr 告警，返回 False——文件已在库中，下次 force
+    重建自然入索引。
     """
     from fulilian_ctf import knowledge_retriever as kr
 
     try:
+        content_trunc = content[:_MAX_CONTENT_CHARS]
+        row = (file_path.stem, category, content_trunc, str(file_path))
         conn = sqlite3.connect(str(kr.DB_PATH), timeout=5)
         try:
-            conn.execute(
-                _INCREMENTAL_INSERT_SQL,
-                (
-                    file_path.stem,
-                    category,
-                    content[:_MAX_CONTENT_CHARS],
-                    str(file_path),
-                ),
+            conn.executemany(
+                "INSERT INTO writeups (title, category, content, source_path) VALUES (?, ?, ?, ?)",
+                [row],
             )
             conn.commit()
         finally:
@@ -134,12 +125,15 @@ def writeback_wp_for_solve(
 ) -> Optional[Path]:
     """难题解出后把 WP 自动写入知识库并做 FTS5 增量索引。
 
+    落点为统一知识库自产 WP 唯一区 ``CTF大赛WP集合/self-solved/``，
+    纯正文（无 frontmatter），元数据单源登记 wp_technique_index.json。
+
     Args:
-        challenge_id: 题目 ID
+        challenge_id: 题目 ID（同时作为文件名主体与题级去重键）
         category: 题目分类（空时按内容/文件名自动推断）
         work_dir: 挑战工作目录（solver.log / blackboard / FLAG 所在）
-        flag: 已验证的 flag（不写入 WP，防泄漏）
-        model_hint: 求解模型名（frontmatter 元信息）
+        flag: 已验证的 flag（本地自产库允许明文保留）
+        model_hint: 保留参数（元数据单源进 technique index，正文不含）
 
     Returns:
         Path: 写入的 WP 文件路径；未达门槛 / 时钟缺失 / 去重跳过 / 任何
@@ -171,32 +165,25 @@ def writeback_wp_for_solve(
         if not writeup_md.strip():
             return None
 
-        # 防泄漏：flag 明文替换为"已验证 ✔"（正文 Flag 节与可能含 flag 的
-        # fact/输出一并进行）
-        writeup_md = _redact_flag(
-            writeup_md, [flag, getattr(trace, "flag", "") or ""]
-        )
-
-        # frontmatter 头部 + 正文
         from fulilian_ctf import knowledge_retriever as kr
 
         kb_path = kr.KB_PATH
-        full_md = _build_frontmatter(
-            challenge_id, category or "misc", elapsed, model_hint
-        ) + writeup_md
-
-        target_dir = kb_path / "WP汇总" / "自产WP"
-        file_name = f"{_safe_filename_stem(challenge_id)}-{date.today():%Y%m%d}.md"
-        target = target_dir / file_name
+        target_dir = kb_path / "CTF大赛WP集合" / "self-solved"
+        # 题级去重：同 challenge 已沉淀（不带日期后缀，同题不重写）
+        target = target_dir / f"{_safe_filename_stem(challenge_id)}.md"
         if target.exists():
-            return None  # 去重：同 challenge 同日已沉淀，跳过
+            return None
 
         target_dir.mkdir(parents=True, exist_ok=True)
-        target.write_text(full_md, encoding="utf-8")
+        target.write_text(writeup_md, encoding="utf-8")
+
+        # 元数据单源登记（similar_by_technique 的数据源）
+        title = writeup_md.splitlines()[0].lstrip("# ").strip() or challenge_id
+        resolved_category = category or kr._guess_category(target, writeup_md)
+        _register_technique_index(target, title, resolved_category, challenge_id)
 
         # FTS5 增量索引（失败降级：文件在库中，force 重建自然入索引）
-        resolved_category = category or kr._guess_category(target, full_md)
-        _incremental_index(target, resolved_category, full_md)
+        _incremental_index(target, resolved_category, writeup_md)
 
         return target
     except Exception as exc:  # noqa: BLE001 — WP 回灌全程 fail-open
