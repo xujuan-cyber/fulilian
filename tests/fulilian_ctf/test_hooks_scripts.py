@@ -217,10 +217,13 @@ def test_register_ctf_tool_hooks_idempotent(monkeypatch):
     registered = hooks_mod.register_ctf_tool_hooks()
     assert registered == ["pre_tool_call", "post_tool_call"]
     assert len(manager._hooks["pre_tool_call"]) == 1
-    assert len(manager._hooks["post_tool_call"]) == 1
+    # post_tool_call 挂两个回调：flag 检测 + kb_nudge（超时知识库注入）
+    assert len(manager._hooks["post_tool_call"]) == 2
+    assert hooks_mod._kb_nudge_post_tool_hook in manager._hooks["post_tool_call"]
     # 再次注册：幂等
     assert hooks_mod.register_ctf_tool_hooks() == []
     assert len(manager._hooks["pre_tool_call"]) == 1
+    assert len(manager._hooks["post_tool_call"]) == 2
 
 
 def test_register_skipped_in_safe_mode(monkeypatch):

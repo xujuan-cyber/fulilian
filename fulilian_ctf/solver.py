@@ -394,6 +394,19 @@ def _default_solver_impl(project, work_dir: Path, query: str) -> int:
     """真实求解：复用 Fulilian run_agent 核心（CTF 模式），stdout/stderr 进 solver.log。"""
     from run_agent import main as run_agent_main
 
+    # 解题时钟 + CTF hooks（危险命令拦截/flag 检测/知识库检索注入）：
+    # solve-all 走独立子进程，需在此自行标记与注册（best-effort 不阻断求解）
+    try:
+        from .solve_clock import mark_solve_start
+        mark_solve_start(work_dir)
+    except Exception:  # noqa: BLE001 — 时钟失败不阻断求解
+        pass
+    try:
+        from .hooks import register_ctf_tool_hooks
+        register_ctf_tool_hooks()
+    except Exception:  # noqa: BLE001 — hook 注册失败只降级安全检查
+        pass
+
     # 轮数上限：环境变量显式覆盖（CLI --max-turns）才限制；未设/0 =
     # 不限轮数（sys.maxsize，AIAgent 库默认无限迭代语义）——题目一直
     # 解到出 flag 为止。（forkserver 子进程继承父进程环境，故 solve-all

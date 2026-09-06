@@ -380,6 +380,40 @@ def build_index(force: bool = False) -> int:
     return count
 
 
+def index_writeup_file(md_file: Path) -> bool:
+    """把单篇 Markdown 增量插入 writeups 索引（kb_writeback 回灌用）。
+
+    行结构与 build_index 完全同构（title=文件名 stem、category 走
+    _guess_category、content 截 200k）。SQL 为常量字面量 + 占位符，
+    所有运行时值经 sqlite3 参数绑定传入。表不存在/DB 锁等失败返回
+    False（调用方降级：文件已在库内，下次 force 重建自然入索引）。
+    幂等性由调用方保证（回灌前有文件级去重，每篇至多插入一次）。
+    """
+    if not DB_PATH.exists():
+        return False
+    try:
+        content = md_file.read_text(encoding="utf-8", errors="ignore")
+        if not content.strip():
+            return False
+        title = md_file.stem
+        category = _guess_category(md_file, content)
+        content_trunc = content[:200_000]
+        source = str(md_file)
+        row = (title, category, content_trunc, source)
+        conn = sqlite3.connect(str(DB_PATH))
+        try:
+            conn.executemany(
+                "INSERT INTO writeups (title, category, content, source_path) VALUES (?, ?, ?, ?)",
+                [row],
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        return True
+    except Exception:  # noqa: BLE001 — 增量索引失败由调用方告警降级
+        return False
+
+
 # ── 片段（snippets）索引 ────────────────────────────────────────────────
 
 # 片段文件头部元数据注释的解析规则

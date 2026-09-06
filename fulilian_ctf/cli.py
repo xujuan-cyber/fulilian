@@ -362,6 +362,12 @@ def handle_solve_command(args: argparse.Namespace) -> None:
     work_dir = _prepare_work_dir(project, challenge_id)
     if work_dir is not None:
         os.environ["FULILIAN_CTF_WORK_DIR"] = str(work_dir.resolve())
+        # 解题时钟：WP 回灌判难与 10 分钟知识库检索注入共用（best-effort）
+        try:
+            from fulilian_ctf.solve_clock import mark_solve_start
+            mark_solve_start(work_dir)
+        except Exception:  # noqa: BLE001 — 时钟失败不阻断解题
+            pass
 
     # F4-002：-p / --json 非交互模式
     oneshot = bool(getattr(args, "oneshot", False))
@@ -416,6 +422,32 @@ def _guess_category_from_id(challenge_id: str) -> str:
     return ""
 
 
+def _detect_solved_flag(base_dir: Path) -> str:
+    """flag 检测链：read_flag_file 读 FLAG 文件 → check_output_for_flag 扫
+    solver.log（后者只放行通过三重校验门的 flag）。无 flag 返回空串。
+
+    经验落库（_record_single_solve_experience）与 WP 回灌（_writeback_wp）
+    共用同一检测口径。
+    """
+    from fulilian_ctf.solver import SOLVER_LOG, read_flag_file
+    from fulilian_ctf.verify import check_output_for_flag
+
+    try:
+        flag = read_flag_file(base_dir)
+    except OSError:
+        flag = ""
+    if not flag:
+        try:
+            flag = check_output_for_flag(
+                (base_dir / SOLVER_LOG).read_text(
+                    encoding="utf-8", errors="replace"
+                )
+            ) or ""
+        except OSError:
+            flag = ""
+    return flag
+
+
 def _record_single_solve_experience(project, work_dir: Optional[Path]) -> None:
     """单题 solve 结束后的经验落库（F3-003/F3-004），best-effort。
 
@@ -432,27 +464,12 @@ def _record_single_solve_experience(project, work_dir: Optional[Path]) -> None:
             load_blackboard,
         )
         from fulilian_ctf.experiential_learning import record_solve_outcome
-        from fulilian_ctf.solver import SOLVER_LOG, read_flag_file
-        from fulilian_ctf.verify import check_output_for_flag
 
         # 与 _run_solve_once 的 base_dir 语义一致：无独立工作目录（清单文件
         # 形态）时在 cwd 求解，此处 cwd 已在 finally 中恢复
         base_dir = work_dir or Path.cwd()
 
-        flag = ""
-        try:
-            flag = read_flag_file(base_dir)
-        except OSError:
-            flag = ""
-        if not flag:
-            try:
-                flag = check_output_for_flag(
-                    (base_dir / SOLVER_LOG).read_text(
-                        encoding="utf-8", errors="replace"
-                    )
-                ) or ""
-            except OSError:
-                flag = ""
+        flag = _detect_solved_flag(base_dir)
 
         fact_contents: list[str] = []
         try:

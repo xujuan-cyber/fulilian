@@ -15,6 +15,11 @@ post_tool_call 的 ``{"context": ...}`` 上下文注入。
 config.yaml 手动注册（脚本不自动落任何配置）。
 
 脚本内部错误一律 fail-open（放行），避免断题。
+
+另含进程内 hook ``kb_nudge._kb_nudge_post_tool_hook``（仅随
+:func:`register_ctf_tool_hooks` 注册，无独立脚本）：单题求解超过阈值
+（默认 600 秒）后一次性检索 Des-CTF-Knowledge，把历史思路作为
+``{"context": ...}`` 注入运行中的解题会话（详见 kb_nudge.py 模块文档）。
 """
 
 from __future__ import annotations
@@ -27,6 +32,10 @@ from pathlib import Path
 # 独立脚本场景（hook 子进程 cwd 是题目工作目录）：把项目根加入 sys.path
 if __package__ in (None, ""):  # pragma: no cover — 直接以脚本运行时
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+# kb_nudge 顶层仅依赖 stdlib，模块级导入无循环风险（knowledge_retriever
+# 等重依赖在函数内延迟 import）；导出模块属性供测试与注册方引用
+from fulilian_ctf.hooks.kb_nudge import _kb_nudge_post_tool_hook
 
 
 # ── 检查逻辑（进程内回调与脚本共用） ─────────────────────────────────────────
@@ -142,21 +151,26 @@ def register_ctf_tool_hooks() -> list:
         return []
 
     from fulilian_cli.plugins import get_plugin_manager
+    from fulilian_ctf.hooks.kb_nudge import _kb_nudge_post_tool_hook
 
     manager = get_plugin_manager()
     registered = []
+    # kb_nudge 与 detect_flag 同挂 post_tool_call（各自独立回调，互不影响）
     for event, callback in (
         ("pre_tool_call", _ctf_pre_tool_hook),
         ("post_tool_call", _ctf_post_tool_hook),
+        ("post_tool_call", _kb_nudge_post_tool_hook),
     ):
         hooks = manager._hooks.setdefault(event, [])
         if callback not in hooks:
             hooks.append(callback)
-            registered.append(event)
+            if event not in registered:
+                registered.append(event)
     return registered
 
 
 __all__ = [
     "check_command",
     "register_ctf_tool_hooks",
+    "_kb_nudge_post_tool_hook",
 ]

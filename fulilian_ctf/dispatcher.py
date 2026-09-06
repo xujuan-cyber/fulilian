@@ -800,6 +800,7 @@ class Dispatcher:
                 success=(project.status is ChallengeStatus.SOLVED),
                 key_commands=fact_contents,
                 flag=project.flag,
+                verified=bool(project.flag),
             )
         except Exception:  # noqa: BLE001 — 经验落库失败不影响调度
             pass
@@ -995,6 +996,7 @@ class Dispatcher:
                 success=success,
                 key_commands=fact_contents,
                 flag=project.flag,
+                verified=bool(project.flag),
             )
         except Exception:  # noqa: BLE001 — 经验落库失败不影响调度
             pass
