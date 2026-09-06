@@ -10175,7 +10175,11 @@ async def cancel_whatsapp_onboarding(pairing_id: str):
     return {"ok": True}
 
 
-_TELEGRAM_ONBOARDING_DEFAULT_URL = "https://setup.hermes-agent.nousresearch.com"
+# 配对端点与 telegram_managed_bot.resolve_api_url 同一 local/legacy 语义：
+# 默认 local（FULILIAN_PAIRING_API_URL 自建端点），legacy 过渡开关保留上游托管端点
+_TELEGRAM_ONBOARDING_LEGACY_URL = (
+    "https://setup.hermes-agent.nousresearch.com"
+)
 _TELEGRAM_ONBOARDING_USER_AGENT = f"FulilianDashboard/{__version__}"
 @dataclass
 class _TelegramOnboardingPairing:
@@ -10192,10 +10196,22 @@ _telegram_onboarding_lock = threading.RLock()
 
 
 def _telegram_onboarding_base_url() -> str:
-    return (
-        os.getenv("TELEGRAM_ONBOARDING_URL", _TELEGRAM_ONBOARDING_DEFAULT_URL)
-        .strip()
-        .rstrip("/")
+    override = (
+        os.getenv("TELEGRAM_ONBOARDING_URL")
+        or os.getenv("FULILIAN_PAIRING_API_URL")
+        or ""
+    ).strip()
+    if override:
+        return override.rstrip("/")
+    if os.getenv("FULILIAN_PAIRING_MODE", "local").strip().lower() in (
+        "legacy",
+        "nous",
+    ):
+        return _TELEGRAM_ONBOARDING_LEGACY_URL
+    raise ValueError(
+        "Telegram 托管配对未配置服务端：请设置 FULILIAN_PAIRING_API_URL "
+        "指向自建配对服务；或设置 FULILIAN_PAIRING_MODE=legacy "
+        "暂用上游托管端点（过渡期）"
     )
 
 
@@ -10259,7 +10275,13 @@ def _telegram_onboarding_request_sync(
     if bearer_token:
         headers["Authorization"] = f"Bearer {bearer_token}"
 
-    url = f"{_telegram_onboarding_base_url()}{path}"
+    try:
+        base_url = _telegram_onboarding_base_url()
+    except ValueError as exc:
+        # 未配置自建配对端点：把配置指引直接返回给前端，而非裸 500
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    url = f"{base_url}{path}"
     try:
         with httpx.Client(timeout=httpx.Timeout(10.0)) as client:
             response = client.request(

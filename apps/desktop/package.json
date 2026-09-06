@@ -4,10 +4,10 @@
   "private": true,
   "version": "0.17.0",
   "description": "Native desktop shell for FuLiLian.",
-  "author": "Nous Research",
+  "author": "FuLiLian",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/NousResearch/hermes-agent.git"
+    "url": "git+https://github.com/xujuan-cyber/fulilian.git"
   },
   "type": "module",
   "main": "dist/electron-main.mjs",

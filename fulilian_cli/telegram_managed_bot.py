@@ -18,10 +18,35 @@ from typing import Optional
 
 import httpx
 
-# Default pairing API base URL (Nous-hosted Cloudflare Worker).
-# Override for PoC/staging with TELEGRAM_ONBOARDING_URL.
-DEFAULT_API_URL = "https://setup.hermes-agent.nousresearch.com"
+# 配对端点解析（FULILIAN_PAIRING_MODE）：
+# - local（默认）：使用 FULILIAN_PAIRING_API_URL 指向的自建配对服务；
+#   未配置时不内置任何第三方端点，调用时抛出带配置指引的 ValueError。
+# - legacy（过渡开关）：沿用分叉前上游的托管配对端点，保留一个版本周期，
+#   便于已部署流程迁移；后续版本将删除。
+LEGACY_API_URL = "https://setup.hermes-agent.nousresearch.com"
 TELEGRAM_ONBOARDING_URL_ENV = "TELEGRAM_ONBOARDING_URL"
+PAIRING_MODE_ENV = "FULILIAN_PAIRING_MODE"
+PAIRING_API_URL_ENV = "FULILIAN_PAIRING_API_URL"
+
+
+def resolve_api_url(api_url: str | None = None) -> str:
+    """按 local/legacy 两档解析配对 API 基址（末尾斜杠归一化）。"""
+    if api_url:
+        return api_url.rstrip("/")
+    override = os.environ.get(TELEGRAM_ONBOARDING_URL_ENV, "").strip()
+    if override:
+        return override.rstrip("/")
+    mode = os.environ.get(PAIRING_MODE_ENV, "local").strip().lower()
+    if mode in ("legacy", "nous"):
+        return LEGACY_API_URL
+    self_hosted = os.environ.get(PAIRING_API_URL_ENV, "").strip()
+    if self_hosted:
+        return self_hosted.rstrip("/")
+    raise ValueError(
+        "Telegram 托管配对未配置服务端：请设置 "
+        f"{PAIRING_API_URL_ENV} 指向自建配对服务；或设置 "
+        f"{PAIRING_MODE_ENV}=legacy 暂用上游托管端点（过渡期）"
+    )
 
 # The Nous-hosted manager bot username (without @). The backend returns the
 # actual deep link, so this is only used by local helpers/tests.
@@ -57,10 +82,8 @@ class TelegramBotSetupResult:
 
 
 def _api_url(api_url: str | None = None) -> str:
-    """Resolve the onboarding API URL, honoring the PoC env override."""
-    return (
-        api_url or os.environ.get(TELEGRAM_ONBOARDING_URL_ENV) or DEFAULT_API_URL
-    ).rstrip("/")
+    """Resolve the onboarding API base URL (local/legacy 两档，见 resolve_api_url)."""
+    return resolve_api_url(api_url)
 
 
 def is_valid_telegram_bot_token(token: object) -> bool:

@@ -88,6 +88,8 @@ jobs:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           SKILLS_INDEX_RUN_ID: ${{ github.event.inputs.skills_index_run_id || '' }}
           REBUILD_SKILLS_INDEX: ${{ github.event.inputs.rebuild_skills_index || 'false' }}
+          # 当前已发布索引的 URL（仓库级 vars 配置；未配置时直接走重新爬取）
+          SKILLS_INDEX_URL: ${{ vars.SKILLS_INDEX_URL || '' }}
         run: |
           # The unified external catalog is expensive to crawl and can burn
           # through the repository installation's GitHub API quota when several
@@ -146,11 +148,13 @@ jobs:
             echo "::warning::Could not use skills-index artifact from run $SKILLS_INDEX_RUN_ID; trying live index"
           fi
 
-          echo "Downloading currently live skills index"
-          if curl -fsSL --retry 3 --retry-delay 5 \
-            "https://hermes-agent.nousresearch.com/docs/api/skills-index.json" \
-            -o "$INDEX_PATH" && validate_index; then
-            exit 0
+          if [ -n "$SKILLS_INDEX_URL" ]; then
+            echo "Downloading currently live skills index"
+            if curl -fsSL --retry 3 --retry-delay 5 \
+              "$SKILLS_INDEX_URL" \
+              -o "$INDEX_PATH" && validate_index; then
+              exit 0
+            fi
           fi
 
           echo "::warning::Live skills index unavailable or unhealthy; falling back to a fresh crawl"

@@ -27,8 +27,10 @@ from fulilian_constants import get_fulilian_home
 logger = logging.getLogger(__name__)
 
 # Canonical index location. Override via config key ``plugins.index_url``.
+# 自有索引源：直接复用仓库内置 seed（同一 JSON schema）；远端不可达时
+# 本就有 SEED_INDEX_PATH 兜底，故该 URL 暂时 404 不会破坏插件发现。
 DEFAULT_INDEX_URL = (
-    "https://raw.githubusercontent.com/NousResearch/hermes-plugin-index/main/index.json"
+    "https://raw.githubusercontent.com/xujuan-cyber/fulilian/main/fulilian_cli/data/plugin_index.json"
 )
 
 # Cache the fetched index for 24 hours; a stale cache is still preferred over

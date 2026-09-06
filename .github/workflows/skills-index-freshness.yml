@@ -18,7 +18,9 @@ permissions:
 
 jobs:
   check-freshness:
-    if: github.repository == 'xujuan-cyber/fulilian'
+    # 站点域名属部署环境配置：仓库级 vars.SKILLS_INDEX_URL 未设置时跳过，
+    # 避免对固定第三方域名的硬编码依赖
+    if: github.repository == 'xujuan-cyber/fulilian' && vars.SKILLS_INDEX_URL != ''
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: trusted-automation
@@ -33,9 +35,11 @@ jobs:
 
       - name: Probe live index
         id: probe
+        env:
+          SKILLS_INDEX_URL: ${{ vars.SKILLS_INDEX_URL }}
         run: |
           set -e
-          URL="https://hermes-agent.nousresearch.com/docs/api/skills-index.json"
+          URL="$SKILLS_INDEX_URL"
           echo "Probing $URL"
           # -L follows redirects; -f fails on HTTP errors; -s suppresses progress
           if ! curl -fsSL --retry 3 --retry-delay 10 -o /tmp/skills-index.json "$URL"; then
