@@ -158,14 +158,11 @@ DEFAULT_AGENT_IDENTITY = (
 )
 
 FULILIAN_AGENT_HELP_GUIDANCE = (
-    "You run on FuLiLian. When the user needs help with "
-    "Fulilian itself — configuring, setting up, using, extending, or troubleshooting "
-    "it — or when you need to understand your own features, tools, or capabilities, "
-    "the documentation at https://github.com/xujuan-cyber/fulilian is your "
-    "authoritative reference and always holds the latest, most up-to-date "
-    "information. Load the `fulilian-agent` skill with skill_view(name='fulilian-agent') "
-    "for additional guidance and proven workflows, but treat the docs as the source "
-    "of truth when the two differ."
+    "You run on FuLiLian. For help with Fulilian itself — configuring, using, extending, "
+    "or troubleshooting — or understanding your own features, the docs at "
+    "https://github.com/xujuan-cyber/fulilian are the authoritative source of truth. "
+    "Load the `fulilian-agent` skill with skill_view(name='fulilian-agent') for additional "
+    "workflows."
 )
 
 # Variant injected when the skill tools are not in the session's toolset
@@ -173,52 +170,34 @@ FULILIAN_AGENT_HELP_GUIDANCE = (
 # model at skill_view() there would be a dangling reference — the docs URL is
 # the only actionable pointer.
 FULILIAN_AGENT_HELP_GUIDANCE_NO_SKILLS = (
-    "You run on FuLiLian. When the user needs help with "
-    "Fulilian itself — configuring, setting up, using, extending, or troubleshooting "
-    "it — or when you need to understand your own features, tools, or capabilities, "
-    "the documentation at https://github.com/xujuan-cyber/fulilian is the "
-    "authoritative reference and always holds the latest, most up-to-date "
-    "information. Point the user there (or read it yourself if you have a way to "
-    "fetch web content)."
+    "You run on FuLiLian. For help with Fulilian itself — configuring, using, extending, "
+    "or troubleshooting — or understanding your own features, the docs at "
+    "https://github.com/xujuan-cyber/fulilian are the authoritative source. "
+    "Point the user there (or read it yourself if you can fetch web content)."
 )
 
 MEMORY_GUIDANCE = (
-    "You have persistent memory across sessions. Save durable facts using the memory "
-    "tool: user preferences, environment details, tool quirks, and stable conventions. "
-    "Memory is injected into every turn, so keep it compact and focused on facts that "
-    "will still matter later.\n"
-    "Prioritize what reduces future user steering — the most valuable memory is one "
-    "that prevents the user from having to correct or remind you again. "
-    "User preferences and recurring corrections matter more than procedural task details.\n"
-    "Do NOT save task progress, session outcomes, completed-work logs, or temporary TODO "
-    "state to memory; use session_search to recall those from past transcripts. "
-    "Specifically: do not record PR numbers, issue numbers, commit SHAs, 'fixed bug X', "
-    "'submitted PR Y', 'Phase N done', file counts, or any artifact that will be stale "
-    "in 7 days. If a fact will be stale in a week, it does not belong in memory. "
-    "If you've discovered a new way to do something, solved a problem that could be "
-    "necessary later, save it as a skill with the skill tool.\n"
-    "Write memories as declarative facts, not instructions to yourself. "
+    "You have persistent memory and user profile across sessions. Save durable facts with "
+    "the memory tool: user preferences, environment details, tool quirks, name, role, and "
+    "communication style. Both are injected into every turn, so keep entries compact and "
+    "focused on facts that will still matter later.\n"
+    "The built-in memory notes store is disabled — write to the profile (target='user') "
+    "for user facts, never target='memory'.\n"
+    "Prioritize what reduces future user steering — the most valuable entry prevents the "
+    "user from having to correct you again. User preferences and recurring corrections "
+    "matter more than procedural task details.\n"
+    "Do NOT save task progress, session outcomes, TODO state, PR numbers, commit SHAs, "
+    "file counts, or any artifact that will be stale in 7 days. Use session_search to "
+    "recall those from past transcripts.\n"
+    "Write entries as declarative facts, not instructions. "
     "'User prefers concise responses' ✓ — 'Always respond concisely' ✗. "
     "'Project uses pytest with xdist' ✓ — 'Run tests with pytest -n 4' ✗. "
-    "Imperative phrasing gets re-read as a directive in later sessions and can "
-    "cause repeated work or override the user's current request. Procedures and "
-    "workflows belong in skills, not memory."
+    "Imperative phrasing gets re-read as a directive in later sessions and can cause "
+    "repeated work. Procedures and workflows belong in skills, not memory. Save "
+    "reusable approaches as skills with the skill tool."
 )
 
-USER_PROFILE_GUIDANCE = (
-    "You have a persistent user profile across sessions. Save durable facts about "
-    "the user with the memory tool (target='user'): name, role, preferences, "
-    "corrections, and communication style. The profile is injected into every turn, "
-    "so keep it compact and focused on facts that will still matter later.\n"
-    "The built-in memory notes store is disabled — write only to the user profile "
-    "(target='user'), never target='memory'.\n"
-    "Prioritize what reduces future user steering — the most valuable entry is one "
-    "that prevents the user from having to correct or remind you again.\n"
-    "Write entries as declarative facts, not instructions to yourself. "
-    "'User prefers concise responses' ✓ — 'Always respond concisely' ✗. "
-    "Imperative phrasing gets re-read as a directive in later sessions and can "
-    "cause repeated work or override the user's current request."
-)
+USER_PROFILE_GUIDANCE = MEMORY_GUIDANCE  # merged with MEMORY_GUIDANCE for compactness
 
 SESSION_SEARCH_GUIDANCE = (
     "When the user references something from a past conversation or you suspect "
@@ -498,81 +477,65 @@ PARALLEL_TOOL_CALL_GUIDANCE = (
 OPENAI_MODEL_EXECUTION_GUIDANCE = (
     "# Execution discipline\n"
     "<tool_persistence>\n"
-    "- Use tools whenever they improve correctness, completeness, or grounding.\n"
-    "- Do not stop early when another tool call would materially improve the result.\n"
-    "- If a tool returns empty, partial, or suspiciously narrow results, retry "
-    "with a broader or different query or strategy before concluding.\n"
-    "- Keep calling tools until: (1) the task is complete, AND (2) you have verified "
-    "the result.\n"
+    "- Use tools whenever they improve correctness. Do not stop early if another call "
+    "would improve the result.\n"
+    "- If a tool returns empty or partial results, retry with a broader query before concluding.\n"
+    "- Keep calling tools until: (1) task is complete, AND (2) you have verified the result.\n"
     "</tool_persistence>\n"
     "\n"
     "<mandatory_tool_use>\n"
-    "NEVER answer these from memory or mental computation — ALWAYS use a tool:\n"
-    "- Arithmetic, math, calculations → use terminal or execute_code\n"
-    "- Hashes, encodings, checksums → use terminal (e.g. sha256sum, base64)\n"
-    "- Current time, date, timezone → use terminal (e.g. date)\n"
-    "- System state: OS, CPU, memory, disk, ports, processes → use terminal\n"
-    "- File contents, sizes, line counts → use read_file, search_files, or terminal\n"
-    "- Git history, branches, diffs → use terminal\n"
-    "- Current facts (weather, news, versions) → use web_search\n"
-    "Your memory and user profile describe the USER, not the system you are "
-    "running on. The execution environment may differ from what the user profile "
-    "says about their personal setup.\n"
+    "NEVER answer from memory — ALWAYS use a tool for:\n"
+    "- Arithmetic, math, calculations → terminal or execute_code\n"
+    "- Hashes, encodings, checksums → terminal (e.g. sha256sum, base64)\n"
+    "- Current time, date, timezone → terminal (e.g. date)\n"
+    "- System state: OS, CPU, memory, disk, ports, processes → terminal\n"
+    "- File contents, sizes, line counts → read_file, search_files, or terminal\n"
+    "- Git history, branches, diffs → terminal\n"
+    "- Current facts (weather, news, versions) → web_search\n"
+    "Your memory and profile describe the USER, not the system — the execution "
+    "environment may differ from their personal setup.\n"
     "</mandatory_tool_use>\n"
     "\n"
     "<act_dont_ask>\n"
-    "When a question has an obvious default interpretation, act on it immediately "
-    "instead of asking for clarification. Examples:\n"
-    "- 'Is port 443 open?' → check THIS machine (don't ask 'open where?')\n"
-    "- 'What OS am I running?' → check the live system (don't use user profile)\n"
-    "- 'What time is it?' → run `date` (don't guess)\n"
-    "Only ask for clarification when the ambiguity genuinely changes what tool "
-    "you would call.\n"
+    "Act on obvious defaults immediately instead of asking. Examples:\n"
+    "- 'Is port 443 open?' → check THIS machine\n"
+    "- 'What OS am I running?' → check the live system\n"
+    "- 'What time is it?' → run `date`\n"
+    "Ask only when ambiguity genuinely changes which tool to call.\n"
     "</act_dont_ask>\n"
     "\n"
     "<prerequisite_checks>\n"
-    "- Before taking an action, check whether prerequisite discovery, lookup, or "
-    "context-gathering steps are needed.\n"
-    "- Do not skip prerequisite steps just because the final action seems obvious.\n"
-    "- If a task depends on output from a prior step, resolve that dependency first.\n"
+    "- Before acting, check if prerequisite discovery or context-gathering is needed.\n"
+    "- Do not skip steps just because the final action seems obvious.\n"
+    "- If a task depends on a prior step's output, resolve that dependency first.\n"
     "</prerequisite_checks>\n"
     "\n"
     "<verification>\n"
-    "Before finalizing your response:\n"
+    "Before finalizing:\n"
     "- Correctness: does the output satisfy every stated requirement?\n"
     "- Grounding: are factual claims backed by tool outputs or provided context?\n"
-    "- Formatting: does the output match the requested format or schema?\n"
-    "- Safety: if the next step has side effects (file writes, commands, API calls), "
-    "confirm scope before executing.\n"
-    "- Completion: 'done' means every named acceptance criterion is verified — "
-    "never a plausible subset. Completing your plan is not itself the answer; "
-    "the requested output must appear in your response.\n"
+    "- Formatting: does the output match the requested format?\n"
+    "- Safety: if next step has side effects, confirm scope before executing.\n"
+    "- Completion: 'done' means every acceptance criterion is verified — never a plausible subset.\n"
     "</verification>\n"
     "\n"
     "<external_state_verification>\n"
-    "- After any state-changing write to an external system (API call, message "
-    "post, record update), verify the effect by reading back the exact target "
-    "before claiming success — a successful tool call is not a successful task. "
+    "- After any state-changing write to an external system, verify by reading back "
+    "the target before claiming success. A successful tool call is not a successful task. "
     "Do NOT re-verify internal file edits a tool already confirmed.\n"
-    "- Declared totals in responses (total, reply_count, has_more, '...N more') "
-    "are hard assertions. If your enumerated count disagrees, re-fetch or parse "
-    "programmatically — never finalize on 'go with what I have'.\n"
-    "- When building write payloads, set fields explicitly rather than relying "
-    "on provider defaults that could contradict intent.\n"
+    "- Declared totals (total, reply_count, has_more, '...N more') are hard assertions. "
+    "If your count disagrees, re-fetch — never finalize on 'go with what I have'.\n"
+    "- When building write payloads, set fields explicitly rather than relying on provider defaults.\n"
     "</external_state_verification>\n"
     "\n"
     "<literal_preservation>\n"
-    "- Preserve identifiers, commands, and values exactly as given — never "
-    "'repair' or normalize a token that fails a stated format. A successful "
-    "lookup does not validate a malformed source token; validate format first, "
-    "then look up.\n"
+    "- Preserve identifiers, commands, and values exactly as given — never 'repair' "
+    "a token that fails a stated format. Validate format first, then look up.\n"
     "</literal_preservation>\n"
     "\n"
     "<missing_context>\n"
-    "- If required context is missing, do NOT guess or hallucinate an answer.\n"
-    "- Use the appropriate lookup tool when missing information is retrievable "
-    "(search_files, web_search, read_file, etc.).\n"
-    "- Ask a clarifying question only when the information cannot be retrieved by tools.\n"
+    "- If required context is missing, do NOT guess. Use lookup tools for retrievable "
+    "info. Ask only when tools cannot retrieve it.\n"
     "- If you must proceed with incomplete information, label assumptions explicitly.\n"
     "</missing_context>"
 )
@@ -589,11 +552,11 @@ def execution_guidance_text(valid_tool_names=None) -> str:
     text = OPENAI_MODEL_EXECUTION_GUIDANCE
     if valid_tool_names is not None and "web_search" not in valid_tool_names:
         text = text.replace(
-            "- Current facts (weather, news, versions) → use web_search\n", ""
+            "- Current facts (weather, news, versions) → web_search\n", ""
         )
         text = text.replace(
-            "(search_files, web_search, read_file, etc.)",
-            "(search_files, read_file, etc.)",
+            "Use lookup tools for retrievable ",
+            "Use search_files, read_file, etc. for retrievable ",
         )
     return text
 
@@ -1502,6 +1465,36 @@ def drain_truncation_warnings() -> list:
 _SKILLS_PROMPT_CACHE_MAX = 32
 _SKILLS_PROMPT_CACHE: OrderedDict[tuple, str] = OrderedDict()
 _SKILLS_PROMPT_CACHE_LOCK = threading.Lock()
+
+# ── On-demand skill loading tracker ──────────────────────────────────────────
+# Tracks which skills have been loaded via skill_view() so the system prompt
+# can show their descriptions while keeping all other skills as names-only.
+# Thread-safe; cleared on session start (/reset, new session).
+_LOADED_SKILL_NAMES: set[str] = set()
+_LOADED_SKILL_NAMES_LOCK = threading.Lock()
+
+
+def record_loaded_skill(name: str) -> None:
+    """Record that a skill has been loaded by name via skill_view().
+
+    Thread-safe.  Used by the system prompt builder to include descriptions
+    of loaded skills while keeping unloaded skills as names-only.
+    """
+    with _LOADED_SKILL_NAMES_LOCK:
+        _LOADED_SKILL_NAMES.add(name)
+
+
+def get_loaded_skill_names() -> frozenset[str]:
+    """Return the set of skill names that have been loaded this session."""
+    with _LOADED_SKILL_NAMES_LOCK:
+        return frozenset(_LOADED_SKILL_NAMES)
+
+
+def clear_loaded_skills() -> None:
+    """Clear the loaded-skill tracker (e.g. on session reset)."""
+    with _LOADED_SKILL_NAMES_LOCK:
+        _LOADED_SKILL_NAMES.clear()
+
 # v2: entries gained org provenance fields (org_id/org_author/rel_dir) for M2
 # org-shared skills; older snapshots are discarded and rebuilt.
 _SKILLS_SNAPSHOT_VERSION = 2
@@ -1741,6 +1734,7 @@ def build_skills_system_prompt(
     available_toolsets: "set[str] | None" = None,
     compact_categories: "frozenset[str] | None" = None,
     skills_dir_override: "Path | None" = None,
+    names_only: "bool | None" = None,
 ) -> str:
     """Build a compact skill index for the system prompt.
 
@@ -1761,6 +1755,11 @@ def build_skills_system_prompt(
     the rendered index. Nothing is ever hidden: every skill name stays
     visible and loadable via ``skill_view`` / ``skills_list``; only the
     descriptions are dropped, and a footer note explains the demotion.
+
+    ``names_only`` enables global names-only mode: **all** skills start as
+    names-only except those explicitly loaded via ``skill_view()``, which have
+    their descriptions shown. This dramatically reduces system prompt size
+    (4.5K → ~0.5K tokens) while keeping the full skill index discoverable.
     """
     # Home resolution is EXPLICIT when a caller passes skills_dir_override
     # (the agent knows its own profile home from its session_db path). This
@@ -1793,6 +1792,7 @@ def build_skills_system_prompt(
             available_tools,
             available_toolsets,
             compact_categories,
+            names_only,
             project_dirs=project_dirs,
         )
     finally:
@@ -1806,6 +1806,7 @@ def _build_skills_system_prompt_inner(
     available_tools: "set[str] | None",
     available_toolsets: "set[str] | None",
     compact_categories: "frozenset[str] | None",
+    names_only: "bool | None" = None,
     project_dirs: "list[Path] | None" = None,
 ) -> str:
     # Include the resolved platform so per-platform disabled-skill lists
@@ -1822,6 +1823,8 @@ def _build_skills_system_prompt_inner(
         _platform_hint,
         tuple(sorted(disabled)),
         tuple(sorted(compact_categories or ())),
+        tuple(sorted(get_loaded_skill_names())),
+        names_only,
     )
     with _SKILLS_PROMPT_CACHE_LOCK:
         cached = _SKILLS_PROMPT_CACHE.get(cache_key)
@@ -2044,13 +2047,29 @@ def _build_skills_system_prompt_inner(
         if cat.split("/", 1)[0] in (compact_categories or frozenset())
     )
 
+    # Global names-only mode (enabled by names_only=True): all unloaded skills
+    # become names-only. Only already loaded skills (via skill_view()) keep
+    # their descriptions in the index. This dramatically reduces system prompt
+    # size from ~4.5K to ~0.5K tokens while keeping all skills discoverable.
+    loaded_skills = get_loaded_skill_names() if names_only else frozenset()
+
     hidden_note = ""
-    if demoted:
-        hidden_note = (
-            "\n(Categories marked [names only] are outside the current coding "
-            "context, so their descriptions are omitted — the skills work "
-            "normally and load with skill_view(name) as usual.)"
-        )
+    if demoted or names_only:
+        notes = []
+        if demoted:
+            notes.append(
+                "categories marked [names only] are outside the current coding "
+                "context, so their descriptions are omitted"
+            )
+        if names_only:
+            notes.append(
+                "unloaded skills are names-only — load with skill_view(name) "
+                "to see descriptions when needed"
+            )
+        if len(notes) == 1:
+            hidden_note = f"\n({notes[0]} — the skills work normally and load with skill_view(name) as usual.)"
+        else:
+            hidden_note = f"\n({notes[0]}, {notes[1]} — the skills work normally and load with skill_view(name) as usual.)"
 
     if not skills_by_category:
         result = ""
@@ -2065,6 +2084,7 @@ def _build_skills_system_prompt_inner(
             # Deduplicate and sort skills within each category
             seen = set()
             if category in demoted:
+                # Category fully demoted (posture-driven): all names-only
                 names = sorted({name for name, _ in skills_by_category[category]})
                 index_lines.append(f"  {category} [names only]: {', '.join(names)}")
                 continue
@@ -2077,7 +2097,9 @@ def _build_skills_system_prompt_inner(
                 if name in seen:
                     continue
                 seen.add(name)
-                if desc:
+                # In names_only mode: only loaded skills show descriptions;
+                # unloaded stay names-only (still visible, just no description)
+                if desc and (not names_only or name in loaded_skills):
                     index_lines.append(f"    - {name}: {desc}")
                 else:
                     index_lines.append(f"    - {name}")

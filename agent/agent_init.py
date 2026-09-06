@@ -2274,6 +2274,28 @@ def init_agent(
                 compression_threshold_tokens = None
         except (TypeError, ValueError):
             compression_threshold_tokens = None
+    # Frozen-segment compaction mode: each compression summarizes ONLY the
+    # turns added since the previous one; the produced summary block is
+    # frozen (never merged/rewritten by later compressions) and stays in the
+    # live transcript verbatim. The trigger threshold is evaluated on the
+    # new-content basis (live tokens minus frozen-segment estimate), so
+    # frozen segments do not consume the trigger budget. See
+    # tests/agent/test_segment_mode.py.
+    compression_segment_mode = is_truthy_value(
+        _compression_cfg.get("segment_mode"), default=False
+    )
+    # Safety valve for segment mode: frozen segments grow linearly. When
+    # their estimated tokens exceed this fraction of the context length, ONE
+    # emergency consolidation pass merges them back into a single segment.
+    compression_frozen_ceiling_ratio = _compression_cfg.get(
+        "frozen_ceiling_ratio"
+    )
+    try:
+        compression_frozen_ceiling_ratio = float(compression_frozen_ceiling_ratio)
+    except (TypeError, ValueError):
+        compression_frozen_ceiling_ratio = 0.6
+    if not 0.0 < compression_frozen_ceiling_ratio <= 1.0:
+        compression_frozen_ceiling_ratio = 0.6
     compression_checkpoint_required = is_truthy_value(
         _compression_cfg.get("checkpoint_required"), default=False
     )
@@ -2825,6 +2847,12 @@ def init_agent(
         _cc._micro_compact_defrag_threshold_tokens = (
             compression_micro_compact_defrag_tokens
         )
+    # Segment mode rides as attributes (same pattern as micro_compact) so a
+    # plugin context engine without the feature simply ignores the config.
+    if _cc is not None and hasattr(_cc, "segment_mode"):
+        _cc.segment_mode = compression_segment_mode
+    if _cc is not None and hasattr(_cc, "frozen_ceiling_ratio"):
+        _cc.frozen_ceiling_ratio = compression_frozen_ceiling_ratio
     agent.compression_checkpoint_required = compression_checkpoint_required
     agent.codex_app_server_auto_compaction = codex_app_server_auto_compaction
     agent.codex_responses_native_compaction = codex_responses_native_compaction

@@ -255,6 +255,11 @@ COMPRESSED_SUMMARY_HAS_USER_TURN_KEY = "_compressed_summary_has_user_turn"
 # micro markers: a batch marker's content is NOT contained in the micro
 # rolling summary, so dropping or rewriting one destroys history.
 MICRO_COMPACT_MARKER_KEY = "_micro_compact_marker"
+# Segment-mode marker: stamped on batch-produced summary blocks whose text is
+# FROZEN — later compressions must carry them verbatim (never merge/rewrite)
+# and exclude their tokens from the trigger basis. Unlike micro markers this
+# key is never removed, so the block stays immutable for the session's life.
+FROZEN_SEGMENT_KEY = "_frozen_segment"
 _DB_PERSISTED_MARKER = "_db_persisted"
 PROACTIVE_PRUNE_REARM_MODEL_CONFIG_KEY = "_proactive_prune_rearm_tokens"
 
@@ -1088,7 +1093,26 @@ _LOW_SIGNAL_TOOL_RE = re.compile(
 # for session_search recovery.
 _LEAN_ANCHOR_HEADING = "## Anchor Index (mechanically extracted, exact)"
 _LEAN_ANCHOR_BUDGET_CHARS = 7_000
+# Category ORDER is load-bearing: the per-category budget below is sequential
+# (first categories that overflow the char budget win, later ones are dropped),
+# so CTF-specific categories are pinned ahead of the upstream coding ones —
+# the exploit-critical needles must survive even on a squeezed budget.
 _ANCHOR_PATTERNS: "list[tuple[str, re.Pattern[str], int]]" = [
+    # ── CTF fork additions ──
+    # Captured flags / flag-format hints: the single most load-bearing fact.
+    ("flags", re.compile(r"\b[a-z0-9_]*(?:flag|ctf|thm|htb)\{[^}\n]{4,100}\}", re.IGNORECASE), 60),
+    # MD5/SHA-1/SHA-256 (word-bounded, exact lengths).
+    ("hashes", re.compile(r"\b(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{40}|[0-9a-fA-F]{64})\b"), 40),
+    ("cves", re.compile(r"\bCVE-\d{4}-\d{4,7}\b", re.IGNORECASE), 40),
+    # Pwn/re offsets and addresses.
+    ("offsets", re.compile(r"\b0x[0-9a-fA-F]{4,16}\b"), 40),
+    # Targets and services. 0.0.0.0 bindings are noise (see _ANCHOR_NOISE);
+    # 127.0.0.1 stays — local services are load-bearing in CTF work.
+    ("hosts", re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}(?::\d{1,5})?\b"), 60),
+    # Long base64 payloads (shells, encoded blobs). Values are long, so the
+    # cap is small; overlap with ``hashes`` on 64-char hex is accepted.
+    ("encoded blobs", re.compile(r"\b[A-Za-z0-9+/]{48,}={0,2}\b"), 12),
+    # ── Upstream coding categories (order preserved from hermes-agent) ──
     ("PRs/issues", re.compile(r"#\d{3,6}\b"), 120),
     ("commits", re.compile(r"\b[0-9a-f]{9,40}\b"), 40),
     ("branches", re.compile(r"\b(?:fix|feat|docs|refactor|chore|salvage|ent)/[A-Za-z0-9._/-]{3,60}"), 40),
@@ -1099,6 +1123,7 @@ _ANCHOR_PATTERNS: "list[tuple[str, re.Pattern[str], int]]" = [
 ]
 _ANCHOR_NOISE = frozenset({
     "@teknium", "@teknium1",  # session owner, in every transcript
+    "0.0.0.0",  # wildcard bind address, meaningless as a target
 })
 
 
@@ -1292,8 +1317,8 @@ _AUTO_FOCUS_MAX_CHARS = 700
 _ACTIVE_TASK_MAX_CHARS = 1400
 # Keep a short run of recent messages verbatim even when the token budget is
 # already exhausted.  The public ``protect_last_n`` default is intentionally
-# high for small/light tails, but using all 20 as a hard floor here would bring
-# back the old large-tool-output case where nothing can be compacted.
+# moderate for small/light tails, but using it as a hard floor here would
+# bring back the old large-tool-output case where nothing can be compacted.
 _MAX_TAIL_MESSAGE_FLOOR = 8
 
 # Pre-LLM feasibility skip (#60451): when the compressible middle is below
@@ -1322,7 +1347,25 @@ _MAX_KEEP_TOOL_IMAGES = 3
 # eats most of the reclaimed headroom, so compaction re-fires every 1-2
 # turns and the session spends most of its wall-clock summarizing.
 _SMALL_CTX_WINDOW_LIMIT = 512_000
-_SMALL_CTX_THRESHOLD_PERCENT = 0.75
+_SMALL_CTX_THRESHOLD_PERCENT = 0.60
+
+# Force-compression interval: trigger compaction every N turns even when the
+# token threshold has not been reached, preventing unbounded context growth
+# between passive threshold-based compressions.  20 turns means a 128K model
+# stays under ~60-70K consumed even in tool-heavy sessions.
+_FORCE_COMPRESS_TURNS = 50
+
+# Proactive-compression threshold: trigger compression when turns since last
+# compress exceeds this value AND the token threshold hasn't been reached yet.
+# This fires earlier than _FORCE_COMPRESS_TURNS to proactively shrink context
+# before it grows large, saving 50-100K tokens per call in long conversations.
+# 15 turns ≈ 30+ messages (1 user + 1 assistant per round).
+_PROACTIVE_COMPRESS_TURNS = 45
+
+# Turn-based triggers (proactive/force) additionally require the context to
+# occupy at least this fraction of the model window — on large-window models
+# (1M) a low token count is no reason to pay a multi-minute compaction.
+_TURNBASED_MIN_OCCUPANCY = 0.5
 
 
 _PATH_MENTION_RE = re.compile(r"(?:/|~/?|[A-Za-z]:\\)[^\s`'\")\]}<>]+")
@@ -1355,6 +1398,45 @@ def _redact_compaction_text(text: Any) -> str:
         force=True,
         redact_url_credentials=True,
     )
+
+
+# A summary response stopped with finish_reason="length" is PARTIAL text:
+# the summarizer hit its output token cap mid-generation. Persisted anyway,
+# the cut-off text replaces the real middle turns AND feeds back into every
+# subsequent iterative-update prompt, compounding the loss across
+# compactions. Both summary paths therefore treat it as a failure
+# (ported from hermes-agent; same class as pi#7048).
+_TRUNCATED_SUMMARY_MARKER = "finish_reason=length"
+
+
+def _response_finish_reason(response: Any) -> str:
+    """Return ``choices[0].finish_reason`` from a dict- or object-shaped response.
+
+    Mirrors the defensive message extraction in ``_generate_summary``: some
+    OpenAI-compatible proxies / local backends return plain dicts, others
+    return SDK objects, and either may omit the field entirely. Returns the
+    lowercased finish reason, or ``""`` when absent/unreadable.
+    """
+    try:
+        if isinstance(response, dict):
+            choices = response.get("choices") or [{}]
+            first = choices[0] if choices else {}
+            reason = (
+                first.get("finish_reason")
+                if isinstance(first, dict)
+                else getattr(first, "finish_reason", None)
+            )
+        else:
+            choices = getattr(response, "choices", None) or [None]
+            first = choices[0] if choices else None
+            reason = getattr(first, "finish_reason", None)
+            if reason is None and isinstance(first, dict):
+                reason = first.get("finish_reason")
+        return (
+            reason.lower() if isinstance(reason, str) and reason else ""
+        )
+    except Exception:
+        return ""
 
 
 def _dedupe_append(items: list[str], value: str, *, limit: int) -> None:
@@ -2163,6 +2245,12 @@ class ContextCompressor(ContextEngine):
       5. On subsequent compactions, iteratively update the previous summary
     """
 
+    # Class-level defaults so instances built without __init__ (test
+    # doubles, plugin shims) still present a coherent segment-mode surface.
+    segment_mode: bool = False
+    frozen_ceiling_ratio: float = 0.6
+    _last_frozen_tokens_estimate: int = 0
+
     @property
     def name(self) -> str:
         return "compressor"
@@ -2202,7 +2290,7 @@ class ContextCompressor(ContextEngine):
         self._last_compression_telemetry = None
         self._active_compression_telemetry = None
         self._compression_telemetry_seed = None
-        self._proactive_prune_rearm_tokens = 0
+        self._reset_proactive_prune_rearm()
 
         # Micro-compaction state reset
         self._micro_compact_cursor = 0
@@ -2488,7 +2576,7 @@ class ContextCompressor(ContextEngine):
         self._last_compression_telemetry = None
         self._active_compression_telemetry = None
         self._compression_telemetry_seed = None
-        self._proactive_prune_rearm_tokens = 0
+        self._reset_proactive_prune_rearm()
 
     def bind_session_state(self, session_db: Any = None, session_id: str = "") -> None:
         """Bind the current session row so durable cooldowns can round-trip."""
@@ -2503,7 +2591,7 @@ class ContextCompressor(ContextEngine):
         self._prellm_skip_count = 0
         self._anti_thrash_recovery_deadline = 0.0
         self._structural_no_op_backoff_until = 0.0
-        self._proactive_prune_rearm_tokens = 0
+        self._reset_proactive_prune_rearm()
         self.get_active_compression_failure_cooldown()
         self._load_fallback_compression_streak()
         self._load_ineffective_compression_count()
@@ -2616,6 +2704,18 @@ class ContextCompressor(ContextEngine):
             patcher(session_id, {PROACTIVE_PRUNE_REARM_MODEL_CONFIG_KEY: None})
         except Exception as exc:
             logger.debug("proactive prune runway clear failed: %s", exc)
+
+    def _reset_proactive_prune_rearm(self) -> None:
+        """Zero the rearm mark AND release the no-op warning dedup key.
+
+        Every path that voids the runway (compress commit, session
+        reset/end, bind, model switch) must go through this — clearing only
+        the mark left a stale dedup key that suppressed the over-threshold
+        lockout warning on the next distinct lockout (#101889 follow-up).
+        """
+        self._proactive_prune_rearm_tokens = 0
+        self._last_reclaim_block_warn = None
+        self._last_reclaim_block_warn = None
 
     def _persist_fallback_compression_streak(self) -> None:
         session_db = getattr(self, "_session_db", None)
@@ -3051,7 +3151,7 @@ class ContextCompressor(ContextEngine):
         # sizes. Same durable-sync discipline as the strike reset above: clear
         # the model_config copy too, so a restart doesn't resurrect a runway
         # this recalibration just voided.
-        self._proactive_prune_rearm_tokens = 0
+        self._reset_proactive_prune_rearm()
         self._clear_durable_proactive_prune_rearm()
 
     # When the MINIMUM_CONTEXT_LENGTH floor meets/exceeds a small context
@@ -3135,7 +3235,7 @@ class ContextCompressor(ContextEngine):
         """Apply the small-context threshold floor (raise-only).
 
         Models under ``_SMALL_CTX_WINDOW_LIMIT`` (512K) trigger at no less
-        than ``_SMALL_CTX_THRESHOLD_PERCENT`` (75%) of the window.  An
+        than ``_SMALL_CTX_THRESHOLD_PERCENT`` (60%) of the window.  An
         explicitly higher threshold (user config or per-model autoraise,
         e.g. Codex gpt-5.5's 85%) always wins; only lower values are raised.
         Large-context models keep the configured value — at 512K+ the default
@@ -3189,9 +3289,9 @@ class ContextCompressor(ContextEngine):
     def __init__(
         self,
         model: str,
-        threshold_percent: float = 0.50,
+        threshold_percent: float = 0.60,
         protect_first_n: int = 3,
-        protect_last_n: int = 20,
+        protect_last_n: int = 7,
         summary_target_ratio: float = 0.20,
         quiet_mode: bool = False,
         summary_model_override: str = None,
@@ -3209,6 +3309,7 @@ class ContextCompressor(ContextEngine):
         proactive_prune_min_reclaim_tokens: int = 4096,
         min_tail_user_messages: int = 1,
         tail_mode: str = "lean",
+        segment_mode: bool = False,
     ):
         self.model = model
         self.base_url = base_url
@@ -3219,6 +3320,23 @@ class ContextCompressor(ContextEngine):
         # tail + verbatim-user-message summary section + recovery pointers;
         # "legacy" = 0.20*window tail (shipping behavior).
         self.tail_mode = tail_mode if tail_mode in ("legacy", "lean") else "lean"
+        # Frozen-segment mode: each compression summarizes only the turns
+        # added since the previous one; the produced summary block is frozen
+        # (never merged/rewritten by later compressions) and rides the live
+        # transcript verbatim. Trigger accounting uses the new-content basis
+        # (live tokens minus frozen-segment estimate). Configured via
+        # ``compression.segment_mode`` (default off = rolling-merge behavior).
+        self.segment_mode = bool(segment_mode)
+        # Emergency-consolidation ceiling as a fraction of the context
+        # length; see frozen_ceiling_ratio in agent_init.py.
+        self.frozen_ceiling_ratio = 0.6
+        # Last-known token weight of frozen segments in the live transcript,
+        # refreshed at every compression commit (the only event that changes
+        # it — micro splices never touch frozen blocks). Subtracted from the
+        # provider's prompt_tokens to derive the new-content trigger basis;
+        # a stale zero after a resume merely fires one early compression,
+        # which re-derives it correctly.
+        self._last_frozen_tokens_estimate = 0
         # Per-model threshold overrides (longest substring match wins).
         # Stored as a plain dict; resolved in _resolve_threshold(), then the
         # small-context floor is applied on top.
@@ -3270,9 +3388,16 @@ class ContextCompressor(ContextEngine):
         # A committed prune is a prompt-cache boundary. Do not permit the next
         # one until the prompt has regrown the tokens just reclaimed.
         self._proactive_prune_rearm_tokens: int = 0
+        # Dedup key for the over-threshold "reclamation no-oped" warning
+        # (#101889) so a tool loop riding above the threshold warns once per
+        # distinct reason + rearm snapshot instead of every iteration.
+        self._last_reclaim_block_warn: "tuple[str, int] | None" = None
         self.min_tail_user_messages = min_tail_user_messages
         self.summary_target_ratio = max(0.10, min(summary_target_ratio, 0.80))
         self.quiet_mode = quiet_mode
+        # Turn counter for forced compression at _FORCE_COMPRESS_TURNS intervals.
+        # Incremented after each API response; reset when compression fires.
+        self._turns_since_last_compress: int = 0
         # Output-token reservation: the provider carves max_tokens out of the
         # context window, so the usable input budget is context_length -
         # max_tokens. None = provider default => assume no reservation. (#43547)
@@ -3435,7 +3560,10 @@ class ContextCompressor(ContextEngine):
         self.last_total_tokens = usage.get("total_tokens", self.last_prompt_tokens + self.last_completion_tokens)
         if self.last_prompt_tokens > 0:
             self.last_real_prompt_tokens = self.last_prompt_tokens
-            if self.last_prompt_tokens < self.threshold_tokens:
+            # Segment mode: judge "fits" on the new-content basis — frozen
+            # segments ride the prompt but don't consume the threshold.
+            _basis = self._trigger_basis(self.last_prompt_tokens)
+            if _basis < self.threshold_tokens:
                 if self.awaiting_real_usage_after_compression and self.last_compression_rough_tokens > 0:
                     self.last_rough_tokens_when_real_prompt_fit = self.last_compression_rough_tokens
                 elif self._pending_request_rough_tokens > 0:
@@ -3476,18 +3604,20 @@ class ContextCompressor(ContextEngine):
             # Keying on real usage compares like with like and fires exactly once
             # per compaction.
             if self._verify_compaction_cleared_threshold:
-                if self.last_prompt_tokens >= self.threshold_tokens:
+                if self._trigger_basis(self.last_prompt_tokens) >= self.threshold_tokens:
                     self._record_ineffective_compression_verdict(
                         self._ineffective_compression_count + 1,
                     )
                     if not self.quiet_mode:
                         logger.warning(
                             "Compaction did not clear the threshold: %d real "
-                            "tokens still >= %d. The incompressible prompt "
-                            "(system prompt + tool schemas) may already exceed "
-                            "it, in which case shrinking messages cannot help. "
-                            "ineffective_compression_count=%d",
-                            self.last_prompt_tokens, self.threshold_tokens,
+                            "tokens (basis %d) still >= %d. The incompressible "
+                            "prompt (system prompt + tool schemas) may already "
+                            "exceed it, in which case shrinking messages cannot "
+                            "help. ineffective_compression_count=%d",
+                            self.last_prompt_tokens,
+                            self._trigger_basis(self.last_prompt_tokens),
+                            self.threshold_tokens,
                             self._ineffective_compression_count,
                         )
                 else:
@@ -3497,6 +3627,9 @@ class ContextCompressor(ContextEngine):
         # it armed for a later, unrelated reading.
         self._verify_compaction_cleared_threshold = False
         self.awaiting_real_usage_after_compression = False
+        # Increment turn counter for forced interval-based compression
+        if hasattr(self, "_turns_since_last_compress"):
+            self._turns_since_last_compress += 1
 
     def snapshot_preflight_display_tokens(self) -> int:
         """Capture the display token count before a speculative preflight seed."""
@@ -3635,11 +3768,37 @@ class ContextCompressor(ContextEngine):
         where each pass removes only 1-2 messages.
         """
         tokens = prompt_tokens if prompt_tokens is not None else self.last_prompt_tokens
-        if tokens < self.threshold_tokens:
+        # Segment mode: judge the trigger on the NEW-content basis — frozen
+        # segments ride every request but never consume the trigger budget.
+        basis = self._trigger_basis(tokens)
+        # Compression triggers (OR logic — any one can fire):
+        #   1. Token threshold: context exceeds the configured token threshold
+        #   2. Proactive turn-based: >_PROACTIVE_COMPRESS_TURNS (15) turns since
+        #      last compress, even when tokens are below the threshold
+        #   3. Force turn-based: >=_FORCE_COMPRESS_TURNS (20) turns since last
+        #      compress (hard floor).
+        # Only fire turn-based triggers when the context has meaningful content
+        # (tokens > MINIMUM_CONTEXT_LENGTH).
+        _force_reason = None
+        if basis >= self.threshold_tokens:
+            pass  # token-threshold trigger, _force_reason stays None
+        elif (
+            self._turns_since_last_compress > _PROACTIVE_COMPRESS_TURNS
+            and basis >= MINIMUM_CONTEXT_LENGTH
+            and basis >= int(self.context_length * _TURNBASED_MIN_OCCUPANCY)
+        ):
+            _force_reason = f"proactive_turn_based:{self._turns_since_last_compress}"
+        elif (
+            self._turns_since_last_compress >= _FORCE_COMPRESS_TURNS
+            and basis >= MINIMUM_CONTEXT_LENGTH
+            and basis >= int(self.context_length * _TURNBASED_MIN_OCCUPANCY)
+        ):
+            _force_reason = f"turn_based:{self._turns_since_last_compress}"
+        else:
             return False, None
         if self._automatic_compression_blocked():
             return False, self._compression_block_reason() or "blocked"
-        return True, None
+        return True, _force_reason
 
     def _compression_block_reason(self) -> "str | None":
         """Return a human-readable reason for the current automatic-compaction
@@ -3833,7 +3992,7 @@ class ContextCompressor(ContextEngine):
         ``protect_tail_count`` messages (backward-compatible default).
         When both are given, the token budget takes priority and the message
         count acts as a hard minimum floor — capped at
-        ``_MAX_TAIL_MESSAGE_FLOOR`` so a default ``protect_last_n=20`` cannot
+        ``_MAX_TAIL_MESSAGE_FLOOR`` so a default ``protect_last_n=7`` cannot
         freeze a whole run of bulky tool outputs against pruning.
 
         When the protected region itself still exceeds the soft tail budget
@@ -3869,7 +4028,7 @@ class ContextCompressor(ContextEngine):
         if protect_tail_tokens is not None and protect_tail_tokens > 0:
             # Token-budget approach: walk backward accumulating tokens.
             # Cap the message-count floor the same way tail-cut does so a
-            # default protect_last_n=20 cannot lock a bulky recent tool run
+            # default protect_last_n=7 cannot lock a bulky recent tool run
             # outside the compressible / prunable window (#61932).
             accumulated = 0
             boundary = len(result)
@@ -4110,6 +4269,57 @@ class ContextCompressor(ContextEngine):
 
         return result, pruned
 
+    def _billed_basis_over_threshold(self, current_tokens: "int | None") -> bool:
+        """Whether a provider-billed reading says the session is over threshold.
+
+        ``current_tokens`` is the provider's ``prompt_tokens`` (or the
+        overhead-aware fallback estimate): it counts the system prompt and tool
+        schemas, which the message-only estimate behind
+        ``_proactive_prune_rearm_tokens`` does not. Used to stop schema
+        overhead from parking the prune rearm gate above a real request that is
+        already over ``threshold_tokens`` (#101889).
+        """
+        return (
+            current_tokens is not None
+            and self.threshold_tokens > 0
+            and current_tokens >= self.threshold_tokens
+        )
+
+    def _warn_reclamation_no_op(
+        self,
+        reason: str,
+        current_tokens: "int | None",
+        before: "int | None" = None,
+    ) -> None:
+        """Warn when an over-threshold session's reclamation path no-ops.
+
+        A session sitting above ``threshold_tokens`` with every reclamation
+        path declining is the failure mode from #101889: context keeps growing
+        until the provider's hard limit rejects the request, with nothing in
+        the log to explain it. Silent below the threshold (a declined prune
+        there is ordinary hysteresis, not a lockout). Deduped on ``reason`` +
+        the rearm snapshot so a busy tool loop logs once per distinct state,
+        not once per iteration; the key is cleared whenever a prune commits
+        so a later lockout warns again.
+        """
+        if not self._billed_basis_over_threshold(current_tokens):
+            return
+        key = (reason, int(self._proactive_prune_rearm_tokens))
+        if self._last_reclaim_block_warn == key:
+            return
+        self._last_reclaim_block_warn = key
+        logger.warning(
+            "Context is over the compression threshold (~%s of %s tokens) but "
+            "reclamation did not run: %s (message-token estimate %s, prune "
+            "rearm mark %s). The session may keep growing until the provider "
+            "rejects the request — /compact to compress history now.",
+            f"{int(current_tokens):,}",
+            f"{int(self.threshold_tokens):,}",
+            reason,
+            "n/a" if before is None else f"{int(before):,}",
+            f"{int(self._proactive_prune_rearm_tokens):,}",
+        )
+
     def prune_tool_results_only(
         self, messages: List[Dict[str, Any]], current_tokens: int | None = None,
     ) -> tuple[List[Dict[str, Any]], int]:
@@ -4151,6 +4361,13 @@ class ContextCompressor(ContextEngine):
         object is returned unchanged — the standard no-op caller contract
         (callers gate bookkeeping on ``result is not input``).
 
+        The rearm gate is measured on message bodies only, so it is bypassed
+        (never the reclaim gate) when a provider-billed ``current_tokens``
+        reading already puts the request over ``threshold_tokens``: schema
+        overhead must not park an over-threshold session below the rearm mark
+        forever with no reclamation and no log (#101889). Every no-op taken
+        while over threshold is logged once per distinct reason.
+
         Returns ``(messages, 0)`` — the input object — when disabled, below
         the trigger, or when the reclaim gate rejects the commit.
         """
@@ -4160,10 +4377,17 @@ class ContextCompressor(ContextEngine):
             return messages, 0
         # Nothing to reclaim until there are messages outside the protected tail.
         if len(messages) <= self.protect_last_n + self._protect_head_size(messages) + 1:
+            self._warn_reclamation_no_op("prune:tail_only", current_tokens)
             return messages, 0
         before = sum(_estimate_msg_budget_tokens(m) for m in messages)
         if before < self._proactive_prune_rearm_tokens:
-            return messages, 0
+            # Message-only estimate is short of the runway. Honour it as
+            # prompt-cache hysteresis only while the real (billed) request is
+            # still under threshold — above it, the lockout is the bug. The
+            # under-threshold skip stays silent on purpose: ordinary
+            # hysteresis, not a stuck session.
+            if not self._billed_basis_over_threshold(current_tokens):
+                return messages, 0
         # Capability gate BEFORE the expensive multi-pass scan: a bound store that
         # can't persist the prune atomically (duck-typed/plugin session store
         # without archive_and_compact) makes every prune a permanent no-op, so
@@ -4175,6 +4399,7 @@ class ContextCompressor(ContextEngine):
             and session_id
             and not callable(getattr(session_db, "archive_and_compact", None))
         ):
+            self._warn_reclamation_no_op("prune:store_cannot_persist", current_tokens)
             return messages, 0
         pruned_msgs, pruned_count = self._prune_old_tool_results(
             messages,
@@ -4185,6 +4410,7 @@ class ContextCompressor(ContextEngine):
         if not pruned_count:
             # Standard no-op contract: hand back the INPUT object so callers
             # can gate bookkeeping on `result is not input`.
+            self._warn_reclamation_no_op("prune:nothing_eligible", current_tokens)
             return messages, 0
         # Measured-savings gate (prompt-cache hysteresis): only commit when
         # the prune reclaims a meaningful batch of tokens. Estimated on the
@@ -4192,6 +4418,9 @@ class ContextCompressor(ContextEngine):
         after = sum(_estimate_msg_budget_tokens(m) for m in pruned_msgs)
         reclaimed = max(0, before - after)
         if reclaimed < self.proactive_prune_min_reclaim_tokens:
+            self._warn_reclamation_no_op(
+                "prune:reclaim_below_minimum", current_tokens, before=before
+            )
             return messages, 0
         # ``after`` includes the tool batch appended since the provider's last
         # usage reading, so both the low-water mark and future gate use the
@@ -4224,6 +4453,8 @@ class ContextCompressor(ContextEngine):
                 if isinstance(msg, dict):
                     msg[_DB_PERSISTED_MARKER] = True
         self._proactive_prune_rearm_tokens = next_rearm_tokens
+        # Reclamation just ran: let a future lockout warn again.
+        self._last_reclaim_block_warn = None
         return pruned_msgs, pruned_count
 
     # ------------------------------------------------------------------
@@ -4480,7 +4711,9 @@ class ContextCompressor(ContextEngine):
             else _NO_USER_TASK_SENTINEL
         )
         previous_summary_note = ""
-        if self._previous_summary:
+        if self._previous_summary and not self.segment_mode:
+            # Segment mode: frozen segments already ride the transcript
+            # verbatim — the fallback segment must not swallow them.
             previous_summary = redact_sensitive_text(self._previous_summary.strip())
             if len(previous_summary) > _FALLBACK_PREVIOUS_SUMMARY_MAX_CHARS:
                 previous_summary = (
@@ -5009,14 +5242,17 @@ Target ~{summary_budget} tokens. Be CONCRETE — include file paths, command out
 {_temporal_anchoring_rule}
 Write only the summary body. Do not include any preamble or prefix."""
 
-        if self._previous_summary:
+        if self._previous_summary and not self.segment_mode:
             # Iterative update: preserve existing info, add new progress.
             # Bound the previous-summary block with the same aggregate cap as
             # the serialized new turns: a normal summary is far below the cap
             # (the output side is held to a ~10K-token ceiling), but a
             # pathological handoff rehydrated from a persisted session can be
             # arbitrarily large — the iterative prompt (previous summary +
-            # new turns) must stay bounded too.
+            # new turns) must stay bounded too. Segment mode deliberately
+            # skips this merge: frozen segments stay verbatim in the
+            # transcript and each compression summarizes only the new turns
+            # into a fresh, independent segment.
             _bounded_previous_summary = self._bound_summary_input(
                 self._previous_summary
             )
@@ -5157,6 +5393,19 @@ This compaction should PRIORITISE preserving all information related to the focu
                     f"(provider={self.provider or 'auto'} "
                     f"model={self.summary_model or self.model})"
                 )
+            # A finish_reason of "length" means the summarizer hit its output
+            # token cap mid-generation: the text present is PARTIAL. Treat it
+            # as a failure so it routes through the same main-model fallback +
+            # abort machinery as other degraded responses instead of becoming
+            # a checkpoint that silently truncates the conversation's memory.
+            if _response_finish_reason(response) == "length":
+                raise RuntimeError(
+                    "Context compression summary was truncated "
+                    f"({_TRUNCATED_SUMMARY_MARKER}): generation hit the output "
+                    "token cap and the summary is incomplete "
+                    f"(provider={self.provider or 'auto'} "
+                    f"model={self.summary_model or self.model})"
+                )
             # Strip reasoning blocks the summarizer model may have emitted
             # (<think>...</think> etc. from thinking models like MiniMax,
             # DeepSeek, QwQ). Without this the trace is stored in
@@ -5176,8 +5425,12 @@ This compaction should PRIORITISE preserving all information related to the focu
             summary = self._ground_historical_task_snapshot(summary, turns_to_summarize)
             summary = self._augment_summary_lean(summary, turns_to_summarize)
             self._validate_summary_user_provenance(summary, has_user_turn)
-            # Store for iterative updates on next compaction
-            self._previous_summary = summary
+            # Store for iterative updates on next compaction. Segment mode
+            # deliberately leaves _previous_summary alone: segment state is
+            # carried by the frozen blocks in the transcript itself, and the
+            # rolling-merge template above is skipped in this mode.
+            if not self.segment_mode:
+                self._previous_summary = summary
             self._clear_compression_failure_cooldown()
             self._summary_model_fallen_back = False
             self._last_summary_error = None
@@ -5566,6 +5819,68 @@ This compaction should PRIORITISE preserving all information related to the focu
         return cls._has_compressed_summary_metadata(
             message
         ) or cls._is_context_summary_content(message.get("content"))
+
+    def _is_frozen_segment_message(self, message: Any) -> bool:
+        """Return True for frozen-segment summary blocks (segment mode).
+
+        Frozen segments are batch-produced summary blocks stamped with
+        ``FROZEN_SEGMENT_KEY``. The metadata is the authority; the
+        metadata-or-content heuristic is the fallback because wire
+        sanitization may strip private metadata keys mid-session (same
+        rationale as ``is_compaction_summary_message``). Micro-compaction's
+        own markers are deliberately NOT frozen — they stay mutable under
+        supersede/defrag.
+        """
+        if not self.segment_mode:
+            return False
+        if not isinstance(message, dict):
+            return False
+        if message.get(MICRO_COMPACT_MARKER_KEY):
+            return False
+        if message.get(FROZEN_SEGMENT_KEY):
+            return True
+        return self._is_context_summary_message(message)
+
+    def _iter_frozen_segments(self, messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Return the frozen-segment blocks in a message list, in order."""
+        return [m for m in messages if self._is_frozen_segment_message(m)]
+
+    def _estimate_frozen_tokens(self, messages: List[Dict[str, Any]]) -> int:
+        """Estimate the token weight of frozen segments in a message list.
+
+        Used to derive the new-content trigger basis: the trigger compares
+        ``live_tokens - frozen_tokens`` against ``threshold_tokens`` so frozen
+        segments never consume the compression budget. Recomputed per call —
+        segment blocks are few (≤ ~20) and the scan is a few hundred K chars,
+        far cheaper than a stale-cache bug.
+        """
+        if not self.segment_mode:
+            return 0
+        return sum(
+            estimate_tokens_rough(str(m.get("content") or ""))
+            for m in self._iter_frozen_segments(messages)
+        )
+
+    def _frozen_ceiling_exceeded(self, messages: List[Dict[str, Any]]) -> bool:
+        """Whether frozen segments crossed the emergency-consolidation line."""
+        if not self.segment_mode:
+            return False
+        ceiling = int(self.context_length * max(0.0, self.frozen_ceiling_ratio))
+        if ceiling <= 0:
+            return False
+        return self._estimate_frozen_tokens(messages) >= ceiling
+
+    def _trigger_basis(self, tokens: "int | None") -> "int | None":
+        """New-content token basis for threshold comparisons.
+
+        Segment mode subtracts the frozen-segment weight from a live
+        prompt reading: frozen blocks ride every request but must never
+        consume the trigger budget — only content added SINCE the last
+        compression counts. Legacy mode returns the reading unchanged.
+        """
+        if tokens is None or not self.segment_mode:
+            return tokens
+        return max(0, tokens - self._last_frozen_tokens_estimate)
 
     @classmethod
     def _is_blank_user_turn(cls, message: Any) -> bool:
@@ -6655,7 +6970,17 @@ This compaction should PRIORITISE preserving all information related to the focu
                     # compaction reset — safe precisely because we just
                     # absorbed its content. Markers whose content we did NOT
                     # absorb never get the key and are never dropped.
-                    messages[last_summary_idx][MICRO_COMPACT_MARKER_KEY] = True
+                    # Segment mode: a FROZEN batch block must stay immutable
+                    # — its text is rehydrated into the working rolling
+                    # summary in memory, but the block itself is never tagged
+                    # and can never be superseded/rewritten by micro passes.
+                    if not (
+                        self.segment_mode
+                        and self._is_frozen_segment_message(
+                            messages[last_summary_idx]
+                        )
+                    ):
+                        messages[last_summary_idx][MICRO_COMPACT_MARKER_KEY] = True
                     logger.info(
                         "Micro-compaction: recovered rolling summary from "
                         "transcript (%d chars)", len(recovered),
@@ -6841,6 +7166,17 @@ This compaction should PRIORITISE preserving all information related to the focu
                 response = call_llm(**call_kwargs)
         except Exception as exc:
             logger.info("micro-summarization call failed: %s", exc)
+            return None
+
+        # A length stop means the merged rolling summary is partial —
+        # persisting it would silently drop the tail of the merge and feed
+        # the cut-off text into every later micro-compact pass. Leave the
+        # exchange unabsorbed instead; a later pass retries it.
+        if _response_finish_reason(response) == "length":
+            logger.warning(
+                "micro-summarization output hit the token cap "
+                "(finish_reason=length) — discarding partial summary",
+            )
             return None
 
         message = response.choices[0].message
@@ -7572,13 +7908,141 @@ This compaction should PRIORITISE preserving all information related to the focu
         summary_idx = None
         summary_body = None
         tail_start = compress_end
+        # Segment mode: batch-produced frozen blocks carried verbatim to the
+        # output, in transcript order (see the branch below).
+        frozen_carry_rows: List[Dict[str, Any]] = []
         summary_hits = self._find_context_summaries(
             messages,
             summary_search_start,
             summary_search_end,
         )
         real_user_present = self._transcript_has_real_user_turn(messages)
-        if summary_hits:
+        if summary_hits and self.segment_mode:
+            # ── Frozen-segment branch ──────────────────────────────────
+            # Every prior summary block in the transcript is FROZEN: it is
+            # excluded from the summarizer input and carried verbatim to the
+            # output. The only summary body folded into the new segment is
+            # the newest MICRO-COMPACTION marker (its rolling narrative must
+            # not be orphaned when its absorbed raw rows are compressed away
+            # — batch segments, by contrast, are immutable chapters).
+            summary_idx = summary_hits[-1][0]
+            summary_body = summary_hits[-1][1]
+            frozen_indices = {
+                idx for idx, _ in summary_hits
+                if self._is_frozen_segment_message(messages[idx])
+            }
+            summary_indices = {idx for idx, _ in summary_hits}
+            # Emergency consolidation: frozen blocks crossed the ceiling
+            # fraction of the window. This ONE pass folds every frozen body
+            # back into a single new segment — the only sanctioned exception
+            # to segment immutability — and carries nothing, so the frozen
+            # weight restarts from one block instead of growing unbounded
+            # into the hard window limit.
+            segment_emergency = self._frozen_ceiling_exceeded(messages)
+            if segment_emergency and not self.quiet_mode:
+                logger.warning(
+                    "Frozen segments (~%s tokens) reached the consolidation "
+                    "ceiling (%.0f%% of the %s-token window): merging all "
+                    "segments into one this pass.",
+                    f"{self._estimate_frozen_tokens(messages):,}",
+                    self.frozen_ceiling_ratio * 100,
+                    f"{self.context_length:,}",
+                )
+            # Zero-user provenance rides on the newest handoff hit (same as
+            # the legacy branch).
+            provenance = messages[summary_idx].get(
+                COMPRESSED_SUMMARY_HAS_USER_TURN_KEY
+            )
+            if real_user_present:
+                self._summary_has_user_turn = True
+            elif isinstance(provenance, bool):
+                self._summary_has_user_turn = provenance
+            elif self._summary_has_user_turn is None:
+                self._summary_has_user_turn = not (
+                    summary_body and _NO_USER_TASK_SENTINEL in summary_body
+                )
+            # Carry set: frozen batch blocks (immutable chapters) PLUS any
+            # summary row outside the compression window (its absorbed raw
+            # rows are gone — the block is the only copy). Middle-region
+            # micro markers are NOT carried: their narrative folds into the
+            # new segment via the prelude below. Emergency pass: nothing is
+            # carried — every frozen body feeds the input instead.
+            frozen_carry_rows = (
+                []
+                if segment_emergency
+                else [
+                    _fresh_compaction_message_copy(messages[i])
+                    for i in sorted(summary_indices)
+                    if i in frozen_indices or i >= compress_end
+                ]
+            )
+            micro_bodies = [
+                body
+                for idx, body in summary_hits
+                if idx not in frozen_indices
+                and body
+                and compress_start <= idx < compress_end
+            ]
+            segment_input_prelude: List[Dict[str, Any]] = []
+
+            def _segment_body_text(raw: str) -> str:
+                """Strip the summary envelope from a block's text.
+
+                The envelope (SUMMARY_PREFIX boilerplate + end marker) makes
+                the resulting prelude row classify as a summary handoff, which
+                sends _generate_summary down the reuse path instead of
+                generating a fresh segment body — losing the LLM output.
+                """
+                text = self._strip_summary_prefix(raw or "")
+                if _SUMMARY_END_MARKER in text:
+                    text = text.split(_SUMMARY_END_MARKER)[0]
+                return text.strip()
+
+            if micro_bodies:
+                # Newest micro marker only — older ones are superseded
+                # snapshots whose content it already contains.
+                segment_input_prelude = [{
+                    "role": "user",
+                    "content": (
+                        "[Working narrative from micro-compaction of the "
+                        "newest exchanges — fold this into the segment "
+                        "below as its recent-history section]\n\n"
+                        + _segment_body_text(micro_bodies[-1])
+                    ),
+                }]
+            if segment_emergency:
+                # Frozen bodies ride the summarizer input so the single
+                # consolidated segment preserves their content. The aggregate
+                # input cap (_bound_summary_input) bounds pathological sizes.
+                for i in sorted(frozen_indices):
+                    _frozen_text = _segment_body_text(
+                        str(messages[i].get("content") or "")
+                    )
+                    if _frozen_text:
+                        segment_input_prelude.append({
+                            "role": "user",
+                            "content": (
+                                "[Frozen segment being consolidated — merge "
+                                "its content into the single new segment]\n\n"
+                                + _frozen_text
+                            ),
+                        })
+            turns_to_summarize = segment_input_prelude + [
+                msg
+                for i, msg in enumerate(
+                    messages[compress_start:compress_end],
+                    start=compress_start,
+                )
+                if i not in summary_indices
+            ]
+            if summary_idx >= compress_end:
+                # Degenerate cut: the newest block sits inside the protected
+                # tail region. Its row would fall out of both the middle and
+                # the tail ranges below, so widen tail_start to keep the
+                # block in the carried set instead of dropping it (#57835
+                # analogue; lossless in segment mode by construction).
+                tail_start = summary_idx + 1
+        elif summary_hits:
             summary_idx = summary_hits[-1][0]
             summary_body = summary_hits[-1][1]
             if not self._previous_summary:
@@ -7873,9 +8337,20 @@ This compaction should PRIORITISE preserving all information related to the focu
                         existing,
                         "\n\n" + _compression_note if isinstance(existing, str) and existing else _compression_note,
                     )
+            if self.segment_mode and self._is_context_summary_message(msg):
+                # Segment mode: summary rows in the protected head (e.g. a
+                # resume handoff) are frozen chapters — carried verbatim,
+                # never re-summarized.
+                compressed.append(msg)
+                continue
             stripped = self._strip_context_summary_handoff_message(msg)
             if stripped is not None:
                 compressed.append(stripped)
+
+        # Segment mode: frozen blocks from the compressed region ride the
+        # output verbatim, in transcript order, ahead of the new segment.
+        if self.segment_mode and frozen_carry_rows:
+            compressed.extend(frozen_carry_rows)
 
         # If LLM summary failed, insert a deterministic fallback so the model
         # gets at least locally recoverable continuity anchors instead of a
@@ -7913,12 +8388,22 @@ This compaction should PRIORITISE preserving all information related to the focu
         for i in range(max(compress_end, tail_start), n_messages):
             if i in summary_indices and i >= tail_start:
                 # A summary at/after tail_start was already folded into
-                # _previous_summary; don't re-emit it verbatim.
-                continue
+                # _previous_summary; don't re-emit it verbatim. Segment mode
+                # is the exception: nothing was folded (no rolling merge) —
+                # the row IS the only copy of its narrative, so it rides
+                # verbatim like the rest of the protected tail.
+                if not (self.segment_mode and self._is_context_summary_message(messages[i])):
+                    continue
             msg = _fresh_compaction_message_copy(messages[i])
-            stripped = self._strip_context_summary_handoff_message(msg)
-            if stripped is not None:
-                tail_messages.append(stripped)
+            if self.segment_mode and self._is_context_summary_message(msg):
+                compressed_tail_carry = msg
+            else:
+                stripped = self._strip_context_summary_handoff_message(msg)
+                compressed_tail_carry = (
+                    stripped if stripped is not None else None
+                )
+            if compressed_tail_carry is not None:
+                tail_messages.append(compressed_tail_carry)
 
         _merge_summary_into_tail = False
         # last_head_role reads the assembled (post-strip) head; first_tail_role
@@ -8055,14 +8540,20 @@ This compaction should PRIORITISE preserving all information related to the focu
             summary = summary + "\n\n" + _SUMMARY_END_MARKER
 
         if not _merge_summary_into_tail:
-            compressed.append({
+            _new_segment: Dict[str, Any] = {
                 "role": summary_role,
                 "content": summary,
                 COMPRESSED_SUMMARY_METADATA_KEY: True,
                 COMPRESSED_SUMMARY_HAS_USER_TURN_KEY: bool(
                     self._summary_has_user_turn
                 ),
-            })
+            }
+            if self.segment_mode:
+                # Stamp the fresh block as a frozen segment: later
+                # compressions carry it verbatim and exclude its tokens
+                # from the trigger basis.
+                _new_segment[FROZEN_SEGMENT_KEY] = True
+            compressed.append(_new_segment)
 
         # Default merge target: literal tail index 0. For an ordinary
         # alternation collision the summary only has to stay *invisible* to
@@ -8123,6 +8614,12 @@ This compaction should PRIORITISE preserving all information related to the focu
                 msg[COMPRESSED_SUMMARY_HAS_USER_TURN_KEY] = bool(
                     self._summary_has_user_turn
                 )
+                if self.segment_mode:
+                    # The merged carrier IS this compression's segment (the
+                    # alternation corner case moved it into a tail row).
+                    # Freeze it like a standalone block so later compressions
+                    # carry it verbatim instead of re-summarizing it.
+                    msg[FROZEN_SEGMENT_KEY] = True
                 # Content rewritten → the api_content sidecar (exact bytes
                 # previously sent) is stale; drop it so replay can't resend
                 # the pre-merge bytes without the summary.
@@ -8131,6 +8628,15 @@ This compaction should PRIORITISE preserving all information related to the focu
             compressed.append(msg)
 
         self.compression_count += 1
+
+        # Segment mode: refresh the frozen-weight estimate from the committed
+        # output — this is the only event that changes it (micro splices
+        # never touch frozen blocks), and the trigger basis reads it until
+        # the next commit.
+        if self.segment_mode:
+            self._last_frozen_tokens_estimate = self._estimate_frozen_tokens(
+                compressed
+            )
 
         compressed = self._sanitize_tool_pairs(compressed)
 
@@ -8228,7 +8734,9 @@ This compaction should PRIORITISE preserving all information related to the focu
         self._micro_compact_cursor = 0
         self._micro_compact_consecutive_failures = 0
         self._micro_compact_last_failure_cursor = -1
-        self._proactive_prune_rearm_tokens = 0
+        self._reset_proactive_prune_rearm()
+        # Reset the interval-based force-compress counter
+        self._turns_since_last_compress = 0
 
         return compressed
 
