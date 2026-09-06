@@ -102,3 +102,62 @@ def test_workspace_write_allows_non_write_commands(tmp_path):
 def test_danger_full_allows_but_approval_layer_remains(tmp_path):
     allowed, _ = enforce_sandbox("rm -rf /some/dir", SandboxMode.DANGER_FULL, str(tmp_path))
     assert allowed  # 沙箱放行，危险命令由 hooks 危险检查表 / approval 审批兜底
+
+
+# ── WORKSPACE_WRITE：写类命令目标路径检查（P1 修复）────────────────────────
+
+def test_ww_blocks_cp_to_outside(tmp_path):
+    allowed, reason = enforce_sandbox(
+        "cp ./evil /etc/cron.d/backdoor", SandboxMode.WORKSPACE_WRITE, str(tmp_path)
+    )
+    assert not allowed and "/etc/cron.d/backdoor" in reason
+
+
+def test_ww_allows_cp_source_outside(tmp_path):
+    # 读取源在工作区外是合法侦察动作（字典/词表拷入工作区），不得误伤
+    allowed, _ = enforce_sandbox(
+        "cp /usr/share/wordlists/rockyou.txt .", SandboxMode.WORKSPACE_WRITE, str(tmp_path)
+    )
+    assert allowed
+
+
+def test_ww_blocks_dd_of_outside(tmp_path):
+    allowed, reason = enforce_sandbox(
+        "dd if=/dev/zero of=/etc/magic bs=1M count=1",
+        SandboxMode.WORKSPACE_WRITE, str(tmp_path),
+    )
+    assert not allowed and "/etc/magic" in reason
+
+
+def test_ww_allows_dd_of_inside(tmp_path):
+    allowed, _ = enforce_sandbox(
+        "dd if=/dev/zero of=./blob bs=1M count=1", SandboxMode.WORKSPACE_WRITE, str(tmp_path)
+    )
+    assert allowed
+
+
+def test_ww_blocks_mv_install_touch_chmod_outside(tmp_path):
+    for cmd, target in [
+        ("mv ./x /etc/passwd-writable", "/etc/passwd-writable"),
+        ("install -m 644 ./a /etc/persistence", "/etc/persistence"),
+        ("touch /tmp/outside-marker", "/tmp/outside-marker"),
+        ("chmod 755 /etc/unsafe", "/etc/unsafe"),
+        ("truncate -s 0 /var/log/audit.log", "/var/log/audit.log"),
+    ]:
+        allowed, reason = enforce_sandbox(cmd, SandboxMode.WORKSPACE_WRITE, str(tmp_path))
+        assert not allowed, f"{cmd} should be blocked"
+        assert target in reason
+
+
+def test_ww_blocks_write_command_in_chained_line(tmp_path):
+    allowed, _ = enforce_sandbox(
+        "cat /etc/passwd > ./notes.txt && cp ./notes.txt /etc/cron.d/x",
+        SandboxMode.WORKSPACE_WRITE, str(tmp_path),
+    )
+    assert not allowed
+
+
+def test_ww_allows_write_commands_inside(tmp_path):
+    for cmd in ["touch ./a", "mkdir ./d", "mv ./a ./b", "chmod 755 ./b"]:
+        allowed, reason = enforce_sandbox(cmd, SandboxMode.WORKSPACE_WRITE, str(tmp_path))
+        assert allowed, f"{cmd} blocked: {reason}"

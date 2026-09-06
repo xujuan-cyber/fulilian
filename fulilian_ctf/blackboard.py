@@ -21,12 +21,18 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Optional
+
+try:
+    import fcntl  # POSIX 文件锁；Windows 无此模块（见 save_blackboard 降级逻辑）
+except ImportError:  # pragma: no cover - Windows only
+    fcntl = None
 
 
 class State(str, Enum):
@@ -184,6 +190,13 @@ class Blackboard:
         if existing is not None:
             if existing is fact:
                 return  # 同一对象重复加入 → 幂等 no-op
+            # 幂等吞并（P1 修复）：并发场景下多个子黑板会先后向父黑板
+            # 透传同 id 的 Fact（各自反序列化出的不同对象、内容相同）。
+            # 若一律按 append-only 抛 ValueError，会把无辜的子 solver
+            # 打崩——内容一致即视为同一发现，静默跳过；内容不同才是真
+            # 冲突（同一 id 被复用），仍然报错暴露。
+            if (existing.content or "") == (fact.content or ""):
+                return
             raise ValueError(
                 f"append-only: fact id '{fact.id}' already exists "
                 f"(facts are immutable once added)"
@@ -330,14 +343,31 @@ BLACKBOARD_FILENAME = "blackboard.json"
 
 
 def save_blackboard(board: Blackboard, path: str | Path) -> Path:
-    """把黑板持久化为 blackboard.json（原子写：先写临时文件再替换）。"""
+    """把黑板持久化为 blackboard.json（原子写：先写临时文件再替换）。
+
+    并发安全（P1 修复）：
+    - 临时文件名带 pid + uuid：旧的固定 `*.tmp` 命名下，多 solver 进程
+      并发保存同一 blackboard.json 会互相覆盖临时文件，后完成者的
+      `replace` 可能把别人写的内容替换进正式文件；
+    - 对同一目标路径用 flock 串行化替换动作（fcntl 在 Windows 不可用
+      时降级为无锁——临时文件名的唯一性已足以保证 replace 的原子性）。
+    """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(
-        json.dumps(board.to_dict(), indent=2, ensure_ascii=False), encoding="utf-8"
-    )
-    tmp.replace(path)
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.{uuid.uuid4().hex[:8]}.tmp")
+    payload = json.dumps(board.to_dict(), indent=2, ensure_ascii=False)
+    if fcntl is not None:
+        lock_fd = os.open(path.with_name(path.name + ".lock"),
+                          os.O_CREAT | os.O_WRONLY, 0o644)
+        try:
+            fcntl.flock(lock_fd, fcntl.LOCK_EX)
+            tmp.write_text(payload, encoding="utf-8")
+            tmp.replace(path)
+        finally:
+            os.close(lock_fd)
+    else:  # pragma: no cover - Windows only
+        tmp.write_text(payload, encoding="utf-8")
+        tmp.replace(path)
     return path
 
 

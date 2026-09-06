@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import re
 import sys
@@ -383,7 +384,7 @@ def handle_solve_command(args: argparse.Namespace) -> None:
         try:
             _record_single_solve_experience(project, work_dir)
         except Exception:  # noqa: BLE001 — 经验落库失败不影响 solve 退出码
-            pass
+            logging.debug("solve experience recording failed", exc_info=True)
         sys.exit(code)
 
     from run_agent import main as solver_main
@@ -409,7 +410,7 @@ def handle_solve_command(args: argparse.Namespace) -> None:
     try:
         _record_single_solve_experience(project, work_dir)
     except Exception:  # noqa: BLE001 — 经验落库失败不影响 solve 退出码
-        pass
+        logging.debug("solve experience recording failed", exc_info=True)
     sys.exit(0)
 
 
@@ -494,7 +495,8 @@ def _record_single_solve_experience(project, work_dir: Optional[Path]) -> None:
             verified=bool(flag),
         )
     except Exception:  # noqa: BLE001 — 经验落库失败不影响 solve 退出码
-        pass
+        # debug 记录但不打断主流程（P1 修复：裸 pass 让落库失败完全不可见）
+        logging.debug("solve experience recording failed", exc_info=True)
 
 
 def handle_solve_all_command(args: argparse.Namespace) -> None:

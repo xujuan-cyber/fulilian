@@ -226,7 +226,7 @@ When the agent acts, you'll see a **tinted overlay cursor** glide
 across the screen to where each click / type / scroll lands. The real
 OS cursor never moves. The overlay shows where the agent is acting. Each
 Fulilian run declares a public cua-driver **session name** (something like
-`hermes-3a7b9c14d2e8`). The name labels cursor identity and related state, so
+`fulilian-3a7b9c14d2e8`). The name labels cursor identity and related state, so
 concurrent runs and subagents get distinct cursors. The MCP transport owns the
 private lifecycle session inside the runtime; the public name does not.
 

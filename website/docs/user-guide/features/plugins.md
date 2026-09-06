@@ -521,7 +521,7 @@ index and keep working exactly as before. An explicit `--ref <sha>` always
 overrides the index pin.
 
 **How the index is fetched.** The index lives at a canonical URL
-(`https://raw.githubusercontent.com/NousResearch/hermes-plugin-index/main/index.json`,
+(`https://raw.githubusercontent.com/xujuan-cyber/fulilian/main/fulilian_cli/data/plugin_index.json`,
 overridable via `fulilian config set plugins.index_url <url>`). Fetches are
 cached under `~/.fulilian/cache/plugin_index.json` for 24 hours; when the
 remote is unreachable the stale cache is used, and when there is no cache at

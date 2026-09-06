@@ -34,6 +34,15 @@ _SAFE_REDIRECT_TARGETS = {"/dev/null", "/dev/stderr", "/dev/stdout", "/dev/zero"
 
 _REDIRECT_RE = re.compile(r"(>>?|&>>?|2>>?|1>>?)\s*(\S+)")
 
+# WORKSPACE_WRITE 档需要检查"写入目标路径"的写类命令（P1 修复）。
+# 旧实现只查重定向，该档可用 `cp x /etc/cron.d/evil`、`dd of=/etc/...`
+# 等无重定向形态把文件写到工作区外。规则：READ_ONLY_WRITE_COMMANDS
+# 中除 rm（只删不写）与 tee（已有专项检查）外全部纳入。
+_WRITE_TARGET_COMMANDS = READ_ONLY_WRITE_COMMANDS - {"rm", "tee"}
+
+# 多命令拼接符：写命令的操作数扫描到拼接符即止（后面是另一条命令）
+_SHELL_JOINERS = {"|", ";", "&&", "||", "&"}
+
 
 class SandboxMode(IntEnum):
     """三档沙箱模式。"""
@@ -94,8 +103,34 @@ def _resolve_within(cmd_path: str, work_dir: Path) -> bool:
         return False
 
 
+def _write_targets(tokens: list, start: int) -> list:
+    """提取写命令的"写入目标"操作数（供 WORKSPACE_WRITE 档检查）。
+
+    目标位置按命令语义区分（读取源允许在工作区外，只有写入落点受限）：
+    - dd：仅 ``of=`` 参数（``if=`` 是读取源）；
+    - cp/mv/install/ln：最后一个非 flag 操作数（写入落点，其余是源）；
+    - chmod/chown：跳过第一个非 flag 操作数（mode/owner，非路径）；
+    - touch/mkdir/rmdir/truncate/shred/mkfs：全部非 flag 操作数。
+    """
+    cmd = Path(tokens[start]).name
+    operands = []
+    for tok in tokens[start + 1:]:
+        if tok in _SHELL_JOINERS:
+            break
+        if tok.startswith("-") or tok == "--":
+            continue
+        operands.append(tok)
+    if cmd == "dd":
+        return [t[3:] for t in operands if t.startswith("of=")]
+    if cmd in ("chmod", "chown"):
+        return operands[1:]
+    if cmd in ("cp", "mv", "install", "ln"):
+        return operands[-1:]
+    return operands
+
+
 def _check_workspace_write(command: str, work_dir: Path) -> Tuple[bool, str]:
-    """WORKSPACE_WRITE：拦截把输出/输入重定向到工作区外的命令。"""
+    """WORKSPACE_WRITE：拦截把输出/数据写到工作区外的命令。"""
     try:
         tokens = shlex.split(command)
     except ValueError:
@@ -112,6 +147,15 @@ def _check_workspace_write(command: str, work_dir: Path) -> Tuple[bool, str]:
             for target in tokens[i + 1:]:
                 if target.startswith("-") or target == "--":
                     continue
+                if not _resolve_within(target, work_dir):
+                    return False, f"WORKSPACE_WRITE: writing outside workspace blocked ({target})"
+    # 写类命令的目标路径检查（P1 修复）：无重定向落盘形态
+    # （cp/mv/install/dd of=/touch/...）同样只允许写工作区内
+    for i, tok in enumerate(tokens):
+        if tok in _SHELL_JOINERS:
+            continue
+        if Path(tok).name in _WRITE_TARGET_COMMANDS:
+            for target in _write_targets(tokens, i):
                 if not _resolve_within(target, work_dir):
                     return False, f"WORKSPACE_WRITE: writing outside workspace blocked ({target})"
     return True, ""
