@@ -27,6 +27,53 @@ from agent.redact import redact_sensitive_text
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Overflow-to-disk: when a read_file result exceeds the char budget, save the
+# full content to a temp file so the model can reference it later instead of
+# re-paginating through offset/limit.  Files are written under
+# FULILIAN_HOME/traces/read_overflow/ and cleaned up on process exit.
+# ---------------------------------------------------------------------------
+_OVERFLOW_DIR: Path | None = None
+_OVERFLOW_DIR_LOCK = threading.Lock()
+
+
+def _get_overflow_dir() -> Path:
+    global _OVERFLOW_DIR
+    if _OVERFLOW_DIR is not None:
+        return _OVERFLOW_DIR
+    with _OVERFLOW_DIR_LOCK:
+        if _OVERFLOW_DIR is not None:
+            return _OVERFLOW_DIR
+        try:
+            from fulilian_constants import get_fulilian_home
+            base = Path(get_fulilian_home())
+        except Exception:
+            base = Path.home() / ".fulilian"
+        _OVERFLOW_DIR = base / "traces" / "read_overflow"
+        _OVERFLOW_DIR.mkdir(parents=True, exist_ok=True)
+        return _OVERFLOW_DIR
+
+
+def _write_read_overflow(resolved_path: str, full_content: str) -> str | None:
+    """Write *full_content* (the untruncated read result) to a temp file.
+
+    Returns the absolute path of the overflow file, or ``None`` on failure.
+    The file is named ``read_overflow_{path_hash}.txt`` where *path_hash* is
+    the first 12 hex chars of the SHA-256 digest of the resolved path, so
+    repeat reads of the same file reuse the same overflow file.
+    """
+    try:
+        import hashlib
+
+        path_hash = hashlib.sha256(resolved_path.encode()).hexdigest()[:12]
+        overflow_dir = _get_overflow_dir()
+        overflow_path = overflow_dir / f"read_overflow_{path_hash}.txt"
+        overflow_path.write_text(full_content, encoding="utf-8")
+        return str(overflow_path)
+    except Exception as exc:
+        logger.debug("Failed to write read overflow file: %s", exc)
+        return None
+
 
 _EXPECTED_WRITE_ERRNOS = {errno.EACCES, errno.EPERM, errno.EROFS}
 
@@ -1741,6 +1788,7 @@ def read_file_tool(path: str, offset: int = 1, limit: int = 2000, task_id: str =
                     # Graceful char-budget truncation (nearai/ironclaw#5029):
                     # trim to the last complete line that fits and offer a
                     # next_offset rather than rejecting the whole extraction.
+                    _full_content_for_overflow = result_dict["content"]
                     trimmed, lines_kept, _ = _truncate_to_char_budget(
                         result_dict["content"], max_chars
                     )
@@ -1756,6 +1804,17 @@ def read_file_tool(path: str, offset: int = 1, limit: int = 2000, task_id: str =
                         f"{shown_end} of {total_lines}). Use offset={next_offset} "
                         "to continue."
                     )
+                    # Overflow-to-disk: save the full pre-truncation content to a
+                    # temp file so the model can reference it via read_file.
+                    overflow_path = _write_read_overflow(
+                        str(_resolved), _full_content_for_overflow
+                    )
+                    if overflow_path:
+                        result_dict["overflow_file"] = overflow_path
+                        result_dict["hint"] += (
+                            f" Full content saved to {overflow_path} — "
+                            "read it with read_file if you need the complete data."
+                        )
                     if len(trimmed.split("\n", 1)[0]) >= max_chars:
                         result_dict["hint"] += (
                             " Note: the first line alone exceeded the budget and "
@@ -1893,9 +1952,10 @@ def read_file_tool(path: str, offset: int = 1, limit: int = 2000, task_id: str =
             # `next_offset` so the model can paginate forward. This rescues the
             # "few but very long lines" case (logs, wide CSVs, minified data)
             # that sails past the line-count `limit` but blows the char budget.
+            _full_content_for_overflow = result.content or ""
             total_lines = result_dict.get("total_lines", "unknown")
             trimmed, lines_kept, _ = _truncate_to_char_budget(
-                result.content or "", max_chars
+                _full_content_for_overflow, max_chars
             )
             next_offset = offset + lines_kept
             shown_end = offset + lines_kept - 1
@@ -1909,6 +1969,17 @@ def read_file_tool(path: str, offset: int = 1, limit: int = 2000, task_id: str =
                 f"{lines_kept} line(s) (showing lines {offset}-{shown_end} of "
                 f"{total_lines}). Use offset={next_offset} to continue."
             )
+            # Overflow-to-disk: save the full pre-truncation content to a
+            # temp file so the model can reference it via read_file.
+            overflow_path = _write_read_overflow(
+                str(_resolved), _full_content_for_overflow
+            )
+            if overflow_path:
+                result_dict["overflow_file"] = overflow_path
+                result_dict["hint"] += (
+                    f" Full content saved to {overflow_path} — "
+                    "read it with read_file if you need the complete data."
+                )
             if len(trimmed.split("\n", 1)[0]) >= max_chars:
                 result_dict["hint"] += (
                     " Note: the first line alone exceeded the budget and was "

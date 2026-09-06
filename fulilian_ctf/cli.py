@@ -326,14 +326,16 @@ def handle_solve_command(args: argparse.Namespace) -> None:
 
     query = f"Solve the CTF challenge: {challenge_id}"
 
-    # Phase 3 知识卡注入：从 challenge id 猜测分类（如 web-01 → web）
-    from fulilian_ctf.knowledge import get_knowledge_card
+    # Phase 3 知识注入：从 challenge id 猜测分类（如 web-01 → web）。
+    # inject_ctf_context = playbook + 知识卡 + 历史教训 + 相似 WP 检索，
+    # 全程 best-effort（失败静默降级）；无猜测分类时仍注入 playbook。
+    from fulilian_ctf.knowledge import inject_ctf_context
 
     guessed_category = _guess_category_from_id(challenge_id)
-    if guessed_category:
-        card = get_knowledge_card(guessed_category)
-        if card:
-            query = query + "\n\n---\n\n" + card
+    try:
+        query = inject_ctf_context(guessed_category, query, query=challenge_id)
+    except Exception as exc:  # noqa: BLE001 — 知识注入失败不阻断解题
+        print(f"[solve] knowledge injection skipped: {exc}", file=sys.stderr)
 
     # Phase 1 模型解析：显式 --model 优先，否则配置默认（run_agent 不自动回退）
     from fulilian_ctf.solver import resolve_default_model
@@ -356,6 +358,8 @@ def handle_solve_command(args: argparse.Namespace) -> None:
     # F4-001：题目工作目录 + AGENTS.md（chdir 后由 _load_agents_md 自动加载）
     project = _resolve_project(challenge_id)
     work_dir = _prepare_work_dir(project, challenge_id)
+    if work_dir is not None:
+        os.environ["FULILIAN_CTF_WORK_DIR"] = str(work_dir.resolve())
 
     # F4-002：-p / --json 非交互模式
     oneshot = bool(getattr(args, "oneshot", False))
@@ -368,6 +372,7 @@ def handle_solve_command(args: argparse.Namespace) -> None:
         ))
 
     from run_agent import main as solver_main
+    from fulilian_ctf.solver import resolve_max_turns_from_env
 
     old_cwd = os.getcwd()
     try:
@@ -377,6 +382,9 @@ def handle_solve_command(args: argparse.Namespace) -> None:
             query=query,
             mode="ctf",
             model=model,
+            # 轮数上限：FULILIAN_CTF_MAX_TURNS 显式设置才限制；未设 =
+            # 不限轮数（与 solve-all 子进程路径语义一致）
+            max_turns=resolve_max_turns_from_env(),
             architect_model=str(getattr(args, "architect_model", "") or ""),
             executor_model=str(getattr(args, "executor_model", "") or ""),
         )
@@ -429,16 +437,22 @@ def handle_solve_all_command(args: argparse.Namespace) -> None:
         sys.exit(0)
 
     workers = getattr(args, "workers", None) or 3
+    # --max-turns：显式指定才限制 solver 轮数（经环境变量传给 solver 子
+    # 进程）；0/未设 = 不限轮数（题目一直解到出 flag，靠进展型止损兜底）
+    max_turns_override = getattr(args, "max_turns", None) or 0
+    if max_turns_override:
+        os.environ["FULILIAN_CTF_MAX_TURNS"] = str(int(max_turns_override))
     dispatcher = Dispatcher(
         max_workers=workers,
         model=getattr(args, "model", "") or "",
         probe_timeout=getattr(args, "probe_timeout", None) or 60,
-        max_attempts=getattr(args, "max_attempts", None) or 3,
+        max_attempts=getattr(args, "max_attempts", None) or 5,
         timebox_override=getattr(args, "timebox", None) or 0,
-        max_tokens=getattr(args, "max_tokens", None) or 500_000,
-        max_no_output_rounds=getattr(args, "max_no_output_rounds", None) or 5,
-        max_variant_failures=getattr(args, "max_variant_failures", None) or 3,
+        max_tokens=getattr(args, "max_tokens", None),
+        max_no_output_rounds=getattr(args, "max_no_output_rounds", None) or 7,
+        max_variant_failures=getattr(args, "max_variant_failures", None) or 7,
         stop_loss=not getattr(args, "no_stop_loss", False),
+        warmup=not getattr(args, "no_warmup", False),
     )
     for p in projects:
         dispatcher.add_project(p)
@@ -744,6 +758,7 @@ def handle_knowledge_command(args: argparse.Namespace) -> None:
     ``fulilian knowledge query <terms> [--limit N] [--category C]`` — 检索历史 WP
     ``fulilian knowledge list [--category C]`` — 列出知识卡 / 索引统计
     ``fulilian knowledge stats`` — 跨题学习统计
+    ``fulilian knowledge cards-sync`` — 从经验库筛「建议加入知识卡」的技巧
     """
     action = getattr(args, "knowledge_action", None)
 
@@ -755,9 +770,11 @@ def handle_knowledge_command(args: argparse.Namespace) -> None:
         _knowledge_list(args)
     elif action == "stats":
         _knowledge_stats()
+    elif action == "cards-sync":
+        _knowledge_cards_sync()
     else:
         print(
-            "knowledge: use one of import / query / list / stats "
+            "knowledge: use one of import / query / list / stats / cards-sync "
             "(try `fulilian knowledge --help`)"
         )
 
@@ -845,3 +862,43 @@ def _knowledge_stats() -> None:
             f"{cat}={n}" for cat, n in stats["by_category"].items()
         ))
     print(f"  file: {stats['file_path']}")
+
+
+def _knowledge_cards_sync() -> None:
+    """从经验库筛「建议加入知识卡」的技巧候选清单。
+
+    读取 experiential_learning 的 learnings 文件（ATT&CK 索引），筛出
+    成功率高（成功率 ≥0.75）或出现 ≥2 次的 technique，打印
+    分类 + 技巧 + 频次 + 建议目标卡。纯读操作，不修改知识卡。
+    """
+    from fulilian_ctf.experiential_learning import query_index
+    from fulilian_ctf.knowledge import CATEGORIES, SKILLS_DIR
+
+    rows = query_index()  # [{category, technique, success, fail, total, success_rate}]
+    if not rows:
+        print("cards-sync: learning.json 为空，暂无可同步的技巧。")
+        return
+
+    # 入选条件：出现 ≥2 次，或成功率 ≥0.75（含 1 次即高成功的技巧）
+    candidates = [
+        r for r in rows
+        if r["total"] >= 2 or r["success_rate"] >= 0.75
+    ]
+    # 高频优先，其次成功次数
+    candidates.sort(key=lambda r: (r["total"], r["success"]), reverse=True)
+
+    print(f"cards-sync: {len(candidates)} candidate technique(s) "
+          f"(出现≥2次 或 成功率≥0.75；共 {len(rows)} 条技巧记录)")
+    print()
+    for r in candidates[:20]:
+        card_file = CATEGORIES.get(r["category"], "misc.md")
+        card_path = SKILLS_DIR / card_file
+        status = "✓" if card_path.exists() else "✗ missing"
+        print(
+            f"  [{r['category']:<8}] {r['technique'][:70]}"
+            f"\n      频次: 成功 {r['success']} / 失败 {r['fail']}"
+            f" (共 {r['total']}，成功率 {r['success_rate']:.0%})"
+            f"  → 建议目标卡: skills/ctf-knowledge/{card_file} {status}"
+        )
+    if len(candidates) > 20:
+        print(f"  ... 其余 {len(candidates) - 20} 条省略")

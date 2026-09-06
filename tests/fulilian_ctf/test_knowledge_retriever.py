@@ -64,6 +64,10 @@ def _isolated_knowledge_env(tmp_path, monkeypatch):
     _make_synthetic_kb(kb_root)
     monkeypatch.setattr(kr, "KB_PATH", kb_root)
     monkeypatch.setattr(kr, "DB_PATH", db_path)
+    # _kb_roots() 会追加 Obsidian vault、build_index 会顺带扫 SNIPPETS_DIR，
+    # 二者都指向真实数据，必须一并隔离，否则合成 KB 的精确计数断言被污染。
+    monkeypatch.setattr(kr, "OBSIDIAN_VAULT", tmp_path / "no-vault")
+    monkeypatch.setattr(kr, "SNIPPETS_DIR", tmp_path / "no-snippets")
     yield
 
 

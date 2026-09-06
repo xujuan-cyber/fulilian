@@ -55,12 +55,43 @@ def fake_racer_slow(project, work_dir, model, queue):
     queue.put(SolverResult(ok=True, exit_code=0))
 
 
-def _make_fast(flag: str = "flag{winner}"):
-    def _impl(project, work_dir, model, queue):
-        # 快 racer：把旗子写进自己的目录（哪个目录由 project 的子目录决定）
-        Path(work_dir, "FLAG").write_text(flag + "\n", encoding="utf-8")
+def fake_racer_fast(project, work_dir, model, queue):
+    """快 racer：立即写 FLAG 并退出。"""
+    Path(work_dir, "FLAG").write_text("flag{winner}\n", encoding="utf-8")
+    queue.put(SolverResult(ok=True, exit_code=0))
+
+
+def fake_racer_two_models(project, work_dir, model, queue):
+    """根据模型名决定行为：fast 模型快速解出，slow 模型长时间睡眠。"""
+    if model.endswith("fast"):
+        Path(work_dir, "FLAG").write_text("flag{winner}\n", encoding="utf-8")
         queue.put(SolverResult(ok=True, exit_code=0))
-    return _impl
+    else:
+        time.sleep(5)
+
+
+def fake_racer_merge_board(project, work_dir, model, queue):
+    """写 FLAG + 黑板（发现 + 死路），验证合并。"""
+    d = Path(work_dir)
+    d.joinpath("FLAG").write_text("flag{merge-me}\n", encoding="utf-8")
+    board = Blackboard(challenge_id=project.challenge_id)
+    board.add_fact(Fact(content="found suspicious endpoint /admin", source="solver"))
+    board.mark_dead_end("tried sqli on login")
+    save_blackboard(board, d / BLACKBOARD_FILENAME)
+    queue.put(SolverResult(ok=True, exit_code=0))
+
+
+def fake_racer_crash_or_ok(project, work_dir, model, queue):
+    """crash 模型抛异常，ok 模型解出。"""
+    if model.endswith("crash"):
+        raise RuntimeError("boom")
+    Path(work_dir, "FLAG").write_text("flag{crash-ok}\n", encoding="utf-8")
+    queue.put(SolverResult(ok=True, exit_code=0))
+
+
+def fake_racer_sleepy(project, work_dir, model, queue):
+    """长时间睡眠，等待时间盒中断。"""
+    time.sleep(30)
 
 
 def fake_racer_bad_flag(project, work_dir, model, queue):
@@ -75,19 +106,12 @@ def test_race_first_flag_stops_others(tmp_path):
     """第一个找到 flag 的 racer 胜出，慢 racer 被提前终止（总耗时 < 5s）。"""
     project = Project(challenge_id="race-01", challenge_dir=str(tmp_path / "race-01"))
 
-    # 让慢 racer 挂着：第一个模型快解出，第二个模型永远睡
-    def two_models(project_, work_dir_, model_, queue_):
-        if model_.endswith("fast"):
-            _make_fast()(project_, work_dir_, model_, queue_)
-        else:
-            time.sleep(5)
-
     started = time.time()
     result = run_race(
         project,
         models=["test/fast", "test/slow"],
         timeout=30,
-        solver_fn=two_models,
+        solver_fn=fake_racer_two_models,
         coordinator=False,
         quiet=True,
     )
@@ -108,19 +132,9 @@ def test_race_writes_flag_and_merges_board(tmp_path):
     base = tmp_path / "chall"
     project = Project(challenge_id="race-02", challenge_dir=str(base))
 
-    def impl(project_, work_dir_, model_, queue_):
-        d = Path(work_dir_)
-        d.joinpath("FLAG").write_text("flag{merge-me}\n", encoding="utf-8")
-        # racer 自己的黑板：发现 + 死路
-        board = Blackboard(challenge_id=project_.challenge_id)
-        board.add_fact(Fact(content="found suspicious endpoint /admin", source="solver"))
-        board.mark_dead_end("tried sqli on login")
-        save_blackboard(board, d / BLACKBOARD_FILENAME)
-        queue_.put(SolverResult(ok=True, exit_code=0))
-
     result = run_race(
         project, models=["test/only"], timeout=20,
-        solver_fn=impl, coordinator=False, quiet=True,
+        solver_fn=fake_racer_merge_board, coordinator=False, quiet=True,
     )
 
     assert result.solved
@@ -149,7 +163,7 @@ def test_race_all_timeout(tmp_path):
     started = time.time()
     result = run_race(
         project, models=["test/sleepy"], timeout=2,
-        solver_fn=lambda p, w, m, q: time.sleep(30),
+        solver_fn=fake_racer_sleepy,
         coordinator=False, quiet=True,
     )
     assert not result.solved
@@ -160,14 +174,9 @@ def test_race_solver_crash_isolated(tmp_path):
     """单个 racer 崩溃不影响其他（进程隔离语义）。"""
     project = Project(challenge_id="race-05", challenge_dir=str(tmp_path / "r5"))
 
-    def impl(project_, work_dir_, model_, queue_):
-        if model_.endswith("crash"):
-            raise RuntimeError("boom")
-        _make_fast("flag{crash-ok}")(project_, work_dir_, model_, queue_)
-
     result = run_race(
         project, models=["test/crash", "test/ok"], timeout=20,
-        solver_fn=impl, coordinator=False, quiet=True,
+        solver_fn=fake_racer_crash_or_ok, coordinator=False, quiet=True,
     )
     assert result.solved
     assert result.winner_model == "test/ok"

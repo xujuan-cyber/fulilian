@@ -177,6 +177,7 @@ def test_inprocess_post_hook_autocommits_only_in_ctf_mode(monkeypatch, tmp_path)
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("FULILIAN_CTF_MODE", "1")
+    monkeypatch.delenv("FULILIAN_CTF_WORK_DIR", raising=False)
     (tmp_path / "progress.txt").write_text("step 1", encoding="utf-8")
     _ctf_post_tool_hook(tool_name="terminal", result={"output": "ok"}, status="ok")
     commits = subprocess.run(
@@ -188,6 +189,17 @@ def test_inprocess_post_hook_autocommits_only_in_ctf_mode(monkeypatch, tmp_path)
     other = tmp_path / "other"
     other.mkdir()
     assert not (other / ".git").exists()
+
+
+def test_git_auto_commit_rejects_path_outside_bound_workspace(monkeypatch, tmp_path):
+    from tools.ctf_solve import _git_auto_commit_impl
+
+    workspace = tmp_path / "challenge"
+    outside = tmp_path / "outside"
+    monkeypatch.setenv("FULILIAN_CTF_WORK_DIR", str(workspace))
+    message = _git_auto_commit_impl(str(outside), "should not commit")
+    assert "outside" in message
+    assert not (outside / ".git").exists()
 
 
 class _FakeManager:

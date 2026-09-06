@@ -17,4 +17,9 @@ class CryptoSBeSpecialist(BaseSpecialist):
             "3. compute: use sagemath for modular arithmetic, z3 for constraint solving\n"
             "4. decode: apply appropriate decoding/decryption, recover plaintext"
         )
+        self.asset_discipline = (
+            "Before solving, check existing assets first:\n"
+            "- search(query, category='crypto') and search_snippets(query, category='crypto') from fulilian_ctf/knowledge_retriever.py for similar past write-ups and exp snippets\n"
+            "- skills/ctf-knowledge/scripts/ROUTE.md may point to a ready-made script for this cipher/scenario; adapt it instead of writing from scratch"
+        )
         super().__init__()

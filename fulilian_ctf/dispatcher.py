@@ -27,6 +27,10 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from .blackboard import BLACKBOARD_FILENAME, Fact, State, load_blackboard, save_blackboard
+
+_SAFE_MP_CONTEXT = multiprocessing.get_context(
+    "forkserver" if "forkserver" in multiprocessing.get_all_start_methods() else "spawn"
+)
 from .probe import ProbeResult, probe_challenge
 from .relay import (
     atomic_write_text,
@@ -48,8 +52,10 @@ from .stopper import (
     TokenCounter,
     count_variant_failures,
     estimate_tokens_from_log,
+    usage_tokens,
 )
 from .timebox import Timebox, difficulty_adjusted_budget
+from .specialists.factory import SpecialistFactory
 
 
 class ChallengeStatus(str, Enum):
@@ -177,16 +183,17 @@ class Dispatcher:
         max_workers: int = 3,
         model: str = "",
         probe_timeout: int = 60,
-        max_attempts: int = 3,
+        max_attempts: int = 5,
         timebox_override: int = 0,
         solver_fn: Optional[Callable] = None,
         quiet: bool = False,
-        max_tokens: int = DEFAULT_MAX_TOKENS,
+        max_tokens: Optional[int] = None,
         max_no_output_rounds: int = DEFAULT_MAX_NO_OUTPUT_ROUNDS,
         max_variant_failures: int = DEFAULT_MAX_VARIANT_FAILURES,
         stop_loss: bool = True,
         token_counter: Optional[TokenCounter] = None,
         no_output_round_seconds: int = 60,
+        warmup: bool = True,  # 新增：启动前批量端口检测
     ):
         self.max_workers = max(1, int(max_workers))
         self.model = model
@@ -196,6 +203,8 @@ class Dispatcher:
         self._solver_fn = solver_fn or solver_worker
         self.quiet = quiet
         # 止损治理器（F2-004 / F2-011，步骤 07）
+        # max_tokens=None（默认）→ 不设 token 预算上限；显式传入（CLI
+        # --max-tokens）才启用预算保险丝。每题止损器均复用同一配置。
         self.stop_loss = bool(stop_loss)
         self.stopper = Stopper(
             max_tokens=max_tokens,
@@ -212,6 +221,7 @@ class Dispatcher:
         # P1-2 / M-3：_spawns / attempts 的读改写发生在 _spawn_candidates
         # 的线程池并发上下文中，+= 非原子——计数器读写统一走此锁。
         self._counters_lock = threading.Lock()
+        self._warmup = bool(warmup)
 
     # ── 项目管理 ────────────────────────────────────────────────────────
 
@@ -220,15 +230,31 @@ class Dispatcher:
 
     # ── 调度决策（确定性，非 LLM）────────────────────────────────────────
 
+    @staticmethod
+    def _difficulty_key(difficulty: str) -> int:
+        """难度排序键：easy=0, medium=1, hard=2（越小越优先）。"""
+        return {"easy": 0, "medium": 1, "hard": 2}.get(difficulty.lower(), 1)
+
     def schedule(self, available: int) -> list[Project]:
-        """调度决策：1. 新题优先（score 降序） 2. 无新题 → 收割轮（EV 排序）。"""
+        """调度决策：1. Easy-First 新题优先 2. 无新题 → 收割轮（EV 排序）。
+
+        Easy-First 排序：
+        - 先按难度（easy → medium → hard）
+        - 同难度按 score 降序（高分优先）
+        - 如果可用槽位有限，优先分配 easy 题目
+        """
         if available <= 0:
             return []
         new = [
             p for p in self.projects.values() if p.status == ChallengeStatus.NEW
         ]
-        new.sort(key=lambda p: p.score, reverse=True)
+        # Easy-First：按难度升序，同难度按 score 降序
+        new.sort(key=lambda p: (self._difficulty_key(p.difficulty), -p.score))
         if new:
+            # 至少分配一个 easy 题目（如果有）
+            easy_first = [p for p in new if p.difficulty == "easy"]
+            if easy_first and available <= len(easy_first):
+                return easy_first[:available]
             return new[:available]
         return self.harvest_cycle()[:available]
 
@@ -251,6 +277,77 @@ class Dispatcher:
         abandoned.sort(key=lambda p: p.ev_score, reverse=True)
         return abandoned
 
+    # ── 预热步骤 ─────────────────────────────────────────────────────────
+
+    def warmup(self, quiet: bool = False) -> dict[str, int]:
+        """预热：批量检测所有题目的端口可达性，提前标记 INFRA_BLOCKED。
+
+        在主循环前执行一次批量端口检测，避免逐个探活导致的时间浪费。
+        使用 ThreadPoolExecutor 并行检测，最多 4 并发。
+
+        Returns:
+            dict: 预热统计 {total, reachable, discovered, infra_blocked, unknown}
+        """
+        if not self.quiet and not quiet:
+            print("[warmup] batch port check for all projects ...")
+        hosts = [
+            (p.challenge_id, p.target_host, p.target_port)
+            for p in self.projects.values()
+            if p.target_host and p.status == ChallengeStatus.NEW
+        ]
+        if not hosts:
+            if not self.quiet and not quiet:
+                print("[warmup] no network targets to check")
+            return {"total": 0, "reachable": 0, "discovered": 0, "infra_blocked": 0, "unknown": 0}
+
+        stats = {"total": len(hosts), "reachable": 0, "discovered": 0, "infra_blocked": 0, "unknown": 0}
+        from concurrent.futures import ThreadPoolExecutor as _TExecutor
+
+        def _check(cid: str, host: str, port: int) -> tuple[str, str | tuple]:
+            try:
+                return cid, probe_challenge(host, port, timeout=min(self.probe_timeout, 10))
+            except Exception:  # noqa: BLE001
+                return cid, ProbeResult.UNKNOWN
+
+        with _TExecutor(max_workers=min(PROBE_CONCURRENCY, 8)) as ex:
+            futures = {ex.submit(_check, cid, h, p): cid for cid, h, p in hosts}
+            import concurrent.futures as _cf
+
+            for future in _cf.as_completed(futures):
+                cid, result = future.result()
+                project = self.projects.get(cid)
+                if project is None:
+                    continue
+                if result == ProbeResult.REACHABLE:
+                    stats["reachable"] += 1
+                elif isinstance(result, tuple) and result[0] == ProbeResult.DISCOVERED:
+                    discovered_port = int(result[1])
+                    project.target_port = discovered_port
+                    project.stop_reason = f"warmup: discovered port {discovered_port}"
+                    stats["discovered"] += 1
+                    if not self.quiet and not quiet:
+                        print(
+                            f"[warmup] {cid}: DISCOVERED port {discovered_port} "
+                            f"on {project.target_host}"
+                        )
+                elif result == ProbeResult.INFRA_BLOCKED:
+                    project.status = ChallengeStatus.INFRA_BLOCKED
+                    project.stop_reason = "warmup: infra blocked"
+                    stats["infra_blocked"] += 1
+                    if not self.quiet and not quiet:
+                        print(f"[warmup] {cid}: INFRA_BLOCKED — skipped")
+                else:
+                    stats["unknown"] += 1
+
+        if not self.quiet and not quiet:
+            print(
+                f"[warmup] done: {stats['reachable']} reachable, "
+                f"{stats['discovered']} discovered, "
+                f"{stats['infra_blocked']} infra_blocked, "
+                f"{stats['unknown']} unknown ({stats['total']} total)"
+            )
+        return stats
+
     # ── 主循环 ──────────────────────────────────────────────────────────
 
     def run(self, limit: Optional[int] = None) -> dict:
@@ -263,6 +360,11 @@ class Dispatcher:
             dict: 汇总报告（totals + 每题状态），供 CLI 输出/持久化
         """
         started = time.time()
+
+        # 预热：启动前批量端口检测，提前标记 INFRA_BLOCKED
+        if self._warmup:
+            self.warmup()
+
         try:
             while True:
                 self._reap_finished()
@@ -312,7 +414,12 @@ class Dispatcher:
 
     def _probe_and_maybe_spawn(self, project: Project,
                                limit: Optional[int] = None) -> bool:
-        """探活单个候选；可达则分配 solver，不可达标记 INFRA_BLOCKED。"""
+        """探活单个候选；可达则分配 solver，不可达标记 INFRA_BLOCKED。
+
+        增强行为（v2）：
+        - 收到 ``ProbeResult.DISCOVERED`` 时自动更新 target_port 并重试
+        - 发现隐藏端口时打印提示信息
+        """
         if project.target_host:
             if not self.quiet:
                 print(
@@ -322,6 +429,39 @@ class Dispatcher:
             result = probe_challenge(
                 project.target_host, project.target_port, timeout=self.probe_timeout
             )
+            # 处理 DISCOVERED（tuple 类型）
+            if isinstance(result, tuple) and result[0] == ProbeResult.DISCOVERED:
+                discovered_port = int(result[1])
+                if not self.quiet:
+                    print(
+                        f"[probe] {project.challenge_id}: "
+                        f"DISCOVERED port {discovered_port} on {project.target_host} "
+                        f"(original target_port={project.target_port})"
+                    )
+                project.target_port = discovered_port
+                project.stop_reason = f"probe: discovered port {discovered_port}"
+                # 重试新端口
+                retry = probe_challenge(
+                    project.target_host, project.target_port, timeout=min(self.probe_timeout, 10)
+                )
+                if isinstance(retry, tuple):
+                    retry = retry[0]
+                if retry == ProbeResult.INFRA_BLOCKED:
+                    project.status = ChallengeStatus.INFRA_BLOCKED
+                    project.stop_reason = "probe: infra blocked (retry after discovery)"
+                    if not self.quiet:
+                        print(
+                            f"[probe] {project.challenge_id}: "
+                            f"retry on port {discovered_port} failed — INFRA_BLOCKED"
+                        )
+                    return False
+                # 新端口可达 → 分配 solver
+                if not self.quiet:
+                    print(
+                        f"[probe] {project.challenge_id}: "
+                        f"port {discovered_port} reachable — spawning solver"
+                    )
+                return self._spawn(project, limit)
             if result == ProbeResult.INFRA_BLOCKED:
                 project.status = ChallengeStatus.INFRA_BLOCKED
                 project.stop_reason = "probe: infra blocked"
@@ -351,6 +491,22 @@ class Dispatcher:
                 )
             )
         # ex.map 已按序完成探活+分配；返回 False 的已被标记 INFRA_BLOCKED
+
+    def _get_specialist_prompt(self, project: Project) -> str:
+        """根据题目类别创建专家 prompt 并注入知识卡。
+
+        Args:
+            project: 当前挑战项目
+
+        Returns:
+            str: 专家 prompt 文本，类别无匹配时返回空字符串
+        """
+        if not project.category:
+            return ""
+        specialist = SpecialistFactory.create(project.category)
+        if specialist is None:
+            return ""
+        return specialist.build_prompt(project)
 
     def _escalation_for(self, project: Project) -> tuple[str, str]:
         """P0-3：收割轮 respawn 升级决策。返回 (route, stop_reason 原文)。
@@ -458,7 +614,21 @@ class Dispatcher:
             ensure_agents_md(work_dir, project)
         except Exception:  # noqa: BLE001 — 生成失败不阻断调度
             pass
-        # P0-3：升级决策在状态重置前读取快照（status 此时仍为 ABANDONED/TIMEOUT）
+        # 注入分类专家 prompt（F3-001：知识卡 + 专家工作流）。
+        # 收割轮会对同一题 respawn：先剥掉上一轮的 [Specialist Prompt] 块，
+        # 否则每次重试都追加一整份（单份 ~11KB），重试多次会累积数十 KB。
+        specialist_prompt = self._get_specialist_prompt(project)
+        if specialist_prompt:
+            base_desc = project.description or ""
+            marker = "\n\n[Specialist Prompt]\n"
+            prev = base_desc.find(marker)
+            if prev != -1:
+                base_desc = base_desc[:prev]
+            project.description = (
+                base_desc + f"\n\n[Specialist Prompt]\n{specialist_prompt}"
+            )
+        # P0-3：升级决策在状态重置前读取快照（status 此时仍为 ABANDONED/TIMEOUT）。
+        # 注入顺序在 [Specialist Prompt] 之后，保证 [Escalation] 位于 prompt 末尾。
         route, detail = self._escalation_for(project)
         if route != DEFAULT_ROUTE:
             self._apply_escalation(project, route, detail)
@@ -475,8 +645,9 @@ class Dispatcher:
         incremental = not (project.timebox_override or self.timebox_override)
         tb = Timebox(initial_budget=budget, incremental=incremental)
         tb.start()
-        queue = multiprocessing.Queue()
-        proc = multiprocessing.Process(
+        mp_context = _SAFE_MP_CONTEXT
+        queue = mp_context.Queue()
+        proc = mp_context.Process(
             target=_safe_target,
             args=(self._solver_fn, project, str(work_dir), self.model or project.model, queue),
             name=f"solver-{project.challenge_id}",
@@ -738,6 +909,11 @@ class Dispatcher:
         # _budget_tokens）。solver.log 每次尝试被截断重写，只反映当前尝试。
         tokens = self._budget_tokens(work_dir, self.token_counter)
 
+        # 每题止损器：max_tokens=None（默认不限 token）→ 直接复用共享
+        # stopper（无预算维度）；显式 max_tokens（CLI）→ 配置一致，同样复用。
+        # stopper 纯计算无共享状态，无需按题实例化。
+        stopper = self.stopper
+
         # 维度 2/4 — 无产出 / 假设空间重复：需要黑板数据源
         # （P0-2：mtime 缓存，未变时复用上次反序列化对象，语义等同重载）
         board = self._cached_board(slot, work_dir)
@@ -778,22 +954,50 @@ class Dispatcher:
 
         # 临门不弃（F2-011）：FLAG 文件内容过校验门，或 solver.log 检出 flag。
         # 占位/畸形 FLAG 不算「已拿到 flag」（与 _reap 的声明式提交口径一致）。
+        # P0-2：日志改增量扫描（offset + tail 拼接），布尔语义与全量一致；
+        # FLAG 文件极小且低频写，保留全量读取。
         declared = read_flag_file(work_dir)
         if declared and verify_flag(
             declared, evidence="", require_grounding=False
         ) is not VerificationResult.CONFIRMED:
             declared = ""
-        # P0-2：日志改增量扫描（offset + tail 拼接），布尔语义与全量一致；
-        # FLAG 文件极小且低频写，保留全量读取。
         has_partial_flag = bool(declared) or self._incremental_flag_scan(slot, work_dir)
 
-        return self.stopper.check(
+        return stopper.check(
             project_tokens=tokens,
             rounds_without_new_fact=rounds_without_fact,
             variant_failures=variant_failures,
             is_infra_blocked=project.status == ChallengeStatus.INFRA_BLOCKED,
             has_partial_flag=has_partial_flag,
         )
+
+    def _record_experience(self, project: Project, success: bool, work_dir: Path) -> None:
+        """经验落库（F3-003/F3-004）：成功/失败/超时/止损各出口统一调用。
+
+        从黑板提取 CONFIRMED/REFUTED fact 作为 key_commands，best-effort：
+        任何失败只静默跳过，不影响调度。
+        """
+        try:
+            board = load_blackboard(work_dir / BLACKBOARD_FILENAME)
+            fact_contents = (
+                [
+                    f.content[:120]
+                    for f in board.get_facts()
+                    if f.state in (State.CONFIRMED, State.REFUTED)
+                ][:20]
+                if board
+                else []
+            )
+            from .experiential_learning import record_solve_outcome
+            record_solve_outcome(
+                challenge_id=project.challenge_id,
+                category=project.category or "misc",
+                success=success,
+                key_commands=fact_contents,
+                flag=project.flag,
+            )
+        except Exception:  # noqa: BLE001 — 经验落库失败不影响调度
+            pass
 
     def _interrupt_stopped(self, cid: str, slot: dict, reason: str) -> None:
         """止损命中：终止 solver 进程，标记 ABANDONED（可收割轮换方向重试），写接力块。"""
@@ -824,6 +1028,8 @@ class Dispatcher:
             print(
                 f"[dispatch] {project.challenge_id}: STOPPED ({reason}) — RELAY.md written"
             )
+        # 经验落库：止损出口（success=False）同样记录
+        self._record_experience(project, success=False, work_dir=work_dir)
 
     def _interrupt(self, cid: str, slot: dict) -> None:
         """时间盒最终超时：终止 solver 进程，标记 TIMEOUT，输出接力块。"""
@@ -855,6 +1061,8 @@ class Dispatcher:
                 f"[dispatch] {project.challenge_id}: TIMEOUT "
                 f"(tier={tb.tier_label}, elapsed={int(tb.elapsed)}s) — RELAY.md written"
             )
+        # 经验落库：时间盒超时出口（success=False）同样记录
+        self._record_experience(project, success=False, work_dir=work_dir)
 
     def _write_relay(self, project: Project, tb: Timebox, work_dir: Path,
                      reason: Optional[str] = None) -> None:

@@ -47,12 +47,17 @@ from .racer import (
     _stop_process,
     model_slug,
 )
+from .reasoner import Reasoner, TaskCategory
 from .solver import FLAG_FILENAME, SOLVER_LOG, SolverResult, resolve_default_model, solver_worker
 from .timebox import Timebox, difficulty_adjusted_budget
 from .verify import (
     VerificationResult,
     extract_flag_candidates,
     verify_flag,
+)
+
+_SAFE_MP_CONTEXT = multiprocessing.get_context(
+    "forkserver" if "forkserver" in multiprocessing.get_all_start_methods() else "spawn"
 )
 
 _POLL_INTERVAL = 1.0
@@ -135,7 +140,7 @@ class SharedMemory:
 
     def __init__(self, manager=None):
         if manager is None:
-            manager = multiprocessing.Manager()
+            manager = _SAFE_MP_CONTEXT.Manager()
         self._manager = manager
         self.data = manager.dict()
         self.data["flag"] = ""
@@ -169,6 +174,15 @@ class SharedMemory:
 
     def snapshot(self) -> dict:
         return dict(self.data)
+
+    def __getstate__(self):
+        """Pickle 支持：排除不可 pickle 的 _manager，保留 proxy 对象。"""
+        return {"data": self.data, "stop_event": self.stop_event}
+
+    def __setstate__(self, state):
+        self._manager = None
+        self.data = state["data"]
+        self.stop_event = state["stop_event"]
 
 
 def merge_all_boards(
@@ -489,12 +503,13 @@ def run_multi_agent(
     hallucination_detector: bool = True,
     opponent_monitor: bool = True,
     quiet: bool = False,
+    reasoner: Optional[Reasoner] = None,
 ) -> MultiAgentResult:
     """启动多 Agent 协作（F3-007/008/009）。
 
     Args:
         project: Project 对象
-        directions: 探索方向列表；None 从黑板/默认解析
+        directions: 探索方向列表；None 从黑板/Reasoner/默认解析
         n_direct_explorers: 直接解题方向探索 agent 数（默认 4）
         work_dir: 工作目录（默认 project.challenge_dir）
         timeout: 全局时间盒（秒）；0 用难度自适应预算
@@ -504,17 +519,26 @@ def run_multi_agent(
         hallucination_detector: 启用幻觉检测 agent
         opponent_monitor: 启用对手 Agent 监控（F3-013 集成）
         quiet: 静默输出
+        reasoner: Reasoner 实例（提供时替代随机方向分配）
 
     Returns:
         MultiAgentResult
     """
     solver_fn = solver_fn or solver_worker
+    mp_context = _SAFE_MP_CONTEXT
     n = max(1, int(n_direct_explorers))
     base_dir = Path(work_dir or project.challenge_dir or project.challenge_id)
     base_dir.mkdir(parents=True, exist_ok=True)
     board_path = base_dir / BLACKBOARD_FILENAME
 
     dirs = resolve_directions(directions, board_path)
+    # 如果提供了 Reasoner 且没有显式 directions，用 Reasoner 的任务分配
+    if reasoner is not None and not directions:
+        plan = reasoner.initial_plan(project, None)
+        if plan and plan.tasks:
+            reasoner_dirs = [t.description for t in plan.tasks]
+            if reasoner_dirs:
+                dirs = reasoner_dirs
     resolved_model = model or project.model or resolve_default_model()
 
     budget = timeout or difficulty_adjusted_budget(project.difficulty)
@@ -549,8 +573,8 @@ def run_multi_agent(
             exp_project.description = build_explorer_description(
                 project, direction
             )
-            queue = multiprocessing.Queue()
-            proc = multiprocessing.Process(
+            queue = mp_context.Queue()
+            proc = mp_context.Process(
                 target=_explorer_target,
                 args=(
                     solver_fn, exp_project, str(exp_dir), resolved_model,

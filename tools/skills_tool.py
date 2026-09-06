@@ -104,6 +104,21 @@ _SKILLS_CACHE_KEY_DISABLED = "with_disabled"
 _SKILLS_CACHE_KEY_FILTERED = "filtered"
 
 
+def _record_skill_loaded(name: str) -> None:
+    """Record that a skill was loaded via skill_view() for on-demand indexing.
+
+    This allows the system prompt builder to include descriptions of skills
+    that have been explicitly loaded, while keeping all others as names-only.
+    Silently ignores failures (e.g. during import bootstrap).
+    """
+    try:
+        from agent.prompt_builder import record_loaded_skill
+
+        record_loaded_skill(name)
+    except Exception:
+        pass
+
+
 def _skills_scan_signature(dirs_to_scan, disabled) -> tuple:
     """Cheap change-signature for the skill scan inputs.
 
@@ -995,6 +1010,7 @@ def _serve_plugin_skill(
                 {"success": False, "error": f"Failed to read '{file_path}': {exc}"},
                 ensure_ascii=False,
             )
+        _record_skill_loaded(f"{namespace}:{bare}")
         return json.dumps(
             {
                 "success": True,
@@ -1050,6 +1066,8 @@ def _serve_plugin_skill(
             logger.debug(
                 "Could not preprocess plugin skill %s:%s", namespace, bare, exc_info=True
             )
+
+    _record_skill_loaded(f"{namespace}:{bare}")
 
     return json.dumps(
         {
@@ -1924,6 +1942,10 @@ def skill_view(
             result["compatibility"] = frontmatter["compatibility"]
         if isinstance(metadata, dict):
             result["metadata"] = metadata
+
+        # Record this skill as "loaded" so the system prompt builder can
+        # include its description in subsequent turns (names-only mode).
+        _record_skill_loaded(skill_name)
 
         return json.dumps(result, ensure_ascii=False)
 

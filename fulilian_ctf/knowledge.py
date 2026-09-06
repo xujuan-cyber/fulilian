@@ -2,15 +2,29 @@
 
 在 solver 启动时根据题目分类自动注入对应知识卡，
 同时集成 Des-CTF-Knowledge FTS5 检索。
+
+注入顺序（inject_ctf_context 统一入口）：
+1. playbook.md（通用 CTF 解题 playbook，存在才注入，位于知识卡之前）
+2. 分类知识卡（web/crypto/reverse/pwn/forensics/misc）
+3. 历史失败教训（experiential_learning.get_avoid_list）
+4. 相似历史 WP 参考（knowledge_retriever.search top-3，题面关键词优先）
+
+所有环节均为 best-effort：检索失败/文件缺失/DB 空时静默降级，
+绝不让 solve 因此崩溃；检索块严格限体积（每条 title+snippet≤300 字符
++路径，最多 3 条）。
 """
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Optional
 
 # skills/ctf-knowledge/ 目录路径（相对于项目根）
 SKILLS_DIR = Path(__file__).resolve().parent.parent / "skills" / "ctf-knowledge"
+
+# 通用解题 playbook（注入在知识卡之前）
+PLAYBOOK_PATH = SKILLS_DIR / "playbook.md"
 
 CATEGORIES = {
     "web": "web.md",
@@ -20,6 +34,20 @@ CATEGORIES = {
     "forensics": "forensics.md",
     "misc": "misc.md",
 }
+
+# 检索注入体积限制
+_MAX_WP_REFS = 3          # 最多 3 条 WP 参考
+_MAX_REF_CHARS = 300      # 每条 title+snippet 合计上限（路径另计）
+_MAX_AVOID_ITEMS = 10     # 历史教训最多条数
+_MAX_QUERY_TOKENS = 8     # 题面关键词最多取前 N 个 token
+
+_CJK_WORD_RE = re.compile(r"[\w\u4e00-\u9fff]+", re.UNICODE)
+
+# FTS5 MATCH 保留操作符词：裸出现在 token 序列里是语法错误
+_FTS_OPERATOR_WORDS = {"and", "or", "not", "near"}
+
+# 注入幂等 sentinel：以代码常量判断，不依赖文档文案是否被改动
+_CONTEXT_MARKER = "<!-- fulilian:ctf-context -->"
 
 
 def get_knowledge_card(category: str) -> Optional[str]:
@@ -31,7 +59,7 @@ def get_knowledge_card(category: str) -> Optional[str]:
     Returns:
         str | None: 知识卡内容，分类不存在返回 None
     """
-    filename = CATEGORIES.get(category.lower())
+    filename = CATEGORIES.get((category or "").lower())
     if not filename:
         return None
     card_path = SKILLS_DIR / filename
@@ -40,18 +68,164 @@ def get_knowledge_card(category: str) -> Optional[str]:
     return None
 
 
-def inject_knowledge_card(category: str, system_prompt: str) -> str:
-    """根据题目分类将知识卡注入系统提示。
+def get_playbook() -> str:
+    """读取通用 CTF 解题 playbook；文件缺失/读取失败返回空串。"""
+    try:
+        if PLAYBOOK_PATH.exists():
+            content = PLAYBOOK_PATH.read_text(encoding="utf-8")
+            return content if content.strip() else ""
+    except OSError:
+        pass
+    return ""
+
+
+def _sanitize_query(text: str) -> str:
+    """把题面文本清洗成 FTS5 MATCH 友好的查询串。
+
+    只保留字母数字/下划线/中文字符 token（去掉标点、引号等会触发
+    FTS5 语法错误的字符），取前 _MAX_QUERY_TOKENS 个，用 " OR " 连接
+    ——题面多词做隐式 AND 太严格（任一词不命中即空结果），OR 提高召回，
+    排序仍由 BM25 兜底。清洗后为空返回空串。
+    """
+    if not text:
+        return ""
+    tokens = _CJK_WORD_RE.findall(text)
+    # FTS5 保留操作符词（or/and/not/near）裸出现在 MATCH 里是语法错误，
+    # 题面贴 SQL payload 时极易命中（如 admin' OR 1=1）——直接丢弃。
+    tokens = [t for t in tokens if t.lower() not in _FTS_OPERATOR_WORDS]
+    tokens = tokens[:_MAX_QUERY_TOKENS]
+    if not tokens:
+        return ""
+    # 每个 token 加双引号短语包裹，token 本身已无引号字符（正则只留
+    # 字母数字/下划线/中文），杜绝其余边界字符触发 MATCH 语法错误。
+    return " OR ".join(f'"{t}"' for t in tokens)
+
+
+def _format_lessons_block(category: str) -> str:
+    """构造「历史失败教训」块；无教训/查询异常返回空串。"""
+    try:
+        from .experiential_learning import get_avoid_list
+
+        avoid = [t for t in get_avoid_list(category) if t][: _MAX_AVOID_ITEMS]
+    except Exception:  # noqa: BLE001 — 经验查询失败不阻断注入
+        return ""
+    if not avoid:
+        return ""
+    lines = "\n".join(f"- {t}" for t in avoid)
+    return (
+        "\n\n## 历史失败教训（avoid list — 该分类下这些做法曾失败，别再犯）\n"
+        + lines
+    )
+
+
+def _format_wp_refs_block(query_text: str, category: str) -> str:
+    """构造「相似历史 WP 参考」块；无结果/检索异常返回空串。
+
+    体积控制：每条 title+snippet 合计截断到 _MAX_REF_CHARS，
+    路径单独一行；最多 _MAX_WP_REFS 条。
+    """
+    try:
+        from .knowledge_retriever import search
+
+        results = search(
+            query=query_text,
+            category=category or None,
+            limit=_MAX_WP_REFS,
+            auto_build=True,
+        )
+    except Exception:  # noqa: BLE001 — 检索失败静默降级
+        return ""
+    if not results:
+        return ""
+
+    lines = []
+    for r in results[:_MAX_WP_REFS]:
+        title = str(r.get("title") or "").strip()
+        snippet = " ".join(str(r.get("snippet") or "").split())
+        combined = f"{title} — {snippet}" if snippet else title
+        if len(combined) > _MAX_REF_CHARS:
+            combined = combined[: _MAX_REF_CHARS - 1] + "…"
+        src = str(r.get("source_path") or "").strip()
+        lines.append(f"- {combined}\n  ({src})" if src else f"- {combined}")
+    if not lines:
+        return ""
+    return (
+        "\n\n## 相似历史 WP 参考（来自 Des-CTF-Knowledge，可参考其思路）\n"
+        + "\n".join(lines)
+    )
+
+
+def inject_ctf_context(
+    category: str,
+    system_prompt: str,
+    query: Optional[str] = None,
+) -> str:
+    """统一知识注入入口：playbook + 知识卡 + 历史教训 + 相似 WP 检索。
+
+    Args:
+        category: 题目分类（web/crypto/reverse/pwn/forensics/misc，可为空）
+        system_prompt: 原始系统提示（或 solver 查询文本）
+        query: 可选题面关键词（标题/描述等）。检索优先使用它构造查询，
+               缺失时回退到纯 category 词。
+
+    Returns:
+        str: 注入后的提示；所有环节失败时原样返回。
+    """
+    # 幂等守卫：specialist prompt 经 dispatcher 拼进 description 后，
+    # solver 侧会再调一次注入。已含注入 sentinel 时跳过，避免双份。
+    if _CONTEXT_MARKER in system_prompt:
+        return system_prompt
+
+    blocks: list[str] = []
+
+    # 1) playbook —— 无条件注入（存在才注入），位于知识卡之前
+    playbook = get_playbook()
+    if playbook:
+        blocks.append(playbook)
+
+    # 2) 分类知识卡
+    card = get_knowledge_card(category)
+    if card:
+        blocks.append(card)
+
+    # 3) 历史失败教训 + 4) 相似 WP 参考（均 best-effort、限体积）
+    cat = (category or "").strip()
+    if cat:
+        lessons = _format_lessons_block(cat)
+        if lessons:
+            blocks.append(lessons)
+
+    query_text = _sanitize_query(query or "") or (cat or "")
+    if query_text:
+        refs = _format_wp_refs_block(query_text, cat)
+        if refs:
+            blocks.append(refs)
+
+    if not blocks:
+        return system_prompt
+    # sentinel 打头，供幂等守卫识别（见 _CONTEXT_MARKER）
+    return (
+        system_prompt.rstrip()
+        + "\n\n---\n\n"
+        + _CONTEXT_MARKER
+        + "\n\n"
+        + "\n\n---\n\n".join(blocks)
+    )
+
+
+def inject_knowledge_card(
+    category: str,
+    system_prompt: str,
+    query: Optional[str] = None,
+) -> str:
+    """根据题目分类将知识卡注入系统提示（兼容入口，委托 inject_ctf_context）。
 
     Args:
         category: 题目分类
         system_prompt: 原始系统提示
+        query: 可选题面关键词（标题/描述），用于相似 WP 检索
 
     Returns:
-        str: 注入知识卡后的系统提示
+        str: 注入后的系统提示
     """
-    card = get_knowledge_card(category)
-    if card:
-        # 在系统提示末尾追加知识卡，用分隔线隔开
-        return system_prompt.rstrip() + "\n\n---\n\n" + card
-    return system_prompt
+    return inject_ctf_context(category, system_prompt, query=query)

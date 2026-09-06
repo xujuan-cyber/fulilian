@@ -17,4 +17,9 @@ class RevSpecialist(BaseSpecialist):
             "3. deobfuscate: unpack, deobfuscate, or decompile as needed\n"
             "4. reconstruct: recover algorithm, extract flag or key"
         )
+        self.asset_discipline = (
+            "Before solving, check existing assets first:\n"
+            "- search(query, category='reverse') and search_snippets(query, category='reverse') from fulilian_ctf/knowledge_retriever.py for similar past write-ups and exp snippets (note: the knowledge base uses 'reverse', not 'rev')\n"
+            "- skills/ctf-knowledge/scripts/ROUTE.md may point to a ready-made script (decoders, deobfuscation helpers); adapt it instead of writing from scratch"
+        )
         super().__init__()

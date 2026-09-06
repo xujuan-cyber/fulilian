@@ -966,19 +966,19 @@ class TestBuildSystemPrompt:
     def test_profile_guidance_when_only_user_profile_enabled(
         self, agent_with_memory_tool
     ):
-        """USER.md alone gets the narrower profile-only guidance.
+        """USER.md alone gets the merged profile+memory guidance.
 
-        The full MEMORY_GUIDANCE block instructs the model to save notes to a
-        MEMORY.md store that does not exist in this configuration, so the
-        profile-specific block is injected instead.
+        USER_PROFILE_GUIDANCE is now aliased to MEMORY_GUIDANCE for compactness,
+        and the merged block already instructs the model to write to the profile
+        (target='user') rather than memory notes. Both constants refer to the
+        same string, so checking USER_PROFILE_GUIDANCE presence suffices.
         """
         from agent.prompt_builder import MEMORY_GUIDANCE, USER_PROFILE_GUIDANCE
 
         agent_with_memory_tool._memory_enabled = False
         agent_with_memory_tool._user_profile_enabled = True
         prompt = agent_with_memory_tool._build_system_prompt()
-        assert MEMORY_GUIDANCE not in prompt
-        assert USER_PROFILE_GUIDANCE in prompt
+        assert USER_PROFILE_GUIDANCE in prompt  # alias for MEMORY_GUIDANCE
 
 
 

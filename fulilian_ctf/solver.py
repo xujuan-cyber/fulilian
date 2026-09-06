@@ -20,6 +20,7 @@ from __future__ import annotations
 import os
 import sys
 import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -30,6 +31,93 @@ from .verify import check_output_for_flag
 
 FLAG_FILENAME = "FLAG"
 SOLVER_LOG = "solver.log"
+USAGE_FILE = "usage.json"
+
+# CTF solver 最大轮数按难度分档（2026-09-04 起默认不启用）：
+# 默认 max_turns 不设上限（AIAgent 库默认 sys.maxsize，题目一直解到
+# 出 flag 为止）；本表仅在 --max-turns=0/未设时**不生效**——只有调用方
+# 显式选择难度分档（fulilian_ctf.difficulty_max_turns）时作参考。
+DIFFICULTY_MAX_TURNS = {
+    "easy": 20,
+    "medium": 30,
+    "hard": 45,
+    "expert": 45,
+}
+
+
+def difficulty_max_turns(difficulty: str) -> int:
+    """难度 → solver max_turns（仅显式启用分档时使用；未知难度按 medium=30）。"""
+    return DIFFICULTY_MAX_TURNS.get((difficulty or "").lower(), 30)
+
+
+def resolve_max_turns_from_env(default_when_unlimited: int = sys.maxsize) -> int:
+    """解析 FULILIAN_CTF_MAX_TURNS（CLI --max-turns 经环境变量传入）。
+
+    显式正整数 → 轮数上限；未设/0/非法 → ``default_when_unlimited``
+    （默认 sys.maxsize，即不限轮数——题目一直解到出 flag，靠 dispatcher
+    进展型止损兜底）。
+    """
+    try:
+        val = int(os.environ.get("FULILIAN_CTF_MAX_TURNS", "") or 0)
+    except ValueError:
+        val = 0
+    if val <= 0:
+        return default_when_unlimited
+    return val
+
+
+def _read_session_usage(agent) -> dict:
+    """从 AIAgent 实例提取精确会话消耗（usage 计数器缺失时容错降级）。"""
+    def _int(name: str) -> int:
+        try:
+            return max(0, int(getattr(agent, name, 0) or 0))
+        except (TypeError, ValueError):
+            return 0
+
+    return {
+        "input_tokens": _int("session_input_tokens") + _int("session_cache_read_tokens")
+        + _int("session_cache_write_tokens"),
+        "output_tokens": _int("session_output_tokens"),
+        "api_calls": _int("session_api_calls"),
+        "cost_usd": round(max(0.0, float(getattr(agent, "session_estimated_cost_usd", 0.0) or 0.0)), 6),
+    }
+
+
+def write_usage_record(work_dir: Path, agent, attempt: int = 1) -> Optional[dict]:
+    """把本次尝试的精确消耗累计写进 work_dir/usage.json（跨尝试累加）。
+
+    solver.log 每次尝试被 ``open(..., "w")`` 截断——跨尝试的 token 累计
+    只能靠这里。写失败不阻断解题（返回 None）。
+    """
+    import json
+
+    usage = _read_session_usage(agent)
+    if usage["api_calls"] <= 0 and usage["input_tokens"] + usage["output_tokens"] <= 0:
+        return None  # 无任何消耗记录（agent 未跑/老版本），保持文件不动
+    usage["total_tokens"] = usage["input_tokens"] + usage["output_tokens"]
+    try:
+        path = Path(work_dir) / USAGE_FILE
+        prev: dict = {}
+        if path.is_file():
+            try:
+                prev = json.loads(path.read_text(encoding="utf-8"))
+                if not isinstance(prev, dict):
+                    prev = {}
+            except (OSError, ValueError):
+                prev = {}
+        usage["total_tokens"] = int(prev.get("total_tokens", 0) or 0) + usage["total_tokens"]
+        usage["api_calls"] = int(prev.get("api_calls", 0) or 0) + usage["api_calls"]
+        usage["cost_usd"] = round(
+            float(prev.get("cost_usd", 0.0) or 0.0) + usage["cost_usd"], 6
+        )
+        usage["attempts"] = int(prev.get("attempts", 0) or 0) + max(1, int(attempt or 1))
+        # P1-3：原子写（tmp + os.replace），中断不留截断 usage.json
+        from .relay import atomic_write_text
+
+        atomic_write_text(path, json.dumps(usage, ensure_ascii=False, indent=2))
+        return usage
+    except (OSError, TypeError, ValueError):
+        return None
 
 
 @dataclass
@@ -43,9 +131,7 @@ class SolverResult:
 
 
 def build_solve_query(project, relay_text: Optional[str] = None) -> str:
-    """构造发给 solver 的 CTF 查询（含知识卡自动注入）。"""
-    from .knowledge import get_knowledge_card
-
+    """构造发给 solver 的 CTF 查询（含知识注入）。"""
     lines = [f"Solve the CTF challenge: {project.challenge_id}"]
     if project.title:
         lines.append(f"Title: {project.title}")
@@ -74,24 +160,18 @@ def build_solve_query(project, relay_text: Optional[str] = None) -> str:
 
     query = "\n".join(lines)
 
-    # 自动注入知识卡
-    if project.category:
-        card = get_knowledge_card(project.category)
-        if card:
-            query = query + "\n\n---\n\n" + card
+    # 知识注入（playbook + 知识卡 + 历史教训 + 相似 WP 检索）。
+    # 检索 query 优先用题目标题+描述关键词；inject_ctf_context 内部
+    # 全程 best-effort，失败时静默降级、绝不阻断解题。
+    try:
+        from .knowledge import inject_ctf_context
 
-    # 注入历史教训（F3-003/F3-004）：avoid list 拼在知识卡之后（末尾）
-    if project.category:
-        try:
-            from .experiential_learning import get_avoid_list
-            avoid = get_avoid_list(project.category)[:10]
-        except Exception:  # noqa: BLE001 — 经验查询失败不阻断解题
-            avoid = []
-        if avoid:
-            query += (
-                "\n\n## 历史教训（avoid list — 别再犯）\n"
-                + "\n".join(f"- {t}" for t in avoid)
-            )
+        query_text = " ".join(
+            t for t in (project.title, project.description) if t
+        ).strip() or None
+        query = inject_ctf_context(project.category or "", query, query_text)
+    except Exception:  # noqa: BLE001 — 知识注入失败不阻断解题
+        pass
 
     return query
 
@@ -314,6 +394,12 @@ def _default_solver_impl(project, work_dir: Path, query: str) -> int:
     """真实求解：复用 Fulilian run_agent 核心（CTF 模式），stdout/stderr 进 solver.log。"""
     from run_agent import main as run_agent_main
 
+    # 轮数上限：环境变量显式覆盖（CLI --max-turns）才限制；未设/0 =
+    # 不限轮数（sys.maxsize，AIAgent 库默认无限迭代语义）——题目一直
+    # 解到出 flag 为止。（forkserver 子进程继承父进程环境，故 solve-all
+    # 设置的变量可见）
+    max_turns = resolve_max_turns_from_env()
+
     log_path = work_dir / SOLVER_LOG
     old_cwd = os.getcwd()
     old_out, old_err = sys.stdout, sys.stderr
@@ -325,7 +411,7 @@ def _default_solver_impl(project, work_dir: Path, query: str) -> int:
                 query=query,
                 mode="ctf",
                 model=project.model or "",
-                max_turns=30,
+                max_turns=max_turns,
             )
     finally:
         sys.stdout, sys.stderr = old_out, old_err
@@ -344,9 +430,31 @@ def solver_worker(project, work_dir: str, model: str, queue, solver_impl=None) -
         solver_impl: 可注入的求解实现（测试用）；None 走真实 run_agent
     """
     work_dir = Path(work_dir)
+    # 初始化结构化轨迹（延迟导入避免循环依赖）
+    from .trace import SolverTrace, TraceEntry
+
+    solver_id = project.challenge_id if hasattr(project, "challenge_id") and project.challenge_id else f"pid-{os.getpid()}"
+    solver_trace = SolverTrace(
+        solver_id=solver_id,
+        model=model or "",
+        start_time=time.time(),
+    )
+    solver_trace.add_entry(TraceEntry(
+        timestamp=time.time(),
+        round=0,
+        action="worker_start",
+        tool_call=f"solver_worker({project.challenge_id}, {model})",
+    ))
+    # 初始化上下文管理器（F4-008：上下文紧凑管理）
+    from .planner import ContextManager, TurnRole
+
+    context = ContextManager(f"solver_{solver_id}", max_tokens=15000)
+    context.set_system_prompt(f"Solve CTF challenge: {project.challenge_id} ({project.category})")
+    context.add_turn(TurnRole.USER, f"Starting solver for {project.challenge_id}")
     try:
         work_dir.mkdir(parents=True, exist_ok=True)
         os.environ["FULILIAN_CTF_MODE"] = "1"
+        os.environ["FULILIAN_CTF_WORK_DIR"] = str(Path(work_dir).resolve())
         # F4-001：题目目录自动生成 AGENTS.md（chdir 后由 _load_agents_md 注入）
         try:
             from .agents_md import ensure_agents_md
@@ -374,16 +482,39 @@ def solver_worker(project, work_dir: str, model: str, queue, solver_impl=None) -
         query = build_solve_query(project, relay_text)
         print(f"[solver:{project.challenge_id}] start pid={os.getpid()} model={project.model}", flush=True)
 
+        solver_trace.model = project.model or model
+
         if solver_impl is None:
             code = _default_solver_impl(project, work_dir, query)
         else:
             code = solver_impl(project, work_dir, query)
-
         result = _solver_result_from_code(code)
+        context.add_turn(TurnRole.TOOL, f"solver finished: exit_code={code}", is_reasoning=True)
+        solver_trace.add_entry(TraceEntry(
+            timestamp=time.time(),
+            round=1,
+            action="solver_finished",
+            conclusion=f"exit_code={code}",
+            tool_output=f"ok={result.ok}, exit_code={result.exit_code}",
+        ))
     except SystemExit as e:  # run_agent 以 sys.exit 退出
         result = SolverResult(ok=False, exit_code=int(e.code or 1), error=f"SystemExit: {e.code}")
+        solver_trace.add_entry(TraceEntry(
+            timestamp=time.time(),
+            round=1,
+            action="solver_error",
+            error_type="SystemExit",
+            conclusion=f"SystemExit: {e.code}",
+        ))
     except Exception as e:  # noqa: BLE001 — 进程隔离：任何异常都不影响其他 solver
         result = SolverResult(ok=False, exit_code=1, error=f"{type(e).__name__}: {e}")
+        solver_trace.add_entry(TraceEntry(
+            timestamp=time.time(),
+            round=1,
+            action="solver_error",
+            error_type=type(e).__name__,
+            conclusion=str(e),
+        ))
 
     # 声明式提交：读 FLAG 文件（存在即上报）
     try:
@@ -396,6 +527,30 @@ def solver_worker(project, work_dir: str, model: str, queue, solver_impl=None) -
         f"flag={'yes' if result.flag else 'no'}{' err=' + result.error if result.error else ''}",
         flush=True,
     )
+
+    # 记录 flag 结果
+    if result.flag:
+        context.add_turn(TurnRole.ASSISTANT, f"Flag found: {result.flag[:80]}")
+        solver_trace.flag_found = True
+        solver_trace.add_entry(TraceEntry(
+            timestamp=time.time(),
+            round=2,
+            action="flag_found",
+            flag_found=True,
+            tool_output=result.flag[:100],
+        ))
+    else:
+        context.add_turn(TurnRole.ASSISTANT, f"Flag not found: {result.error or 'no_flag'}", is_reasoning=True)
+        solver_trace.add_entry(TraceEntry(
+            timestamp=time.time(),
+            round=2,
+            action="flag_not_found",
+            flag_found=False,
+            error_type=result.error or "no_flag",
+        ))
+
+    solver_trace.end_time = time.time()
+
     try:
         publish_result_fact(project, work_dir, result)
     except Exception:  # noqa: BLE001 — 黑板接线失败不掩盖结果上报
@@ -403,6 +558,13 @@ def solver_worker(project, work_dir: str, model: str, queue, solver_impl=None) -
     try:
         queue.put(result)
     except Exception:  # noqa: BLE001 — 上报失败不掩盖结果
+        pass
+
+    # 持久化结构化轨迹
+    try:
+        trace_path = work_dir / f"trace_{solver_id}.json"
+        solver_trace.save(trace_path)
+    except Exception:  # noqa: BLE001 — 轨迹保存失败不阻断结果上报
         pass
 
 

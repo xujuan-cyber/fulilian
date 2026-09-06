@@ -45,6 +45,10 @@ from .solver import FLAG_FILENAME, SolverResult, resolve_default_model, solver_w
 from .timebox import Timebox, difficulty_adjusted_budget
 from .verify import VerificationResult, verify_flag
 
+_SAFE_MP_CONTEXT = multiprocessing.get_context(
+    "forkserver" if "forkserver" in multiprocessing.get_all_start_methods() else "spawn"
+)
+
 # 竞速默认轮询间隔（秒）：与 Dispatcher 相同量级，保证响应性
 _POLL_INTERVAL = 1.0
 
@@ -236,6 +240,123 @@ def coordinator_advice(
     return _heuristic_advice(blackboard_data)
 
 
+def coordinator_analyze_traces(
+    traces: list,
+    blackboard: Optional[Blackboard] = None,
+    enable_llm: bool = True,
+    llm_fn: Optional[Callable[[str], str]] = None,
+) -> str:
+    """分析多个 solver 的轨迹，生成汇总分析与方向建议（F4-007）。
+
+    Args:
+        traces: list[SolverTrace] — 各 solver 的轨迹
+        blackboard: 可选的 Blackboard（提供线索和排他路径）
+        enable_llm: 是否尝试 LLM 分析（False 直接走启发式）
+        llm_fn: 可注入 LLM（prompt → 文本）；None 走默认低成本调用
+
+    Returns:
+        str: 分析报告
+    """
+    lines: list[str] = []
+    # 1. 汇总每个 solver 的进展
+    lines.append("## Solver Trace Analysis")
+    lines.append("")
+    lines.append(f"### Overview ({len(traces)} solver(s))")
+    for t in traces:
+        solver_id = getattr(t, "solver_id", "?")
+        model = getattr(t, "model", "?")
+        entries = getattr(t, "entries", [])
+        flag_found = getattr(t, "flag_found", False)
+        summary = {
+            "solver_id": solver_id,
+            "model": model,
+            "entries": len(entries),
+            "flag_found": flag_found,
+        }
+        lines.append(f"- {solver_id} ({model}): {len(entries)} entries, {'✅ flag' if flag_found else '❌ no flag'}")
+        # 每个 solver 的失败分类
+        if hasattr(t, "classify_failures"):
+            failures = t.classify_failures()
+            if failures["error_entries"]:
+                lines.append(f"  - Errors: {failures['error_entries']} ({', '.join(failures['error_types'])})")
+    lines.append("")
+
+    # 2. 提取黑板线索和排他路径
+    if blackboard:
+        facts = blackboard.get_facts()
+        lines.append(f"### Blackboard State")
+        lines.append(f"- Facts: {len(facts)}")
+        if facts:
+            for f in facts[:10]:
+                lines.append(f"  - {f.content[:100]}")
+        exclusions = blackboard.get_exclusions()
+        lines.append(f"- Exclusions: {len(exclusions)}")
+        if exclusions:
+            for e in sorted(exclusions)[:10]:
+                lines.append(f"  - {e}")
+        lines.append("")
+
+    # 3. 对比分析互补路径
+    if len(traces) >= 2:
+        lines.append("### Cross-Solver Comparison")
+        # 找不同 solver 使用的不同工具/动作
+        all_actions: dict[str, set[str]] = {}
+        for t in traces:
+            sid = str(getattr(t, "solver_id", "?"))
+            actions = set()
+            for e in getattr(t, "entries", []):
+                if e.action:
+                    actions.add(e.action)
+            all_actions[sid] = actions
+        if len(all_actions) >= 2:
+            solver_ids = list(all_actions.keys())
+            unique_actions = all_actions[solver_ids[0]] ^ all_actions[solver_ids[1]]
+            if unique_actions:
+                lines.append(f"Complementary actions: {', '.join(sorted(unique_actions))}")
+            else:
+                lines.append("All solvers used similar actions")
+        lines.append("")
+
+    # 4. LLM 分析（可选）
+    if enable_llm:
+        prompt = (
+            "You are a CTF coordinator analyzing solver traces. "
+            "Based on the following trace summary, provide:\n"
+            "1. What each solver tried and why\n"
+            "2. Complementary approaches worth combining\n"
+            "3. 2-3 specific next steps\n\n"
+        )
+        for t in traces:
+            if hasattr(t, "summarize"):
+                trace_summary = t.summarize()
+                prompt += trace_summary + "\n\n"
+        if blackboard:
+            prompt += f"Blackboard: {len(blackboard.get_facts())} facts, {len(blackboard.get_exclusions())} exclusions\n"
+        fn = llm_fn or _default_llm
+        try:
+            analysis = fn(prompt)
+            if analysis and analysis.strip():
+                lines.append("### LLM Analysis")
+                lines.append("")
+                lines.append(analysis.strip())
+                return "\n".join(lines)
+        except Exception:  # noqa: BLE001 — LLM 失败降级
+            pass
+
+    # 5. 启发式降级
+    if blackboard:
+        heuristic = _heuristic_advice(blackboard.to_dict())
+        lines.append("### Heuristic Advice")
+        lines.append("")
+        lines.append(heuristic)
+    else:
+        lines.append("### Summary")
+        lines.append("")
+        lines.append("No blackboard available. Review individual solver traces for details.")
+
+    return "\n".join(lines)
+
+
 class CoordinatorLoop:
     """Coordinator 周期循环：读黑板 → 生成建议 → 写回黑板 Hint。
 
@@ -395,6 +516,7 @@ def run_race(
         RaceResult: 胜者 flag + 每个 racer 的结果
     """
     solver_fn = solver_fn or solver_worker
+    mp_context = _SAFE_MP_CONTEXT
     models = resolve_race_models(models)
     base_dir = Path(race_dir or project.challenge_dir or project.challenge_id)
     base_dir.mkdir(parents=True, exist_ok=True)
@@ -417,8 +539,8 @@ def run_race(
             racer_dir.mkdir(parents=True, exist_ok=True)
             racer_project = copy.deepcopy(project)
             racer_project.model = model
-            queue = multiprocessing.Queue()
-            proc = multiprocessing.Process(
+            queue = mp_context.Queue()
+            proc = mp_context.Process(
                 target=_race_target,
                 args=(solver_fn, racer_project, str(racer_dir), model, queue),
                 name=f"race-{i}-{model_slug(model)}",
@@ -555,6 +677,7 @@ __all__ = [
     "RaceResult",
     "RacerResult",
     "coordinator_advice",
+    "coordinator_analyze_traces",
     "model_slug",
     "resolve_race_models",
     "run_race",

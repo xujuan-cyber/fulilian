@@ -614,6 +614,13 @@ _MIN_KEEPALIVE_INTERVAL = 5        # clamp floor for configured intervals
 # before closing their owning loop. Cooperative parked/reconnect waiters finish
 # immediately; cancellation-resistant tasks must not hang process exit.
 _MCP_LOOP_DRAIN_TIMEOUT = 3.0
+# Shutdown is a best-effort cleanup path. Cooperative servers normally exit
+# immediately after the shutdown event; these bounds prevent one broken stdio
+# server from holding the CLI at exit for tens of seconds.
+_MCP_SERVER_SHUTDOWN_TIMEOUT = 3.0
+_MCP_TOTAL_SHUTDOWN_TIMEOUT = 5.0
+_MCP_LOOP_THREAD_JOIN_TIMEOUT = 2.0
+_MCP_ORPHAN_TERM_GRACE = 0.5
 
 # Environment variables that are safe to pass to stdio subprocesses
 _SAFE_ENV_KEYS = frozenset({
@@ -4420,7 +4427,7 @@ class MCPServerTask:
         self._reconnect_event.set()
         if self._task and not self._task.done():
             try:
-                await asyncio.wait_for(self._task, timeout=10)
+                await asyncio.wait_for(self._task, timeout=_MCP_SERVER_SHUTDOWN_TIMEOUT)
             except asyncio.TimeoutError:
                 logger.warning(
                     "MCP server '%s' shutdown timed out, cancelling task",
@@ -6184,9 +6191,10 @@ def _make_tool_handler(server_name: str, tool_name: str, tool_timeout: float):
                         )
                     _call_coro = server.session.call_tool(tool_name, arguments=args)
                     _watch_children = getattr(server, "_watch_stdio_children", None)
+                    _watch_coro = _watch_children() if callable(_watch_children) else None
                     _watch_ok = (
                         _watch_children is not None
-                        and inspect.isawaitable(_watch_children())
+                        and inspect.isawaitable(_watch_coro)
                         and asyncio.iscoroutine(_call_coro)
                     )
                     if not _watch_ok:
@@ -6194,18 +6202,16 @@ def _make_tool_handler(server_name: str, tool_name: str, tool_timeout: float):
                         # non-awaitable, or there is no child-watcher to race
                         # against: plain await is exactly the pre-#81995
                         # semantics.
-                        result = (
-                            await _call_coro
-                            if asyncio.iscoroutine(_call_coro)
-                            else _call_coro
-                        )
+                        if inspect.isawaitable(_watch_coro):
+                            _watch_coro.close()
+                        result = await _call_coro if asyncio.iscoroutine(_call_coro) else _call_coro
                     else:
                         # Fast-fail machinery (#81995): the RPC races a
                         # stdio-children watcher so a dead subprocess fails
                         # the call immediately instead of riding out the full
                         # tool timeout.
                         rpc_task = asyncio.ensure_future(_call_coro)
-                        watch_task = asyncio.ensure_future(_watch_children())
+                        watch_task = asyncio.ensure_future(_watch_coro)
                         try:
                             done, _pending = await asyncio.wait(
                                 {rpc_task, watch_task},
@@ -8380,7 +8386,7 @@ def shutdown_mcp_servers():
         )
         if future is not None:
             try:
-                future.result(timeout=15)
+                future.result(timeout=_MCP_TOTAL_SHUTDOWN_TIMEOUT)
             except BaseException as exc:
                 logger.debug("Error during MCP shutdown: %s", exc)
 
@@ -8426,6 +8432,7 @@ def _kill_orphaned_mcp_children(
     sessions can still be in flight.
     """
     import signal as _signal
+    from gateway.status import _pid_exists
 
     with _lock:
         pids: Dict[int, str] = {}
@@ -8505,14 +8512,18 @@ def _kill_orphaned_mcp_children(
         _send_signal(pid, _signal.SIGTERM, server_name)
         logger.debug("Sent SIGTERM to orphaned MCP process %d (%s)", pid, server_name)
 
-    # Phase 2: Wait for graceful exit
-    time.sleep(2)
+    # Phase 2: Wait briefly for graceful exit. Polling avoids paying a fixed
+    # multi-second sleep when the server exits immediately.
+    deadline = time.monotonic() + _MCP_ORPHAN_TERM_GRACE
+    while time.monotonic() < deadline:
+        if not any(_pid_exists(pid) for pid in pids):
+            break
+        time.sleep(0.05)
 
     # Phase 3: SIGKILL any survivors
     _sigkill = getattr(_signal, "SIGKILL", _signal.SIGTERM)
     # ``os.kill(pid, 0)`` is NOT a no-op on Windows. Use the cross-platform
     # existence check before escalating to SIGKILL.
-    from gateway.status import _pid_exists
     for pid, server_name in pids.items():
         if not _pid_exists(pid):
             continue  # Good — exited after SIGTERM
@@ -8636,9 +8647,12 @@ def _stop_mcp_loop(*, only_if_idle: bool = False) -> bool:
         if not stop_owned_by_loop and loop.is_running():
             loop.call_soon_threadsafe(loop.stop)
         if thread is not None:
-            thread.join(timeout=5)
+            thread.join(timeout=_MCP_LOOP_THREAD_JOIN_TIMEOUT)
             if thread.is_alive():
-                logger.warning("MCP event loop thread did not stop within 5.0s")
+                logger.warning(
+                    "MCP event loop thread did not stop within %.1fs",
+                    _MCP_LOOP_THREAD_JOIN_TIMEOUT,
+                )
         try:
             loop.close()
         except Exception as exc:

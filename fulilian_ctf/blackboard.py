@@ -26,7 +26,7 @@ import uuid
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Optional
+from typing import Any, Callable, Optional
 
 
 class State(str, Enum):
@@ -171,6 +171,8 @@ class Blackboard:
         self.hints: list[Hint] = []
         self.dead_ends: set[str] = set()   # "已证死路" 免疫集
         self.tags: dict[str, str] = {}     # 信息素 key=tag_name, value=tag_value
+        self.exclusions: set[str] = set()  # 已证明走不通的路径
+        self._listeners: list[Callable[[str, Any], None]] = []  # 事件监听器
         self.parent: Optional[Blackboard] = parent
         self.challenge_id = challenge_id
 
@@ -187,6 +189,7 @@ class Blackboard:
                 f"(facts are immutable once added)"
             )
         self.facts[fact.id] = fact
+        self._notify("fact_added", fact)
         # 同步到父黑板（全局发现可见）
         if self.parent:
             self.parent.add_fact(fact)
@@ -202,6 +205,7 @@ class Blackboard:
     def add_intent(self, intent: Intent) -> None:
         """声明探索方向（单题本地，不透传父黑板）。"""
         self.intents.append(intent)
+        self._notify("intent_added", intent)
 
     def get_open_intents(self) -> list[Intent]:
         """获取待探索的方向。"""
@@ -252,6 +256,45 @@ class Blackboard:
     def add_hint(self, hint: Hint) -> None:
         """注入人类/协调器判断（单题本地）。"""
         self.hints.append(hint)
+        self._notify("hint_added", hint)
+
+    # ─── 排他路径操作 ─────────────────────────────────────────────────
+
+    def add_exclusion(self, path: str) -> None:
+        """声明死路（已证明走不通的路径）。"""
+        self.exclusions.add(path)
+
+    def check_excluded(self, path: str) -> bool:
+        """检查路径是否已被排除，支持前缀匹配。"""
+        if path in self.exclusions:
+            return True
+        for e in self.exclusions:
+            if path.startswith(e):
+                return True
+        return False
+
+    def get_exclusions(self) -> set[str]:
+        """返回排他路径集合。"""
+        return set(self.exclusions)
+
+    # ─── 事件监听器 ─────────────────────────────────────────────────────
+
+    def add_listener(self, callback: Callable[[str, Any], None]) -> None:
+        """注册事件监听器（callback 签名: (event_type, data)）。"""
+        self._listeners.append(callback)
+
+    def remove_listener(self, callback: Callable[[str, Any], None]) -> None:
+        """移除监听器。"""
+        if callback in self._listeners:
+            self._listeners.remove(callback)
+
+    def _notify(self, event_type: str, data: Any) -> None:
+        """通知所有监听器。监听器中的异常不影响主流程。"""
+        for cb in list(self._listeners):
+            try:
+                cb(event_type, data)
+            except Exception:
+                pass
 
     # ─── 序列化 / 反序列化 ─────────────────────────────────────────────
 
@@ -264,6 +307,7 @@ class Blackboard:
             "hints": [h.to_dict() for h in self.hints],
             "dead_ends": sorted(self.dead_ends),
             "tags": dict(self.tags),
+            "exclusions": sorted(self.exclusions),
         }
 
     @classmethod
@@ -276,6 +320,7 @@ class Blackboard:
         board.hints = [Hint.from_dict(h) for h in (d.get("hints") or [])]
         board.dead_ends = set(d.get("dead_ends") or [])
         board.tags = dict(d.get("tags") or {})
+        board.exclusions = set(d.get("exclusions") or [])
         return board
 
 

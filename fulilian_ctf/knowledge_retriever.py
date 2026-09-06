@@ -15,6 +15,7 @@ FTS5 使用 trigram tokenizer 兼顾中英文搜索。
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import sqlite3
@@ -25,8 +26,50 @@ from fulilian_constants import FULILIAN_HOME
 
 # ── 路径常量 ─────────────────────────────────────────────────────────────
 
-KB_PATH = Path(os.environ.get("FULILIAN_CTF_KB_PATH", str(FULILIAN_HOME / "ctf-knowledge")))
+_KB_FALLBACK_PATHS = (
+    Path.home() / "Des-CTF-Knowledge" / "Des-CTF-Knowledge-main",
+)
+
+
+def _resolve_kb_path() -> Path:
+    """解析知识库根目录。
+
+    优先级：环境变量 FULILIAN_CTF_KB_PATH > ~/.fulilian/ctf-knowledge >
+    已知的 Des-CTF-Knowledge 仓库位置。默认目录不存在时回退到仓库路径，
+    避免 build_index 对着不存在的目录静默产出 0 条、把已有索引清空。
+    """
+    env = os.environ.get("FULILIAN_CTF_KB_PATH", "").strip()
+    if env:
+        return Path(env)
+    default = FULILIAN_HOME / "ctf-knowledge"
+    if default.exists():
+        return default
+    for cand in _KB_FALLBACK_PATHS:
+        if cand.is_dir():
+            return cand
+    return default
+
+
+KB_PATH = _resolve_kb_path()
+
+# Obsidian 知识库（唯一知识写入源）。2026-09-06 起直接索引 vault，
+# 不再经 hermes-vault 本地镜像（镜像已删除，写入一律进 vault）。
+OBSIDIAN_VAULT = Path("/mnt/e/Program Files/Obsidian/Document/Markdown/Hermes知识库")
+
+
+def _kb_roots():
+    roots = [KB_PATH]
+    if OBSIDIAN_VAULT.exists():
+        roots.append(OBSIDIAN_VAULT)
+    return roots
+
 DB_PATH = FULILIAN_HOME / "knowledge.db"
+
+# skills/ctf-knowledge/snippets/ — 可复用攻击片段（.py，头部注释元数据）
+SNIPPETS_DIR = Path(__file__).resolve().parent.parent / "skills" / "ctf-knowledge" / "snippets"
+
+# 技术标签索引（WP → tags），存在时供 similar_by_technique 使用
+TECHNIQUE_INDEX_RELPATH = Path("CTF大赛WP集合") / "wp_technique_index.json"
 
 # 需要跳过的文件（非正文）。
 # 注意：build_index 只 rglob("*.md")，因此只保留 .md 条目——
@@ -35,8 +78,13 @@ SKIP_FILES = {
     "AI-SEARCH-INDEX.md",
     "README.md",
     "CHANGELOG.md",
-    "PAYLOAD-CHEATSHEET.md",
     "SCRIPTS-INDEX.md",
+    # hermes-vault 导航/元数据页：无技术内容，索引进来只会污染检索结果
+    "log.md",
+    "SCHEMA.md",
+    "知识库索引.md",
+    "index.md",
+    "ctf-index.md",
 }
 # 分段索引文件后缀名。注意不能用 Path.suffix 判断：
 # Path("命令执行.idx.md").suffix == ".md"，必须用 name.endswith(".idx.md")。
@@ -179,6 +227,18 @@ CREATE VIRTUAL TABLE IF NOT EXISTS writeups USING fts5(
 );
 """
 
+# 可复用攻击片段表（.py 片段，元数据在文件头注释）
+CREATE_SNIPPETS_SQL = """
+CREATE VIRTUAL TABLE IF NOT EXISTS snippets USING fts5(
+    title,
+    category,
+    code,
+    source_wp UNINDEXED,
+    snippet_path UNINDEXED,
+    tokenize='trigram'
+);
+"""
+
 
 # ── 分类推断 ────────────────────────────────────────────────────────────
 
@@ -254,6 +314,8 @@ def build_index(force: bool = False) -> int:
                 "SELECT count(*) FROM writeups"
             ).fetchone()[0]
             if existing > 0:
+                # writeups 已有索引，仍顺带确保 snippets 片段表构建
+                snippets = _build_snippets_index(conn, force=False)
                 conn.close()
                 return existing
         except sqlite3.OperationalError:
@@ -269,7 +331,11 @@ def build_index(force: bool = False) -> int:
     count = 0
     errors = 0
 
-    for md_file in sorted(KB_PATH.rglob("*.md")):
+    _md_files = sorted({p for root in _kb_roots() for p in root.rglob("*.md")})
+    for md_file in _md_files:
+        # hermes-vault 本地镜像已废弃；残留时跳过，防止重复索引
+        if "hermes-vault" in md_file.parts:
+            continue
         # 跳过索引文件
         if md_file.name in SKIP_FILES:
             continue
@@ -300,11 +366,102 @@ def build_index(force: bool = False) -> int:
             continue
 
     conn.commit()
+
+    # 顺带构建 snippets 片段表（force 时一并重建）
+    snippets = _build_snippets_index(conn, force=force)
+
     conn.close()
 
     if errors:
         print(f"[knowledge] build_index: {count} indexed, {errors} skipped (errors)")
+    if snippets:
+        print(f"[knowledge] snippets: {snippets} indexed")
 
+    return count
+
+
+# ── 片段（snippets）索引 ────────────────────────────────────────────────
+
+# 片段文件头部元数据注释的解析规则
+_SNIPPET_META_RE = re.compile(r"^#\s*(SOURCE|TITLE|CATEGORY)\s*:\s*(.*)$", re.MULTILINE)
+
+
+def _parse_snippet_file(path: Path) -> Optional[dict]:
+    """解析单个片段 .py 文件的头部元数据。
+
+    头部约定（由片段生成器写入）：
+        # SOURCE: <来源 WP 绝对路径>
+        # TITLE:  <片段标题>
+        # CATEGORY: <分类>
+
+    Returns:
+        dict | None: {"source_wp", "title", "category", "code", "snippet_path"}
+        无效文件（空/读失败）返回 None。
+    """
+    try:
+        code = path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return None
+    if not code.strip():
+        return None
+
+    meta = {m.group(1).lower(): m.group(2).strip() for m in _SNIPPET_META_RE.finditer(code)}
+    title = meta.get("title") or path.stem
+    category = meta.get("category") or (path.parent.name or "misc")
+    source_wp = meta.get("source") or ""
+    return {
+        "source_wp": source_wp,
+        "title": title,
+        "category": category,
+        "code": code,
+        "snippet_path": str(path),
+    }
+
+
+def _build_snippets_index(conn: "sqlite3.Connection", force: bool = False) -> int:
+    """构建 snippets 片段表（在已打开的连接上执行）。
+
+    扫描 SNIPPETS_DIR 下所有 .py 片段入库。目录缺失时返回 0（静默）。
+    非 force 且表已有数据时跳过。
+    """
+    try:
+        if not force:
+            existing = conn.execute("SELECT count(*) FROM snippets").fetchone()[0]
+            if existing > 0:
+                return existing
+    except sqlite3.OperationalError:
+        pass  # 表不存在，继续创建
+
+    try:
+        conn.execute("DROP TABLE IF EXISTS snippets")
+        conn.execute(CREATE_SNIPPETS_SQL)
+    except sqlite3.OperationalError:
+        return 0
+
+    if not SNIPPETS_DIR.is_dir():
+        return 0
+
+    count = 0
+    for py_file in sorted(SNIPPETS_DIR.rglob("*.py")):
+        if ".git" in py_file.parts:
+            continue
+        try:
+            item = _parse_snippet_file(py_file)
+            if not item:
+                continue
+            conn.execute(
+                "INSERT INTO snippets (title, category, code, source_wp, snippet_path) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (item["title"], item["category"], item["code"],
+                 item["source_wp"], item["snippet_path"]),
+            )
+            count += 1
+        except Exception:  # noqa: BLE001 — 单个片段失败不阻断
+            continue
+    try:
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
     return count
 
 
@@ -427,6 +584,173 @@ def _fallback_like_search(
         return []
 
 
+def search_snippets(
+    query: str,
+    category: Optional[str] = None,
+    limit: int = 3,
+    auto_build: bool = True,
+) -> list[dict]:
+    """FTS5 检索可复用攻击片段（snippets 表）。
+
+    Args:
+        query: 搜索关键词。
+        category: 可选分类过滤。
+        limit: 返回结果数（默认 3）。
+        auto_build: 片段表为空时自动构建（默认 True）。
+
+    Returns:
+        list[dict]: [{"title", "category", "code", "source_wp", "snippet_path"}, ...]
+        任何失败（DB 缺失/表为空/语法错误）返回 []，绝不抛异常。
+    """
+    try:
+        if not DB_PATH.exists():
+            if auto_build:
+                build_index()
+            else:
+                return []
+        if _snippets_count() == 0:
+            if not auto_build:
+                return []
+            conn = sqlite3.connect(str(DB_PATH))
+            try:
+                _build_snippets_index(conn, force=False)
+            finally:
+                conn.close()
+            if _snippets_count() == 0:
+                return []
+
+        conn = sqlite3.connect(str(DB_PATH))
+        try:
+            sql = """
+                SELECT title, category, code, source_wp, snippet_path
+                FROM snippets
+                WHERE snippets MATCH ?
+            """
+            params: list = [query]
+            if category:
+                sql += " AND category = ?"
+                params.append(category)
+            sql += " ORDER BY bm25(snippets, 5.0, 3.0, 1.0, 1.0, 1.0) LIMIT ?"
+            params.append(limit)
+            rows = conn.execute(sql, params).fetchall()
+        except sqlite3.OperationalError:
+            # FTS5 语法错误 → LIKE 回退（按 code 列模糊匹配）
+            try:
+                sql = """
+                    SELECT title, category, code, source_wp, snippet_path
+                    FROM snippets
+                    WHERE code LIKE ? ESCAPE '\\'
+                """
+                escaped = (
+                    query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+                )
+                params = [f"%{escaped}%"]
+                if category:
+                    sql += " AND category = ?"
+                    params.append(category)
+                sql += " LIMIT ?"
+                params.append(limit)
+                rows = conn.execute(sql, params).fetchall()
+            except (sqlite3.OperationalError, sqlite3.DatabaseError):
+                return []
+        finally:
+            conn.close()
+        return [
+            {
+                "title": r[0],
+                "category": r[1],
+                "code": r[2],
+                "source_wp": r[3],
+                "snippet_path": r[4],
+            }
+            for r in rows
+        ]
+    except (sqlite3.OperationalError, sqlite3.DatabaseError, OSError):
+        return []
+
+
+def _snippets_count() -> int:
+    """snippets 表行数（表不存在/DB 缺失返回 0）。"""
+    try:
+        conn = sqlite3.connect(str(DB_PATH))
+        count = conn.execute("SELECT count(*) FROM snippets").fetchone()[0]
+        conn.close()
+        return count
+    except (sqlite3.OperationalError, sqlite3.DatabaseError):
+        return 0
+
+
+def similar_by_technique(tags: list[str], limit: int = 3) -> list[dict]:
+    """按技术标签交集查找相似历史 WP。
+
+    读知识库的 CTF大赛WP集合/wp_technique_index.json（存在时），对每个
+    WP 的标签集合与给定 tags 求交集，按交集大小排序返回 top-N。
+
+    Args:
+        tags: 技术标签列表（如 ["SSTI", "jinja2", "bypass"]）。
+        limit: 返回结果数（默认 3）。
+
+    Returns:
+        list[dict]: [{"title", "source_path"}, ...]（按交集大小降序）。
+        JSON 缺失/解析异常时返回 []，绝不抛异常。
+    """
+    if not tags:
+        return []
+    index_file = KB_PATH / TECHNIQUE_INDEX_RELPATH
+    if not index_file.exists():
+        return []
+    try:
+        data = json.loads(index_file.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError, ValueError):
+        return []
+
+    wanted = {str(t).strip().lower() for t in tags if str(t).strip()}
+    if not wanted:
+        return []
+
+    # 兼容多种 JSON 形态：
+    # 1) {wp键(标题或路径): [tag, ...]}
+    # 2) {wp键: {"title":..., "source_path":..., "tags":[...]}}
+    # 3) [{"title":..., "source_path":..., "tags":[...]}, ...]
+    entries: list[tuple[set, str, str]] = []  # (tags_set, title, source_path)
+    try:
+        if isinstance(data, dict):
+            iterator = data.items()
+        elif isinstance(data, list):
+            iterator = [(None, item) for item in data if isinstance(item, dict)]
+        else:
+            return []
+
+        for key, val in iterator:
+            if isinstance(val, dict):
+                raw_tags = val.get("tags") or val.get("techniques") or []
+                title = str(val.get("title") or key or "")
+                src = str(val.get("source_path") or val.get("path") or key or "")
+            elif isinstance(val, (list, tuple)):
+                raw_tags = val
+                title = str(key or "")
+                src = str(key or "")
+            else:
+                continue
+            tag_set = {str(t).strip().lower() for t in raw_tags if str(t).strip()}
+            if tag_set:
+                entries.append((tag_set, title, src))
+    except (AttributeError, TypeError):
+        return []
+
+    scored: list[tuple[int, str, str]] = []
+    for tag_set, title, src in entries:
+        overlap = len(tag_set & wanted)
+        if overlap > 0:
+            scored.append((overlap, title, src))
+    scored.sort(key=lambda x: x[0], reverse=True)
+
+    return [
+        {"title": title, "source_path": src}
+        for _, title, src in scored[: max(1, limit)]
+    ]
+
+
 def get_index_stats() -> dict:
     """获取索引统计信息。"""
     try:
@@ -461,8 +785,11 @@ def list_categories() -> list[str]:
 __all__ = [
     "KB_PATH",
     "DB_PATH",
+    "SNIPPETS_DIR",
     "build_index",
     "search",
+    "search_snippets",
+    "similar_by_technique",
     "get_index_stats",
     "list_categories",
     "_guess_category",

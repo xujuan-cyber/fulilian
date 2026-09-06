@@ -177,7 +177,7 @@ class TestStdioPidTracking:
             _kill_orphaned_mcp_children(server_name="feishu")
 
         mock_kill.assert_called_once_with(target_pid, signal.SIGTERM)
-        mock_sleep.assert_called_once_with(2)
+        mock_sleep.assert_not_called()
         with _lock:
             assert target_pid not in _orphan_stdio_pids
             assert target_pid not in _orphan_stdio_pid_servers

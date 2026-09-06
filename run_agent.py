@@ -9137,7 +9137,7 @@ def _build_ctf_system_prompt() -> str:
         "- 你必须将候选 flag 写入工作区的 FLAG 文件才算声明提交\n"
         "- 不要自动从输出中提取 flag 字符串\n"
         "- 只有 FLAG 文件中的内容才会被提交\n"
-        "- 提交前会走 flag 校验门验证（grounding/规则对抗/格式复核）\n"
+        "- 提交前会走三重校验门验证\n"
         "- 每次有意义的步骤后用 git_auto_commit 记录进度\n"
         "\n"
         "## 黑板进度共享\n"
@@ -9240,6 +9240,22 @@ def _run_solver_turn(
     print("\n" + "=" * 50)
 
     result = agent.run_conversation(query)
+
+    # F2-004 修订（2026-09-04）：CTF 模式把精确 token 消耗写入
+    # ``$FULILIAN_CTF_WORK_DIR/usage.json``（solver_worker 与单题 solve 路径
+    # 均已设置该环境变量；普通模式无此变量，直接跳过）。
+    # Architect 模式 PLAN/EXECUTE 两次调用各写一次，write_usage_record 累计。
+    # 失败静默：消耗记录只是止损精度优化，绝不阻断求解。
+    _usage_work_dir = os.environ.get("FULILIAN_CTF_WORK_DIR", "")
+    if _usage_work_dir and agent is not None:
+        try:
+            from pathlib import Path as _Path
+
+            from fulilian_ctf.solver import write_usage_record
+
+            write_usage_record(_Path(_usage_work_dir), agent)
+        except Exception:  # noqa: BLE001 — 记账失败不影响求解主流程
+            pass
 
     print("\n" + "=" * 50)
     print(f"📋{label} CONVERSATION SUMMARY")

@@ -376,10 +376,150 @@ def replay_trace(
     return "\n".join(lines)
 
 
+# ── F4-007 结构化轨迹（Coordinator 轨迹回读） ────────────────────────────
+
+MAX_TRACE_OUTPUT = 500  # 工具输出截断字符数
+
+
+@dataclass
+class TraceEntry:
+    """轨迹中的一条记录。"""
+
+    timestamp: float = 0.0
+    round: int = 0
+    action: str = ""
+    tool_call: str = ""
+    tool_output: str = ""
+    reasoning: str = ""
+    conclusion: str = ""
+    flag_found: bool = False
+    error_type: str = ""
+
+    def __post_init__(self) -> None:
+        if len(self.tool_output) > MAX_TRACE_OUTPUT:
+            self.tool_output = self.tool_output[:MAX_TRACE_OUTPUT] + "... (truncated)"
+
+    def to_dict(self) -> dict:
+        return {
+            "timestamp": round(self.timestamp, 3),
+            "round": self.round,
+            "action": self.action,
+            "tool_call": self.tool_call,
+            "tool_output": self.tool_output,
+            "reasoning": self.reasoning,
+            "conclusion": self.conclusion,
+            "flag_found": self.flag_found,
+            "error_type": self.error_type,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "TraceEntry":
+        return cls(
+            timestamp=float(d.get("timestamp", 0.0)),
+            round=int(d.get("round", 0)),
+            action=str(d.get("action", "")),
+            tool_call=str(d.get("tool_call", "")),
+            tool_output=str(d.get("tool_output", "")),
+            reasoning=str(d.get("reasoning", "")),
+            conclusion=str(d.get("conclusion", "")),
+            flag_found=bool(d.get("flag_found", False)),
+            error_type=str(d.get("error_type", "")),
+        )
+
+
+@dataclass
+class SolverTrace:
+    """一个 solver 的完整轨迹记录。"""
+
+    solver_id: str = ""
+    model: str = ""
+    entries: list[TraceEntry] = field(default_factory=list)
+    start_time: float = 0.0
+    end_time: float = 0.0
+    flag_found: bool = False
+    score: int = 0
+
+    def add_entry(self, entry: TraceEntry) -> None:
+        """添加一条轨迹条目。"""
+        self.entries.append(entry)
+
+    def classify_failures(self) -> dict:
+        """分析失败类型，返回分类统计。"""
+        no_flag = [e for e in self.entries if not e.flag_found]
+        errors = [e for e in no_flag if e.error_type]
+        stalled = [e for e in no_flag if "stall" in e.error_type.lower()]
+        timeout = [e for e in no_flag if "timeout" in e.error_type.lower()]
+        tool_err = [e for e in no_flag if "tool" in e.error_type.lower() or "exec" in e.error_type.lower()]
+
+        return {
+            "total_entries": len(self.entries),
+            "flag_found": self.flag_found,
+            "error_entries": len(errors),
+            "stalled": len(stalled),
+            "timeout": len(timeout),
+            "tool_error": len(tool_err),
+            "error_types": sorted(set(e.error_type for e in errors if e.error_type)),
+        }
+
+    def summarize(self) -> str:
+        """生成轨迹摘要。"""
+        lines = [
+            f"SolverTrace: {self.solver_id}",
+            f"  Model: {self.model}",
+            f"  Entries: {len(self.entries)}",
+            f"  Duration: {max(0.0, self.end_time - self.start_time):.1f}s",
+            f"  Flag found: {self.flag_found}",
+        ]
+        if self.entries:
+            actions = sorted(set(e.action for e in self.entries if e.action))
+            lines.append(f"  Actions: {', '.join(actions)}")
+            failures = self.classify_failures()
+            if failures["error_entries"]:
+                lines.append(f"  Errors: {failures['error_entries']} ({', '.join(failures['error_types'])})")
+        return "\n".join(lines)
+
+    def save(self, path: str | Path) -> Path:
+        """持久化到 JSON 文件。"""
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        data = {
+            "solver_id": self.solver_id,
+            "model": self.model,
+            "entries": [e.to_dict() for e in self.entries],
+            "start_time": self.start_time,
+            "end_time": self.end_time,
+            "flag_found": self.flag_found,
+            "score": self.score,
+        }
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(path)
+        return path
+
+    @classmethod
+    def load(cls, path: str | Path) -> "SolverTrace":
+        """从 JSON 文件加载。"""
+        path = Path(path)
+        data = json.loads(path.read_text(encoding="utf-8"))
+        entries = [TraceEntry.from_dict(e) for e in (data.get("entries") or [])]
+        return cls(
+            solver_id=str(data.get("solver_id", "")),
+            model=str(data.get("model", "")),
+            entries=entries,
+            start_time=float(data.get("start_time", 0.0)),
+            end_time=float(data.get("end_time", 0.0)),
+            flag_found=bool(data.get("flag_found", False)),
+            score=int(data.get("score", 0)),
+        )
+
+
 __all__ = [
     "TRACE_FILENAME",
+    "MAX_TRACE_OUTPUT",
     "Trace",
+    "TraceEntry",
     "TraceStep",
+    "SolverTrace",
     "build_trace",
     "get_or_build_trace",
     "load_trace",

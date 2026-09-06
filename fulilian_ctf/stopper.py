@@ -32,19 +32,70 @@ STOP_REASONS = {
 }
 
 # 默认阈值
-DEFAULT_MAX_TOKENS = 500_000          # 最大 token 消耗（默认 500K）
-DEFAULT_MAX_NO_OUTPUT_ROUNDS = 5      # 连续无新 Fact 轮数
-DEFAULT_MAX_VARIANT_FAILURES = 3      # 同一攻击类变体失败次数
+DEFAULT_MAX_TOKENS = 1_500_000        # 历史参考值；默认不限 token（见下）
+DEFAULT_MAX_NO_OUTPUT_ROUNDS = 7      # 连续无新 Fact 轮数
+DEFAULT_MAX_VARIANT_FAILURES = 7      # 同一攻击类变体失败次数
 PARTIAL_FLAG_BUDGET_MULTIPLIER = 2    # 临门不弃：预算放大倍数
 
+# 按难度分档的 token 预算（2026-09-04 起默认不启用）：max_tokens=None
+# 表示不设 token 上限（题目可一直解到出 flag），本表仅在调用方显式
+# 选择难度分档时作参考（easy/medium/hard/expert 档，medium=全局历史默认）。
+DIFFICULTY_TOKEN_BUDGETS = {
+    "easy": 200_000,
+    "medium": DEFAULT_MAX_TOKENS,
+    "hard": 1_000_000,
+    "expert": 1_500_000,
+}
+
+
+def difficulty_token_budget(difficulty: str) -> int:
+    """难度 → token 止损上限（仅显式启用分档时使用；未知难度按 medium）。"""
+    return DIFFICULTY_TOKEN_BUDGETS.get((difficulty or "").lower(), DEFAULT_MAX_TOKENS)
+
+# 精确消耗文件名（solver 每次尝试结束时由 run_agent 会话计数器写入；
+# stopper 优先读它，solver.log 估算仅作 fallback/运行中无文件时的兜底）
+USAGE_FILE = "usage.json"
+
 SOLVER_LOG = "solver.log"
+
+
+def read_exact_usage(work_dir: str | Path) -> Optional[dict]:
+    """读取 solver 写入的精确消耗记录 usage.json。
+
+    Returns:
+        dict（total_tokens/input_tokens/output_tokens/api_calls/cost_usd/
+        attempts 累计），文件缺失或损坏返回 None（调用方走日志估算）。
+    """
+    import json
+
+    usage_file = Path(work_dir) / USAGE_FILE
+    try:
+        if not usage_file.is_file():
+            return None
+        data = json.loads(usage_file.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else None
+    except (OSError, ValueError):
+        return None
+
+
+def usage_tokens(work_dir: str | Path) -> Optional[int]:
+    """精确 token 数：usage.json 的累计 total_tokens；无文件返回 None。"""
+    data = read_exact_usage(work_dir)
+    if not data:
+        return None
+    try:
+        return int(data.get("total_tokens", 0) or 0)
+    except (TypeError, ValueError):
+        return None
 
 
 def estimate_tokens_from_log(work_dir: str | Path) -> int:
     """从 solver.log 估算已消耗 token 数（4 字符 ≈ 1 token）。
 
     run_agent 日志不含精确 token 计数，按字符量估算用于止损判断；
-    调用方可注入更精确的计数器（如按 API 响应统计）。
+    精确计数优先走 usage.json（``usage_tokens``），本函数仅作 fallback。
+    注意：solver.log 每次尝试被 ``open(..., "w")`` 截断重写，估算值只反映
+    当前尝试——跨尝试累计依赖 usage.json 的 attempts 加权。
     """
     log_file = Path(work_dir) / SOLVER_LOG
     try:
@@ -69,16 +120,23 @@ class Stopper:
     """4 维止损治理器（F2-004）+ 多 flag 链临门不弃（F2-011）。
 
     纯计算：``check()`` 根据输入状态返回终止原因或 None（继续运行），
-    不做任何 IO。阈值可配置（默认值见常量）。
+    不做任何 IO。阈值可配置（默认值见常量）。``max_tokens=None`` 表示
+    不设 token 预算上限（默认：题目一直解到解出为止，token 仅记账）；
+    传入具体数值（如 CLI --max-tokens）即启用预算保险丝。``difficulty``
+    不再隐式分档，仅供调用方自查。
     """
 
     def __init__(
         self,
-        max_tokens: int = DEFAULT_MAX_TOKENS,
+        max_tokens: Optional[int] = None,
         max_no_output_rounds: int = DEFAULT_MAX_NO_OUTPUT_ROUNDS,
         max_variant_failures: int = DEFAULT_MAX_VARIANT_FAILURES,
+        difficulty: str = "",
     ):
-        self.max_tokens = max(1, int(max_tokens))
+        self.difficulty = str(difficulty or "").lower()
+        # max_tokens=None → 无预算上限（不限 token，靠其余维度止损）；
+        # 显式传入 → 启用 BUDGET_EXCEEDED 保险丝。
+        self.max_tokens = int(max_tokens) if max_tokens is not None else None
         self.max_no_output_rounds = max(1, int(max_no_output_rounds))
         self.max_variant_failures = max(1, int(max_variant_failures))
 
@@ -103,12 +161,13 @@ class Stopper:
             str: 终止原因（STOP_REASONS 键），或 None（继续运行）
         """
         # 临门不弃修正：已经有 flag 的题放大预算（F2-011）
-        effective_max_tokens = self.max_tokens
-        if has_partial_flag:
-            effective_max_tokens *= PARTIAL_FLAG_BUDGET_MULTIPLIER
-
-        if int(project_tokens or 0) >= effective_max_tokens:
-            return "BUDGET_EXCEEDED"
+        # max_tokens=None（默认不限 token）时跳过预算维度。
+        if self.max_tokens is not None:
+            effective_max_tokens = self.max_tokens
+            if has_partial_flag:
+                effective_max_tokens *= PARTIAL_FLAG_BUDGET_MULTIPLIER
+            if int(project_tokens or 0) >= effective_max_tokens:
+                return "BUDGET_EXCEEDED"
 
         if is_infra_blocked:
             return "INFRA_BLOCKED"
@@ -141,6 +200,11 @@ __all__ = [
     "DEFAULT_MAX_NO_OUTPUT_ROUNDS",
     "DEFAULT_MAX_VARIANT_FAILURES",
     "PARTIAL_FLAG_BUDGET_MULTIPLIER",
+    "DIFFICULTY_TOKEN_BUDGETS",
+    "difficulty_token_budget",
+    "USAGE_FILE",
+    "read_exact_usage",
+    "usage_tokens",
     "Stopper",
     "estimate_tokens_from_log",
     "count_variant_failures",

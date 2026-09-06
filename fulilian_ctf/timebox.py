@@ -16,6 +16,9 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
+from typing import Optional
+
+from .budget import BudgetConfig, BudgetTracker
 
 # 标准递增档位（秒）
 TIER_THRESHOLDS = [300, 900, 1800, 3600]  # 5m, 15m, 30m, 60m
@@ -48,11 +51,13 @@ class Timebox:
 
     initial_budget: int = 300
     incremental: bool = True
+    budget_config: Optional[BudgetConfig] = None
     current_tier: int = 0
     start_time: float = 0.0
     elapsed: float = 0.0
     is_expired: bool = False
     budgets: list[int] = field(init=False)
+    budget_tracker: BudgetTracker = field(init=False)
 
     def __post_init__(self) -> None:
         first = int(self.initial_budget)
@@ -61,6 +66,7 @@ class Timebox:
             self.budgets = sorted({first, *(t for t in TIER_THRESHOLDS if t >= first)})
         else:
             self.budgets = [first]
+        self.budget_tracker = BudgetTracker(self.budget_config)
 
     def start(self) -> None:
         self.start_time = time.time()

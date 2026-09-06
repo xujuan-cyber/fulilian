@@ -55,6 +55,11 @@ class TestCacheRoundTrip:
         self._isolate(monkeypatch, tmp_path)
         assert msc.get_cached_entry("nope", "fp") is None
 
+    def test_zero_ttl_means_no_expiry(self, monkeypatch, tmp_path):
+        self._isolate(monkeypatch, tmp_path)
+        msc.write_cache_entry("srv", "fp", tools=[], ttl_ms=0)
+        assert msc.get_cached_entry("srv", "fp") is not None
+
     def test_clear_cache_entry(self, monkeypatch, tmp_path):
         self._isolate(monkeypatch, tmp_path)
         msc.write_cache_entry("srv", "fp1", tools=[], utility_tools=[])

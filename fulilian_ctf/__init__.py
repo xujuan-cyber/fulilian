@@ -26,6 +26,7 @@ from .blackboard import (
     load_blackboard,
     save_blackboard,
 )
+from .budget import BudgetConfig, BudgetTracker, ChallengeUsage, Difficulty
 from .ctfd_adapter import (
     CTFdAdapter,
     CTFdError,
@@ -50,11 +51,15 @@ from .racer import (
     RaceResult,
     RacerResult,
     coordinator_advice,
+    coordinator_analyze_traces,
     run_race,
     run_race_for_challenge,
 )
 from .trace import (
     Trace,
+    TraceEntry,
+    TraceStep,
+    SolverTrace,
     build_trace,
     get_or_build_trace,
     load_trace,
@@ -78,6 +83,7 @@ from .knowledge import (
     CATEGORIES,
     SKILLS_DIR,
     get_knowledge_card,
+    inject_ctf_context,
     inject_knowledge_card,
 )
 from .knowledge_retriever import (
@@ -88,10 +94,32 @@ from .knowledge_retriever import (
     get_index_stats,
     list_categories,
     search,
+    search_snippets,
+    similar_by_technique,
 )
-from .probe import ProbeResult, probe_challenge
+from .probe import AutoPrompter, EnvInfo, FileInfo, NetworkInfo, ProbeResult, QuickScanResult, probe_challenge
+from .specialists import (
+    BaseSpecialist,
+    SpecialistFactory,
+    PwnSpecialist,
+    RevSpecialist,
+    WebSpecialist,
+    CryptoSBeSpecialist,
+    ForensicsSpecialist,
+    MiscSpecialist,
+)
+from .reasoner import Plan, Reasoner, Task, TaskCategory, TaskResult
+from .planner import ContextManager, Executor, Planner, Turn, TurnRole
 from .registry import challenge_to_project, load_challenges
-from .relay import build_relay, parse_relay, read_relay_file, write_relay_file
+from .relay import (
+    build_relay, parse_relay, read_relay_file, write_relay_file,
+    # v2 结构化协议
+    MessageType, Severity, RelayMessage, RelayBlock,
+    RELAY_BLOCK_FILENAME, PROTOCOL_VERSION,
+    make_achieved_message, make_dead_end_message, make_next_step_message,
+    make_task_delegation, make_task_result, make_error_report,
+    write_relay_block, read_relay_block,
+)
 from .sandbox import SandboxMode, enforce_sandbox
 from .solver import (
     SolverResult,
@@ -147,14 +175,51 @@ __all__ = [
     "DIFFICULTY_BUDGETS",
     "Timebox",
     "difficulty_adjusted_budget",
+    # budget (统一预算控制层)
+    "BudgetConfig",
+    "BudgetTracker",
+    "ChallengeUsage",
+    "Difficulty",
     # probe (F2-003)
+    "AutoPrompter",
+    "EnvInfo",
+    "FileInfo",
+    "NetworkInfo",
     "ProbeResult",
+    "QuickScanResult",
     "probe_challenge",
+    # reasoner (F4-008)
+    "Plan",
+    "Reasoner",
+    "Task",
+    "TaskCategory",
+    "TaskResult",
+    # planner (F4-008)
+    "ContextManager",
+    "Executor",
+    "Planner",
+    "Turn",
+    "TurnRole",
     # relay (F2-012 契约)
     "build_relay",
     "parse_relay",
     "read_relay_file",
     "write_relay_file",
+    # v2 结构化协议
+    "RELAY_BLOCK_FILENAME",
+    "PROTOCOL_VERSION",
+    "MessageType",
+    "Severity",
+    "RelayMessage",
+    "RelayBlock",
+    "make_achieved_message",
+    "make_dead_end_message",
+    "make_next_step_message",
+    "make_task_delegation",
+    "make_task_result",
+    "make_error_report",
+    "write_relay_block",
+    "read_relay_block",
     # registry
     "load_challenges",
     "challenge_to_project",
@@ -188,12 +253,15 @@ __all__ = [
     "CATEGORIES",
     "SKILLS_DIR",
     "get_knowledge_card",
+    "inject_ctf_context",
     "inject_knowledge_card",
     # knowledge_retriever (Phase 3, F3-002)
     "KB_PATH",
     "DB_PATH",
     "build_index",
     "search",
+    "search_snippets",
+    "similar_by_technique",
     "get_index_stats",
     "list_categories",
     "_guess_category",
@@ -207,12 +275,11 @@ __all__ = [
     "self_evolve",
     "record_solve_outcome",
     "get_learning_stats",
-    # racer (Phase 3, F3-005/F3-006)
+    # racer (Phase 3, F3-005/F3-006 / F4-007)
     "COORDINATOR_INTERVAL",
     "CoordinatorLoop",
-    "RaceResult",
-    "RacerResult",
     "coordinator_advice",
+    "coordinator_analyze_traces",
     "run_race",
     "run_race_for_challenge",
     # multi_agent (Phase 3, F3-007/008/009)
@@ -226,8 +293,11 @@ __all__ = [
     "generate_writeup",
     "save_writeup",
     "writeup_to_format",
-    # trace (Phase 3, F3-014)
+    # trace (Phase 3, F3-014 / F4-007)
     "Trace",
+    "TraceEntry",
+    "TraceStep",
+    "SolverTrace",
     "build_trace",
     "get_or_build_trace",
     "load_trace",
@@ -246,6 +316,15 @@ __all__ = [
     "OpponentMonitor",
     "analyze_tool_call",
     "scan_log_for_anomalies",
+    # specialists (Phase 2, 分类专家流水线)
+    "BaseSpecialist",
+    "SpecialistFactory",
+    "PwnSpecialist",
+    "RevSpecialist",
+    "WebSpecialist",
+    "CryptoSBeSpecialist",
+    "ForensicsSpecialist",
+    "MiscSpecialist",
     # Phase 4（通用增强，步骤 10）
     "AGENTS_MD_FILENAME",
     "ensure_agents_md",

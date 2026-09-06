@@ -142,16 +142,20 @@ def query_index(
         cat, _, tech = key.partition("::")
         if category and cat != category:
             continue
-        total = stats["success"] + stats["fail"]
+        # index 可能被手工改坏（值非 dict / 缺键），跳过坏条目而不是崩掉调用方
+        if not isinstance(stats, dict):
+            continue
+        success, fail = stats.get("success", 0), stats.get("fail", 0)
+        total = success + fail
         if total < min_total:
             continue
         results.append({
             "category": cat,
             "technique": tech,
-            "success": stats["success"],
-            "fail": stats["fail"],
+            "success": success,
+            "fail": fail,
             "total": total,
-            "success_rate": round(stats["success"] / total, 2) if total > 0 else 0.0,
+            "success_rate": round(success / total, 2) if total > 0 else 0.0,
         })
     results.sort(key=lambda x: x["total"], reverse=True)
     return results

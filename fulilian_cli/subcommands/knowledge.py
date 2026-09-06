@@ -50,4 +50,10 @@ def build_knowledge_parser(subparsers, *, cmd_knowledge: Callable) -> None:
         help="Show experiential learning statistics",
     )
 
+    # knowledge cards-sync
+    cards_sync_parser = knowledge_subparsers.add_parser(
+        "cards-sync",
+        help="Suggest techniques (from experiential learning) to add into knowledge cards",
+    )
+
     knowledge_parser.set_defaults(func=cmd_knowledge)

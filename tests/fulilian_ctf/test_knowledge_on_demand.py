@@ -24,7 +24,16 @@ def test_card_loaded_on_demand_only_for_category():
             assert card is None
 
 
-def test_inject_only_appends_when_card_exists():
+def test_inject_prefixes_prompt_when_card_missing():
+    """无卡分类：原提示保留在前；playbook.md 存在时无条件注入。"""
+    from fulilian_ctf.knowledge import get_playbook
+
     prompt = "BASE PROMPT"
     out = inject_knowledge_card("nonexistent-cat", prompt)
-    assert out == prompt  # 无卡 → 原样返回，上下文不膨胀
+    assert out.startswith(prompt)  # 原提示保留在前，不丢失
+    playbook = get_playbook()
+    if playbook:
+        assert out != prompt  # playbook 已注入
+        assert playbook.strip().splitlines()[0] in out
+    else:
+        assert out == prompt  # playbook 缺失且无卡 → 原样返回

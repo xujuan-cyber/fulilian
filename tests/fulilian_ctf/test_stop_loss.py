@@ -70,7 +70,8 @@ def _project(cid: str, tmp_path: Path, **kw) -> Project:
 def test_budget_exceeded_stops_solver(tmp_path):
     d = Dispatcher(
         max_workers=1, solver_fn=fake_solver_sleep, quiet=True,
-        token_counter=lambda wd: 600_000,  # 注入精确计数器：超过默认 500K
+        max_tokens=500_000,  # 显式锚定（2026-09-04：默认值改为按难度分档）
+        token_counter=lambda wd: 600_000,  # 注入精确计数器：超过 500K
     )
     d.add_project(_project("p1", tmp_path))
     d.run()
@@ -82,9 +83,10 @@ def test_budget_exceeded_stops_solver(tmp_path):
 
 
 def test_budget_within_limit_not_stopped(tmp_path):
-    """token 在预算内 → 不触发止损（时间盒兜底中断）。"""
+    """token 在预算内 → 不触发止损（时间盒兜底）。"""
     d = Dispatcher(
         max_workers=1, solver_fn=fake_solver_sleep, quiet=True,
+        max_tokens=500_000,
         token_counter=lambda wd: 100, timebox_override=1,
     )
     d.add_project(_project("p1", tmp_path))
@@ -192,7 +194,8 @@ def test_hypothesis_repeated_stops_solver(tmp_path):
     board = Blackboard(challenge_id="p1")
     board.add_intent(Intent(goal="CVE-2021-41773", approach="curl", variant_count=3))
     save_blackboard(board, work / "blackboard.json")
-    d = Dispatcher(max_workers=1, solver_fn=fake_solver_sleep, quiet=True)
+    d = Dispatcher(max_workers=1, solver_fn=fake_solver_sleep, quiet=True,
+                   max_variant_failures=3)  # 显式锚定（默认值 2026-09-04 起为 7）
     d.add_project(_project("p1", tmp_path))
     d.run()
     p = d.projects["p1"]
@@ -203,12 +206,15 @@ def test_hypothesis_repeated_stops_solver(tmp_path):
 # ── 临门不弃（F2-011）───────────────────────────────────────────────────
 
 def test_partial_flag_doubles_budget_integration(tmp_path):
-    """已拿到至少一个 flag：750K（>500K 但 <1000K）不触发止损，时间盒兜底。"""
+    """已拿到至少一个 flag：750K（>500K 但 <1M 放大后）不触发止损，时间盒兜底。
+    max_tokens 显式锚定 500K（默认值已改按难度分档，easy 题 200K 分档
+    不适用于本用例的旧语义）。"""
     work = tmp_path / "p1"
     work.mkdir(parents=True, exist_ok=True)
     (work / "FLAG").write_text("flag{first}\n", encoding="utf-8")  # 已解出第一枚
     d = Dispatcher(
         max_workers=1, solver_fn=fake_solver_sleep, quiet=True,
+        max_tokens=500_000,
         token_counter=lambda wd: 750_000, timebox_override=2,
     )
     d.add_project(_project("p1", tmp_path))
@@ -222,6 +228,7 @@ def test_no_flag_budget_exceeded_stops(tmp_path):
     """对照：无 flag 时 750K 超限 → 立即止损。"""
     d = Dispatcher(
         max_workers=1, solver_fn=fake_solver_sleep, quiet=True,
+        max_tokens=500_000,
         token_counter=lambda wd: 750_000,
     )
     d.add_project(_project("p1", tmp_path))
@@ -236,6 +243,7 @@ def test_no_flag_budget_exceeded_stops(tmp_path):
 def test_stop_loss_disabled(tmp_path):
     d = Dispatcher(
         max_workers=1, solver_fn=fake_solver_sleep, quiet=True,
+        max_tokens=500_000,
         token_counter=lambda wd: 10**9, timebox_override=1, stop_loss=False,
     )
     d.add_project(_project("p1", tmp_path))
@@ -299,6 +307,7 @@ def test_build_solve_query_includes_relay():
 def test_budget_exceeded_not_harvested(tmp_path):
     d = Dispatcher(
         max_workers=1, solver_fn=fake_solver_sleep, quiet=True,
+        max_tokens=500_000,  # 显式锚定（2026-09-04：默认改为不限 token，预算保险丝需显式启用）
         token_counter=lambda wd: 600_000, max_attempts=3,
     )
     d.add_project(_project("p1", tmp_path))
@@ -316,6 +325,7 @@ def test_placeholder_flag_not_partial_flag(tmp_path):
     (work / "FLAG").write_text("flag{...}\n", encoding="utf-8")  # 占位内容
     d = Dispatcher(
         max_workers=1, solver_fn=fake_solver_sleep, quiet=True,
+        max_tokens=500_000,  # 显式锚定（默认不限 token；测保险丝维度需显式预算）
         token_counter=lambda wd: 750_000,  # >500K：<1M 若被误判 partial 会存活
     )
     d.add_project(_project("p1", tmp_path))
@@ -457,12 +467,12 @@ def test_build_solve_query_injects_avoid_list(tmp_path, monkeypatch):
     el.record_lesson("old-2", "web", "无过滤直接 union 注入", success=False)
     p = Project(challenge_id="web-02", category="web", difficulty="easy")
     q = build_solve_query(p)
-    assert "## 历史教训（avoid list — 别再犯）" in q
+    assert "## 历史失败教训" in q
     assert "sqlmap --batch 被封 IP" in q
     # 无失败记录 → 不注入
     monkeypatch.setattr(el, "LEARNING_FILE", tmp_path / "empty.json")
-    assert "历史教训" not in build_solve_query(p)
+    assert "历史失败教训" not in build_solve_query(p)
     # 无分类 → 不查询不注入
     p2 = Project(challenge_id="misc-01", difficulty="easy")
     monkeypatch.setattr(el, "LEARNING_FILE", tmp_path / "learning.json")
-    assert "历史教训" not in build_solve_query(p2)
+    assert "历史失败教训" not in build_solve_query(p2)
