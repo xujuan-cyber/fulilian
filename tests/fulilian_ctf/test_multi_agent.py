@@ -232,7 +232,8 @@ def test_detect_hallucinations_rejects_fake_flag(tmp_path):
     """过不了三重校验门的候选被判幻觉；真实 flag 不报。
 
     - FLAG 文件里的占位符 ``flag{...}``（题干示例）→ REJECTED
-    - 日志里格式不匹配任何已知模式的候选 → PENDING
+    - S-1 修复后声明式路径按形状放行：逐字出现在日志里的 flag 形状候选
+      （misc{has spaces}）不再被判幻觉，占位符仍被拒。
     """
     d = tmp_path / "explore-0"
     d.mkdir()
@@ -245,7 +246,9 @@ def test_detect_hallucinations_rejects_fake_flag(tmp_path):
     records = detect_hallucinations(d, 0)
     candidates = {r["candidate"] for r in records}
     assert any("flag{...}" in c for c in candidates)
-    assert any("misc{has spaces}" in c for c in candidates)
+    # S-1 修复后声明式路径按形状放行：逐字出现在日志里的 flag 形状候选
+    # （misc{has spaces}）不再被判幻觉，占位符 flag{...} 仍被拒。
+    assert not any("misc{has spaces}" in c for c in candidates)
 
     # 真实 flag：evidence 里逐字出现 → CONFIRMED，不是幻觉
     (d / "FLAG").write_text("flag{real_one_42}\n", encoding="utf-8")
