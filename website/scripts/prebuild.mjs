@@ -34,8 +34,9 @@ const llmsScript = join(scriptDir, "generate-llms-txt.py");
 const cronBlueprintsScript = join(scriptDir, "extract-automation-blueprints.py");
 const outputFile = join(websiteDir, "static", "api", "skills.json");
 const unifiedIndexFile = join(websiteDir, "static", "api", "skills-index.json");
-const UNIFIED_INDEX_URL =
-  "https://hermes-agent.nousresearch.com/docs/api/skills-index.json";
+// 已发布索引的 URL：经环境变量 SKILLS_INDEX_URL 配置（部署环境决定）；
+// 未配置时跳过远端刷新，直接使用磁盘上的本地副本
+const UNIFIED_INDEX_URL = process.env.SKILLS_INDEX_URL || "";
 const UNIFIED_INDEX_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24h
 
 function writeEmptyFallback(reason) {
@@ -82,6 +83,12 @@ async function ensureUnifiedIndex() {
   }
 
   try {
+    if (!UNIFIED_INDEX_URL) {
+      console.warn(
+        "[prebuild] SKILLS_INDEX_URL not set; using local skills-index.json copy if any",
+      );
+      return existsSync(unifiedIndexFile);
+    }
     const resp = await fetch(UNIFIED_INDEX_URL, {
       headers: { accept: "application/json" },
     });

@@ -53,8 +53,15 @@ def _resolve_kb_path() -> Path:
 KB_PATH = _resolve_kb_path()
 
 # Obsidian 知识库（唯一知识写入源）。2026-09-06 起直接索引 vault，
-# 不再经 hermes-vault 本地镜像（镜像已删除，写入一律进 vault）。
-OBSIDIAN_VAULT = Path("/mnt/e/Program Files/Obsidian/Document/Markdown/Hermes知识库")
+# 不再经本地镜像目录（镜像已删除，写入一律进 vault）。
+# 路径可经 FULILIAN_OBSIDIAN_VAULT 覆盖；默认值中的 vault 目录名是
+# 用户自己的资产命名（不在本项目品牌清理范围内）。
+OBSIDIAN_VAULT = Path(
+    os.environ.get(
+        "FULILIAN_OBSIDIAN_VAULT",
+        "/mnt/e/Program Files/Obsidian/Document/Markdown/Hermes知识库",
+    ).strip()
+)
 
 
 def _kb_roots():

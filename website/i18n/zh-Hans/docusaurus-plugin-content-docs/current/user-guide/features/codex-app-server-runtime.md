@@ -391,7 +391,7 @@ tool_timeout_sec = 600.0
 - **当 Codex 未跟踪变更集时，审批提示中没有内联 patch 预览。** Codex 的 `fileChange` 审批参数并不总是携带变更集。Fulilian 会尽可能从对应的 `item/started` 通知中缓存数据，但如果审批在事件项流式传输完成之前到达，提示会回退到 Codex 提供的 `reason`。
 - **亚秒级取消无法保证。** 流式传输中途的中断（Codex 响应时按 Ctrl+C）通过 `turn/interrupt` 发送，但如果 Codex 已经刷新了最终消息，你仍会收到该响应。
 
-如果你发现 bug，请[提交 issue](https://github.com/NousResearch/hermes-agent/issues)，附上 `fulilian logs --since 5m` 的输出。在标题中注明 `codex-runtime` 以便于分类处理。
+如果你发现 bug，请[提交 issue](https://github.com/xujuan-cyber/fulilian/issues)，附上 `fulilian logs --since 5m` 的输出。在标题中注明 `codex-runtime` 以便于分类处理。
 
 ## 架构
 

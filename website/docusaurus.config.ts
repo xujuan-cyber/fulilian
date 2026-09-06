@@ -176,7 +176,7 @@ const config: Config = {
           title: 'Community',
           items: [
             { label: 'Discord', href: 'https://discord.gg/NousResearch' },
-            { label: 'GitHub Issues', href: 'https://github.com/NousResearch/hermes-agent/issues' },
+            { label: 'GitHub Issues', href: 'https://github.com/xujuan-cyber/fulilian/issues' },
             { label: 'Skills Hub', href: 'https://agentskills.io' },
           ],
         },

@@ -220,7 +220,7 @@ print_banner() {
     echo "┌─────────────────────────────────────────────────────────┐"
     echo "│             ⚕ FuLiLian Installer                    │"
     echo "├─────────────────────────────────────────────────────────┤"
-    echo "│  CTF-dedicated agent CLI built on the Hermes Agent codebase.  │"
+    echo "│  CTF-dedicated agent CLI for security competitions and forensics.  │"
     echo "└─────────────────────────────────────────────────────────┘"
     echo -e "${NC}"
 }

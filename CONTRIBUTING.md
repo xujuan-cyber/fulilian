@@ -63,7 +63,7 @@ Bundled skills (in `skills/`) ship with every Fulilian install. They should be *
 
 If your skill is official and useful but not universally needed (e.g., a paid service integration, a heavyweight dependency), put it in **`optional-skills/`** — it ships with the repo but isn't activated by default. Users can discover it via `fulilian skills browse` (labeled "official") and install it with `fulilian skills install` (no third-party warning, built-in trust).
 
-If your skill is specialized, community-contributed, or niche, it's better suited for a **Skills Hub** — upload it to a skills registry and share it in the [Nous Research Discord](https://discord.gg/NousResearch). Users can install it with `fulilian skills install`.
+If your skill is specialized, community-contributed, or niche, it's better suited for a **Skills Hub** — publish it to a skills registry and share it via the repository's [GitHub Discussions](https://github.com/xujuan-cyber/fulilian/discussions). Users can install it with `fulilian skills install`.
 
 ---
 
@@ -96,7 +96,7 @@ Publish these as a **standalone plugin repo** instead:
 - Implement the relevant ABC and use the existing plugin discovery path (`~/.fulilian/plugins/`, project `.fulilian/plugins/`, or a pip entry point) — see [Build a Fulilian Plugin](https://github.com/xujuan-cyber/fulilian)
 - Register lifecycle hooks (`pre_tool_call`, `post_tool_call`, `pre_llm_call`, `post_llm_call`, `on_session_start`, `on_session_end`), tools (`ctx.register_tool`), and CLI subcommands (`ctx.register_cli_command`) through the surface we already expose — no core changes needed
 - If your plugin needs a capability the framework doesn't expose, that's a feature request to **widen the generic plugin surface** (a new hook or `ctx` method) — never special-case your plugin in core
-- Promote it in the [Nous Research Discord](https://discord.gg/NousResearch) `#plugins-skills-and-skins` channel so users can find and install it
+- Promote it in [GitHub Discussions](https://github.com/xujuan-cyber/fulilian/discussions) so users can find and install it
 
 A well-built third-party-product plugin can clear automated review and still be closed for this reason — it's a placement decision, not a verdict on the code. PRs that add such a directory under `plugins/` will be closed with a pointer to publish it as its own repo.
 
@@ -982,9 +982,30 @@ test(tools): add unit tests for file_operations
 
 ## Community
 
-- **Discord**: [discord.gg/NousResearch](https://discord.gg/NousResearch) — for questions, showcasing projects, and sharing skills
+- **GitHub Issues**: [github.com/xujuan-cyber/fulilian/issues](https://github.com/xujuan-cyber/fulilian/issues) — bug reports and feature requests
 - **GitHub Discussions**: For design proposals and architecture discussions
 - **Skills Hub**: Upload specialized skills to a registry and share them with the community
+
+---
+
+## Fork Provenance Note
+
+FuLiLian is an actively maintained fork. You will find code comments that
+reference issue/PR numbers from the original upstream project (for example
+`NousResearch/hermes-agent#NNNNN`). These comments are **intentionally
+retained**: they are provenance/traceability anchors explaining *why* a piece
+of code exists, they have no runtime effect, and removing them would destroy
+valuable debugging context for future maintainers.
+
+When you touch code that carries such a provenance comment:
+
+- Keep the comment and its reference intact.
+- If you change the behavior it describes, append your rationale below the
+  existing comment rather than rewriting history.
+
+User-facing surfaces (README, docs site, CLI help, install banner) must not
+carry upstream branding — that cleanup is enforced by the zero-residue audit
+described in the repository docs.
 
 ---
 

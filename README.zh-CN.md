@@ -10,7 +10,7 @@
   <a href="README.md"><img src="https://img.shields.io/badge/Lang-English-lightgrey?style=for-the-badge" alt="English"></a>
 </p>
 
-**FuLiLian — 一个专注 CTF（夺旗赛）与数字取证的智能体 CLI。** 基于 Hermes Agent 代码库构建，面向安全竞赛、取证分析与渗透测试工作流做了深度定制。
+**FuLiLian — 一个专注 CTF（夺旗赛）与数字取证的智能体 CLI。** 面向安全竞赛、取证分析与渗透测试工作流做了深度定制。
 
 内置调度引擎、校验门与知识系统，FuLiLian 能自动完成重复性的 CTF 任务、持续追踪已发现的工件，让你专注于解题本身。
 
@@ -26,7 +26,7 @@
 
 ## 本 Fork 的增强
 
-在上游 Hermes Agent 的基础上，本 Fork 增加了一层面向 CTF 的能力：
+在核心智能体框架的基础上，FuLiLian 增加了一层面向 CTF 的能力：
 
 - **多智能体解题** —— racer/relay 编排，六类题型专家（crypto / pwn / reverse / web / forensics / misc）并行攻坚，配套时间盒与止损控制。
 - **校验门** —— Flag 形状校验与依据检查，答案被接受前先过一道关。

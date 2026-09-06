@@ -286,7 +286,7 @@ When you ask Fulilian to review a PR in a repository that has `.agents/checks/`,
 
 ## Reporting Issues
 
-- Use [GitHub Issues](https://github.com/NousResearch/hermes-agent/issues)
+- Use [GitHub Issues](https://github.com/xujuan-cyber/fulilian/issues)
 - Include: OS, Python version, Fulilian version (`fulilian --version`), full error traceback
 - Include steps to reproduce
 - Check existing issues before creating duplicates

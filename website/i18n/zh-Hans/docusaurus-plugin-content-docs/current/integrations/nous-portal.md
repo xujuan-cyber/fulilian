@@ -256,7 +256,7 @@ Portal 会为每个模型选择合适的后端——部分模型通过 OpenRoute
 /model anthropic/claude-opus-4.6
 ```
 
-如果某个模型确实缺失，请[提交 issue](https://github.com/NousResearch/hermes-agent/issues)——我们将 Portal 目录同步至 Fulilian，缺口通常意味着可以更新的路由配置。
+如果某个模型确实缺失，请[提交 issue](https://github.com/xujuan-cyber/fulilian/issues)——我们将 Portal 目录同步至 Fulilian，缺口通常意味着可以更新的路由配置。
 
 ### 账单未出现在我的 Portal 账号中
 

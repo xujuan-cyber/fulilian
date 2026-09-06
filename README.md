@@ -9,7 +9,7 @@
   <a href="README.zh-CN.md"><img src="https://img.shields.io/badge/Lang-中文-red?style=for-the-badge" alt="中文"></a>
 </p>
 
-**FuLiLian — a dedicated CTF (Capture The Flag) & digital forensics agent CLI.** Built on the Hermes Agent codebase, tailored for security competitions, forensic analysis, and penetration testing workflows.
+**FuLiLian — a dedicated CTF (Capture The Flag) & digital forensics agent CLI.** Tailored for security competitions, forensic analysis, and penetration testing workflows.
 
 Equipped with a scheduling engine, verification gate, and knowledge system, FuLiLian automates repetitive CTF tasks, keeps track of discovered artifacts, and helps you focus on the puzzles that matter.
 
@@ -25,7 +25,7 @@ Equipped with a scheduling engine, verification gate, and knowledge system, FuLi
 
 ## Fork Highlights
 
-Beyond the upstream Hermes Agent foundation, this fork adds a CTF-focused layer:
+Beyond the core agent foundation, FuLiLian adds a CTF-focused layer:
 
 - **Multi-agent solving** — racer/relay orchestration with six language specialists (crypto, pwn, reverse, web, forensics, misc), timeboxing, and stop-loss controls.
 - **Verification gate** — flag-shaped candidate validation with grounding checks before an answer is accepted.

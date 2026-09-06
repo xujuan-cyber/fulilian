@@ -236,7 +236,7 @@ fix(security): prevent shell injection in sudo password piping
 
 ## 报告问题
 
-- 使用 [GitHub Issues](https://github.com/NousResearch/hermes-agent/issues)
+- 使用 [GitHub Issues](https://github.com/xujuan-cyber/fulilian/issues)
 - 请包含：操作系统、Python 版本、Fulilian 版本（`fulilian --version`）、完整错误堆栈
 - 包含复现步骤
 - 创建前请检查是否已有重复 issue
@@ -244,7 +244,7 @@ fix(security): prevent shell injection in sudo password piping
 
 ## 社区
 
-- **Discord**：[discord.gg/NousResearch](https://discord.gg/NousResearch)
+- **GitHub Issues**：[github.com/xujuan-cyber/fulilian/issues](https://github.com/xujuan-cyber/fulilian/issues)
 - **GitHub Discussions**：用于设计提案和架构讨论
 - **Skills Hub**：上传专业 skill 并与社区共享
 
