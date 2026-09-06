@@ -10,7 +10,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -365,11 +367,18 @@ def handle_solve_command(args: argparse.Namespace) -> None:
     oneshot = bool(getattr(args, "oneshot", False))
     as_json = bool(getattr(args, "json", False))
     if oneshot or as_json:
-        sys.exit(_run_solve_once(
+        code = _run_solve_once(
             project, work_dir, query, model, oneshot, as_json,
             architect_model=getattr(args, "architect_model", "") or "",
             executor_model=getattr(args, "executor_model", "") or "",
-        ))
+        )
+        # 经验落库（F3-003/F3-004）：单题路径与 dispatcher 批量路径同源接线，
+        # best-effort，失败静默，不影响退出码
+        try:
+            _record_single_solve_experience(project, work_dir)
+        except Exception:  # noqa: BLE001 — 经验落库失败不影响 solve 退出码
+            pass
+        sys.exit(code)
 
     from run_agent import main as solver_main
     from fulilian_ctf.solver import resolve_max_turns_from_env
@@ -390,6 +399,11 @@ def handle_solve_command(args: argparse.Namespace) -> None:
         )
     finally:
         os.chdir(old_cwd)
+    # 经验落库（F3-003/F3-004）：单题路径接线，best-effort，失败静默
+    try:
+        _record_single_solve_experience(project, work_dir)
+    except Exception:  # noqa: BLE001 — 经验落库失败不影响 solve 退出码
+        pass
     sys.exit(0)
 
 
@@ -400,6 +414,70 @@ def _guess_category_from_id(challenge_id: str) -> str:
         if cid.startswith(cat) or f"-{cat}" in cid or f"_{cat}" in cid:
             return cat
     return ""
+
+
+def _record_single_solve_experience(project, work_dir: Optional[Path]) -> None:
+    """单题 solve 结束后的经验落库（F3-003/F3-004），best-effort。
+
+    与 dispatcher 批量路径同源：从工作目录黑板提取 CONFIRMED/REFUTED fact
+    作为 key_commands（每条截 120 字符、最多 20 条）。flag/verified 走现成
+    的 flag 检测链（``read_flag_file`` 读 FLAG 文件 → ``check_output_for_flag``
+    扫 solver.log；后者只放行通过三重校验门的 flag，故 verified=bool(flag)）。
+    任何失败只静默吞掉：绝不改变命令退出码、绝不往 stdout 打印干扰输出。
+    """
+    try:
+        from fulilian_ctf.blackboard import (
+            BLACKBOARD_FILENAME,
+            State,
+            load_blackboard,
+        )
+        from fulilian_ctf.experiential_learning import record_solve_outcome
+        from fulilian_ctf.solver import SOLVER_LOG, read_flag_file
+        from fulilian_ctf.verify import check_output_for_flag
+
+        # 与 _run_solve_once 的 base_dir 语义一致：无独立工作目录（清单文件
+        # 形态）时在 cwd 求解，此处 cwd 已在 finally 中恢复
+        base_dir = work_dir or Path.cwd()
+
+        flag = ""
+        try:
+            flag = read_flag_file(base_dir)
+        except OSError:
+            flag = ""
+        if not flag:
+            try:
+                flag = check_output_for_flag(
+                    (base_dir / SOLVER_LOG).read_text(
+                        encoding="utf-8", errors="replace"
+                    )
+                ) or ""
+            except OSError:
+                flag = ""
+
+        fact_contents: list[str] = []
+        try:
+            board = load_blackboard(base_dir / BLACKBOARD_FILENAME)
+        except (OSError, ValueError):
+            board = None
+        if board is not None:
+            fact_contents = [
+                f.content[:120]
+                for f in board.get_facts()
+                if f.state in (State.CONFIRMED, State.REFUTED)
+            ][:20]
+
+        record_solve_outcome(
+            challenge_id=project.challenge_id,
+            category=project.category
+            or _guess_category_from_id(project.challenge_id)
+            or "misc",
+            success=bool(flag),
+            key_commands=fact_contents,
+            flag=flag,
+            verified=bool(flag),
+        )
+    except Exception:  # noqa: BLE001 — 经验落库失败不影响 solve 退出码
+        pass
 
 
 def handle_solve_all_command(args: argparse.Namespace) -> None:
@@ -758,7 +836,8 @@ def handle_knowledge_command(args: argparse.Namespace) -> None:
     ``fulilian knowledge query <terms> [--limit N] [--category C]`` — 检索历史 WP
     ``fulilian knowledge list [--category C]`` — 列出知识卡 / 索引统计
     ``fulilian knowledge stats`` — 跨题学习统计
-    ``fulilian knowledge cards-sync`` — 从经验库筛「建议加入知识卡」的技巧
+    ``fulilian knowledge cards-sync`` — 生成知识卡候选文件（人工编辑确认）
+    ``fulilian knowledge cards-sync --apply`` — 把保留的候选块回灌进知识卡
     """
     action = getattr(args, "knowledge_action", None)
 
@@ -771,7 +850,7 @@ def handle_knowledge_command(args: argparse.Namespace) -> None:
     elif action == "stats":
         _knowledge_stats()
     elif action == "cards-sync":
-        _knowledge_cards_sync()
+        _knowledge_cards_sync(args)
     else:
         print(
             "knowledge: use one of import / query / list / stats / cards-sync "
@@ -864,41 +943,326 @@ def _knowledge_stats() -> None:
     print(f"  file: {stats['file_path']}")
 
 
-def _knowledge_cards_sync() -> None:
-    """从经验库筛「建议加入知识卡」的技巧候选清单。
+def _knowledge_cards_sync(args: argparse.Namespace) -> None:
+    """知识卡回灌三步流程入口（生成 → 人工编辑确认 → --apply 回灌）。
 
-    读取 experiential_learning 的 learnings 文件（ATT&CK 索引），筛出
-    成功率高（成功率 ≥0.75）或出现 ≥2 次的 technique，打印
-    分类 + 技巧 + 频次 + 建议目标卡。纯读操作，不修改知识卡。
+    生成模式（默认）：从经验库筛出候选技巧，写入候选文件（默认
+    ~/Exchange/ctf-知识卡候选.md），stdout 只打印摘要不刷屏；
+    apply 模式（--apply）：解析候选文件里剩余的候选块，逐条回灌进
+    对应知识卡的「实战经验沉淀」小节，最后把候选文件重置为仅含说明。
     """
-    from fulilian_ctf.experiential_learning import query_index
-    from fulilian_ctf.knowledge import CATEGORIES, SKILLS_DIR
+    out_raw = getattr(args, "out", None)
+    out_path = (
+        Path(out_raw).expanduser() if out_raw
+        else _CARDS_SYNC_DEFAULT_OUT.expanduser()
+    )
+    if getattr(args, "apply", False):
+        _cards_sync_apply(out_path)
+    else:
+        _cards_sync_generate(out_path)
 
-    rows = query_index()  # [{category, technique, success, fail, total, success_rate}]
+
+# ── cards-sync 候选文件（生成 / apply 共用常量）───────────────────────────
+
+# 候选文件默认输出路径（--out 可覆盖）
+_CARDS_SYNC_DEFAULT_OUT = Path("~/Exchange/ctf-知识卡候选.md")
+
+# 候选文件头部：固定标题 + 使用说明（apply 后文件也被重置回这段）。
+# 注意：说明文案里不要出现 `<!-- candidate` / `<!-- /candidate -->` 字面
+# 标记，否则会被 _cards_sync_parse_blocks 误识别为候选块。
+_CARDS_SYNC_HEADER = (
+    "# CTF 知识卡候选（cards-sync 自动生成）\n"
+    "\n"
+    "使用说明：文件中每个 candidate 块（由成对的 HTML 注释标记圈起）\n"
+    "是一条候选经验。**删掉不要的候选块（被删掉 = 放弃），保留想要的**，\n"
+    "然后运行：\n"
+    "\n"
+    "    fulilian knowledge cards-sync --apply\n"
+    "\n"
+    "即可把保留的候选回灌进 skills/ctf-knowledge/ 对应知识卡的\n"
+    "「实战经验沉淀」小节。apply 成功后本文件会被重置为仅含本说明。\n"
+)
+
+# 候选块开 / 闭标记（apply 解析用；开标记里带结构化元数据，容错人工编辑）
+_CARDS_SYNC_OPEN_RE = re.compile(r"<!--\s*candidate\s+(?P<attrs>[^>]*?)\s*-->")
+_CARDS_SYNC_CLOSE = "<!-- /candidate -->"
+# 元数据属性：key="value" 优先，退化支持 key=bare-token
+_CARDS_SYNC_ATTR_RE = re.compile(r'(\w+)="([^"]*)"|(\w+)=([^\s"<>]+)')
+
+# 「实战经验沉淀」小节标题（append 模式下不存在则创建）
+_CARDS_SYNC_SECTION = "## 实战经验沉淀"
+
+
+def _collect_cards_sync_candidates() -> Optional[list[dict]]:
+    """按既有门槛筛出候选技巧，并补充 entries 维度的证据信息。
+
+    入选条件（与旧版打印行为一致，不放松）：出现 ≥2 次或成功率 ≥0.75；
+    有成功记录的 technique 还须至少一条 verified=True 的 entry 支撑。
+    纯失败（success==0）不受 verified 门槛限制。
+
+    Returns:
+        list | None：learning.json 为空（索引无记录）时返回 None；
+        否则返回候选列表（可能为空列表 = 有记录但无达标候选）。
+    """
+    from fulilian_ctf.experiential_learning import load_learnings, query_index
+
+    rows = query_index()
     if not rows:
-        print("cards-sync: learning.json 为空，暂无可同步的技巧。")
-        return
+        return None
 
-    # 入选条件：出现 ≥2 次，或成功率 ≥0.75（含 1 次即高成功的技巧）
+    verified_keys = {
+        (e.get("category", ""), e.get("technique", ""))
+        for e in load_learnings()["entries"]
+        if e.get("verified")
+    }
     candidates = [
         r for r in rows
-        if r["total"] >= 2 or r["success_rate"] >= 0.75
+        if (r["total"] >= 2 or r["success_rate"] >= 0.75)
+        and (r["success"] == 0 or (r["category"], r["technique"]) in verified_keys)
     ]
-    # 高频优先，其次成功次数
     candidates.sort(key=lambda r: (r["total"], r["success"]), reverse=True)
 
-    print(f"cards-sync: {len(candidates)} candidate technique(s) "
-          f"(出现≥2次 或 成功率≥0.75；共 {len(rows)} 条技巧记录)")
-    print()
-    for r in candidates[:20]:
-        card_file = CATEGORIES.get(r["category"], "misc.md")
-        card_path = SKILLS_DIR / card_file
-        status = "✓" if card_path.exists() else "✗ missing"
+    # 按 (category, technique) 聚合 entries：来源题 id（去重保序，最多 3 个）
+    # 与最新 command（entries 按落库顺序追加，遍历中最后一条即最新）
+    entries_by_key: dict[tuple[str, str], list[dict]] = {}
+    for e in load_learnings()["entries"]:
+        entries_by_key.setdefault(
+            (e.get("category", ""), e.get("technique", "")), []
+        ).append(e)
+
+    enriched = []
+    for r in candidates:
+        entries = entries_by_key.get((r["category"], r["technique"]), [])
+        challenge_ids: list[str] = []
+        latest_command = ""
+        for e in entries:
+            cid = str(e.get("challenge_id") or "").strip()
+            if cid and cid not in challenge_ids:
+                challenge_ids.append(cid)
+            cmd = str(e.get("command") or "").strip()
+            if cmd:
+                latest_command = cmd
+        enriched.append({
+            **r,
+            "challenge_ids": challenge_ids[:3],
+            "latest_command": latest_command,
+        })
+    return enriched
+
+
+def _cards_sync_attr_escape(value: str) -> str:
+    """把值塞进 HTML 注释属性（key="value"）前的转义：去引号、压平换行。"""
+    return " ".join(str(value).replace('"', "'").split())
+
+
+def _cards_sync_parse_attrs(raw: str) -> dict:
+    """解析候选块开标记里的元数据属性（人工编辑后仍尽量容错）。"""
+    attrs: dict[str, str] = {}
+    for m in _CARDS_SYNC_ATTR_RE.finditer(raw):
+        key = m.group(1) or m.group(3)
+        value = m.group(2) if m.group(2) is not None else m.group(4)
+        attrs[key] = value
+    return attrs
+
+
+def _cards_sync_generate(out_path: Path) -> None:
+    """生成模式：全量重建候选文件（入选门槛不变），stdout 只打摘要。"""
+    candidates = _collect_cards_sync_candidates()
+    if candidates is None:
+        print("cards-sync: learning.json 为空，暂无可同步的技巧。")
+        return
+    if not candidates:
+        # 有经验记录但无达标候选：仍写出仅含说明的候选文件，保持
+        # 「编辑 → --apply」流程可用（对空文件 apply 是安全空操作）。
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(_CARDS_SYNC_HEADER, encoding="utf-8")
+        print(f"cards-sync: 0 candidate technique(s) → {out_path}")
         print(
-            f"  [{r['category']:<8}] {r['technique'][:70]}"
-            f"\n      频次: 成功 {r['success']} / 失败 {r['fail']}"
-            f" (共 {r['total']}，成功率 {r['success_rate']:.0%})"
-            f"  → 建议目标卡: skills/ctf-knowledge/{card_file} {status}"
+            "cards-sync: 请编辑该文件（删除不要的候选块），然后运行 "
+            "`fulilian knowledge cards-sync --apply` 回灌。"
         )
-    if len(candidates) > 20:
-        print(f"  ... 其余 {len(candidates) - 20} 条省略")
+        return
+
+    from fulilian_ctf.knowledge import CATEGORIES
+
+    date_prefix = datetime.now().strftime("%Y%m%d")
+    blocks: list[str] = []
+    for i, c in enumerate(candidates, 1):
+        card_file = CATEGORIES.get(c["category"], "misc.md")
+        technique_line = " ".join(str(c["technique"]).split())[:70]
+        # 拟写入要点：technique + 最新 command 压成单行；command 缺失只写 technique
+        bullet = technique_line
+        if c["latest_command"] and c["latest_command"] != c["technique"]:
+            cmd_line = " ".join(str(c["latest_command"]).split())[:80]
+            bullet = f"{technique_line}（关键命令: {cmd_line}）"
+        evidence = f"成功 {c['success']} / 失败 {c['fail']}"
+        if c["success"] > 0:
+            evidence += "（含 verified 通过）"
+        sources = ", ".join(c["challenge_ids"]) if c["challenge_ids"] else "无"
+        attrs = (
+            f'id={date_prefix}-{i} '
+            f'category="{_cards_sync_attr_escape(c["category"])}" '
+            f'technique="{_cards_sync_attr_escape(c["technique"])}" '
+            f'sources="{_cards_sync_attr_escape(", ".join(c["challenge_ids"]))}"'
+        )
+        blocks.append(
+            f"<!-- candidate {attrs} -->\n"
+            f"### [{c['category']}] {technique_line}\n"
+            f"- 目标卡: skills/ctf-knowledge/{card_file}\n"
+            f"- 证据: {evidence}；来源: {sources}\n"
+            f"- 拟写入:\n"
+            f"  - {bullet}\n"
+            f"<!-- /candidate -->"
+        )
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(
+        _CARDS_SYNC_HEADER + "\n" + "\n\n".join(blocks) + "\n",
+        encoding="utf-8",
+    )
+    print(f"cards-sync: {len(candidates)} candidate technique(s) → {out_path}")
+    print(
+        "cards-sync: 请编辑该文件（删除不要的候选块），然后运行 "
+        "`fulilian knowledge cards-sync --apply` 回灌。"
+    )
+
+
+def _cards_sync_parse_blocks(text: str) -> tuple[list[tuple[dict, str]], list[str]]:
+    """解析候选文件里所有完整的 candidate 块。
+
+    Returns:
+        (blocks, warnings)：blocks 为 (attrs, body) 列表；warnings 为
+        跳过块对应的告警文案（标记不配对 / 元数据残缺）。
+        绝不抛异常——坏块一律跳过并告警。
+    """
+    blocks: list[tuple[dict, str]] = []
+    warnings: list[str] = []
+    pos = 0
+    while True:
+        m = _CARDS_SYNC_OPEN_RE.search(text, pos)
+        if not m:
+            break
+        close_idx = text.find(_CARDS_SYNC_CLOSE, m.end())
+        next_open = _CARDS_SYNC_OPEN_RE.search(text, m.end())
+        attrs = _cards_sync_parse_attrs(m.group("attrs"))
+        block_id = attrs.get("id", "?")
+        if close_idx == -1 or (next_open and next_open.start() < close_idx):
+            # 开标记没有配对的闭标记（闭标记前又出现下一个开标记）：
+            # 跳过该块并告警，从下一个开标记处继续解析
+            warnings.append(
+                f"候选块 id={block_id}"
+                f"（technique={attrs.get('technique', '?')}）"
+                f"缺少配对的结束标记 {_CARDS_SYNC_CLOSE}，已跳过"
+            )
+            pos = next_open.start() if next_open else len(text)
+            continue
+        body = text[m.end():close_idx]
+        if not attrs.get("technique"):
+            warnings.append(
+                f"候选块 id={block_id} 格式残缺（缺少 technique 元数据），已跳过"
+            )
+        else:
+            blocks.append((attrs, body))
+        pos = close_idx + len(_CARDS_SYNC_CLOSE)
+    return blocks, warnings
+
+
+def _cards_sync_extract_bullet(body: str) -> str:
+    """从候选块正文提取「拟写入」要点行（尊重人工编辑后的文本）。"""
+    lines = body.splitlines()
+    for i, ln in enumerate(lines):
+        if ln.strip().startswith("- 拟写入"):
+            for nxt in lines[i + 1:]:
+                s = nxt.strip()
+                if s.startswith("- "):
+                    return s[2:].strip()
+                if s:
+                    break
+            break
+    return ""
+
+
+def _cards_sync_append_to_card(
+    category: str, technique: str, attrs: dict, body: str,
+) -> tuple[bool, str]:
+    """把单个候选块回灌进目标知识卡。
+
+    Returns:
+        (ok, reason)：ok=False 时 reason 说明跳过原因（卡缺失 / 已去重）。
+    """
+    from fulilian_ctf.knowledge import CATEGORIES, SKILLS_DIR
+
+    card_file = CATEGORIES.get((category or "").lower(), "misc.md")
+    card_path = SKILLS_DIR / card_file
+    if not card_path.exists():
+        return False, f"知识卡缺失（不自动建卡）: {card_path}"
+
+    content = card_path.read_text(encoding="utf-8")
+    # 去重：卡片已含相同 technique 文本（全文或压平后的 70 字符形态）则跳过
+    dedupe_keys = [k for k in (
+        technique, " ".join(technique.split())[:70],
+    ) if k]
+    if any(k in content for k in dedupe_keys):
+        return False, "卡片已含相同技巧"
+
+    bullet = _cards_sync_extract_bullet(body) or technique
+    sources = attrs.get("sources", "").strip()
+    line = f"- {bullet}" + (f"（来源: {sources}）" if sources else "")
+
+    lines = content.rstrip("\n").split("\n") if content.strip() else []
+    try:
+        heading_i = lines.index(_CARDS_SYNC_SECTION)
+    except ValueError:
+        lines.append(_CARDS_SYNC_SECTION)
+        heading_i = len(lines) - 1
+    # 插入位置：该小节末尾（下一个二级标题行之前，否则文件末尾）
+    end_i = len(lines)
+    for j in range(heading_i + 1, len(lines)):
+        if lines[j].startswith("## "):
+            end_i = j
+            break
+    lines.insert(end_i, line)
+    card_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return True, ""
+
+
+def _cards_sync_apply(out_path: Path) -> None:
+    """apply 模式：回灌候选文件里剩余的块，最后把文件重置为仅含说明。"""
+    if not out_path.exists():
+        print(f"cards-sync: 候选文件不存在: {out_path}（先运行生成模式）")
+        return
+
+    try:
+        text = out_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        print(f"cards-sync: 候选文件读取失败: {exc}")
+        return
+
+    blocks, warnings = _cards_sync_parse_blocks(text)
+    for w in warnings:
+        print(f"cards-sync: 警告: {w}")
+
+    applied = 0
+    skipped = len(warnings)  # 残缺 / 不配对的块计入 skipped
+    for attrs, body in blocks:
+        category = attrs.get("category", "")
+        technique = attrs.get("technique", "")
+        ok, reason = _cards_sync_append_to_card(
+            category, technique, attrs, body,
+        )
+        if ok:
+            applied += 1
+        else:
+            skipped += 1
+            print(
+                f"cards-sync: skipped（{reason}）: "
+                f"[{category or '?'}] {technique[:50]}"
+            )
+
+    # 消费语义：全部处理完后把候选文件重置为仅含标题与说明——
+    # 保留的块已回灌，被删掉的块视为放弃，不再二次处理。
+    out_path.write_text(_CARDS_SYNC_HEADER, encoding="utf-8")
+    print(
+        f"cards-sync: apply 完成: applied={applied}, skipped={skipped}"
+        f"（候选文件已重置: {out_path}）"
+    )

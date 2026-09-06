@@ -232,3 +232,100 @@ class TestLearningStats:
         assert stats["total_entries"] == 2
         assert stats["positive"] == 1
         assert stats["negative"] == 1
+
+
+# ── 7. 噪音过滤质量门（NOISE_PATTERNS）────────────────────────────────────
+
+
+class TestNoiseFiltering:
+    def test_noise_patterns_exported(self):
+        """NOISE_PATTERNS 是模块级导出的编译正则列表，供外部复用。"""
+        assert isinstance(el.NOISE_PATTERNS, list)
+        assert len(el.NOISE_PATTERNS) >= 4
+        assert all(hasattr(p, "search") for p in el.NOISE_PATTERNS)
+
+    def test_is_noise_covers_known_noise_lines(self):
+        # 曾被落库为 technique 的真实进程日志行
+        assert el._is_noise("solver attempt 0 started (pid 10249)")
+        assert el._is_noise("solver attempt 2 finished")
+        assert el._is_noise("[dispatch] web-01: SOLVED flag=flag{x}")
+        assert el._is_noise("some worker pid 12345 crashed")
+        assert el._is_noise("   ")
+        assert el._is_noise("")
+
+    def test_is_noise_keeps_real_commands(self):
+        assert not el._is_noise("nmap -p 80 target")
+        assert not el._is_noise("sqlmap -u 'http://target?id=1' --batch")
+
+    def test_self_evolve_skips_noise_commands(self):
+        """自进化提取时，噪音行不作为 technique 入库。"""
+        _write_trace("noise-challenge", {
+            "challenge_id": "noise-challenge",
+            "category": "web",
+            "flag": "flag{noise}",
+            "key_commands": [
+                "solver attempt 0 started (pid 10249)",
+                "solver attempt 1 finished (pid 10249)",
+                "[dispatch] noise-challenge: SOLVED flag=flag{noise}",
+                "residual worker pid 9988 exited",
+                "   ",
+                "",
+                "nmap -p 80 target",
+            ],
+        })
+
+        result = el.self_evolve("noise-challenge")
+        assert result is not None
+        assert result["extracted"] == 1
+        assert result["new_entries"][0]["technique"] == "nmap -p 80 target"
+        learnings = el.load_learnings()
+        assert len(learnings["entries"]) == 1
+        # index 里不应出现噪音行派生的 technique
+        assert "web::solver attempt 0 started (pid 10249)" not in learnings["index"]
+
+
+# ── 8. verified 字段落库 ─────────────────────────────────────────────────
+
+
+class TestVerifiedField:
+    def test_record_lesson_default_false(self):
+        el.record_lesson("web-01", "web", "SQL注入", success=True)
+        assert el.load_learnings()["entries"][0]["verified"] is False
+
+    def test_record_lesson_verified_true(self):
+        el.record_lesson("web-01", "web", "SQL注入", success=True, verified=True)
+        assert el.load_learnings()["entries"][0]["verified"] is True
+
+    def test_self_evolve_verified_true(self):
+        _write_trace("v-challenge", {
+            "challenge_id": "v-challenge",
+            "category": "crypto",
+            "flag": "flag{v}",
+            "key_commands": ["openssl rsautl -decrypt -in flag.enc"],
+        })
+        result = el.self_evolve("v-challenge", verified=True)
+        assert result is not None and result["extracted"] == 1
+        entries = el.load_learnings()["entries"]
+        assert entries and all(e["verified"] is True for e in entries)
+
+    def test_record_solve_outcome_verified_flows_to_entries(self):
+        result = el.record_solve_outcome(
+            "sv-challenge", "web", success=True,
+            key_commands=["sqlmap -u 'http://target/?id=1' --batch"],
+            flag="flag{sv}", verified=True,
+        )
+        assert result is not None
+        entries = el.load_learnings()["entries"]
+        assert entries
+        assert all(e["verified"] is True for e in entries)
+        # trace 文件也带 verified 字段
+        trace = json.loads((el.TRACES_DIR / "sv-challenge.json").read_text(
+            encoding="utf-8"))
+        assert trace["verified"] is True
+
+    def test_record_solve_outcome_default_not_verified(self):
+        el.record_solve_outcome("sv2-challenge", "web", success=False,
+                                key_commands=[], flag="")
+        entries = el.load_learnings()["entries"]
+        # 空 key_commands 不产生 entry，但也不应崩
+        assert entries == []

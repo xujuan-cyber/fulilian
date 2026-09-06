@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from datetime import datetime
 from typing import Optional
@@ -20,6 +21,21 @@ from fulilian_constants import FULILIAN_HOME
 
 LEARNING_FILE = FULILIAN_HOME / "learning.json"
 TRACES_DIR = FULILIAN_HOME / "traces"
+
+# 噪音模式（F3-004 质量门）：提取 technique 时跳过的进程日志 / 调度输出 /
+# 空白行，避免把 "solver attempt 0 started (pid 10249)" 这类运行时噪音
+# 落库为「技巧」。命中任意一条即视为噪音。
+NOISE_PATTERNS = [
+    re.compile(r"^solver attempt \d+ (started|finished)"),
+    re.compile(r"pid \d+"),          # 含进程号的行（solver 启停日志等）
+    re.compile(r"^\[dispatch\]"),    # 调度器控制台输出
+    re.compile(r"^\s*$"),            # 空 / 纯空白
+]
+
+
+def _is_noise(cmd: str) -> bool:
+    """判断 key_commands 的一条记录是否为噪音行。"""
+    return any(pattern.search(cmd) for pattern in NOISE_PATTERNS)
 
 
 # ── 数据操作 ────────────────────────────────────────────────────────────
@@ -54,6 +70,7 @@ def record_lesson(
     success: bool,
     command: str = "",
     notes: str = "",
+    verified: bool = False,
 ) -> None:
     """记录正/负知识。
 
@@ -64,6 +81,7 @@ def record_lesson(
         success: 是否成功（True=正知识，False=负知识）
         command: 关键命令
         notes: 备注
+        verified: 该条经验是否经 flag 三重校验门确认（默认 False）
     """
     learnings = load_learnings()
 
@@ -74,6 +92,7 @@ def record_lesson(
         "success": success,
         "command": command,
         "notes": notes,
+        "verified": bool(verified),
         "timestamp": datetime.now().isoformat(timespec="seconds"),
     }
     learnings["entries"].append(entry)
@@ -183,17 +202,18 @@ def get_avoid_list(category: str, min_fail: int = 1) -> list[str]:
 # ── 自进化 ──────────────────────────────────────────────────────────────
 
 
-def self_evolve(challenge_id: str) -> Optional[dict]:
+def self_evolve(challenge_id: str, verified: bool = False) -> Optional[dict]:
     """自进化：解题后自动复盘 → 提取可复用知识 → 去重落库。
 
     流程：
     1. 读取该题的解题轨迹（trace 文件）
-    2. 提取关键技术点
+    2. 提取关键技术点（噪音行 — 进程日志/调度输出/空白 — 不入库）
     3. 去重（与已有知识比较）
     4. 落库
 
     Args:
         challenge_id: 题目 ID
+        verified: 本次解题的 flag 是否经校验确认（写入 entry 的 verified 字段）
 
     Returns:
         dict | None: 提取结果（包含提取的知识点），无轨迹返回 None
@@ -220,6 +240,9 @@ def self_evolve(challenge_id: str) -> Optional[dict]:
     for cmd in key_commands:
         if not isinstance(cmd, str) or not cmd.strip():
             continue
+        if _is_noise(cmd):
+            # 噪音质量门：进程日志 / 调度输出行不作为 technique 入库
+            continue
         # 简化命令为技术名称（取前 60 字符）
         technique = cmd.strip()[:60]
 
@@ -234,6 +257,7 @@ def self_evolve(challenge_id: str) -> Optional[dict]:
             "success": bool(flag),
             "command": cmd,
             "notes": f"自进化提取自 {challenge_id}",
+            "verified": bool(verified),
             "timestamp": datetime.now().isoformat(timespec="seconds"),
         })
 
@@ -262,14 +286,18 @@ def self_evolve(challenge_id: str) -> Optional[dict]:
 
 
 def record_solve_outcome(challenge_id: str, category: str, success: bool,
-                         key_commands: list[str], flag: str = "") -> Optional[dict]:
+                         key_commands: list[str], flag: str = "",
+                         verified: bool = False) -> Optional[dict]:
     """一次解题尝试的结果落库（F3-003/F3-004 集成入口）。
 
     写 trace 文件（TRACES_DIR/{challenge_id}.json：challenge_id/category/
-    key_commands/flag/timestamp），然后调用 self_evolve(challenge_id) 做
-    提取→去重→落库。返回 self_evolve 的结果；IO 失败返回 None（不抛异常，
+    key_commands/flag/verified/timestamp），然后调用 self_evolve(challenge_id)
+    做 提取→去重→落库。返回 self_evolve 的结果；IO 失败返回 None（不抛异常，
     方便调度器 best-effort 裸调）。key_commands 为空列表时也写 trace
     （self_evolve 会返回 extracted=0）。
+
+    Args:
+        verified: flag 是否经校验确认（单题路径 = flag 检测链命中；默认 False）
     """
     try:
         TRACES_DIR.mkdir(parents=True, exist_ok=True)
@@ -278,6 +306,7 @@ def record_solve_outcome(challenge_id: str, category: str, success: bool,
             "category": category,
             "key_commands": list(key_commands or []),
             "flag": flag,
+            "verified": bool(verified),
             "timestamp": datetime.now().isoformat(timespec="seconds"),
         }
         (TRACES_DIR / f"{challenge_id}.json").write_text(
@@ -286,7 +315,7 @@ def record_solve_outcome(challenge_id: str, category: str, success: bool,
     except (OSError, TypeError, ValueError):
         return None
     try:
-        return self_evolve(challenge_id)
+        return self_evolve(challenge_id, verified=verified)
     except Exception:  # noqa: BLE001 — 落库失败不影响调度
         return None
 
@@ -334,4 +363,5 @@ __all__ = [
     "self_evolve",
     "record_solve_outcome",
     "get_learning_stats",
+    "NOISE_PATTERNS",
 ]

@@ -53,7 +53,16 @@ def build_knowledge_parser(subparsers, *, cmd_knowledge: Callable) -> None:
     # knowledge cards-sync
     cards_sync_parser = knowledge_subparsers.add_parser(
         "cards-sync",
-        help="Suggest techniques (from experiential learning) to add into knowledge cards",
+        help="Generate candidate file of techniques (from experiential learning) "
+             "for knowledge cards; edit it, then re-run with --apply to merge",
+    )
+    cards_sync_parser.add_argument(
+        "--apply", action="store_true",
+        help="Merge remaining candidate blocks in the file into knowledge cards",
+    )
+    cards_sync_parser.add_argument(
+        "--out",
+        help="Candidate file path (default: ~/Exchange/ctf-知识卡候选.md)",
     )
 
     knowledge_parser.set_defaults(func=cmd_knowledge)

@@ -219,6 +219,53 @@ class TestToolsetConsistency:
         assert len(core) > 20, f"Suspiciously small shared core: {len(core)} tools"
 
 
+class TestCtfSolveToolset:
+    """CTF 解题工具集必须带 memory / skill_manage。
+
+    回合后自省（agent/background_review.py）的触发条件按
+    valid_tool_names 判断：记忆审查需要 "memory" 在其中（且 _memory_store
+    存在，CTF 模式下由 skip_memory/memory_enabled 默认值保证），skill 审查
+    需要 "skill_manage" 在其中。缺了这两个名字，CTF 解题会话的自省 fork
+    永不触发，解题经验全部丢失（回归锁）。
+    """
+
+    def test_static_definition_keeps_solver_tools_and_adds_review_tools(self):
+        tools = set(TOOLSETS["ctf_solve"]["tools"])
+        # 原 CTF 解题工具不回归
+        assert {"verify_flag", "checkpoint", "generate_writeup", "compile_check"} <= tools
+        # 回合后自省触发依赖
+        assert "memory" in tools
+        assert "skill_manage" in tools
+
+    def test_resolved_toolset_includes_review_tools_and_includes(self):
+        from tools.registry import discover_builtin_tools
+
+        discover_builtin_tools()
+        resolved = set(resolve_toolset("ctf_solve"))
+        assert {"memory", "skill_manage"} <= resolved
+        # includes（terminal / file / web / vision）不回归
+        assert {"terminal", "process", "read_file", "write_file", "web_search"} <= resolved
+
+    def test_registry_produces_schemas_for_review_tools(self):
+        """registry 必须实际产出 memory / skill_manage 的 schema。
+
+        工具名写错（或被 check_fn 过滤）时 registry 会静默丢弃，
+        valid_tool_names 里就不会出现对应名字、自省再次失效——
+        所以这里按 model_tools 的真实构建路径断言，而不是只看静态定义。
+        memory / skill_manage 属于 _FULILIAN_CORE_TOOLS，永不被
+        tool_search 渐进披露折叠，因此真实会话里必然出现在
+        valid_tool_names 中。
+        """
+        from model_tools import get_tool_definitions
+
+        defs = get_tool_definitions(
+            enabled_toolsets=["ctf_solve"], quiet_mode=True,
+            skip_tool_search_assembly=True,
+        )
+        names = {t["function"]["name"] for t in defs}
+        assert {"memory", "skill_manage", "verify_flag"} <= names
+
+
 class TestPluginToolsets:
     def test_get_all_toolsets_includes_plugin_toolset(self, monkeypatch):
         reg = ToolRegistry()

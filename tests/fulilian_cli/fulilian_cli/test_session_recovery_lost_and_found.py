@@ -29,7 +29,7 @@ from fulilian_cli.session_recovery import (
     recover_session_database,
 )
 
-from tests.fulilian_cli.test_session_recovery import (
+from tests.fulilian_cli.fulilian_cli.test_session_recovery import (
     _btree_leaf_pages,
     _make_page_spanning_source,
 )
