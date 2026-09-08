@@ -4238,8 +4238,21 @@ class PluginManager:
                 # itself leaves process-global tools/platforms/providers installed.
                 self.unload()
             if env_var_enabled("FULILIAN_SAFE_MODE"):
-                logger.info("FULILIAN_SAFE_MODE=1 — plugin discovery skipped")
+                # SAFE_MODE originally skipped discovery entirely, which left
+                # the web-search registry empty: a user with
+                # ``web.search_backend: firecrawl`` then hit "no registered web
+                # search provider has that name" on every web_search call
+                # (fulilian logs 2026-09-08). Bundled ``backend`` plugins ship
+                # with Fulilian, are gated by their own tool wrappers, and are
+                # exactly what SAFE_MODE users still need, so load those and
+                # record the rest as skipped-for-safe-mode without importing
+                # any third-party / user / project / entry-point code.
+                logger.info(
+                    "FULILIAN_SAFE_MODE=1 — loading bundled backend plugins "
+                    "only; all other plugin sources are skipped"
+                )
                 self._discovered = True
+                self._discover_bundled_backends_safe_mode()
                 return
             # Set the flag up front as a re-entrancy guard (a plugin's register()
             # can transitively trigger discovery again), but reset it if the sweep
@@ -4271,6 +4284,47 @@ class PluginManager:
             except BaseException:
                 self._discovered = False
                 raise
+
+    def _discover_bundled_backends_safe_mode(self) -> None:
+        """SAFE_MODE-restricted discovery: bundled ``backend`` plugins only.
+
+        Mirrors the ``manifest.source == "bundled" and manifest.kind ==
+        "backend"`` branch of :meth:`_discover_and_load_inner` — bundled
+        backends (web search/extract, image_gen, browser cloud, ...) ship
+        with Fulilian and are gated by their own tool wrappers, so they are
+        safe to load even in SAFE_MODE and are exactly what SAFE_MODE
+        sessions still need. All other sources (bundled platforms,
+        exclusives, model-providers, user/project/entry-point plugins) are
+        simply not loaded; nothing is imported for them.
+
+        Directory manifests are still collected (cheap, no plugin imports)
+        so the bundled sweep sees the same disabled-config gates as the
+        full sweep. On failure the ``_discovered`` flag is rolled back
+        exactly like :meth:`discover_and_load` does for the full sweep so
+        a failed pass is not cached as "discovered with an empty registry";
+        backends already loaded stay live and re-registration is idempotent
+        on the next attempt.
+        """
+        try:
+            manifests: List[PluginManifest] = self._collect_directory_manifests()
+            disabled = _get_disabled_plugins()
+            for manifest in manifests:
+                if manifest.source != "bundled" or manifest.kind != "backend":
+                    continue
+                lookup_key = manifest.key or manifest.name
+                if lookup_key in disabled or manifest.name in disabled:
+                    loaded = LoadedPlugin(manifest=manifest, enabled=False)
+                    loaded.error = "disabled via config"
+                    self._plugins[lookup_key] = loaded
+                    logger.debug(
+                        "SAFE_MODE: skipping disabled bundled backend '%s'",
+                        lookup_key,
+                    )
+                    continue
+                self._load_plugin(manifest)
+        except BaseException:
+            self._discovered = False
+            raise
 
     def _re_register_shell_hooks_after_force(self) -> None:
         """Restore config.yaml shell hooks wiped by force-clear of ``_hooks``."""

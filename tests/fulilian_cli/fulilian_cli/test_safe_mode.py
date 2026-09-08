@@ -55,7 +55,10 @@ def test_cmd_chat_safe_mode_sets_env_before_startup(monkeypatch):
 
 
 
-def test_plugin_discovery_skipped(monkeypatch):
+def test_plugin_discovery_safe_mode_loads_bundled_backends_only(monkeypatch):
+    """SAFE_MODE loads bundled ``backend`` plugins (web search etc.) but
+    nothing else — third-party, user, project, entry-point, and platform
+    plugins stay skipped (see plugins.py SAFE_MODE branch)."""
     monkeypatch.setenv("FULILIAN_SAFE_MODE", "1")
     from fulilian_cli.plugins import PluginManager
 
@@ -65,9 +68,28 @@ def test_plugin_discovery_skipped(monkeypatch):
 
     mgr.discover_and_load()
 
+    # Full sweep never ran.
     assert called == []
     assert mgr._discovered is True
-    assert mgr._plugins == {}
+    # Bundled backends are loaded and registered with the web registry.
+    from agent.web_search_registry import list_providers, get_active_search_provider
+
+    provider_names = {p.name for p in list_providers()}
+    assert "firecrawl" in provider_names
+    assert get_active_search_provider() is not None
+    # No non-backend plugin was loaded: platform adapters, exclusives,
+    # model-providers, and user/project/entry-point plugins stay out.
+    non_backends = [
+        key
+        for key, loaded in mgr._plugins.items()
+        if loaded.enabled and loaded.manifest.kind != "backend"
+    ]
+    assert non_backends == []
+    # Every loaded plugin is a bundled backend.
+    for loaded in mgr._plugins.values():
+        if loaded.enabled:
+            assert loaded.manifest.source == "bundled"
+            assert loaded.manifest.kind == "backend"
 
 
 
