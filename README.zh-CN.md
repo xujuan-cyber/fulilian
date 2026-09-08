@@ -49,17 +49,6 @@ fulilian model
 fulilian chat
 ```
 
-### Windows CMD 版
-
-习惯用 Windows CMD 终端？仓库提供一等公民的 CMD 前端（见 [`cmd/`](cmd/README.md)）——实际执行在 WSL 内的完整 FuLiLian 上，而 `fll` 在 CMD 里就像原生命令（UTF-8 输出、参数与退出码原样透传、带自检与卸载的安装器）：
-
-```bat
-git clone https://github.com/xujuan-cyber/fulilian.git
-cd fulilian\cmd
-install.cmd          :: 然后开一个新的 CMD 窗口
-fll --version
-```
-
 ## 文档
 
 - [GitHub Wiki](https://github.com/xujuan-cyber/fulilian/wiki) — 安装指南、CTF 工作流与 API 参考

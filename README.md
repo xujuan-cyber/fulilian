@@ -48,17 +48,6 @@ fulilian model
 fulilian chat
 ```
 
-### Windows CMD Edition
-
-Prefer the Windows CMD terminal? A first-class CMD frontend lives in [`cmd/`](cmd/README.en.md) — it runs FuLiLian inside WSL while `fll` behaves like a native CMD command (UTF-8 output, verbatim argument & exit-code forwarding, installer with self-check and uninstall):
-
-```bat
-git clone https://github.com/xujuan-cyber/fulilian.git
-cd fulilian\cmd
-install.cmd          :: then open a new CMD window
-fll --version
-```
-
 ## Documentation
 
 - [GitHub Wiki](https://github.com/xujuan-cyber/fulilian/wiki) — setup guides, CTF workflows, and API reference
