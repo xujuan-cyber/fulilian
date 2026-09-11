@@ -1652,6 +1652,14 @@ $ git diff --stat 8ada9e6 b4f14cf          # 基线版 → 对照版
 对照 = `/tmp/ctl`（`8ada9e6` 上叠加 `5476537` 逆转 A9、`b4f14cf` 逆转 A3），
 3 批 × 4 道难题。**12/12 解出、flag 全对。**
 
+> **该状态已打标签 `ctf-ctl-a3a9-revert`**（原本只是 `/tmp/ctl` 上的游离 HEAD，
+> 撤掉 worktree 后不可达 —— 一份写进计划书的测量不该依赖 `/tmp` 里一个随时会被
+> gc 的提交）。复现：
+> `git worktree add /tmp/ctl ctf-ctl-a3a9-revert` 然后
+> `PYTHONPATH=/tmp/ctl bash /tmp/ctl/benchmarks/ctf_hard_run.sh <输出目录>`。
+> **`PYTHONPATH` 能压过 editable 安装，已实测** —— 这是隔离对照而不动主仓库的
+> 办法（并发会话多，主仓库不一定是你的）。
+
 ```
 改动前 = 对照（A9 撤）   改动后 = 基线（A9 在）
 ```
