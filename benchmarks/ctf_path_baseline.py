@@ -388,14 +388,191 @@ def print_aggregate(rows: list[dict[str, Any]]) -> None:
         print("- **路径经济性：** 不可用（manifest 无 solve_reference_steps）")
 
 
+# ── 重复采样聚合（2c：经济性要能验收，先得有噪声地板） ──────────────────
+
+# 跑批输出目录里除题目之外的东西，别当成 fixture 采
+NON_FIXTURE_DIRS = frozenset({"logs", "_selfproof", "_mirror"})
+
+
+def discover_batch(batch_dir: Path) -> list[Path]:
+    """列出跑批目录下的题目 work_dir（跳过 logs/_selfproof/_mirror 与隐藏项）。"""
+    return sorted(
+        d for d in batch_dir.iterdir()
+        if d.is_dir() and d.name not in NON_FIXTURE_DIRS and not d.name.startswith(".")
+    )
+
+
+def repeat_stats(groups: dict[str, list[dict[str, Any]]]) -> list[dict[str, Any]]:
+    """把同一 fixture 的多次采样压成一行统计。
+
+    报**范围**而不只是均值：n 小的时候标准差没有意义，但"同一份代码跑出
+    12–26 次 api"这个事实本身就能说明该指标的分辨率上限。
+    """
+    out = []
+    for name, samples in sorted(groups.items()):
+        apis = [s["api_calls"] for s in samples if s["api_calls"] is not None]
+        mults = [s["ref_multiple"] for s in samples if s["ref_multiple"] is not None]
+        toks = [s["total_tokens"] for s in samples if s["total_tokens"]]
+        out.append({
+            "fixture": name,
+            "n": len(samples),
+            "solved": sum(1 for s in samples if s["solved"]),
+            "flag_ok": sum(1 for s in samples if s["flag_matches"]),
+            "graded": sum(1 for s in samples if s["flag_matches"] is not None),
+            "log_untrusted": sum(1 for s in samples if not s["log_is_runtime"]),
+            "api_mean": round(sum(apis) / len(apis), 1) if apis else None,
+            "api_min": min(apis) if apis else None,
+            "api_max": max(apis) if apis else None,
+            "mult_mean": round(sum(mults) / len(mults), 2) if mults else None,
+            "mult_min": min(mults) if mults else None,
+            "mult_max": max(mults) if mults else None,
+            "token_mean": round(sum(toks) / len(toks)) if toks else None,
+            "ref_steps": samples[0]["ref_steps"],
+        })
+    return out
+
+
+def print_repeat_table(stats: list[dict[str, Any]]) -> None:
+    hdr = ("fixture", "n", "解出", "flag对", "api 均值", "api 范围",
+           "×参考解 均值", "×参考解 范围", "token 均值")
+    print()
+    print("| " + " | ".join(hdr) + " |")
+    print("|" + "---|" * len(hdr))
+    for s in stats:
+        api_rng = (f"{s['api_min']}–{s['api_max']}"
+                   if s["api_min"] is not None else "—")
+        mult_rng = (f"{s['mult_min']}–{s['mult_max']}"
+                    if s["mult_min"] is not None else "—")
+        flag = f"{s['flag_ok']}/{s['graded']}" if s["graded"] else "—"
+        print(
+            f"| {s['fixture']} | {s['n']} | {s['solved']}/{s['n']} | {flag} "
+            f"| {s['api_mean'] if s['api_mean'] is not None else '—'} | {api_rng} "
+            f"| {s['mult_mean'] if s['mult_mean'] is not None else '—'}× | {mult_rng} "
+            f"| {(s['token_mean'] or 0):,} |"
+        )
+
+
+def print_repeat_summary(stats: list[dict[str, Any]]) -> None:
+    """给出**噪声地板** —— 2c 的全部意义就在这里。
+
+    没有它，任何一次改动的前后差异都无法与采样噪声区分（v1 3.7× / v2 2.9×
+    的位移就是纯噪声）。所以这里不只报数，还要把"小于多少算没变"说出来。
+    """
+    if not stats:
+        return
+    ns = sorted({s["n"] for s in stats})
+    n_rng = f"{ns[0]}" if len(ns) == 1 else f"{ns[0]}–{ns[-1]}"
+    print(f"\n### 重复采样汇总（{len(stats)} 题 × {n_rng} 次）\n")
+
+    tot_solved = sum(s["solved"] for s in stats)
+    tot_n = sum(s["n"] for s in stats)
+    print(f"- **解出率：** {tot_solved}/{tot_n}")
+    untrusted = sum(s["log_untrusted"] for s in stats)
+    if untrusted:
+        print(f"- ⚠️ **其中 {untrusted} 次采样的日志不可信** —— 工具面数字已剔除，"
+              f"见单批报告。解出率与 api_calls 不受影响。")
+
+    mults = [s for s in stats if s["mult_mean"] is not None]
+    if not mults:
+        print("- **路径经济性：** 不可用（manifest 无 solve_reference_steps）")
+        return
+
+    ref_sum = sum(s["ref_steps"] * s["n"] for s in mults)
+    api_sum = sum(s["api_mean"] * s["n"] for s in mults)
+    print(f"- **路径经济性（合并）：** api_calls {api_sum:,.0f} / 参考解最少步数 "
+          f"{ref_sum} = **{api_sum / ref_sum:.1f}×**")
+
+    # 噪声地板只从「采了 ≥2 次」的题里取 —— 单次采样没有跨度可言，
+    # 让它们把整块判据顶掉，等于用「有一题没重复跑」取消全部结论。
+    dup, single = [], []
+    for s in mults:
+        (single if s["n"] < 2 else dup).append(s)
+    if not dup:
+        print(f"- ⚠️ **{len(single)} 题全是单次采样，算不出方差** —— "
+              f"单点差异不得当证据。")
+        return
+    if single:
+        print(f"- ℹ️ **{len(single)} 题只采了 1 次，不参与噪声地板**"
+              f"（{', '.join(s['fixture'] for s in single)}）—— "
+              f"单点数字当基线可以，当判据不行。")
+
+    # 噪声地板：取各题 ×参考解 跨度的最大值。比它小的前后差异一律不可归因。
+    spans = [(s["fixture"], s["mult_max"] - s["mult_min"]) for s in dup]
+    worst = max(spans, key=lambda kv: kv[1])
+    floor = worst[1]
+    print(f"- **噪声地板（同一份代码的自身摆动）：** 最大跨度 {floor:.2f}× "
+          f"（{worst[0]}）")
+    for name, span in sorted(spans, key=lambda kv: -kv[1]):
+        print(f"  - {name}: {span:.2f}× 跨度")
+    print(f"  > **验收判据：** 改动前后的 ×参考解 差异若小于 **{floor:.2f}×**，"
+          f"本批采样分辨不了，不能归因于改动。"
+          f"要压过它，要么改动足够大，要么加大 n。")
+    if floor == 0:
+        print("  > 本次各题跨度全为 0（样本高度一致）—— 地板取 0 意味着"
+              "任何非零差异都显著；但 n 小时这也可能是巧合，n≥3 前别据此下结论。")
+
+
+def run_repeat_mode(batch_dirs: list[Path], meta: dict[str, dict[str, Any]],
+                    json_path: Path | None) -> int:
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for batch in batch_dirs:
+        if not batch.is_dir():
+            print(f"⚠️  跳过（不是目录）：{batch}", file=sys.stderr)
+            continue
+        mirror = batch / "_mirror"
+        for d in discover_batch(batch):
+            m = meta.get(d.name, {})
+            row = analyze(d, m.get("expected_flag"), m.get("steps"),
+                          mirror if mirror.is_dir() else None)
+            row["batch"] = batch.name
+            groups.setdefault(d.name, []).append(row)
+
+    if not groups:
+        sys.exit("❌ 没有任何可分析的 work_dir")
+
+    stats = repeat_stats(groups)
+    print_repeat_table(stats)
+    print_repeat_summary(stats)
+
+    # 每次单独摊开，便于定位是哪一批异常（均值会把它抹平）
+    print("\n<details><summary>逐次采样</summary>\n")
+    for name, samples in sorted(groups.items()):
+        cells = ", ".join(
+            f"{s['batch']}: {s['api_calls']} api / {s['ref_multiple']}×"
+            + ("" if s["log_is_runtime"] else "（日志不可信）")
+            for s in samples
+        )
+        print(f"- **{name}** — {cells}")
+    print("\n</details>")
+
+    if json_path:
+        payload = {
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "schema": "ctf-path-baseline/2-repeat",
+            "batches": [str(b) for b in batch_dirs],
+            "fixture_count": len(stats),
+            "stats": stats,
+            "samples": groups,
+        }
+        json_path.parent.mkdir(parents=True, exist_ok=True)
+        json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2),
+                             encoding="utf-8")
+        print(f"\n✅ 已写入 {json_path}")
+    return 0
+
+
 # ── 入口 ────────────────────────────────────────────────────────────────
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         description="CTF 路径基线采集器（读 work_dir 的 usage.json + solver.log）",
     )
-    ap.add_argument("--dirs", nargs="+", type=Path, required=True,
+    ap.add_argument("--dirs", nargs="+", type=Path,
                     help="题目 work_dir 列表")
+    ap.add_argument("--runs", nargs="+", type=Path,
+                    help="重复采样模式：跑批目录列表（每个下面一层是各题 work_dir）。"
+                         "按 fixture 聚合 n/解出率/api 范围/×参考解范围，并给出"
+                         "**噪声地板** —— 没有它，单次跑的前后差异无法与采样噪声区分")
     ap.add_argument("--mirror-dir", type=Path,
                     help="镜像运行日志目录（solve 侧 FULILIAN_SOLVER_LOG_MIRROR 的"
                          "落点）。给了它且存在 <fixture>.solver.log 时优先采信镜像，"
@@ -405,7 +582,15 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--json", type=Path, help="结果写成 JSON（基线归档）")
     args = ap.parse_args(argv)
 
+    if not args.dirs and not args.runs:
+        ap.error("至少要给 --dirs 或 --runs")
+    if args.dirs and args.runs:
+        ap.error("--dirs 与 --runs 互斥：单批看明细，多批看分布")
+
     meta = load_expected(args.manifest) if args.manifest else {}
+
+    if args.runs:
+        return run_repeat_mode(args.runs, meta, args.json)
 
     rows = []
     for d in args.dirs:
