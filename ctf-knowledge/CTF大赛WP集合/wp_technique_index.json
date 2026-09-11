@@ -1,0 +1,285 @@
+{
+  "DASCTF_2026_p21_q17_d低300位泄露_CoppersmithLSB.md": {
+    "title": "DASCTF d=p^21+q^17 泄露d低300位（Hensel + Coppersmith LSB）",
+    "source_path": "/home/xujuan/.fulilian/ctf-knowledge/CTF大赛WP集合/self-solved/DASCTF_2026_p21_q17_d低300位泄露_CoppersmithLSB.md",
+    "tags": [
+      "rsa",
+      "coppersmith-known-lsb",
+      "hensel-branch-lifting",
+      "mod-2k-elimination",
+      "fpylll-lll",
+      "mpmath-balanced-roots",
+      "d-leak",
+      "p21q17"
+    ],
+    "event": "DASCTF",
+    "date": "2026-09-06",
+    "category": "crypto",
+    "difficulty": "medium+",
+    "flag": "DASCTF{0psu3_is_the_most_Greatest_army}",
+    "exp": [
+      "CTF常用脚本及工具/RSA_d等于p21加q17泄露d低300位-Hensel加CoppersmithLSB.py",
+      "CTF常用脚本及工具/RSA_d等于p21加q17泄露d低300位-数值大整数整根求取.py"
+    ],
+    "summary": "d=p^21+q^17泄露低300位: f(x)=x^38-d1*x^17+n^17≡0 mod 2^300 逐位Hensel枚举根(4~128个), p=r+2^300*y 线性Coppersmith(m=t=6, fpylll+mpmath平衡缩放+精确验证)"
+  },
+  "DASCTF_2024_EZsquares.md": {
+    "title": "EZsquares — RSA 只给 p^2+q^2（高斯整数+Cornacchia 恢复 n）",
+    "source_path": "/home/xujuan/.fulilian/ctf-knowledge/CTF大赛WP集合/self-solved/DASCTF_2024_EZsquares.md",
+    "tags": [
+      "rsa",
+      "sum-of-squares",
+      "gaussian-integer",
+      "cornacchia",
+      "factordb",
+      "p2+q2"
+    ],
+    "event": "DASCTF(据flag前缀推断)",
+    "date": "2024-08",
+    "category": "crypto",
+    "difficulty": "medium",
+    "flag": "DASCTF{4028d59bb18028e2df8d5d51b376908c}",
+    "exp": []
+  },
+  "Yusa的密码学课堂_SEDSED.md": {
+    "title": "SEDSED — 2轮DES已知明文恢复轮密钥（S盒前像候选集+PC2未知位枚举）",
+    "source_path": "/home/xujuan/.fulilian/ctf-knowledge/CTF大赛WP集合/self-solved/Yusa的密码学课堂_SEDSED.md",
+    "tags": [
+      "des",
+      "2-round-des",
+      "known-plaintext",
+      "feistel",
+      "sbox-preimage",
+      "round-key-recovery"
+    ],
+    "event": "Yusa的密码学课堂",
+    "date": "2026-09-07",
+    "category": "crypto",
+    "difficulty": "medium",
+    "flag": "flag{6023026ffe2c044dd81377feba90adf9}",
+    "exp": [
+      "/home/xujuan/ctf_sedsed/solve.py"
+    ]
+  },
+  "DASCTF_ezRSA_异或gift位耦合_Franklin-Reiter.md": {
+    "title": "ezRSA — gift=P^(Q>>16)位耦合分支定界分解N + pow(n,e,N)恢复n + Franklin-Reiter(平台前缀flag{},源码assert dasctf{})",
+    "source_path": "/home/xujuan/.fulilian/ctf-knowledge/CTF大赛WP集合/self-solved/DASCTF_ezRSA_异或gift位耦合_Franklin-Reiter.md",
+    "tags": [
+      "rsa",
+      "xor-gift-factorization",
+      "branch-and-bound",
+      "franklin-reiter",
+      "related-message",
+      "modulus-recovery",
+      "bit-coupling"
+    ],
+    "event": "DASCTF(据flag前缀推断)",
+    "date": "2026-09-07",
+    "category": "crypto",
+    "difficulty": "medium+",
+    "flag": "flag{C0pper_Sm1th_Mak3s_T1ng5_Bet4er}",
+    "exp": [
+      "CTF常用脚本及工具/RSA_gift异或位耦合分解N_Franklin-Reiter.py"
+    ]
+  },
+  "DASCTF_2023_MathFactor.md": {
+    "title": "MathFactor — 范数恒等式结构素数(2^31-smooth p-1) + 结构化Pollard p-1 + XOR掩码模p DLP (Pohlig-Hellman)",
+    "source_path": "/home/xujuan/.fulilian/ctf-knowledge/CTF大赛WP集合/self-solved/DASCTF_2023_MathFactor.md",
+    "tags": [
+      "pollard-p-1",
+      "smooth-prime",
+      "norm-identity",
+      "quadratic-field",
+      "pohlig-hellman",
+      "bsgs",
+      "dlp",
+      "xor-mask",
+      "rsa-variant"
+    ],
+    "event": "DASCTF",
+    "date": "2023-11",
+    "category": "crypto",
+    "difficulty": "medium",
+    "flag": "DASCTF{0psu3G0d3Best_%}",
+    "exp": [
+      "/home/xujuan/ctf_mathfactor/solve.py"
+    ]
+  },
+  "DASCTF_multiSQL_堆叠注入REPLACE改成绩.md": {
+    "title": "multiSQL — WAF黑名单(select/union/update/insert全禁)路由到堆叠注入：SHOW COLUMNS枚举 + DELETE原行 + REPLACE INTO插总分425过verify；堆叠判定用状态变化而非SLEEP计时",
+    "source_path": "/home/xujuan/.fulilian/ctf-knowledge/CTF大赛WP集合/self-solved/DASCTF_multiSQL_堆叠注入REPLACE改成绩.md",
+    "tags": [
+      "sqli",
+      "stacked-queries",
+      "multi_query",
+      "waf-bypass",
+      "replace-into",
+      "show-columns",
+      "blacklist",
+      "mariadb"
+    ],
+    "event": "DASCTF",
+    "date": "2026-09-08",
+    "category": "web",
+    "difficulty": "easy-medium",
+    "flag": "flag{Ju3t_use_mo2e_t2en_0ne_SQL}",
+    "exp": []
+  },
+  "DASCTF_EasySSTI_attr字典取os_全字符黑名单绕过.md": {
+    "title": "EasySSTI — Jinja2全字符黑名单绕过：attr+dict.get取globals中的os（attr(函数,'os')静默Undefined坑）、dict(global=1)关键字kwargs编译500拆词绕、config|string batch偏移取_/空格//",
+    "source_path": "/home/xujuan/.fulilian/ctf-knowledge/CTF大赛WP集合/self-solved/DASCTF_EasySSTI_attr字典取os_全字符黑名单绕过.md",
+    "tags": [
+      "ssti",
+      "jinja2",
+      "waf-bypass",
+      "attr",
+      "dict-join",
+      "lipsum",
+      "blacklist",
+      "keyword-kwargs"
+    ],
+    "event": "DASCTF",
+    "date": "2026-09-08",
+    "category": "web",
+    "difficulty": "medium",
+    "flag": "CTF2{75119a19-611a-46f9-a803-1c99f80f43b3}",
+    "exp": []
+  },
+  "DASCTF_const_python_pickle字节黑名单_sysmodules毒化_手写STACK_GLOBAL.md": {
+    "title": "const_python — pickle字节级黑名单+sys.modules毒化：手写STACK_GLOBAL（builtins.open/getattr读/flag），栈序坑（REDUCE取栈[-2]callable、无参调用压空元组、g是协议0参数码而h是BINGET），append回写app.py经/src读回",
+    "source_path": "/home/xujuan/.fulilian/ctf-knowledge/CTF大赛WP集合/self-solved/DASCTF_const_python_pickle字节黑名单_sysmodules毒化_手写STACK_GLOBAL.md",
+    "tags": [
+      "pickle",
+      "deserialization",
+      "byte-blacklist",
+      "sysmodules-poison",
+      "stack-global",
+      "binget",
+      "getattr",
+      "file-write",
+      "exfil"
+    ],
+    "event": "DASCTF",
+    "date": "2026-09-08",
+    "category": "web",
+    "difficulty": "medium",
+    "flag": "CTF2{d5b0d7f1-f83e-4c65-be60-540c6f032208}",
+    "exp": []
+  },
+  "DASCTF_BabySSTI_Three_xNN转义绕词WAF_下标getattr回退.md": {
+    "title": "BabySSTI_Three — Jinja2 \\xNN 字符串转义绕词级WAF（WAF查模板原文）+ obj['attr']下标getattr回退直通 __globals__/__builtins__/open，listdir探明flag文件名",
+    "source_path": "/home/xujuan/.fulilian/ctf-knowledge/CTF大赛WP集合/self-solved/DASCTF_BabySSTI_Three_xNN转义绕词WAF_下标getattr回退.md",
+    "tags": [
+      "ssti",
+      "jinja2",
+      "waf-bypass",
+      "hex-escape",
+      "subscript-getattr",
+      "builtins-open",
+      "listdir"
+    ],
+    "event": "DASCTF",
+    "date": "2026-09-08",
+    "category": "web",
+    "difficulty": "medium",
+    "flag": "CTF2{03454971-5f99-4f79-b733-b1ac1bb16b60}",
+    "exp": []
+  },
+  "DASCTF_Uploadfile_缺CRLF假象_pht绕过RCE.md": {
+    "title": "Uploadfile — multipart缺CRLF假象排查 + .pht扩展绕过上传RCE（黑名单精确in_array[php3-5,phtml]白名单[jpg,jpeg,png,gif]不含pht/phar/php6）",
+    "source_path": "/home/xujuan/.fulilian/ctf-knowledge/CTF大赛WP集合/self-solved/DASCTF_Uploadfile_缺CRLF假象_pht绕过RCE.md",
+    "tags": [
+      "upload",
+      "multipart",
+      "crlf",
+      "waf-bypass",
+      "pht",
+      "apache-modphp",
+      "filemanager",
+      "predictable-filename"
+    ],
+    "event": "DASCTF",
+    "date": "2026-09-08",
+    "category": "web",
+    "difficulty": "medium",
+    "flag": "CTF2{0a4dbd07-64bf-45f5-953f-4c71b2a201d6}",
+    "exp": []
+  },
+  "DASCTF_2026_WEB2_CVE-44268与mt_rand种子还原.md": {
+    "title": "DASCTF_2026_WEB2_CVE-44268与mt_rand种子还原",
+    "source_path": "/home/xujuan/.fulilian/ctf-knowledge/CTF大赛WP集合/self-solved/DASCTF_2026_WEB2_CVE-44268与mt_rand种子还原.md",
+    "tags": [
+      "aes-256-cfb",
+      "cve-2022-44268",
+      "imagemagick",
+      "imagick-pseudo-protocol",
+      "label-caption-fingerprint",
+      "mersenne-twister",
+      "mt_rand",
+      "php",
+      "png-profile",
+      "seed-bruteforce",
+      "svg-image-tag",
+      "text-coder"
+    ],
+    "event": "DASCTF",
+    "date": "2026-09-08",
+    "category": "web",
+    "difficulty": "hard",
+    "flag": "CTF2{d7e72881-82cc-4f20-b31a-bc20b1d0977d}",
+    "exp": [],
+    "summary": "Imagick CVE-2022-44268 PNG profile 任意文件读源码；pass=nya_nop_nya~；mt_srand(rand(1e7,1e8-1)) 后 #1=key #2=iv #3..=roll 输出，C 扫种子 83445647，str 补\\0 做 AES-256-CFB key/iv 解密; 09-10 增补 SVG <image xlink:href=text:> 伪协议文件读备用向量（label:@ 被 policy 拦时的替代）"
+  },
+  "BUUCTF_2026_Shiro_黑盒渗透4flag_GCM版Shiro550打点.md": {
+    "title": "BUUCTF_2026_Shiro_黑盒渗透4flag_GCM版Shiro550打点",
+    "source_path": "/home/xujuan/.fulilian/ctf-knowledge/CTF大赛WP集合/self-solved/BUUCTF_2026_Shiro_黑盒渗透4flag_GCM版Shiro550打点.md",
+    "tags": [
+      "shiro",
+      "shiro-550",
+      "rememberme",
+      "aes-gcm",
+      "commons-beanutils",
+      "templatesimpl",
+      "blackbox",
+      "info-leak",
+      "privesc",
+      "rasp"
+    ],
+    "event": "BUUCTF",
+    "date": "2026-09-09",
+    "category": "web",
+    "difficulty": "hard",
+    "flag": "flag{16fc0d69-a7b9-0a5d-5ff6-8eab6776774f}",
+    "exp": [
+      "/home/xujuan/.fulilian/ctf-knowledge/CTF常用脚本及工具/Shiro550-GCM-RememberMe利用/shiro_enc.py",
+      "/home/xujuan/.fulilian/ctf-knowledge/CTF常用脚本及工具/Shiro550-GCM-RememberMe利用/Gen.java",
+      "/home/xujuan/.fulilian/ctf-knowledge/CTF常用脚本及工具/Shiro550-GCM-RememberMe利用/Evil.java"
+    ]
+  },
+  "DASCTF_2026_WEB5_Flask_SSTI_attr无getitem回退.md": {
+    "title": "DASCTF WEB5 Flask SSTI:换行绕单行闭合正则 + attr无getitem回退改__getitem__方法调用",
+    "source_path": "/home/xujuan/.fulilian/ctf-knowledge/CTF大赛WP集合/self-solved/DASCTF_2026_WEB5_Flask_SSTI_attr无getitem回退.md",
+    "tags": [
+      "ssti",
+      "jinja2",
+      "flask",
+      "attr-filter-no-getitem-fallback",
+      "getitem-method-call",
+      "quote-less-string",
+      "dict-join-tilde",
+      "newline-bypass-dotall",
+      "word-blacklist-waf",
+      "python3.5",
+      "lipsum-globals"
+    ],
+    "event": "DASCTF",
+    "date": "2026-09-10",
+    "category": "web",
+    "difficulty": "medium",
+    "flag": "CTF2{80f23122-5828-459f-a49b-1fb71a4e2cba}",
+    "exp": [
+      "CTF常用脚本及工具/Jinja2无引号SSTI_attr-getitem链/rce.py"
+    ],
+    "summary": "Flask 404 处理器把 URL path 注入模板源 → Jinja2 SSTI（无 bot 也成立）；三板斧绕过 WAF（换行绕单行闭合正则 DOTALL / dict(x=1)|join 造无引号字符串 / 词黑名单拆段 ~ 拼接）；主坑：老 Jinja2 的 attr 只做 getattr 无 getitem 回退，dict 取值改走 |attr('__getitem__')(key) 方法调用"
+  }
+}
