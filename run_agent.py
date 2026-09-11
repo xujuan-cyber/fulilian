@@ -9091,6 +9091,37 @@ class AIAgent:
         from agent.codex_runtime import run_codex_app_server_turn
         return run_codex_app_server_turn(self, user_message=user_message, original_user_message=original_user_message, messages=messages, effective_task_id=effective_task_id, should_review_memory=should_review_memory)
 
+def _resolve_ctf_user_overlay() -> str:
+    """CTF 求解路径上的用户级 overlay（``agent.system_prompt``）。
+
+    与 chat 路径同语义（``cli.py:5410`` / ``gateway/run.py:9535`` /
+    ``tui_gateway/server.py:8488``）：``FULILIAN_EPHEMERAL_SYSTEM_PROMPT``
+    优先，其次 config。overlay 解析的唯一所有者是 ``fulilian_cli.personality``
+    （``fulilian_cli/config.py:3317`` 是对它的转发壳），所以这里委托它，
+    不自己读 ``agent.system_prompt`` 键。
+
+    为什么需要这个函数：``resolve_ephemeral_system_prompt`` 的调用者此前只有
+    cli / gateway / tui 三处，**CTF 路径不在其中**；而
+    ``agent/system_prompt.py:781`` 又要求 ``system_message is not None`` 才追加
+    该 overlay，CTF 路径传的正是 None。两条路都堵死的结果是：用户写在 config 里
+    的「CTF 工作纪律」在 CTF 求解器上**完全不可见** —— 配置看着生效、实际静默
+    失效，与 §3.D2 的 argparse 撞名、A2 的死配置是同一类故障。
+
+    取不到时返回空串：overlay 是增强项，不该因为它而中断解题。
+    """
+    overlay = os.getenv("FULILIAN_EPHEMERAL_SYSTEM_PROMPT", "")
+    if overlay.strip():
+        return overlay.strip()
+    try:
+        from fulilian_cli.config import load_config as _load_config
+        from fulilian_cli.config import resolve_ephemeral_system_prompt_from_config
+
+        cfg = _load_config() or {}
+        return (resolve_ephemeral_system_prompt_from_config(cfg) or "").strip()
+    except Exception:  # noqa: BLE001 — overlay 缺失不得影响解题
+        return ""
+
+
 def _build_ctf_system_prompt() -> str:
     """Build CTF mode system prompt with cognitive architecture.
 
@@ -9098,8 +9129,11 @@ def _build_ctf_system_prompt() -> str:
     ABANDON IF clauses, state ledger, and attack-switch rules.
     Returned string is appended as ephemeral_system_prompt so it
     does not pollute the cached base system prompt.
+
+    Also appends the user's config overlay (see ``_resolve_ctf_user_overlay``)
+    so ``agent.system_prompt`` discipline applies to solving, not just chat.
     """
-    return (
+    _arch = (
         "## CTF 解题认知架构（4 阶段循环）\n"
         "\n"
         "你正在以 CTF 解题模式运行。请遵循以下认知架构：\n"
@@ -9144,6 +9178,19 @@ def _build_ctf_system_prompt() -> str:
         "- 每得到一个 CONFIRMED 或 REFUTED 的发现，立即用 record_fact 工具写入黑板\n"
         "  （content 写客观事实，尽量带最小复现命令；同一事实不要重复提交）\n"
         "- 黑板是止损与跨 solver 协同的数据源：长期不发布进展会被判定为无产出而终止\n"
+    )
+
+    overlay = _resolve_ctf_user_overlay()
+    if not overlay:
+        return _arch
+    # 放在末尾：用户显式写的纪律优先于上面的通用架构，冲突时以本节为准。
+    return (
+        _arch
+        + "\n## 用户配置的工作纪律（config.yaml → agent.system_prompt）\n"
+        + "以下为本机为该用户显式设定的解题纪律，与上面的认知架构同等生效；"
+        + "两者冲突时以本节为准。\n\n"
+        + overlay
+        + "\n"
     )
 
 
