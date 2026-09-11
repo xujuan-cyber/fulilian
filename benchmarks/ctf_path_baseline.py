@@ -165,6 +165,13 @@ def analyze(work_dir: Path, expected_flag: str | None = None,
     lats = log["latencies_s"]
     hits = log["cache_hits"]
 
+    if not log["log_present"]:
+        log_issue = "missing"
+    elif usage.get("api_calls") and not log["api_call_lines"]:
+        log_issue = "overwritten"
+    else:
+        log_issue = None
+
     return {
         "fixture": work_dir.name,
         "work_dir": str(work_dir),
@@ -194,6 +201,16 @@ def analyze(work_dir: Path, expected_flag: str | None = None,
         "tool_calls_distinct": distinct,
         "tool_repeat_rate": round(repeats / len(calls), 4) if calls else 0.0,
         "tool_errors": log["tool_errors"],
+        # C5b 日志可信性 —— 这个字段是踩坑换来的，见 print_aggregate 的报警。
+        # solver.log 落在 work_dir 里，而 work_dir 是 agent 的地盘：它可以用
+        # write_file 把它覆盖成一份解题报告。实测发生过（misc-chunkconcat-01，
+        # 2026-09-11）：那一跑 4/4 解出、看起来一切正常，唯独该题的工具面
+        # 全是 0 —— 工具 0、重复率 0%、延迟 None。**0 被当成"高效"读了过去。**
+        # 运行日志必然含 "Making API call" 行；一条都没有却又有 api_calls，
+        # 就说明这份 solver.log 不是运行日志。
+        # 日志根本不存在同样不可用 —— 没有日志就没有工具面数据，不是"零工具"。
+        "log_issue": log_issue,
+        "log_is_runtime": log_issue is None,
         "tool_mix": dict(sorted(name_counts.items(), key=lambda kv: -kv[1])),
         "discovery_calls": discovery,
         "discovery_share": round(discovery / len(calls), 4) if calls else 0.0,
@@ -244,15 +261,25 @@ def print_table(rows: list[dict[str, Any]]) -> None:
     for r in rows:
         ok = "✓" if r["flag_matches"] else ("—" if r["flag_matches"] is None else "✗")
         econ = f"{r['ref_multiple']}×" if r["ref_multiple"] is not None else "—"
+        name = r["fixture"] if r["log_is_runtime"] else f"{r['fixture']} ⚠️"
+        # 日志不可信时工具面四列**必须置为 —**。原先直接打 0/0%/None%，
+        # 那是在报告里写下"这题一次工具都没调、零重复、零延迟"这种
+        # 不存在的事实 —— 全 0 看起来像最优成绩，实际是数据没了。
+        if r["log_is_runtime"]:
+            tools, repeat = str(r["tool_calls"]), f"{r['tool_repeat_rate']*100:.0f}%"
+            disc = f"{r['discovery_calls']} ({r['discovery_share']*100:.0f}%)"
+            sr = f"{r['shell_calls']}/{r['read_calls']}"
+            lat, cache = f"{r['api_latency_avg_s']}s", f"{r['cache_hit_pct_avg']}%"
+        else:
+            tools = repeat = disc = sr = lat = cache = "—"
         print(
-            f"| {r['fixture']} | {'✓' if r['solved'] else '✗'} | {ok} "
+            f"| {name} | {'✓' if r['solved'] else '✗'} | {ok} "
             f"| {r['attempts']} | {r['api_calls']} "
             f"| {econ} "
-            f"| {(r['total_tokens'] or 0):,} | {r['tool_calls']} "
-            f"| {r['tool_repeat_rate']*100:.0f}% | {r['discovery_calls']} "
-            f"({r['discovery_share']*100:.0f}%) "
-            f"| {r['shell_calls']}/{r['read_calls']} "
-            f"| {r['api_latency_avg_s']}s | {r['cache_hit_pct_avg']}% |"
+            f"| {(r['total_tokens'] or 0):,} | {tools} "
+            f"| {repeat} | {disc} "
+            f"| {sr} "
+            f"| {lat} | {cache} |"
         )
 
 
@@ -275,12 +302,27 @@ def print_aggregate(rows: list[dict[str, Any]]) -> None:
     print(f"- **总 token：** {tot_tok:,}（其中 prompt 侧 "
           f"{sum(r['input_tokens'] or 0 for r in rows):,}，补全侧 "
           f"{sum(r['output_tokens'] or 0 for r in rows):,}）")
-    print(f"- **api_calls：** {tot_api}；**工具调用：** {tot_tools}")
+    n_suspect = sum(1 for r in rows if not r["log_is_runtime"])
+    # 缺失的工具面按 0 计入会让总数**偏低**却看不出偏低 —— 标明它是下界。
+    bound = f"（**下界**：{n_suspect} 题的日志不可用，其工具面未计入）" if n_suspect else ""
+    print(f"- **api_calls：** {tot_api}；**工具调用：** {tot_tools}{bound}")
     if tot_tools:
         print(f"- **工具发现开销（tool_describe+tool_search）：** {tot_disc} 次 "
               f"= {tot_disc/tot_tools*100:.1f}% 的工具往返")
     print(f"- **shell : read_file =** {sum(r['shell_calls'] for r in rows)} : "
           f"{sum(r['read_calls'] for r in rows)}（CTF 本该 shell 主导）")
+
+    # 先在汇总里报警，再谈指标 —— 数据不可信时后面的数字一个都别信。
+    suspect = [r for r in rows if not r["log_is_runtime"]]
+    if suspect:
+        why = {"overwritten": "solver.log 不是运行日志（0 条 `Making API call` 行却有 api_calls）",
+               "missing": "工作目录里没有 solver.log"}
+        detail = "；".join(f"{r['fixture']}（{why[r['log_issue']]}）" for r in suspect)
+        print(f"- ⚠️ **日志不可信：** {detail}。")
+        print("  > `solver.log` 落在 work_dir 里，而 work_dir 是 agent 的地盘 —— "
+              "它可以用 `write_file` 把它覆盖成解题报告（实测发生过）。"
+              "这些题的工具数/重复率/延迟/缓存**全部不可用**，"
+              "尤其别把「工具 0」读成「高效」。")
 
     # 路径经济性 —— 解出率在难题上会饱和（3/3 就没有下降空间了），
     # 这个指标不会：绕远路是连续的，任何一次减冗余都能在它上面看到位移。
