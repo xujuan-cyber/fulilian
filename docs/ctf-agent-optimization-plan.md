@@ -1,6 +1,8 @@
 # CTF 解题 Agent 优化计划书
 
-> **状态：仅为计划，尚未实施。** 本文档不含任何已落地的改动。
+> **状态：证据与基线已就绪，优化项尚未开始实施。** §9 记录了已完成的前置工作
+> （1 个阻断性 bug 修复、2 套基线采集器、2 处 A2/A3 小改动）；§4 的 P0–P8 优化项
+> **一个都没做**。当前状态与下一步见 §10。
 > **撰写日期：** 2026-09-11
 > **目标：** 把 fulilian 打造成以 CTF 解题为重点的智能体 —— 强项在难题，简单题一次通过。
 > **用途：** 自包含的上下文保险。阅读本文不需要原始对话；所有数字附复现命令，所有代码结论附文件:行号。
@@ -14,6 +16,9 @@
 1. **真正跑题的是一个通用助理 agent 循环。** 全仓 1,961,148 行 Python（5,313 个 `.py`），CTF 相关只有 15,460 行（**0.8%**）。其余是 Telegram/Discord/Slack/Feishu/Matrix 平台适配、看板、cron、TTS、视频生成、宠物、Home Assistant。
 2. **CTF 层几乎全是"壳"。** `fulilian_ctf` 里所有东西最终收敛到一次 `run_agent.main(query, mode="ctf")`。planner / reasoner / specialist **全是确定性 Python，一次额外 LLM 调用都没有**。
 3. **它对外宣传的 CTF 核心能力，在用户实际使用的路径上从未被调用过一次。**
+   （2026-09-11 追补：这**不是**"没人用"，而是 `fulilian solve -p` 被一个
+   argparse `dest` 撞名劫持到了通用一次性对话分支，CTF 求解器根本没启动，
+   而且**以退出码 0 静默结束**。根因与修复见 §3.D2 / §9。修好后 3/3 解出。）
 
 **根因：fulilian 把"对话本身"当作唯一记忆。** 压缩一次就失忆一次，于是靠**重跑命令**把事实找回来。重复调用（62–79%）、串行往返（1.12 次/轮）、巨量 cache-read —— 全是这一条的下游。
 
@@ -38,8 +43,12 @@
 
 > **基线存档（2026-09-11）：** `benchmarks/baselines/2026-09-11-ctf-chatpath.json`
 > 采集器：`benchmarks/process_metrics.py`（只读 state.db，纯新增）。
-> ⚠️ 该基线测的是 **`fulilian chat` 人工解题路径** —— 见 §3.D2，CTF 层从未执行过。
-> 只作用于 `mode="ctf"` 的改动无法用它验证。
+> ⚠️ M1–M10 测的是 **`fulilian chat` 人工解题路径**（`source=cli`）。
+> CTF 求解器（`mode="ctf"`）不参与这条路径，**这些数字对 CTF 层的改动无效**。
+>
+> **CTF 路径基线见 §1.3**（2026-09-11 建立，`benchmarks/baselines/2026-09-11-ctf-path.json`）。
+> 在此之前 CTF 路径根本跑不起来（§3.D2 的 argparse `dest` 冲突，已由 `bbf054d` 修复），
+> 所以这是 CTF 层的**第一个**可比基线。
 
 ### 1.1 逐会话明细
 
@@ -61,6 +70,52 @@
 ```
 
 即 **90% 的模型回合只做了一件事**。每次往返重发 40–100k tokens。
+
+### 1.3 CTF 路径基线（2026-09-11 采集，3 题全 easy）
+
+M1–M10 测的是 `fulilian chat` 人工路径。CTF 求解器（`mode="ctf"`）此前**根本跑不起来**
+（见 §3.O），修复后才第一次拿到真实数字。
+
+| # | 指标 | 实测基线 | 采集方式 |
+|---|---|---|---|
+| C1 | 解出率 / flag 正确率 | **3/3，3/3**（与 manifest `expected_flag` 逐字一致） | §8.7 |
+| C2 | 每题的 `attempts` | 1 / 2 / 1 | §8.7 |
+| C3 | `api_calls`（usage.json） | 12 / 24 / 12，合计 **48** | §8.7 |
+| C4 | **prompt : 补全 token 比** | 622,946 : 9,211 = **68 : 1** | §8.7 |
+| C5 | 总 token | **888,482**（3 题） | §8.7 |
+| C6 | 工具调用数 | 13 / 13 / 17，合计 43 | §8.7 |
+| C7 | 工具重复率 | 23% / 31% / 35% | §8.7 |
+| C8 | **工具发现开销占比** | **7/43 = 16.3%**（`tool_describe`+`tool_search`） | §8.7 |
+| C9 | **shell : read_file** | **8 : 15**（CTF 本该 shell 主导） | §8.7 |
+| C10 | API 延迟均值 / 最大 | 5.7–6.9s 均值 | §8.7 |
+| C11 | 缓存命中率均值 | 80.5% / 87.1% / 88.5%；`cache_written` 全 0 | §8.7 |
+
+逐题明细：
+
+| fixture | 解出 | api | 总 token | 工具 | 重复率 | 发现开销 | shell/read | 缓存命中 |
+|---|---|---|---|---|---|---|---|---|
+| misc-morse-01 | ✓ | 12 | 213,144 | 13 | 23% | 2 (15%) | 2/4 | 80.5% |
+| crypto-rsa-01 | ✓ | 24 | 436,020 | 13 | 31% | 2 (15%) | 3/5 | 87.1% |
+| web-robots-01 | ✓ | 12 | 239,318 | 17 | 35% | 3 (18%) | 3/6 | 88.5% |
+
+> **基线存档：** `benchmarks/baselines/2026-09-11-ctf-path.json`
+> 采集器：`benchmarks/ctf_path_baseline.py`（读 work_dir 的 `usage.json` + `solver.log`）。
+> 器材：3 个 fixture 复制到 `/tmp/ctf-baseline/` 后跑 —— 必须复制，因为
+> `_prepare_work_dir` 返回的就是题目目录本身并往里写 `AGENTS.md` / `.git` /
+> `FLAG`，直接跑会污染被跟踪的 `benchmarks/fixtures/`。
+
+三条直接指向优化项的读数：
+
+- **C4 = 68 : 1。** 三道简单题烧掉 62 万 prompt token，只换来 9 千补全 token。
+  这正是 P0.1（工具输出落盘 + 只留头尾指针）要打的靶子：钱花在反复重发历史，
+  不是花在思考。
+- **C8 = 16.3%。** 43 次工具往返里有 7 次纯粹用于「问出工具签名」（模型必须靠
+  `tool_describe` / `tool_search` 才发现 `record_fact` 要 `work_dir`、
+  `submit_flag` 要 `work_dir`）。这是 CTF 工具被推迟（不在 `_FULILIAN_CORE_TOOLS`）
+  的直接代价 —— 对应 P0.2 与 P7。
+- **C9 = 8 : 15。** CTF 解题本该 shell 主导（`curl`/`python -c`/`grep`），实测
+  `read_file` 是 `terminal` 的近两倍。模型在「看」而不是「打」—— 对应 P1/C2
+  （分批工具 + 持久 shell）。
 
 ---
 
@@ -123,25 +178,67 @@ git_auto_commit, compile_check, checkpoint, generate_writeup  →  全部 0 次
 - 189 条 skill 名字占系统提示词 **20,239 字符**（~5.1K tokens）。
 - **7.5 MB 的 `ctf-knowledge` 卡片集**：因为 `~/.fulilian/skills/ctf-knowledge/SKILL.md` 没有 YAML frontmatter，在索引里只渲染为一行 `    - ctf-knowledge`，没有任何描述 —— 模型不知道里面有什么。
 
-### D2. CTF 层从未被真正执行过（2026-09-11 新发现）
+### D2. CTF 层从未被真正执行过 —— 根因已定位并修复（2026-09-11）
 
-`find ~/.fulilian -name usage.json` → **全盘不存在**。
-
+**症状：** `find ~/.fulilian -name usage.json` → **全盘不存在**。
 `usage.json` 由 `fulilian_ctf/solver.py:88 write_usage_record()` 在每次
 `fulilian solve` 尝试结束时写入 work_dir。它不存在，意味着
-**`run_agent.main(mode="ctf")` 这条 CTF 路径一次都没有跑过**。
+**`run_agent.main(mode="ctf")` 这条 CTF 路径一次都没有跑过**；
+`state.db` 里那 8 个"解题"会话全部是 `fulilian chat`（`source=cli`）
+人工对话解题。
 
-`state.db` 里那 8 个"解题"会话全部是 `fulilian chat`（`source=cli`）里
-**人工对话解题**，不是 `fulilian solve`。
+**根因（不是"没人用"，是"用了也不走这条路"）：** `argparse` 的
+`dest` 命名空间冲突。
 
-**推论（重要）：**
-- 15,460 行 CTF 层从未在真实解题中承担过职责 —— 这解释了 M4 为何是 0，
-  且比"工具没注册"更根本：**整条路径没被走过**。
-- 因此**任何只作用于 `mode="ctf"` 的改动（如 P0.5.1），都无法用现有
-  基线验证** —— 基线测的是另一条代码路径。
-- `sessions.cache_write_tokens` 在全部 112 个会话、所有模型上**均为 0**
-  → §3.H「压缩强制一次缓存全价重写」**无法从 state.db 验证**，只有代码
-  逻辑支撑，属机制推断而非实测证据。**该条已从"证据"降级。**
+```python
+# fulilian_cli/_parser.py:153  顶层
+parser.add_argument("-z", "--oneshot", metavar="PROMPT", default=None, ...)
+#                              ^ 存**字符串** prompt
+
+# fulilian_cli/subcommands/solve.py:37  solve 子命令（修复前）
+solve_parser.add_argument("-p", "--print", dest="oneshot",
+                          action="store_true", ...)
+#                              ^ 存**布尔** True
+```
+
+argparse 的子解析器与顶层解析器**共用同一个 `Namespace`**。`dest` 同名时，
+后写的子解析器参数会覆盖顶层同名属性。于是 `fulilian solve <id> -p` 把
+`args.oneshot` 置成布尔 `True`，而 `main()` 在派发 `args.func(args)`
+**之前**就命中：
+
+```python
+# fulilian_cli/main.py:14789
+if getattr(args, "oneshot", None):
+    _run_and_exit_oneshot(args.oneshot, ...)   # ← cmd_solve 永不执行
+```
+
+实测探针确认：`[SPY] _run_and_exit_oneshot fired! prompt=True type=bool` /
+`[SPY] cmd_solve was NEVER reached`。
+
+**后果链：** CTF 求解器从未启动 → 通用一次性对话收到一个 **Python 布尔值**
+当 prompt → provider 回 `HTTP 400 "Format Error"` → **进程仍以退出码 0 退出**
+（静默假成功）→ `usage.json` 永不落盘 → "CTF 路径是否执行过"这件事
+**在观测上不可见**。也就是说 §3.A 的 M4=0 不只是"工具没注册"，而是
+**整条路径被一个参数名吃掉了**，且失败得无声无息。
+
+**修复：** `bbf054d`。`dest="ctf_oneshot"`（`solve.py:43`），
+并在 `fulilian_ctf/cli.py:382` 保留读 `oneshot` 的回退以兼容既有测试。
+
+**F4-002 附带排查：** 全量审计了其余子解析器的 `dest` 与顶层撞名情况 ——
+`gateway.py --verbose/--quiet`、`import_agent.py --source`、
+`solve.py --max-turns`、`skills.py --source`（×3）、`gui.py --source`、
+`claw.py --source`（×2）、`knowledge.py --source`、`insights.py --source`、
+`mcp.py --verbose`。**只有 `oneshot` 会在派发前重路由 `main()`**，
+其余撞名是良性的（仅影响日志详细度），未改动。
+
+**原推论需要修正的部分：**
+- ~~"15,460 行 CTF 层从未承担过职责"~~ → 修复后 3/3 解出（§1.3），
+  CTF 层**是**能跑通的，之前的 0 是参数劫持而非能力缺陷。
+- ~~"任何只作用于 `mode="ctf"` 的改动都无法用现有基线验证"~~ → 现在
+  **可以**：`benchmarks/ctf_path_baseline.py` + §8.7 已建立 C1–C11 基线。
+- **仍然成立：** `sessions.cache_write_tokens` 在全部 112 个会话、所有模型上
+  均为 0 → §3.H「压缩强制一次缓存全价重写」**无法从 state.db 验证**，
+  只有代码逻辑支撑，属机制推断而非实测证据。**该条维持降级。**
 
 ### E. 知识检索基本是噪声
 
@@ -316,29 +413,39 @@ _PROACTIVE_COMPRESS_TURNS = 45   # 注释写 "(15)"
 
 ### P0.5 — 一行级修复，先拿干净基线
 
-**P0.5.1 · CTF 路径关掉背景审查 fork**
+**P0.5.1 · CTF 路径关掉背景审查 fork** ✅ **已完成（A3，`67fb68f`）**
 
 ```python
-# run_agent.py:9211  _run_solver_turn
+# run_agent.py:9222  _run_solver_turn（实施后的实际形态）
 agent = AIAgent(
     ...,
-    skip_background_review=True,   # 新增
-    skip_memory=True,              # 新增
+    skip_background_review=True,   # 已加
+    # skip_memory=True,            # 未加 —— 见下
 )
 ```
 
+- **实做与计划的差异：** 计划里还要加 `skip_memory=True`，**实施时去掉了**。
+  按 `agent/agent_init.py:695-702`，`skip_background_review` 本身就是覆盖两条
+  review 路径的单一开关；`skip_memory` 不带来额外收益，却会顺带关掉外部
+  memory provider（`agent_init.py:1898`），而 `ctf_solve` toolset 刻意保留了
+  `memory` 工具（`toolsets.py:646-650`，注释写明"回合后自省触发依赖"）。
 - **为什么：** §3.J。cron 路径已经这么做了并写明理由（~30K tok/event）；CTF 路径漏了。CTF 的 skill/memory 沉淀应该在**批后统一做一次**，不是每题一次。
-- **预期效果：** ~30K tokens/题。
+- **预期效果：** ~30K tokens/题。**效果尚未测量** —— 待做同 fixture 对照跑（§10）。
 
-**P0.5.2 · 删掉死配置 `compression.threshold_tokens: 400000`**
+**P0.5.2 · 删掉死配置 `compression.threshold_tokens: 400000`** ✅ **已完成（A2）**
 
 - **为什么：** §3.I，代码自己的 docstring 承认比窗口大的 cap 是 no-op。
+- 已从 `~/.fulilian/config.yaml` 移除并原位留注释，备份
+  `config.yaml.bak-20260911-200734`（仓库外改动）。
 
 **P0.5.3 · 重新评估 `_cap_ctf_compression_threshold` 的 0.60**
 
 - **问题：** 它在用"**更频繁地压缩**"来应对"长解题轨迹"，而压缩恰恰是**丢数据 + 破缓存**的源头 —— **方向是反的**。
 - **注意：** 这一条是**推断，不是代码注释的观点**。建议先做小样本对照（0.60 vs 0.75）再定。
 - **前提：** 只有在 P0.1 落地后才应该提高阈值（否则删得更多）。
+- **已验证的前提：** 该 0.60 封顶**确实生效**（曾怀疑被 `_SMALL_CTX_THRESHOLD_PERCENT`
+  这条 floor 抬回 0.75 从而失效 —— 查证后 floor 就是 0.60，`max(0.60, 0.60) = 0.60`，
+  假设不成立，见 A2 条目）。
 
 ### P1 — 减少往返
 
@@ -419,14 +526,23 @@ agent = AIAgent(
 
 ## 5. 验证方法
 
-**四个数就是记分牌：M1（重复调用率）、M2（调用数/轮）、M5/M6（到 flag 的调用数）、M7（token 数）。**
+**记分牌分两套，别混用 —— 它们测的是两条不同的代码路径：**
+
+| 路径 | 记分牌 | 采集器 | 基线 |
+|---|---|---|---|
+| `fulilian chat`（人工解题） | M1 重复调用率 · M2 调用数/轮 · M5/M6 到 flag 的调用数 · M7 token | `benchmarks/process_metrics.py`（读 state.db） | §1.1 / §1.2 |
+| `fulilian solve`（**CTF 层**） | C1 解出/正确率 · C3 api_calls · C4 prompt:补全 · C5 总 token · C8 发现开销 · C9 shell:read | `benchmarks/ctf_path_baseline.py`（读 work_dir） | **§1.3** |
+
+改动只作用于 `mode="ctf"` 时，**只有 C 系列能验收**；反之亦然。
 
 1. 拿一批**没做过的**真题做 holdout（现有 benchmark 测不出这些 —— 见 §3.E）。
-2. 跑基线，确认与 §1 的 M1–M7 一致。
+2. 跑基线，确认与 §1 对应表格一致。
 3. 一项一项改，每项单独重测。
-4. 防回归：`M1` 必须单调下降；`M4` 应变为非零（CTF 工具真正进入链路）。
+4. 防回归：`M1`/`C6` 必须单调下降；`M4` 应变为非零（CTF 工具真正进入链路）。
 
-**建议的动手顺序：** P0.5.1 + P0.5.2（各一行 → 干净基线）→ P0.1（单函数）→ 重测 M1/M3。
+**建议的动手顺序：** ~~P0.5.1 + P0.5.2（各一行 → 干净基线）~~ 已完成（A2/A3）
+→ 补做 A3 的 `skip_background_review=False` 对照跑（拿到 A3 的净效果）
+→ P0.1（单函数）→ 重测 M1/M3 与 C4/C5。
 
 ---
 
@@ -439,12 +555,17 @@ agent = AIAgent(
 | §3.G 死代码判定 | 子代理全树引用扫描 | 如 `kb_writeback.py` 的 repo 级 grep 只有定义与 `__all__` |
 | P3.1 精简工具面 | 需实测 | 去掉的 toolset 可能有隐藏依赖 |
 | M1–M10 数字 | **直接查 `state.db` 实测，可复现** | 见 §8 |
+| C1–C11 数字 | **3 题，全 easy，样本极小** | 足以做前后对照，**不足以断言能力**；难题 holdout 仍缺 |
+| A3 的效果 | **未测** | 需 `skip_background_review=False` 对照跑（§10） |
+| CTF API 无读超时 | **实测会挂死** | 一次挂起样本；属 P0 邻域，未处理 |
 
 ---
 
 ## 7. 边界声明
 
-- 本文档**不含任何已落地的改动**。
+- 本文档**记录**已落地的改动（§9 / §10），但 §4 的优化项（P0–P8）**尚未实施**。
+- §9 是**时序日志**：早期条目（如 A4）记录的是当时的判断，后来被推翻的部分
+  已就地加注指向后续条目，**不追改历史原文**。
 - `fulilian_ctf` 内部的死代码判定来自子代理对全树的引用扫描；§1 的 B/C/H 类数字为直接查库实测。
 - 本次研究未逐行通读全部 196 万行代码。
 
@@ -528,6 +649,39 @@ python3 benchmarks/process_metrics.py --recent 10 --json benchmarks/baselines/<�
 
 只读 `state.db`（`mode=ro&immutable=1`），**不碰 solver 一行代码**。
 
+### 8.7 CTF 路径基线（2026-09-11 新增，§1.3 的数据来源）
+
+```bash
+cd ~/.fulilian/fulilian-agent
+
+# 1) 复制 fixture 到 /tmp —— 必须复制，不能原地跑：
+#    _prepare_work_dir 返回题目目录本身并往里写 AGENTS.md / .git / FLAG / solver.log，
+#    原地跑会污染被 git 跟踪的 benchmarks/fixtures/。
+mkdir -p /tmp/ctf-baseline
+cp -r benchmarks/fixtures/misc-morse-01   /tmp/ctf-baseline/
+cp -r benchmarks/fixtures/crypto-rsa-01   /tmp/ctf-baseline/
+cp -r benchmarks/fixtures/web-robots-01   /tmp/ctf-baseline/
+
+# 2) 逐题解（每题独立进程；`solve` 的题号是**位置参数**，不是 --id）
+venv/bin/python -m fulilian_cli.main solve /tmp/ctf-baseline/misc-morse-01 -p
+venv/bin/python -m fulilian_cli.main solve /tmp/ctf-baseline/crypto-rsa-01 -p
+venv/bin/python -m fulilian_cli.main solve /tmp/ctf-baseline/web-robots-01 -p
+
+# 3) 立刻采集（solver.log 每次运行被 "w" 覆盖，不能隔夜）
+python3 benchmarks/ctf_path_baseline.py \
+    --dirs /tmp/ctf-baseline/misc-morse-01 \
+           /tmp/ctf-baseline/crypto-rsa-01 \
+           /tmp/ctf-baseline/web-robots-01 \
+    --manifest benchmarks/manifest-unit.yaml \
+    --json benchmarks/baselines/2026-09-11-ctf-path.json
+```
+
+**若采集器报 "缺 usage.json"** → 该次 solve **没走 CTF 路径**，
+先查是否又出现 §3.D2 的 `dest` 撞名（`args.oneshot` 被设成 bool）。
+
+**交叉校验：** 采集器读 `manifest-unit.yaml` 的 `expected_flag` 与 work_dir 的
+`FLAG` 文件逐字比对（`flag_matches`），避免"解出来了但答案是错的"被记成成功。
+
 ---
 
 ## 9. 实施日志
@@ -574,6 +728,11 @@ P0.5.1 / P0.5.2 只作用于 `mode="ctf"`，而**该路径从未跑过** →
 要么先做一次真实 `fulilian solve` 建立 CTF 路径基线（需题 + API 配额），
 要么接受 A2/A3 仅作代码级验证、把效果测量推迟到首次真实解题。
 
+> ⚠️ **本条目已被后续工作取代，保留以存档当时的判断。** 上句"该路径从未跑过"
+> 的**原因**在 A5 定位到了：不是没人跑，是跑了被 argparse `dest` 撞名劫持
+> （§3.D2 / A5）。CTF 路径基线已于 A6 建立（§1.3 / §8.7），
+> 故"A2/A3 无法验证"这一结论**不再成立** —— 现在可以做前后对照跑。
+
 ### 2026-09-11 · A3 完成（P0.5.1，第一处代码改动）
 
 `run_agent.py:9222` `_run_solver_turn()` 的 `AIAgent(...)` 增加
@@ -611,14 +770,99 @@ P0.5.1 / P0.5.2 只作用于 `mode="ctf"`，而**该路径从未跑过** →
 > 从而失效。查证后 **floor 是 0.60**，`max(0.60, 0.60) = 0.60` —— 封顶有效，
 > 该假设不成立。
 
+### 2026-09-11 · 阻断性 bug：`solve -p` 从未进入 CTF 路径（A5，`bbf054d`）
+
+**这是本次工作影响最大的发现。** 首次尝试跑真实 CTF 路径（A2/A3 的验证载体）
+时，3 个 fixture **全部瞬间失败**，报 `HTTP 400: Format Error`，且**退出码 0**。
+
+**排查路径（三条被证伪的假设，按序）：**
+1. ~~`AIAgent._summarize_api_error` 吞掉了真实错误~~ → 打补丁后**该函数根本没被调用**。
+2. ~~`httpx` 层面的请求有问题~~ → 补丁后**一个请求都没记录到**，只有
+   `API call failed after 3 retries: Connection error.`
+3. ✅ 改为拦截 `builtins.print` + `sys.stdout/stderr.write`，才看到真实 prompt
+   是一个 **Python bool**。据此定位到 argparse `dest` 冲突。
+
+**根因：** `fulilian_cli/subcommands/solve.py:37` 的
+`-p/--print` 用了 `dest="oneshot"`，与顶层 `fulilian_cli/_parser.py:153`
+的 `-z/--oneshot`（存字符串 PROMPT）**共用一个 Namespace**。子解析器覆盖后
+`args.oneshot = True`（bool），`fulilian_cli/main.py:14789` 在
+`args.func(args)` 派发**之前**就 `_run_and_exit_oneshot(True)` ——
+`cmd_solve` 永不执行。完整后果链与修复见 §3.D2。
+
+**修复：** `dest="ctf_oneshot"`，并在 `fulilian_ctf/cli.py:382` 保留读
+`oneshot` 的回退，兼容直接构造 Namespace 的既有测试与调用方。
+
+**已如实记录的既有失败：** `tests/fulilian_ctf/test_solve_modes.py::test_json_mode_emits_start_and_result`
+在本修复后仍失败（`JSONDecodeError: Expecting value: line 1 column 2`）。
+用 `git stash push -- fulilian_cli/subcommands/solve.py fulilian_ctf/cli.py`
+回到 HEAD 复现 → **同样失败** → `git stash pop` 恢复。
+**该失败先于本次改动存在，非本次引入**，已写进提交信息，未修（超出本次范围）。
+
+**同批排查（F4-002）：** 全量审计其余子解析器的 `dest`/顶层撞名 —— 共 11 处，
+**只有 `oneshot` 会在派发前重路由 `main()`**，其余仅影响日志详细度，属良性，未动。
+
+### 2026-09-11 · CTF 路径基线建立（A6，`91c52d6`）
+
+新增 `benchmarks/ctf_path_baseline.py`（纯标准库，读 work_dir 的
+`usage.json` + `solver.log`，含 CPU 侧的 flag/manifest 逐字交叉校验）
++ `benchmarks/baselines/2026-09-11-ctf-path.json`。数据见 §1.3，复现命令见 §8.7。
+
+**结果：3/3 解出，3/3 flag 与 manifest 逐字一致。** 修复正确性由此获得实证。
+
+**本轮产生的修正：**
+- §3.D2 重写：从"CTF 层从未被执行过"改为"被 argparse dest 冲突吃掉，
+  根因已定位并修复"，并撤销随之而来的两条过强推论（见 §3.D2 末段）。
+- §1 新增 §1.3 CTF 路径基线表（C1–C11），与 §1.1/§1.2 的 chat 路径并列。
+- §8 新增 §8.7 复现命令，含"必须复制 fixture 到 /tmp"这一非显然前提。
+
+**三条读数直接对应后续优化项：**
+- C4 prompt:补全 = **68 : 1** → P0.1（工具输出落盘）的靶子。
+- C8 工具发现开销 **16.3%**（7/43 次往返纯为问工具签名）→ P0.2 / P7。
+- C9 shell : read_file = **8 : 15** → P1 / C2（分批工具 + 持久 shell）。
+
+**采集器已知局限（写在文件 docstring 里）：**
+`solver.log` 的 API 计数**低于** `usage.json`（crypto-rsa-01：10 vs 24，重试与
+压缩轮不落日志）→ 跨字段比较以 `usage.json` 为准；`solver.log` 每次运行被
+`"w"` 覆盖 → 基线必须当次跑完立刻采集；**只看过程不看能力** —— 要回答
+"agent 变聪明了吗"需要 holdout 真题。
+
+**仍未解决（已记录，未处理）：** CTF API 路径**无读超时**（实测一次挂起：
+CPU 冻结、`ESTAB ... Send-Q 4290`、最后活动 20:27:38 停在 API call #7）——
+长跑有静默卡死风险，属 P0 邻域。
+
 ---
 
 ## 10. 当前状态
 
-- **代码改动：1 处**（`run_agent.py` +8 行，A3）。
-- **配置改动：1 处**（`~/.fulilian/config.yaml` 删死键，A2，仓库外）。
-- 分支：`ctf-opt`（未推送）。基线：`benchmarks/baselines/2026-09-11-ctf-chatpath.json`。
-- **未验证：** A2/A3 的效果 —— 它们只作用于 `mode="ctf"`，而该路径从未执行过。
-  验证载体已找到：`_resolve_project` 接受目录（`fulilian_ctf/cli.py`），
-  故 `fulilian solve --id benchmarks/fixtures/<name>/` 可跑通真实 CTF 路径，
-  离线、flag 已知。**需要 API 配额授权。**
+**分支 `ctf-opt`（未推送任何内容到 origin），工作树干净，HEAD = `91c52d6`。**
+
+| 类 | 项 | 位置 |
+|---|---|---|
+| 代码 | A3 `skip_background_review=True` | `run_agent.py:9222`（+8 行） |
+| 代码 | A5 `dest="ctf_oneshot"` + 回退读 | `fulilian_cli/subcommands/solve.py:43`、`fulilian_ctf/cli.py:382` |
+| 配置 | A2 删死键 `threshold_tokens` | `~/.fulilian/config.yaml`（仓库外，已备份） |
+| 基准 | A4 chat 路径采集器 + 基线 | `benchmarks/process_metrics.py`、`baselines/2026-09-11-ctf-chatpath.json` |
+| 基准 | A6 CTF 路径采集器 + 基线 | `benchmarks/ctf_path_baseline.py`、`baselines/2026-09-11-ctf-path.json` |
+| 文档 | 本计划书 | `docs/ctf-agent-optimization-plan.md` |
+
+**已验证：** A5 —— 修复前 3/3 瞬间失败（HTTP 400，退出码 0）；修复后
+**3/3 解出、3/3 flag 与 manifest 逐字一致**（§1.3）。
+
+**仍未验证：** A2/A3 的**效果**。它们只作用于 `mode="ctf"`，现在该路径能跑了，
+但"关掉回合后背景审查"与"删掉死配置"各自省了多少，需要**同 fixture 前后对照**，
+而当前只有修复后的单点数据（无修复前基线可采——那时根本跑不起来）。
+→ 可行的做法：在下一批改动前，对 A3 做一次 `skip_background_review=False`
+的对照跑，用 C3/C5（api_calls / 总 token）差分。
+
+**阻断性发现已清除：** §3.D2 的 argparse `dest` 冲突（`bbf054d`）。
+在此之前，"CTF 层是否存在缺陷"这个问题在观测上无法回答——每次
+`solve -p` 都在无声地跑另一条路径并以退出码 0 结束。
+
+**已知未处理（按优先级）：**
+1. **CTF API 路径无读超时** —— 实测挂死一次（§9）。长跑静默卡死风险。
+2. `test_json_mode_emits_start_and_result` **先存的失败**（HEAD 上同样失败）。
+3. `solver.log` 被 `"w"` 覆盖 —— 跑完不立刻采集就丢数据。
+
+**下一步（阶段 B）：** P0.1 工具输出落盘 —— `_prune_old_tool_results` 落在
+`agent/context_compressor.py:763` 的 `_PRUNED_TOOL_PLACEHOLDER`（把旧工具输出
+**物理删除**而非摘要）+ 输出侧截断。先设计再编码；C4 的 68:1 是它的计分板。
