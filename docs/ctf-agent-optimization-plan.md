@@ -1553,6 +1553,65 @@ if (agent._skill_nudge_interval > 0
 断言模块确实从 `/tmp/ctl` 解析、`skip_background_review=True` 确实不在了、
 `ctf_solve` 里 `memory`/`skill_manage` 确实回来了，任一条不成立就拒绝开跑。
 
+### 2026-09-11 · A3 的账算错了：`solve -p` 上那条 fork **跑不起来**，而且**本来就测不到**
+
+对照跑（回退 A3+A9）跑到第 2 题时，日志给出了直接证据。先说结论：
+
+> **A3 在 `solve -p` 路径上省的钱 ≈ 0，不是 ~30K tokens/次。**
+> 它关掉的那条 fork 确实被**创建**了，但在**发出任何 API 调用之前**就随进程退出
+> 被销毁。§9「A3 完成」里那个「批量 10 题即 ~30 万 token 纯开销」**不成立**。
+
+**证据（`~/.fulilian/logs/agent.log`，2026-09-11 对照跑现场）：**
+
+```
+23:32:47,363  [..0fe983] Turn ended: reason=text_response api_calls=16/30 tool_turns=15
+23:32:47,406  run_agent: OpenAI client created thread=bg-review:128355894118080   ← fork 起来了
+23:32:47,622  agent.model_metadata: ... (probe-down) ...                          ← 还在初始化
+23:32:47,624  tools.tool_search: tool_search activated (tier 1)                   ← 还在初始化
+23:32:47,963  tools.terminal_tool: Shutting down 1 remaining sandbox(es)...       ← 主流程已在收尾
+23:32:49,664  fulilian_cli.plugins: FULILIAN_SAFE_MODE=1 ...                      ← 下一题的新进程已启动
+```
+
+**没有 `Background review complete` 行，也没有 `conversation turn ... msg='Review the
+conversation above...'` 行** —— fork 从没走到模型调用。对照同一份日志里
+**长驻会话**（12:40，TUI 路径）的同一个 fork：
+
+```
+12:42:05,127  agent.background_review: Background review complete:
+              thread=bg-review calls=7 in=34859 out=5579 cache_read=376832 result=none
+```
+
+**同一个机制，两条路径上命运完全不同**：`solve -p` 是「一个进程解一题、解完就退」，
+fork 是 daemon 线程，主进程退出即被杀；TUI/gateway 长驻，fork 能跑完 7 次调用、
+吃掉 34,859 in-tokens。**A3 的依据（`agent_init.py:695-702` 的注释 + cron 先例）
+描述的是后者，被套用到了前者身上。**
+
+**第二层，也是更早该问的一层：这条 fork 的消耗从一开始就进不了 C 系列采集器。**
+`usage.json` 由 `_read_session_usage(agent)` 从**求解 agent 自己的内存计数器**取
+（`fulilian_ctf/solver.py:75-89`），而 fork 是**另一个 AIAgent 实例**，它的计数器
+不会累加回父实例。fork 自己的消耗走
+`agent/background_review.py::_record_review_usage_to_parent`，那条路径**只写
+`session_model_usage`，明确不碰计数器**，而且要求父 agent 有 `_session_db` ——
+`solve` 路径根本不建 session DB，所以连这笔记录也不会发生。
+
+> **所以：即使 fork 能跑完，`--compare` 也一个 token 都看不见。**
+> 把「对照跑没测出差异」读成「A3 无效果」是错的 —— 那是**尺子够不着**，
+> 不是**量出来是零**。这正是本计划书反复踩的那一类错误的又一变体。
+
+**对 A3 的处置：保留，但撤回它的收益主张。** `_run_solver_turn` 只服务 CTF
+求解器，关掉 fork 对 TUI/gateway 无影响；在 `solve -p` 上它是一个**空操作**
+（省 0，也不损失什么，因为 fork 本来就没跑完）。真正的教训是**依据的来源**：
+拿长驻会话的实测数去论证短命批处理路径上的收益，中间少了一次「这条路会不会
+真的执行到那里」的核对。
+
+> **一般化（这次的真正收获）：** 任何「关掉 X 能省 N」的主张，都要先确认 X
+> **在目标路径上确实执行了**，以及它的消耗**确实计入你用来验收的那个数**。
+> 两个条件缺一个，省下来的都是纸面数字。核对成本很低 ——
+> `grep` 一次日志找「开始行 / 结束行是否成对」，比跑一小时对照便宜得多。
+
+**对照跑本身继续**（它仍然合法地回答第 6 项：A9 的 n≥3 复测）。预期结果：
+A3+A9 合计效果 ≈ **A9 单独的效果**，因为 A3 那一半是 0。
+
 ## 10. 当前状态
 
 **分支 `ctf-opt`（未推送任何内容到 origin）。**
