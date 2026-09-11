@@ -852,9 +852,11 @@ def handle_knowledge_command(args: argparse.Namespace) -> None:
     """Manage the CTF knowledge base (Phase 3 — F3-001/F3-002/F3-003).
 
     ``fulilian knowledge import [--source KB]`` — 把 Des-CTF-Knowledge 导入 FTS5
-    ``fulilian knowledge query <terms> [--limit N] [--category C]`` — 检索历史 WP
+    ``fulilian knowledge query <terms> [--limit N] [--category C]
+        [--year Y] [--contest NAME] [--vuln-type T]`` — 检索历史 WP
     ``fulilian knowledge list [--category C]`` — 列出知识卡 / 索引统计
-    ``fulilian knowledge stats`` — 跨题学习统计
+    ``fulilian knowledge stats`` — 知识库 + 跨题学习统计
+    ``fulilian knowledge meta build`` — 重建结构化元数据 sidecar 与大赛索引
     ``fulilian knowledge cards-sync`` — 生成知识卡候选文件（人工编辑确认）
     ``fulilian knowledge cards-sync --apply`` — 把保留的候选块回灌进知识卡
     """
@@ -868,12 +870,14 @@ def handle_knowledge_command(args: argparse.Namespace) -> None:
         _knowledge_list(args)
     elif action == "stats":
         _knowledge_stats()
+    elif action == "meta":
+        _knowledge_meta(args)
     elif action == "cards-sync":
         _knowledge_cards_sync(args)
     else:
         print(
-            "knowledge: use one of import / query / list / stats / cards-sync "
-            "(try `fulilian knowledge --help`)"
+            "knowledge: use one of import / query / list / stats / meta / "
+            "cards-sync (try `fulilian knowledge --help`)"
         )
 
 
@@ -894,23 +898,39 @@ def _knowledge_import(args: argparse.Namespace) -> None:
 
 
 def _knowledge_query(args: argparse.Namespace) -> None:
-    """FTS5 检索历史 WP。"""
+    """FTS5 检索历史 WP（支持 category / year / contest / vuln-type 过滤）。"""
     from fulilian_ctf.knowledge_retriever import search
 
     query = " ".join(args.query)
     category = getattr(args, "category", None)
     limit = getattr(args, "limit", 5)
+    year = getattr(args, "year", None)
+    contest = getattr(args, "contest", None)
+    vuln_type = getattr(args, "vuln_type", None)
 
-    results = search(query=query, category=category, limit=limit)
+    results = search(
+        query=query, category=category, limit=limit,
+        year=year, contest=contest, vuln_type=vuln_type,
+    )
+    active = [
+        f"{label}={val}" for label, val in (
+            ("category", category), ("year", year),
+            ("contest", contest), ("vuln_type", vuln_type),
+        ) if val
+    ]
+    suffix = f" ({', '.join(active)})" if active else ""
+
     if not results:
-        print(f"knowledge: no results for '{query}'")
+        print(f"knowledge: no results for '{query}'{suffix}")
         return
 
-    print(f"knowledge: {len(results)} result(s) for '{query}'"
-          + (f" (category={category})" if category else ""))
+    print(f"knowledge: {len(results)} result(s) for '{query}'{suffix}")
     print()
     for i, r in enumerate(results, 1):
-        print(f"[{i}] {r['title']}  ({r['category']})")
+        tags = " · ".join(str(x) for x in (
+            r.get("year") or "", r.get("contest") or "", r.get("vuln_type") or ""
+        ) if x)
+        print(f"[{i}] {r['title']}  ({r['category']})" + (f"  [{tags}]" if tags else ""))
         print(f"    {r['source_path']}")
         if r.get("snippet"):
             snip = r["snippet"].replace("\n", " ").strip()
@@ -947,11 +967,45 @@ def _knowledge_list(args: argparse.Namespace) -> None:
 
 
 def _knowledge_stats() -> None:
-    """跨题学习统计。"""
+    """知识库统计 + 跨题学习统计。
+
+    早期版本只打 experiential learning（几乎恒为 0），让人以为知识库是空的——
+    「索引里到底有多少东西」才是这个命令最该回答的问题，故知识库部分在前。
+    """
+    from fulilian_ctf.knowledge_retriever import get_index_stats
     from fulilian_ctf.experiential_learning import get_learning_stats
 
+    idx = get_index_stats()
+    print("Knowledge base (FTS5 index):")
+    print(f"  documents: {idx['total_docs']}")
+    print(f"  db: {idx['db_path']}")
+    if idx["by_category"]:
+        print("  by category: " + ", ".join(
+            f"{cat}={n}" for cat, n in idx["by_category"].items()
+        ))
+    if not idx["schema_current"]:
+        print("  metadata: unavailable — index predates year/contest/vuln_type "
+              "columns; run `fulilian knowledge import --force` to rebuild")
+    else:
+        print(f"  metadata coverage: year={idx['year_known']}, "
+              f"contest={idx['contest_known']} "
+              f"({idx['contest_count']} distinct contests), "
+              f"vuln_type={sum(idx['by_vuln_type'].values())}")
+        if idx["by_year"]:
+            print("  by year: " + ", ".join(
+                f"{y}={n}" for y, n in idx["by_year"].items()
+            ))
+        if idx["top_contests"]:
+            print("  top contests: " + ", ".join(
+                f"{c}={n}" for c, n in idx["top_contests"].items()
+            ))
+        if idx["by_vuln_type"]:
+            print("  by vuln_type: " + ", ".join(
+                f"{v}={n}" for v, n in list(idx["by_vuln_type"].items())[:12]
+            ))
+
     stats = get_learning_stats()
-    print("Experiential learning stats:")
+    print("\nExperiential learning stats:")
     print(f"  entries: {stats['total_entries']} "
           f"(positive={stats['positive']}, negative={stats['negative']})")
     print(f"  techniques: {stats['techniques']}")
@@ -960,6 +1014,29 @@ def _knowledge_stats() -> None:
             f"{cat}={n}" for cat, n in stats["by_category"].items()
         ))
     print(f"  file: {stats['file_path']}")
+
+
+def _knowledge_meta(args: argparse.Namespace) -> None:
+    """重建结构化元数据 sidecar（wp_meta_index.json）与大赛索引（contest_index.md）。"""
+    from fulilian_ctf.knowledge_retriever import (
+        KB_PATH, META_INDEX_RELPATH, CONTEST_INDEX_RELPATH,
+        build_meta_index, build_contest_index,
+    )
+
+    action = getattr(args, "meta_action", None)
+    if action not in (None, "", "build"):
+        print(f"knowledge meta: unknown action '{action}' (try `build`)")
+        return
+
+    min_count = getattr(args, "min_count", 3)
+    n = build_meta_index(min_count=min_count)
+    if n == 0:
+        print(f"[knowledge] meta: no WP found under {KB_PATH / 'CTF大赛WP集合'}")
+        return
+    print(f"[knowledge] meta: {n} entries -> {KB_PATH / META_INDEX_RELPATH}")
+
+    contests = build_contest_index()
+    print(f"[knowledge] meta: {contests} contests -> {KB_PATH / CONTEST_INDEX_RELPATH}")
 
 
 def _knowledge_cards_sync(args: argparse.Namespace) -> None:

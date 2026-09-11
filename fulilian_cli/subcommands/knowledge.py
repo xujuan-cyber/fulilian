@@ -26,6 +26,12 @@ def build_knowledge_parser(subparsers, *, cmd_knowledge: Callable) -> None:
     query_parser.add_argument("--limit", type=int, default=5, help="Max results")
     query_parser.add_argument("--category", choices=["web", "crypto", "reverse", "pwn", "forensics", "misc"],
                               help="Filter by category")
+    query_parser.add_argument("--year", type=int,
+                              help="Filter by year (e.g. 2022)")
+    query_parser.add_argument("--contest",
+                              help="Filter by contest name (e.g. DASCTF, 强网杯)")
+    query_parser.add_argument("--vuln-type",
+                              help="Filter by technique tag (e.g. sql-injection, ssti)")
 
     # knowledge import
     import_parser = knowledge_subparsers.add_parser(
@@ -47,7 +53,24 @@ def build_knowledge_parser(subparsers, *, cmd_knowledge: Callable) -> None:
     # knowledge stats
     stats_parser = knowledge_subparsers.add_parser(
         "stats",
-        help="Show experiential learning statistics",
+        help="Show knowledge base and experiential learning statistics",
+    )
+
+    # knowledge meta
+    meta_parser = knowledge_subparsers.add_parser(
+        "meta",
+        help="Build structured metadata sidecar (wp_meta_index.json) "
+             "and contest index (contest_index.md)",
+    )
+    meta_subparsers = meta_parser.add_subparsers(dest="meta_action")
+    meta_build_parser = meta_subparsers.add_parser(
+        "build",
+        help="Regenerate wp_meta_index.json + contest_index.md from the KB",
+    )
+    meta_build_parser.add_argument(
+        "--min-count", type=int, default=3,
+        help="Frequency threshold for contest discovery beyond the lexicon "
+             "(default 3)",
     )
 
     # knowledge cards-sync
