@@ -1,0 +1,127 @@
+{
+  "generated_at": "2026-09-11T16:14:00.625246+00:00",
+  "schema": "ctf-path-baseline/2-compare",
+  "base_archive": "benchmarks/baselines/2026-09-12-ctf-ctl-a3a9-revert-n3.json",
+  "changed_archive": "benchmarks/baselines/2026-09-11-ctf-hard-n3.json",
+  "comparison": {
+    "sources": {
+      "base": {
+        "generated_at": "2026-09-11T16:08:07.181790+00:00",
+        "batches": [
+          "/tmp/ctf-ctl/run1",
+          "/tmp/ctf-ctl/run2",
+          "/tmp/ctf-ctl/run3"
+        ],
+        "fixture_count": 4
+      },
+      "changed": {
+        "generated_at": "2026-09-11T15:28:42.106849+00:00",
+        "batches": [
+          "/tmp/ctf-n3/run1",
+          "/tmp/ctf-n3/run2",
+          "/tmp/ctf-n3/run3"
+        ],
+        "fixture_count": 4
+      }
+    },
+    "chronology_warning": "「改动后」那份采集于 2026-09-11T15:28:42.106849+00:00，**早于**「改动前」的 2026-09-11T16:08:07.181790+00:00 —— 两个参数是不是传反了？Δ 的符号按「后 − 前」的字面定义读，若确实是有意倒着比，忽略本警告。",
+    "rows": [
+      {
+        "fixture": "forensics-brutelog-01",
+        "ref_steps": 5,
+        "n_base": 3,
+        "n_changed": 3,
+        "mult_base": 2.67,
+        "mult_changed": 2.8,
+        "mult_delta": 0.13,
+        "floor": 1.0,
+        "resolvable": false,
+        "api_mean_base": 13.3,
+        "api_mean_changed": 14.0,
+        "api_delta": 0.7,
+        "token_mean_base": 311814,
+        "token_mean_changed": 285501,
+        "solved_base": "3/3",
+        "solved_changed": "3/3"
+      },
+      {
+        "fixture": "misc-bigscan-01",
+        "ref_steps": 4,
+        "n_base": 3,
+        "n_changed": 3,
+        "mult_base": 4.5,
+        "mult_changed": 4.08,
+        "mult_delta": -0.42,
+        "floor": 4.5,
+        "resolvable": false,
+        "api_mean_base": 18.0,
+        "api_mean_changed": 16.3,
+        "api_delta": -1.7,
+        "token_mean_base": 470277,
+        "token_mean_changed": 332000,
+        "solved_base": "3/3",
+        "solved_changed": "3/3"
+      },
+      {
+        "fixture": "misc-chunkconcat-01",
+        "ref_steps": 5,
+        "n_base": 3,
+        "n_changed": 3,
+        "mult_base": 3.2,
+        "mult_changed": 4.27,
+        "mult_delta": 1.07,
+        "floor": 1.4,
+        "resolvable": false,
+        "api_mean_base": 16.0,
+        "api_mean_changed": 21.3,
+        "api_delta": 5.3,
+        "token_mean_base": 421874,
+        "token_mean_changed": 743960,
+        "solved_base": "3/3",
+        "solved_changed": "3/3"
+      },
+      {
+        "fixture": "reverse-obfchain-01",
+        "ref_steps": 6,
+        "n_base": 3,
+        "n_changed": 3,
+        "mult_base": 2.95,
+        "mult_changed": 3.55,
+        "mult_delta": 0.6,
+        "floor": 1.33,
+        "resolvable": false,
+        "api_mean_base": 17.7,
+        "api_mean_changed": 21.3,
+        "api_delta": 3.6,
+        "token_mean_base": 577163,
+        "token_mean_changed": 860901,
+        "solved_base": "3/3",
+        "solved_changed": "3/3"
+      }
+    ],
+    "only_base": [],
+    "only_changed": [],
+    "steps_mismatch": [],
+    "incomplete_batches": [],
+    "pooled": {
+      "api_base": 195,
+      "api_changed": 219,
+      "ref_steps": 60,
+      "mult_base": 3.25,
+      "mult_changed": 3.65,
+      "mult_delta": 0.4,
+      "floor": 0.8,
+      "resolvable": false,
+      "batches_base": {
+        "run1": 3.45,
+        "run2": 3.55,
+        "run3": 2.75
+      },
+      "batches_changed": {
+        "run1": 3.75,
+        "run2": 3.55,
+        "run3": 3.65
+      }
+    }
+  }
+}
