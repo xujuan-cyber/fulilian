@@ -9219,6 +9219,14 @@ def _run_solver_turn(
             verbose_logging=verbose,
             log_prefix_chars=log_prefix_chars,
             ephemeral_system_prompt=ctf_prompt,
+            # CTF 解题不需要人机回环式的 memory/skill 审查 fork（~30K tokens/
+            # 次，agent_init.py:695-702）。cron 路径早已这么关（scheduler.py:6434），
+            # CTF 路径此前漏了 —— 批量 10 题即 ~30 万 token 纯开销。
+            # 这是覆盖两条 review 路径的单一开关；不再加 skip_memory=True，
+            # 那会顺带关掉外部 memory provider（agent_init.py:1898），而
+            # ctf_solve toolset 刻意保留了 memory 工具（toolsets.py:646-650）。
+            # 解法后的沉淀应在批后统一做一次，不是每题一次。
+            skip_background_review=True,
         )
     except RuntimeError as e:
         print(f"❌{label} Failed to initialize agent: {e}")

@@ -574,10 +574,51 @@ P0.5.1 / P0.5.2 只作用于 `mode="ctf"`，而**该路径从未跑过** →
 要么先做一次真实 `fulilian solve` 建立 CTF 路径基线（需题 + API 配额），
 要么接受 A2/A3 仅作代码级验证、把效果测量推迟到首次真实解题。
 
+### 2026-09-11 · A3 完成（P0.5.1，第一处代码改动）
+
+`run_agent.py:9222` `_run_solver_turn()` 的 `AIAgent(...)` 增加
+`skip_background_review=True`（+8 行含注释）。
+
+- **只加这一个 flag**，按 `agent/agent_init.py:695-702` 的说明：它本身就是
+  覆盖两条 review 路径的单一开关。
+- **不加 `skip_memory=True`**：不带来额外收益，却会顺带关掉外部 memory
+  provider（`agent_init.py:1898`），而 `ctf_solve` toolset 刻意保留了
+  `memory` 工具（`toolsets.py:646-650`，注释写明"回合后自省触发依赖"）。
+- 验证：`python3 -m py_compile run_agent.py` 通过；`AIAgent.__init__`
+  在 `run_agent.py:513` 确有该参数。
+
+### 2026-09-11 · A2 完成（P0.5.2，死配置）
+
+`~/.fulilian/config.yaml` 移除 `compression.threshold_tokens: 400000`，
+原位留注释说明为何是 no-op。备份：`config.yaml.bak-20260911-200734`。
+
+**顺带做完的键名普查**（担心还有别的死键）：
+
+| 键 | 是否接线 | 结论 |
+|---|---|---|
+| `threshold: 0.7` | ✅ | 128K 下生效值 0.7（不是被 floor 抬到 0.75） |
+| `target_ratio: 0.4` | ✅ | 映射到 `summary_target_ratio` |
+| `proactive_prune_tokens: 80000` | ✅ | 映射到同名参数 |
+| `protect_first_n: 4` / `protect_last_n: 20` | ✅ | 已接线 |
+| `threshold_tokens: 400000` | ❌ | **死**，已移除 |
+
+**新增的文档错误（§3.N 同类）：** `fulilian_cli/config_defaults.py:808`
+注释写 "floored at **0.75**"，而 `agent/context_compressor.py`
+`_effective_threshold_percent` 用的是 `_SMALL_CTX_THRESHOLD_PERCENT = 0.60`。
+实际 floor 是 **60%**，注释错。
+
+> 附一条被证伪的假设：我曾怀疑 CTF 的 0.60 封顶会被这条 floor 抬回 0.75
+> 从而失效。查证后 **floor 是 0.60**，`max(0.60, 0.60) = 0.60` —— 封顶有效，
+> 该假设不成立。
+
 ---
 
 ## 10. 当前状态
 
-- **代码改动：0 处。** 计划书与采集器是纯新增。
-- 分支：`ctf-opt`（未推送）。
-- 下一步待定：见 §9 末「对后续步骤的影响」。
+- **代码改动：1 处**（`run_agent.py` +8 行，A3）。
+- **配置改动：1 处**（`~/.fulilian/config.yaml` 删死键，A2，仓库外）。
+- 分支：`ctf-opt`（未推送）。基线：`benchmarks/baselines/2026-09-11-ctf-chatpath.json`。
+- **未验证：** A2/A3 的效果 —— 它们只作用于 `mode="ctf"`，而该路径从未执行过。
+  验证载体已找到：`_resolve_project` 接受目录（`fulilian_ctf/cli.py`），
+  故 `fulilian solve --id benchmarks/fixtures/<name>/` 可跑通真实 CTF 路径，
+  离线、flag 已知。**需要 API 配额授权。**
