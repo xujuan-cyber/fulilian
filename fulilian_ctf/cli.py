@@ -116,7 +116,11 @@ def _run_solve_once(project, work_dir: Optional[Path], query: str, model: str,
     Returns:
         进程退出码：解出（flag 非空）0，否则 1。
     """
-    from fulilian_ctf.solver import SOLVER_LOG, read_flag_file
+    from fulilian_ctf.solver import (
+        SOLVER_LOG,
+        read_flag_file,
+        solver_evidence_stream,
+    )
     from fulilian_ctf.verify import check_output_for_flag
 
     if as_json:
@@ -136,8 +140,11 @@ def _run_solve_once(project, work_dir: Optional[Path], query: str, model: str,
     try:
         if work_dir is not None:
             os.chdir(work_dir)
-        with open(log_path, "w", encoding="utf-8", errors="replace") as log:
-            sys.stdout, sys.stderr = log, log
+        # 证据流 + 镜像（solve 目录之外）：work_dir 是 agent 的地盘，它能用
+        # write_file 把 solver.log 覆盖掉。见 solver_evidence_stream 的文档。
+        with solver_evidence_stream(base_dir) as log:
+            if log is not None:
+                sys.stdout, sys.stderr = log, log
             _raw_code = solver_main(
                 query=query,
                 mode="ctf",

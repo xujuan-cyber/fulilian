@@ -20,7 +20,12 @@ from pathlib import Path
 
 import pytest
 
-from fulilian_ctf.solver import SOLVER_LOG, SOLVER_LOG_MIRROR_ENV, tee_solver_log
+from fulilian_ctf.solver import (
+    SOLVER_LOG,
+    SOLVER_LOG_MIRROR_ENV,
+    solver_evidence_stream,
+    tee_solver_log,
+)
 from fulilian_ctf.trace import (
     TRACE_FILENAME,
     build_trace,
@@ -77,6 +82,65 @@ def test_tee_flushes_immediately_for_mid_run_readers(tmp_path, monkeypatch):
         print("in-flight line")
         assert "in-flight line" in (tmp_path / SOLVER_LOG).read_text(
             encoding="utf-8"
+        )
+
+
+def test_solver_evidence_stream_mirrors_to_outside_path(tmp_path, monkeypatch):
+    """solver_evidence_stream：生产路径（_run_solve_once / _default_solver_impl）
+    实际用的就是这个 helper，镜像由此生效。"""
+    mirror = tmp_path / "outside" / "mirror.log"
+    monkeypatch.setenv(SOLVER_LOG_MIRROR_ENV, str(mirror))
+
+    with solver_evidence_stream(tmp_path / "work") as log:
+        assert log is not None
+        log.write("🔄 Making API call #1/50\n")
+        log.flush()
+
+    assert (tmp_path / "work" / SOLVER_LOG).read_text(encoding="utf-8") == \
+        mirror.read_text(encoding="utf-8")
+
+
+def test_solver_evidence_stream_without_mirror_writes_only_workdir(
+    tmp_path, monkeypatch
+):
+    monkeypatch.delenv(SOLVER_LOG_MIRROR_ENV, raising=False)
+    with solver_evidence_stream(tmp_path / "work") as log:
+        log.write("hello\n")
+
+    assert (tmp_path / "work" / SOLVER_LOG).read_text(encoding="utf-8") == "hello\n"
+    assert not (tmp_path / "outside").exists()
+
+
+def test_solver_evidence_stream_yields_none_when_unwritable(tmp_path, monkeypatch):
+    """落盘失败 yield None：调用方退回原流，证据缺失不阻断求解。"""
+    blocker = tmp_path / "blocker"
+    blocker.write_text("not a dir", encoding="utf-8")
+    with solver_evidence_stream(blocker / "work") as log:
+        assert log is None
+
+
+def test_mirror_is_wired_into_both_production_entry_points():
+    """接线回归锁 —— 这条是本改动第一次做错换来。
+
+    镜像最初只加在 ``tee_solver_log`` 上，而它**没有生产调用点**：默认
+    solve 路径走的是 ``cli._run_solve_once`` 与 ``solver._default_solver_impl``。
+    结果测试全绿、机制却一次都不会触发。这条锁住那两处不许再裸开日志。
+    """
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2] / "fulilian_ctf"
+    for fname, marker in (("cli.py", "_run_solve_once"),
+                          ("solver.py", "_default_solver_impl")):
+        src = (root / fname).read_text(encoding="utf-8")
+        start = src.index(f"def {marker}")
+        end = src.find("\ndef ", start + 1)
+        body = src[start:end if end != -1 else len(src)]
+        assert "solver_evidence_stream(" in body, (
+            f"{fname}:{marker} 没有走 solver_evidence_stream —— "
+            f"镜像日志在这条路径上不会生效"
+        )
+        assert 'open(log_path, "w"' not in body, (
+            f"{fname}:{marker} 又出现了裸开 solver.log：镜像会被绕过"
         )
 
 

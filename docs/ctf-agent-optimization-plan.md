@@ -1368,8 +1368,8 @@ n≥3；单点差异一律不当证据（与 §1.4 对 P0.1 的判断同源）�
 | 基准 | **探针题 `misc-chunkconcat-01`**（4 题 holdout） | `benchmarks/fixtures-hard/misc-chunkconcat-01/` |
 | 基准 | **v2 跑批基线（4 题，含经济性）** | `benchmarks/baselines/2026-09-11-ctf-hard-holdout-v2.json` |
 | 基准 | **运行日志可信性检测（`log_issue`）** | `benchmarks/ctf_path_baseline.py` `analyze()` / `print_table()` |
-| 代码 | **运行日志镜像（根治 §10 第 3 条）** | `fulilian_ctf/solver.py` `SOLVER_LOG_MIRROR_ENV` / `tee_solver_log` / `_TeeStream` |
-| 测试 | 镜像日志回归锁（4 项，含"agent 覆盖后镜像仍完整"） | `tests/fulilian_ctf/test_solver_log_tee.py` |
+| 代码 | **运行日志镜像（根治 §10 第 3 条）** | `fulilian_ctf/solver.py` `solver_evidence_stream` / `_TeeStream`；接线于 `cli.py:_run_solve_once`、`solver.py:_default_solver_impl` |
+| 测试 | 镜像日志回归锁（8 项，含"agent 覆盖后镜像仍完整"与接线锁） | `tests/fulilian_ctf/test_solver_log_tee.py` |
 | 文档 | 本计划书 | `docs/ctf-agent-optimization-plan.md` |
 
 **已验证：** A5 —— 修复前 3/3 瞬间失败（HTTP 400，退出码 0）；修复后
@@ -1422,15 +1422,24 @@ n≥3；单点差异一律不当证据（与 §1.4 对 P0.1 的判断同源）�
    覆盖成解题报告，**就发生在跑的过程中**，跑批完立刻采集也拿不到。
    → 检测（`5d55fe7`）：采集器出 `log_issue`，不可信行工具面置 `—` 并打 ⚠️，
    汇总把工具总数标注为下界 —— 不再把"数据没了"静默读成"零浪费"。
-   → **根治（镜像日志）**：`tee_solver_log` 支持 `FULILIAN_SOLVER_LOG_MIRROR`，
-   同一份字节额外写一份到指定路径；跑批器把它指到 `$OUT/_mirror/`（solve 目录
-   之外）。**刻意只在增不改**：`work_dir/solver.log` 原地保留，dispatcher 的
-   增量扫描、replay/writeup、racer / multi_agent 的子目录证据全部不受影响 ——
-   移动日志会打断这些消费者（`dispatcher.py:1005,1096` 按字节偏移追增长）。
+   → **根治（镜像日志）**：`solver_evidence_stream` 认
+   `FULILIAN_SOLVER_LOG_MIRROR`，同一份字节额外写一份到指定路径；跑批器把它
+   指到 `$OUT/_mirror/`（solve 目录之外）。**刻意只增不改**：
+   `work_dir/solver.log` 原地保留，dispatcher 的增量扫描、replay/writeup、
+   racer / multi_agent 的子目录证据全部不受影响 —— 移动日志会打断这些消费者
+   （`dispatcher.py:1005,1096` 按字节偏移追增长）。
    采集器加 `--mirror-dir`，有镜像就优先采信，并**单独**报 work_dir 那份是否
    被扰动（测量有效、产物损坏，两件事分开说）。
-   → **仍存在的边界**：只覆盖默认 solve 路径（`tee_solver_log`）；
-   `--race` / `--multi-agent` 各自开日志，未接镜像。环境变量不设时行为不变。
+   → **第一次改错了地方，值得记下来**：镜像最初只加在 `tee_solver_log` 上，
+   而**它没有生产调用点**（grep 全仓只有测试引用）。默认 solve 路径实际走的是
+   `cli._run_solve_once`（`solve -p`，即 holdout 路线）与
+   `solver._default_solver_impl`（`solver_worker`/race 路线），两者各自裸开
+   `open(log_path, "w")`。当时测试 4 项全绿、机制却一次都不会触发 ——
+   **测试绿不等于接上了线**。现已抽出 `solver_evidence_stream` 供两处共用，
+   并加一条**接线回归锁**（按函数体断言两处不许再裸开日志；已用改动前的源码
+   验证过它确实会红）。
+   → **仍存在的边界**：`--race` / `--multi-agent` 的多 agent 子目录日志
+   （`multi_agent.py:338` 等）未接镜像；环境变量不设时行为完全不变。
 4. ~~**没有难题 holdout**~~ —— **已解除**（`9f1caf1`），**2b 已实施**
    （`c0746cd` 经济性指标 + `ce3cb11` 第 4 题 + `5d55fe7` 日志可信性）。
    当前 4 题，v2 跑批 4/4 一次通过 → **天花板效应仍在**，但可用信号已经落地：

@@ -17,6 +17,7 @@ work_dir/solver.log，供 trace 回放 / stopper 停滞检测消费。
 
 from __future__ import annotations
 
+import contextlib
 import os
 import sys
 import threading
@@ -242,6 +243,53 @@ def scan_log_for_flag(work_dir: str | Path) -> str:
     return ""
 
 
+@contextlib.contextmanager
+def solver_evidence_stream(work_dir: str | Path, filename: str = SOLVER_LOG):
+    """打开 ``work_dir/<filename>`` 作为证据流，并（可选）镜像到目录之外。
+
+    yield 的对象可直接赋给 ``sys.stdout``/``sys.stderr``：写它 = 写主日志
+    （+ 镜像）。**落盘失败时 yield None**，调用方退回原流 —— 证据缺失不该
+    阻断求解，这与两处调用点原本的降级语义一致。
+
+    镜像由 ``FULILIAN_SOLVER_LOG_MIRROR`` 指定。存在的理由：``work_dir`` 是
+    agent 的地盘，它可以用 write_file 把 solver.log 覆盖掉，**就发生在求解
+    过程中**（实测 misc-chunkconcat-01，2026-09-11：那一跑解出 flag，
+    api_calls 15，日志却被换成一份解题报告，工具面数据全丢 —— 0 被读成了
+    "高效"）。镜像只增不改：work_dir 内那份原地保留，dispatcher 的增量扫描、
+    replay/writeup、racer/multi_agent 的子目录证据全部不受影响。
+    """
+    log_path = Path(work_dir) / filename
+    try:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log = open(log_path, "w", encoding="utf-8", errors="replace")
+    except OSError:
+        yield None
+        return
+
+    mirror = None
+    mirror_env = os.environ.get(SOLVER_LOG_MIRROR_ENV) or ""
+    if mirror_env:
+        try:
+            mirror_path = Path(mirror_env)
+            mirror_path.parent.mkdir(parents=True, exist_ok=True)
+            mirror = open(mirror_path, "w", encoding="utf-8", errors="replace")
+        except OSError:
+            mirror = None  # 镜像失败不影响主日志
+    # 以主日志为「原流」（而非终端）：__getattr__ 委托给它，isatty/encoding
+    # /buffer 等属性照旧可用，调用方看到的与直接用文件对象时一致。
+    stream = log if mirror is None else _TeeStream(log, mirror)
+    try:
+        yield stream
+    finally:
+        for fh in (log, mirror):
+            if fh is not None:
+                try:
+                    fh.flush()
+                except (OSError, ValueError):
+                    pass
+                fh.close()
+
+
 class _TeeStream:
     """把写入同时转发到原流与日志文件的流代理（write 级线程安全）。
 
@@ -312,6 +360,11 @@ class tee_solver_log:
     ``work_dir/solver.log`` 原地保留，stopper 的增量扫描、replay/writeup、
     racer / multi_agent 的子目录证据全部不受影响；镜像只是给采集器留一份
     agent 没有理由去动的副本。变量为空/未设时不改变任何行为。
+
+    **注意（2026-09-11 核实）：本类当前没有生产调用点** —— 默认 solve 路径
+    实际走 ``cli._run_solve_once`` / ``solver._default_solver_impl``，两者
+    **共用** ``solver_evidence_stream``。本类保留供将来接终端 tee 用；
+    别照它的文档判断"哪条路在写日志"，去看那两处。
     """
 
     def __init__(self, work_dir: str | Path, filename: str = SOLVER_LOG,
@@ -481,8 +534,11 @@ def _default_solver_impl(project, work_dir: Path, query: str) -> int:
     old_out, old_err = sys.stdout, sys.stderr
     try:
         os.chdir(work_dir)
-        with open(log_path, "w", encoding="utf-8", errors="replace") as log:
-            sys.stdout, sys.stderr = log, log
+        # 证据流 + 镜像：见 solver_evidence_stream 的文档。None = 落盘失败，
+        # 退回原流照跑（与「证据缺失不阻断求解」一致）。
+        with solver_evidence_stream(work_dir) as log:
+            if log is not None:
+                sys.stdout, sys.stderr = log, log
             code = run_agent_main(
                 query=query,
                 mode="ctf",
@@ -665,6 +721,7 @@ __all__ = [
     "FLAG_FILENAME",
     "SOLVER_LOG",
     "SOLVER_LOG_MIRROR_ENV",
+    "solver_evidence_stream",
     "SolverResult",
     "bootstrap_blackboard",
     "build_solve_query",
