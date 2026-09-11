@@ -220,41 +220,44 @@ class TestToolsetConsistency:
 
 
 class TestCtfSolveToolset:
-    """CTF 解题工具集必须带 memory / skill_manage。
+    """CTF 解题工具集：解题工具 + includes，**不带**回合后自省工具。
 
-    回合后自省（agent/background_review.py）的触发条件按
-    valid_tool_names 判断：记忆审查需要 "memory" 在其中（且 _memory_store
-    存在，CTF 模式下由 skip_memory/memory_enabled 默认值保证），skill 审查
-    需要 "skill_manage" 在其中。缺了这两个名字，CTF 解题会话的自省 fork
-    永不触发，解题经验全部丢失（回归锁）。
+    这里曾锁着相反的不变量（memory / skill_manage 必须在 ctf_solve 里），
+    理由是那两个名字是回合后自省 fork（agent/background_review.py）的触发
+    前提，缺了则解题经验全部丢失。该理由在 CTF 路径上已被 A3 撤销：解题会话
+    用 skip_background_review=True 关掉了这条 fork（run_agent.py
+    _run_solver_turn），触发条件无人消费。实测 3 题 43 次工具调用里这两个
+    工具调用 0 次，而 schema 合计 5,631 字符（14 个工具共 22,942 字符的
+    24.5%），随每次 API 调用重发 ≈ 1,400 tokens，占全部 input token 的 8%。
+
+    真正的约束不是"工具在不在"，而是**开关与工具集同进同出** ——
+    见 test_solver_spawn_and_toolset_are_coupled。经验沉淀改为批次结束后
+    统一做一次，不是每题一次。
     """
 
-    def test_static_definition_keeps_solver_tools_and_adds_review_tools(self):
+    def test_static_definition_keeps_solver_tools_and_drops_review_tools(self):
         tools = set(TOOLSETS["ctf_solve"]["tools"])
-        # 原 CTF 解题工具不回归
+        # CTF 解题工具
         assert {"verify_flag", "checkpoint", "generate_writeup", "compile_check"} <= tools
-        # 回合后自省触发依赖
-        assert "memory" in tools
-        assert "skill_manage" in tools
+        # 自省 fork 已关（A3），这两个工具是纯开销
+        assert "memory" not in tools
+        assert "skill_manage" not in tools
 
-    def test_resolved_toolset_includes_review_tools_and_includes(self):
+    def test_resolved_toolset_keeps_includes_without_review_tools(self):
         from tools.registry import discover_builtin_tools
 
         discover_builtin_tools()
         resolved = set(resolve_toolset("ctf_solve"))
-        assert {"memory", "skill_manage"} <= resolved
+        assert not ({"memory", "skill_manage"} & resolved)
         # includes（terminal / file / web / vision）不回归
         assert {"terminal", "process", "read_file", "write_file", "web_search"} <= resolved
 
-    def test_registry_produces_schemas_for_review_tools(self):
-        """registry 必须实际产出 memory / skill_manage 的 schema。
+    def test_registry_produces_schemas_for_solver_tools(self):
+        """registry 必须实际产出解题工具的 schema（按真实构建路径断言）。
 
         工具名写错（或被 check_fn 过滤）时 registry 会静默丢弃，
-        valid_tool_names 里就不会出现对应名字、自省再次失效——
-        所以这里按 model_tools 的真实构建路径断言，而不是只看静态定义。
-        memory / skill_manage 属于 _FULILIAN_CORE_TOOLS，永不被
-        tool_search 渐进披露折叠，因此真实会话里必然出现在
-        valid_tool_names 中。
+        valid_tool_names 里就不会出现对应名字，解题门失效也不报错 ——
+        所以这里走 model_tools 的构建路径，而不是只看静态定义。
         """
         from model_tools import get_tool_definitions
 
@@ -263,7 +266,36 @@ class TestCtfSolveToolset:
             skip_tool_search_assembly=True,
         )
         names = {t["function"]["name"] for t in defs}
-        assert {"memory", "skill_manage", "verify_flag"} <= names
+        assert {"verify_flag", "submit_flag"} <= names
+
+    def test_solver_spawn_and_toolset_are_coupled(self):
+        """自省开关与自省工具必须同进同出（回归锁，两个方向都拦）。
+
+        memory / skill_manage 留在 ctf_solve 里的唯一用途是让回合后自省 fork
+        能触发。_run_solver_turn 关掉了该 fork，所以工具被移除；反过来，若有人
+        删掉那个开关却没把工具加回来，自省会**静默**失效 —— 不报错、不告警，
+        只是解题经验不再沉淀。这里把耦合本身锁住，而不是锁单边。
+        """
+        import inspect
+
+        import run_agent as ra
+
+        review_disabled = "skip_background_review=True" in inspect.getsource(
+            ra._run_solver_turn
+        )
+        review_tools = {"memory", "skill_manage"} & set(TOOLSETS["ctf_solve"]["tools"])
+
+        if review_disabled:
+            assert not review_tools, (
+                "自省 fork 已关（skip_background_review=True），这两个工具是纯开销"
+                "（5,631 字符 schema ≈ 1,400 tokens/次调用），不应留在 ctf_solve。"
+                "若确实要重新开启 fork，请同时把它们加回 toolsets.py 并更新本测试。"
+            )
+        else:
+            assert review_tools == {"memory", "skill_manage"}, (
+                "自省 fork 开着，但 memory/skill_manage 不在 ctf_solve 里 —— "
+                "fork 永不触发且静默，解题经验会全部丢失。"
+            )
 
 
 class TestPluginToolsets:

@@ -623,28 +623,21 @@ TOOLSETS = {
     },
 
     # ── FuLiLian CTF solver toolset ─────────────────────────────────
-    # memory / skill_manage 是回合后自省（agent/background_review.py）的
-    # 结构性触发前提：记忆审查要求 "memory" 在 valid_tool_names 且
-    # _memory_store 存在，skill 审查要求 "skill_manage" 在 valid_tool_names
-    # （agent/turn_context.py / agent/turn_finalizer.py）。CTF 解题会话同样
-    # 需要把环境经验沉淀进 MEMORY.md / skill 库，缺这两个名字自省 fork
-    # 永不触发，解题经验全部丢失。取舍说明：
-    #   * _memory_store 的创建只取决于 skip_memory / memory_enabled 配置
-    #     （agent/agent_init.py），与本工具集无关——CTF 模式下 store 早已
-    #     创建，MEMORY.md 快照注入（agent/system_prompt.py 按 _memory_store
-    #     门控）也与工具名无关，因此这里加名字只让审查触发条件成立，
-    #     不改变既有注入行为、不与 ephemeral ctf_prompt 冲突；
-    #   * 自省 fork（background_review）按父会话 enabled_toolsets 重建
-    #     tools[]（字节一致以复用前缀缓存），dispatch 白名单独立取
-    #     ["memory", "skills"] 并复用父的 _memory_store，主会话带上这两个
-    #     工具后 fork 可正常执行写入；
-    #   * 未注册或被 check_fn 过滤的工具名会被 registry 静默丢弃，不报错。
+    # 这里曾经挂着 "memory" 与 "skill_manage"，理由是回合后自省
+    # （agent/background_review.py）要求这两个名字出现在 valid_tool_names 里
+    # 才会触发记忆 / skill 审查 fork。但 CTF 路径已用
+    # skip_background_review=True 关掉该 fork（run_agent.py:9229，A3），
+    # 触发条件无人消费 —— 实测 3 题 43 次工具调用里这两个工具调用 0 次，
+    # 而它们的 schema 是 5,631 字符（14 个工具共 22,942 字符的 24.5%），
+    # 随每次 API 调用重发 ≈ 1,400 tokens，占全部 input token 的 8%。
+    #
+    # ⚠️ 耦合：若将来重新开启 background_review，必须把这两个名字加回来，
+    # 否则自省 fork 永不触发且**静默** —— 不会报错，只是经验不再沉淀。
+    # CTF 经验沉淀应在批次结束后统一做一次，不是每题一次。
     "ctf_solve": {
         "description": "CTF mode solver tools — verify_flag, checkpoint, writeup generation, compile_check",
         "tools": [
             "verify_flag", "checkpoint", "generate_writeup", "compile_check",
-            # 回合后自省触发依赖（见上方注释）：记忆 + skill 写入
-            "memory", "skill_manage",
         ],
         "includes": ["terminal", "file", "web", "vision"],
     }

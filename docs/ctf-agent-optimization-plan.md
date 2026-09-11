@@ -227,6 +227,63 @@ web-robots-01（robots.txt 题）被注入的三条"相似历史 WP"：
 其中 WP 段 474 字符 —— **成本不大，但信噪比接近 0**，且**每题必注入**。
 → 对应 P4（修知识层）。
 
+### 1.6 P0.5.4 实测效果：删两个工具名 = 每次调用少 17,957 字符（2026-09-11 实施并对照跑）
+
+**改动**：`toolsets.py` 的 `ctf_solve` 移除 `"memory"` 与 `"skill_manage"`。
+
+**为什么牵连比预期大** —— 这两个名字不只是两个工具 schema。删掉后有三处**分别**
+按 `valid_tool_names` 门控的内容一起消失（直接构造 system prompt 逐块比对得出）：
+
+| 消失的内容 | 字符数 | 门控点 |
+|---|---:|---|
+| `memory` + `skill_manage` 工具 schema | 5,631 | `ctf_solve` 工具表 |
+| `MEMORY_GUIDANCE` + `SKILLS_GUIDANCE` 引导块 | 2,134 | `system_prompt.py:437` / `:444` |
+| **技能索引（205 条技能清单）** | **10,192** | `system_prompt.py:524` |
+| **合计** | **17,957** | 每次 API 调用 |
+
+> 重建验证：用 `enabled_toolsets=["ctf_solve"]` 构造 agent 后渲染 system prompt，
+> 移除前 27,717 字符 / 14 工具，移除后 15,391 字符 / 12 工具 ——
+> **14 / 12 与两次真跑日志里的 `Loaded 14 tools` / `Loaded 12 tools` 逐字吻合**，
+> 说明这个重建忠实于真实路径。
+
+**最大的一块是技能索引，而它在 CTF 路径上本来就够不着。** 基线日志的
+`Final tool selection (17 tools)` 里**没有 `skill_view`，也没有 `skills_list`**：
+
+```
+compile_check, git_auto_commit, http_session, memory, patch, process, read_file,
+record_fact, search_files, skill_manage, submit_flag, terminal, verify_flag,
+vision_analyze, web_extract, web_search, write_file
+```
+
+也就是说：那 10,192 字符的索引**列了 205 个技能，而 agent 没有任何工具能打开其中
+任何一个** —— 唯一在场的 `skill_manage` 是写入口（且因 A3 关闭自省 fork 而无人消费）。
+这是**纯粹的噪声**，不是能力。
+
+**对照跑（同一协议，3 题，改动前 vs 改动后）：**
+
+| | 基线 | P0.5.4 后 | 变化 |
+|---|---:|---:|---:|
+| 解出率 | 3/3 | 3/3 | — |
+| flag 逐字一致 | 3/3 | 3/3 | — |
+| 首屏 prompt tokens | 9,454–9,525 | 6,290–6,297 | **−3,186/次调用** |
+| api_calls | 48 | 31 | −35.4% |
+| input tokens | 622,946 | 389,021 | −37.6% |
+| 工具调用 | 43 | 38 | −11.6% |
+| 延迟均值 | 5.7–6.9s | 5.35–5.58s | −4~19% |
+
+**约束在哪一格要说清**：首屏的三个读数高度一致
+（9,460→6,297 / 9,525→6,290 / 9,454→6,294，即 −3,160 / −3,235 / −3,163），
+这是**确定性**的每调用节省 ≈ **3,186 tokens**。而 api_calls 48→31 是**行为差异**：
+crypto-rsa-01 从 24 次掉到 8 次，单次运行无法区分是"提示更干净所以路径更直"
+还是普通随机性 —— **n=1，不归因给 P0.5.4**，要归因得多跑几轮。所以
+−37.6% 的总量降幅里，**只有 −3,186/次 那部分是本次改动可确证的**。
+
+**耦合（已写进代码注释与测试）**：这两个工具**唯一**的用途是让回合后自省 fork 能
+触发。A3 用 `skip_background_review=True` 关掉了那条 fork，触发条件无人消费。
+**若将来重新开启 background_review，必须把这两个名字加回，否则自省会静默失效**
+（不报错、不告警，只是经验不再沉淀）。`tests/test_toolsets.py` 的
+`test_solver_spawn_and_toolset_are_coupled` 把这个耦合锁成双向断言，而不是锁单边。
+
 ---
 
 ## 2. 压缩后**无法找回内容**（原题：冒烟枪）
@@ -1066,23 +1123,77 @@ CPU 冻结、`ESTAB ... Send-Q 4290`、最后活动 20:27:38 停在 API call #7�
 **方法论备注：** 这次是"动手前先验证触发条件"，而不是"改完再测效果"。
 如果直接按原计划写 P0.1，会得到一个**无法被现有基线证伪、也无法被证明**的改动。
 
+### 2026-09-11 · A9：P0.5.4 实施 + 对照跑（首项 P0 落地）
+
+**动机（来自 A7）：** `ctf_solve` 里的 `memory` + `skill_manage` 的唯一用途是让
+回合后自省 fork 能触发，而 A3 已把那条 fork 关掉；此前的基线跑里这两个工具
+**43 次工具调用中调用 0 次**。
+
+**改动：**
+- `toolsets.py` —— `ctf_solve` 工具表删两行；注释块重写为「⚠️ 耦合」说明，
+  写明**若重新开启 background_review 必须把名字加回，否则静默失效**。
+- `run_agent.py:9222-9232` —— 修正 A3 注释里已失效的一句
+  （原文写"ctf_solve toolset 刻意保留了 memory 工具"，改动后自相矛盾）。
+- `tests/test_toolsets.py` —— 原有的 3 个测试**锁的正是被推翻的结论**
+  （断言这两个工具必须在场）。没有删掉它们，而是**翻转成双向耦合断言**：
+  `test_solver_spawn_and_toolset_are_coupled` 同时检查
+  `_run_solver_turn` 的 `skip_background_review=True` 与工具表内容，
+  两个方向任一被单独改坏都会失败。这比锁单边更贴近真正的不变量。
+
+**验证：**
+- 单测：`tests/test_toolsets.py` 29 项 ✓；`test_skip_background_review.py`
+  + `tests/fulilian_ctf/` 683 项 ✓。
+- 对照跑（同协议 3 题）：3/3 解出、flag 与基线逐字一致；
+  **首屏 prompt 9,460/9,525/9,454 → 6,297/6,290/6,294**，即
+  **−3,160 / −3,235 / −3,163 tokens/次调用**，三次高度一致。
+- 日志侧确认：`Final tool selection` 17→15，`Loaded` 14→12。
+
+**一个比预估大一倍多的连带效应（A9 的主要发现）：**
+预估只算了两个 schema（1,408 tok）。实测省 **3,186 tok/次**，因为是**三处**
+按 `valid_tool_names` 门控的内容一起消失 —— 见 §1.6。其中最大的一块是
+**10,192 字符的技能索引**，而基线日志的工具表里**既无 `skill_view` 也无
+`skills_list`**，即那份索引列了 205 个技能、agent 却没有任何工具能打开 ——
+**够不着的清单，纯噪声**。这条已推广为 P3/P7 的评估方法（§10 下一步表下注）。
+
+**未归因的部分（n=1，不许当成结论）：** api_calls 48→31（crypto-rsa-01 从
+24 掉到 8）、input tokens −37.6%。三个 fixture 各只跑一次，无法区分
+"提示更干净→路径更直"与随机性。**已列为下一步第 5 项：n≥3 重跑。**
+
+**顺带的用户侧问题（尚未处理）：** `~/.fulilian/config.yaml` 里用户手写的 5 条
+「CTF 工作纪律（每次任务都生效）」**在 CTF 路径上不生效** —— 该配置键
+（`agent.system_prompt`）的唯一读取点是 `fulilian_cli/personality.py:160`，
+调用者只有 `cli.py` / `gateway/run.py` / `tui_gateway/server.py`，
+**CTF 路径不在其中**；`agent_init.py` 无该读取；`system_prompt.py:781` 要求
+`system_message is not None` 才追加，而 CTF 路径传 None。
+用户写下的「大输出先落盘」正是 P0.1 的手工版 —— 它没生效。
+→ 需决定：把该配置接进 CTF 路径，还是改写进 `_build_ctf_system_prompt()`。
+**未向用户报告，也未实施。**
+
 ---
 
 ## 10. 当前状态
 
-**分支 `ctf-opt`（未推送任何内容到 origin），工作树干净，HEAD = `91c52d6`。**
+**分支 `ctf-opt`（未推送任何内容到 origin）。**
 
 | 类 | 项 | 位置 |
 |---|---|---|
+| 代码 | **A9/P0.5.4 删 `memory`+`skill_manage`** | `toolsets.py:625-642`（工具表 + 耦合说明） |
 | 代码 | A3 `skip_background_review=True` | `run_agent.py:9222`（+8 行） |
 | 代码 | A5 `dest="ctf_oneshot"` + 回退读 | `fulilian_cli/subcommands/solve.py:43`、`fulilian_ctf/cli.py:382` |
+| 测试 | A9 耦合回归锁（双向断言） | `tests/test_toolsets.py` `TestCtfSolveToolset` |
 | 配置 | A2 删死键 `threshold_tokens` | `~/.fulilian/config.yaml`（仓库外，已备份） |
 | 基准 | A4 chat 路径采集器 + 基线 | `benchmarks/process_metrics.py`、`baselines/2026-09-11-ctf-chatpath.json` |
 | 基准 | A6 CTF 路径采集器 + 基线 | `benchmarks/ctf_path_baseline.py`、`baselines/2026-09-11-ctf-path.json` |
+| 基准 | **A9 对照跑基线（改动后）** | `baselines/2026-09-11-ctf-path-p054.json` |
 | 文档 | 本计划书 | `docs/ctf-agent-optimization-plan.md` |
 
 **已验证：** A5 —— 修复前 3/3 瞬间失败（HTTP 400，退出码 0）；修复后
 **3/3 解出、3/3 flag 与 manifest 逐字一致**（§1.3）。
+
+**已验证：** **A9/P0.5.4** —— 对照跑 3/3 解出、flag 逐字一致，
+**首屏 prompt 每题一致地降 3,160–3,235 tokens**（§1.6）。
+`tests/test_toolsets.py` 29 项、`tests/agent/test_skip_background_review.py`
++ `tests/fulilian_ctf/` 683 项全绿。
 
 **仍未验证：** A2/A3 的**效果**。它们只作用于 `mode="ctf"`，现在该路径能跑了，
 但"关掉回合后背景审查"与"删掉死配置"各自省了多少，需要**同 fixture 前后对照**，
@@ -1104,10 +1215,19 @@ CPU 冻结、`ESTAB ... Send-Q 4290`、最后活动 20:27:38 停在 API call #7�
 
 | 顺序 | 项 | 理由 | 状态 |
 |---|---|---|---|
-| 1 | **P0.5.4** 删 `memory`+`skill_manage` | 1,408 tok/次调用，零逻辑风险，消费方已被 A3 关掉 | 待做 |
-| 2 | **P0.5 验证跑** A3 对照（`skip_background_review=False`） | 拿 A3 净效果；顺带验 P0.5.4 | 待做 |
-| 3 | **P3/P7** 砍固定开销（terminal schema 3,281 字符最肥） | 固定开销占 68–79% | 待做 |
+| 1 | ~~**P0.5.4** 删 `memory`+`skill_manage`~~ | 实测 **−3,186 tok/次调用**（比预估的 1,408 大一倍多，见 §1.6） | **✅ 完成** |
+| 2 | **A3 对照跑**（`skip_background_review=False`） | 拿 A3 的净效果（P0.5.4 已单独验收） | 待做 |
+| 3 | **P3/P7** 砍固定开销（terminal schema 3,281 字符最肥） | 固定开销是主体；§1.6 证明"够不着的工具"是同一类浪费 | 待做 |
 | 4 | **P0.1** 工具输出落盘 | 只在难题上见效 —— **先要难题 holdout** | 降级 |
+| 5 | **重跑 P0.5.4 对照（n≥3）** | 首屏 −3,186/次是确定的，但 api_calls 48→31 是 n=1，不能归因 | 待做 |
+
+> **§1.6 的一般化教训（供 P3/P7 复用）**：删一个工具名省的不只是它的 schema。
+> 任何按 `valid_tool_names` 门控的引导块 / 索引清单会**一起**消失。所以 P3/P7
+> 评估"砍某个工具值不值"时，不能只算 schema 字符数，要先 grep
+> `"<工具名>" in agent.valid_tool_names` 找出所有门控点，把连带消失的内容算进去。
+> 反过来这也提供了机会：**某些体积很大但够不着的注入块，可能只需要删一个
+> 从未被调用的工具名就能一并清掉**（技能索引 10,192 字符就是实例）。
+
 
 > P0.1 的具体形态已查清，实施时不必重新调研：
 > `tools/tool_result_storage.py` 的 `maybe_persist_tool_result`（Layer 2，

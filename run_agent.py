@@ -9223,8 +9223,11 @@ def _run_solver_turn(
             # 次，agent_init.py:695-702）。cron 路径早已这么关（scheduler.py:6434），
             # CTF 路径此前漏了 —— 批量 10 题即 ~30 万 token 纯开销。
             # 这是覆盖两条 review 路径的单一开关；不再加 skip_memory=True，
-            # 那会顺带关掉外部 memory provider（agent_init.py:1898），而
-            # ctf_solve toolset 刻意保留了 memory 工具（toolsets.py:646-650）。
+            # 那会顺带关掉外部 memory provider（agent_init.py:1898）。
+            # 与之配套：ctf_solve 工具集已移除 memory / skill_manage ——
+            # 它们唯一的用途是让上面的 fork 能触发，fork 关掉后就是纯死重
+            # （5,631 字符 schema，占全部 input token 的 8%）。两处必须同进
+            # 同出，详见 toolsets.py 的 "⚠️ 耦合" 注释。
             # 解法后的沉淀应在批后统一做一次，不是每题一次。
             skip_background_review=True,
         )
