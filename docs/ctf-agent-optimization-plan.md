@@ -1169,6 +1169,55 @@ CPU 冻结、`ESTAB ... Send-Q 4290`、最后活动 20:27:38 停在 API call #7�
 → 需决定：把该配置接进 CTF 路径，还是改写进 `_build_ctf_system_prompt()`。
 **未向用户报告，也未实施。**
 
+### 2026-09-11 · A10：用户 CTF 工作纪律接入求解路径（`5ec2cc5`）
+
+**承接 A9 末尾那条"顺带的用户侧问题"。** 用户选择接入 config（而非把 5 条
+纪律硬编码进 `_build_ctf_system_prompt()`）—— 前者让纪律继续由用户自己维护，
+后者会把用户内容拷进仓库、从此两边漂移。
+
+**改动：** `run_agent.py` 新增 `_resolve_ctf_user_overlay()`，由
+`_build_ctf_system_prompt()` 追加在认知架构之后。三个刻意的选择：
+
+1. **委托共享解析器，不自己读 `agent.system_prompt` 键。**
+   overlay 解析的 single-owner 是 `fulilian_cli.personality.resolve_ephemeral_system_prompt`
+   （`fulilian_cli/config.py:3317` 只是转发壳）。自己读键会造出第二个所有者，
+   而这条链上已经有"人格覆盖 `system_prompt`"的语义 —— 重复实现必然漂移。
+   `FULILIAN_EPHEMERAL_SYSTEM_PROMPT` 环境变量优先，与 chat 路径同语义。
+2. **放在末尾，并写明"冲突时以本节为准"。** 用户显式写的纪律优先于通用架构。
+3. **解析失败返回空串。** overlay 是增强项，缺了不该中断解题。
+
+**验证：**
+- 合并结果 **1,466 字符**（架构 1,037 + overlay 429，与 `wc -c` 实测的 430 吻合）。
+- 真跑 `misc-morse-01`：解出 `flag{morsecodebegin}`，flag 正确；
+  **首屏 6,692 tokens vs 无 overlay 的 6,290/6,297/6,294 = +395**，
+  与 429 字符的 CJK overlay 吻合 → overlay 确实送达求解器。
+  （判据用 token 数而非 `grep ctf-notes.md` —— 日志把 ephemeral prompt
+  **截断**成 `'…（4 阶段循环）\n\n你正在以…\n\n### PHASE...' (not saved to
+  trajectories)`，grep 是行式匹配，只能看到第一行。这个坑值得记：**不要用
+  grep 判断 ephemeral prompt 的内容是否完整**。）
+- 单测：新增 `tests/fulilian_ctf/test_ctf_system_prompt_overlay.py` 6 项 ✓；
+  `tests/test_toolsets.py` 29 项 ✓（共 35 项）。
+
+**不损伤提示缓存：** overlay 在 `_build_ctf_system_prompt()` 里构建**一次**
+（`run_agent.py:9438` 调用点），整轮求解内恒定，只是把缓存前缀加长 429 字符，
+不改变命中率 —— 符合 AGENTS.md「提示缓存是神圣的」这一约束。
+
+**A10 暴露的两个未决问题（都不是本改动的回归，但都由它揭示）：**
+
+1. **纪律送达了，但没被遵守** —— 该次运行**没有生成 `ctf-notes.md`**。
+   规则 1「发现即落盘」送达后模型未照做（可能是 easy 题上判断不值得，
+   也可能是措辞太软）。**n=1，且 easy 题本来就不需要笔记，暂不归因**；
+   需要难题 holdout 才能判断是措辞问题还是场景问题。
+2. **规则 1 的「并同步 memory」现在无法满足** —— 用户在 config 里写的是
+   「写 ctf-notes.md，**并同步 memory**」，而 A9/P0.5.4 已把 `memory` 工具
+   移出 `ctf_solve`。这条指令现在是**不可执行**的。两条出路：改 config 文字
+   （去掉"并同步 memory"），或把 `memory` 加回（代价 3,186 tok/次）。
+   **决定权在用户。**
+
+→ 这两个问题共同指向同一件事：**A10 修好了"送达"，但"遵守"没有被测量。**
+   在难题 holdout 就位前，不应再对 CTF 提示词做措辞调优 —— 没有能证伪它的
+   观测手段（与 §1.4 对 P0.1 的判断同理）。
+
 ---
 
 ## 10. 当前状态
@@ -1177,6 +1226,8 @@ CPU 冻结、`ESTAB ... Send-Q 4290`、最后活动 20:27:38 停在 API call #7�
 
 | 类 | 项 | 位置 |
 |---|---|---|
+| 代码 | **A10 config overlay 接入 CTF 路径** | `run_agent.py` `_resolve_ctf_user_overlay()` + `_build_ctf_system_prompt()` |
+| 测试 | A10 overlay 回归锁（6 项） | `tests/fulilian_ctf/test_ctf_system_prompt_overlay.py` |
 | 代码 | **A9/P0.5.4 删 `memory`+`skill_manage`** | `toolsets.py:625-642`（工具表 + 耦合说明） |
 | 代码 | A3 `skip_background_review=True` | `run_agent.py:9222`（+8 行） |
 | 代码 | A5 `dest="ctf_oneshot"` + 回退读 | `fulilian_cli/subcommands/solve.py:43`、`fulilian_ctf/cli.py:382` |
@@ -1195,6 +1246,10 @@ CPU 冻结、`ESTAB ... Send-Q 4290`、最后活动 20:27:38 停在 API call #7�
 `tests/test_toolsets.py` 29 项、`tests/agent/test_skip_background_review.py`
 + `tests/fulilian_ctf/` 683 项全绿。
 
+**已验证：** **A10**（`5ec2cc5`）—— 合并 prompt 1,466 字符；真跑
+`misc-morse-01` 解出且 flag 正确，首屏 +395 tokens 证实 overlay 送达（§9 A10）。
+**送达已证明，遵守未证明** —— 该次运行未生成 `ctf-notes.md`。
+
 **仍未验证：** A2/A3 的**效果**。它们只作用于 `mode="ctf"`，现在该路径能跑了，
 但"关掉回合后背景审查"与"删掉死配置"各自省了多少，需要**同 fixture 前后对照**，
 而当前只有修复后的单点数据（无修复前基线可采——那时根本跑不起来）。
@@ -1210,16 +1265,29 @@ CPU 冻结、`ESTAB ... Send-Q 4290`、最后活动 20:27:38 停在 API call #7�
 2. `test_json_mode_emits_start_and_result` **先存的失败**（HEAD 上同样失败）。
 3. `solver.log` 被 `"w"` 覆盖 —— 跑完不立刻采集就丢数据。
 4. **没有难题 holdout** —— 现有 3 题全 easy，验证不了 P0.1 与任何历史膨胀类修复（§1.4）。
+   **这条现在卡着三件事**：P0.1 的效果、A10 的"遵守率"、以及任何提示词措辞调优
+   （三者都需要能证伪它们的观测手段）。
+5. **`~/.fulilian/config.yaml` 规则 1 的「并同步 memory」不可执行** ——
+   A9/P0.5.4 已把 `memory` 移出 `ctf_solve`。**需用户决定**：改 config 文字，
+   还是把工具加回（代价 3,186 tok/次）。**未决，不在我这边。**
 
 **下一步（已按 §1.4 重排）：**
 
 | 顺序 | 项 | 理由 | 状态 |
 |---|---|---|---|
 | 1 | ~~**P0.5.4** 删 `memory`+`skill_manage`~~ | 实测 **−3,186 tok/次调用**（比预估的 1,408 大一倍多，见 §1.6） | **✅ 完成** |
-| 2 | **A3 对照跑**（`skip_background_review=False`） | 拿 A3 的净效果（P0.5.4 已单独验收） | 待做 |
-| 3 | **P3/P7** 砍固定开销（terminal schema 3,281 字符最肥） | 固定开销是主体；§1.6 证明"够不着的工具"是同一类浪费 | 待做 |
-| 4 | **P0.1** 工具输出落盘 | 只在难题上见效 —— **先要难题 holdout** | 降级 |
-| 5 | **重跑 P0.5.4 对照（n≥3）** | 首屏 −3,186/次是确定的，但 api_calls 48→31 是 n=1，不能归因 | 待做 |
+| 0 | ~~**A10** config overlay 接入 CTF 路径~~ | 用户手写的纪律此前静默失效；已在用户选择下实施 | **✅ 完成** |
+| 2 | **难题 holdout（长扫描 / 反编译转储 / 爆破日志）** | **它现在卡着三件事**：P0.1 效果、A10 遵守率、提示词调优。**没有它，"难"这个维度一个改动都验收不了** | **↑ 提优先级** |
+| 3 | **A3 对照跑**（`skip_background_review=False`） | 拿 A3 的净效果（P0.5.4 已单独验收） | 待做 |
+| 4 | **P3/P7** 砍固定开销（terminal schema 3,281 字符最肥） | 固定开销是主体；§1.6 证明"够不着的工具"是同一类浪费 | 待做 |
+| 5 | **P0.1** 工具输出落盘 | 只在难题上见效 —— **先要难题 holdout** | 降级 |
+| 6 | **重跑 P0.5.4 对照（n≥3）** | 首屏 −3,186/次是确定的，但 api_calls 48→31 是 n=1，不能归因 | 待做 |
+
+> **顺序说明（A10 之后调整）：** 难题 holdout 从"P0.1 的前置"提升为**全局
+> 第二项**。原计划里它只是 P0.1 的门票；A10 之后可以看到，它同样是 A10
+> 「送达已证明、遵守未证明」的唯一解药，也是后面所有提示词层改动的判据。
+> 继续在只有 3 道 easy 题的基线上做改动，会陷入"每次都能测出 token 变化、
+> 永远测不出能力变化"的状态 —— 而用户的原始诉求正是**难题能力**。
 
 > **§1.6 的一般化教训（供 P3/P7 复用）**：删一个工具名省的不只是它的 schema。
 > 任何按 `valid_tool_names` 门控的引导块 / 索引清单会**一起**消失。所以 P3/P7
