@@ -27,6 +27,12 @@ rem   cmd\install.cmd                install
 rem   cmd\install.cmd /no-profile    install, but do not touch $PROFILE
 rem   cmd\install.cmd /check         self-check only (no changes)
 rem   cmd\install.cmd /uninstall     unwire completion, remove the files + PATH
+rem
+rem Upgrading from a pre-rename install: %USERPROFILE%\bin is on the USER PATH,
+rem so the OLD bare names this installer used to ship (fll.bat, fll.cmd, fll.ps1,
+rem fll.completion.ps1, fulilian.bat, fulilian.cmd) would keep shadowing the
+rem NATIVE fulilian that scripts\install.ps1 puts on PATH. Install and
+rem /uninstall both sweep them; see :sweep_legacy at the foot of this file.
 rem ============================================================================
 
 rem Capture the script's own directory BEFORE the parse loop below: `shift`
@@ -78,6 +84,10 @@ if "%ACTION%"=="uninstall" goto :uninstall
 if "%ACTION%"=="check"     goto :check
 
 rem ============================ INSTALL ========================================
+
+rem 0) Drop the pre-rename bare names BEFORE copying, so an upgrade cannot leave
+rem    a stale `fll` on PATH shadowing the native one. See :sweep_legacy.
+call :sweep_legacy
 
 rem 1) Copy launchers
 if not exist "%DEST_DIR%" mkdir "%DEST_DIR%"
@@ -136,6 +146,8 @@ if exist "%DEST_COMP%" (
         powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%DEST_COMP%" -Uninstall
     )
 )
+rem Sweep the pre-rename bare names too: /uninstall must not leave a shadow.
+call :sweep_legacy
 if exist "%DEST_BAT%"  del /q "%DEST_BAT%"  && echo [uninstall] removed fllkali.bat
 if exist "%DEST_PS1%"  del /q "%DEST_PS1%"  && echo [uninstall] removed fllkali.ps1
 if exist "%DEST_CMD%"  del /q "%DEST_CMD%"  && echo [uninstall] removed fllkali.cmd
@@ -244,4 +256,30 @@ echo [check] 5/5 skipped (check mode, install step not run)
 :check_done
 echo.
 echo [check] done.
+exit /b 0
+
+rem ============================ LEGACY SWEEP ===================================
+rem Names this installer shipped BEFORE the *kali rename. They must not survive
+rem an upgrade, for two independent reasons:
+rem   1. %DEST_DIR% is on the USER PATH. A leftover fll.bat / fll.cmd / fll.ps1
+rem      is a live `fll` that shadows the NATIVE fulilian - the exact collision
+rem      the rename exists to remove. Same for fulilian.bat / fulilian.cmd.
+rem   2. fll.completion.ps1 is gone from the new install, but the old
+rem      '# fulilian-cmd completion' block it wrote into $PROFILE dot-sources
+rem      it - so every new PowerShell session errors. (fllkali.completion.ps1
+rem      strips that block; this removes the file it pointed at.)
+rem
+rem Scope is deliberately narrow: %DEST_DIR% only, and only these six exact
+rem names. The NATIVE launchers live in %FULILIAN_HOME%\bin
+rem (%LOCALAPPDATA%\fulilian\bin), a different directory this never reaches -
+rem so a native fll.exe / fulilian.exe cannot be caught by it.
+rem
+rem %%f is correct here: this is a batch FILE, not a command line.
+:sweep_legacy
+for %%f in (fll.bat fll.cmd fll.ps1 fulilian.bat fulilian.cmd fll.completion.ps1) do (
+    if exist "%DEST_DIR%\%%f" (
+        del /q "%DEST_DIR%\%%f"
+        echo [migrate] removed pre-rename %%f
+    )
+)
 exit /b 0

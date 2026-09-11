@@ -67,6 +67,21 @@ LF_FILES = ("README.md", "README.en.md")
 # installer's self-check decides whether $PROFILE is wired.
 PROFILE_MARKER = "# fllkali completion"
 
+# What the PRE-RENAME install wrote into $PROFILE. Upgrading deletes
+# fll.completion.ps1, so a surviving block dot-sourcing it makes every new
+# PowerShell session error; fllkali.completion.ps1 strips it on -Install and
+# -Uninstall alike.
+LEGACY_PROFILE_MARKER = "# fulilian-cmd completion"
+
+# The bare launcher names cmd/ shipped before the *kali rename. They must not
+# survive an upgrade: %USERPROFILE%\bin is on the USER PATH, so a leftover
+# fll.bat / fulilian.bat is a live `fll` that shadows the NATIVE fulilian --
+# the exact collision the rename exists to remove.
+LEGACY_LAUNCHER_NAMES = (
+    "fll.bat", "fll.cmd", "fll.ps1", "fulilian.bat", "fulilian.cmd",
+    "fll.completion.ps1",
+)
+
 failures: list[str] = []
 passes = 0
 verbose = False
@@ -390,11 +405,19 @@ def check_installer_uninstall_removes_marker() -> None:
         r"[\s\S]{0,200}?Add-Content -LiteralPath \$ProfilePath -Value \$script:FllProfileLine",
         text,
     )
+    # -Uninstall removes the whole chunk, not just the marker line: it routes
+    # through Remove-FllProfileChunk, which deletes $Chunk.Length bytes. Both
+    # halves matter -- a call that stopped honouring the chunk length would
+    # leave -Install's separator behind in $PROFILE.
     uninstall = re.search(
-        r"\$raw\.Remove\(\s*\$idx\s*,\s*\$script:FllProfileChunk\.Length\s*\)", text
+        r"Remove-FllProfileChunk\s+-Path\s+\$ProfilePath\s+-Chunk\s+\$script:FllProfileChunk",
+        text,
+    )
+    helper = re.search(
+        r"\$raw\.Remove\(\s*\$raw\.IndexOf\(\$Chunk\)\s*,\s*\$Chunk\.Length\s*\)", text
     )
 
-    if composed and install and uninstall:
+    if composed and install and uninstall and helper:
         ok("fllkali.completion.ps1: -Install/-Uninstall share one removable chunk")
     else:
         missing = [
@@ -403,6 +426,7 @@ def check_installer_uninstall_removes_marker() -> None:
                 ("chunk definition", composed),
                 ("install append", install is not None),
                 ("uninstall removal", uninstall is not None),
+                ("chunk-length removal helper", helper is not None),
             )
             if not got
         ]
@@ -412,6 +436,123 @@ def check_installer_uninstall_removes_marker() -> None:
             + " — install and uninstall must agree on the exact bytes, "
             "or residue is left in $PROFILE.",
         )
+
+
+def check_legacy_names_are_swept() -> None:
+    """An upgrade from the pre-rename install must not leave a bare-named
+    launcher behind.
+
+    %USERPROFILE%\\bin is on the USER PATH on a machine where cmd\\install.cmd
+    has ever run, so a surviving fll.bat / fll.cmd / fll.ps1 is a live `fll`
+    that shadows the NATIVE fulilian -- and fulilian.bat / fulilian.cmd do the
+    same for the long name. Two things have to hold, and the second is what
+    stops this check from blessing a footgun: every legacy name is swept, and
+    every deletion in the file stays inside %DEST_DIR% (a `del` pointed at
+    %FULILIAN_HOME%\\bin would delete the OTHER install's launcher).
+    """
+    path = CMD_DIR / "install.cmd"
+    if not path.exists():
+        return
+    text = path.read_text(encoding="utf-8", errors="replace")
+    code = [line for _, line in strip_comments(text, "bat")]
+
+    # The sweep enumerates the names in a `for %%f in (...)` header and deletes
+    # %DEST_DIR%\%%f, so the names to check live in the loop header -- the `del`
+    # line itself only ever says %%f.
+    sweep = re.search(r"for %%f in \(([^)]*)\) do", text)
+    if sweep is None:
+        bad(
+            "install.cmd: no `for %%f in (...)` legacy sweep",
+            "→ upgrading from the pre-rename install leaves a bare `fll` in %DEST_DIR%, "
+            "which is on the USER PATH and shadows the native fulilian.",
+        )
+        return
+    swept = sweep.group(1).split()
+    missing = [n for n in LEGACY_LAUNCHER_NAMES if n not in swept]
+    extra = [n for n in swept if n not in LEGACY_LAUNCHER_NAMES]
+    if missing or extra:
+        bad(
+            "install.cmd: the pre-rename sweep list has drifted",
+            (f"missing: {', '.join(missing)}\n" if missing else "")
+            + (f"unexpected: {', '.join(extra)}\n" if extra else "")
+            + "→ the list must be exactly the bare names cmd/ shipped before the rename.",
+        )
+    else:
+        ok(f"install.cmd sweeps exactly the {len(LEGACY_LAUNCHER_NAMES)} pre-rename launcher names")
+
+    if not re.search(r'del /q "%DEST_DIR%\\%%f"', text):
+        bad(
+            "install.cmd: the legacy sweep does not delete from %DEST_DIR%",
+            "the names must be removed from the install dir, wherever the loop is run from.",
+        )
+    else:
+        ok("install.cmd: the legacy sweep deletes from %DEST_DIR% only")
+
+    # Targets are either a literal %DEST_DIR%\... or one of the %DEST_*% file
+    # variables; both resolve inside the install dir. Anything else is a
+    # deletion that could reach outside it. (Digits belong in the class: the
+    # variables are %DEST_PS1% / %DEST_FULBAT% and friends.)
+    dels = [ln for ln in code if "del /q" in ln]
+    unscoped = [ln.strip() for ln in dels if not re.search(r'del /q\s+"%DEST_[A-Z0-9_]+%', ln)]
+    if unscoped:
+        bad(
+            "install.cmd deletes a path that is not %DEST_DIR%-scoped",
+            "\n".join(unscoped)
+            + "\n→ the native launchers live in %FULILIAN_HOME%\\bin; an unscoped `del` "
+            "can remove another install's file.",
+        )
+    else:
+        ok(f"every install.cmd deletion is scoped to the install dir ({len(dels)} sites)")
+
+
+def check_legacy_profile_marker_is_stripped() -> None:
+    """The pre-rename install wrote '# fulilian-cmd completion' plus a dot-source
+    of fll.completion.ps1 into $PROFILE. The upgrade deletes that script, so a
+    surviving block makes EVERY new PowerShell session print a cannot-find-path
+    error -- a failure that is invisible until a user opens a shell and reads it.
+
+    Both paths must strip it: -Install, so an upgrade heals an already-wired
+    profile, and -Uninstall, so removing this version does not strand the older
+    block it never wrote.
+    """
+    path = CMD_DIR / "fllkali.completion.ps1"
+    if not path.exists():
+        return
+    text = path.read_text(encoding="utf-8", errors="replace")
+
+    declared = re.search(r"\$script:FllLegacyProfileMarker\s*=\s*'([^']*)'", text)
+    if declared is None or declared.group(1) != LEGACY_PROFILE_MARKER:
+        got = declared.group(1) if declared else None
+        bad(
+            "fllkali.completion.ps1: pre-rename marker literal missing or drifted",
+            f"found {got!r}, expected {LEGACY_PROFILE_MARKER!r} — this literal is what "
+            "identifies the stale block in the user's $PROFILE.",
+        )
+        return
+    ok(f"fllkali.completion.ps1 knows the pre-rename marker ({declared.group(1)!r})")
+
+    install_strip = re.search(
+        r"if \(Remove-FllProfileChunk -Path \$ProfilePath -Chunk \$script:FllLegacyProfileChunk\)",
+        text,
+    )
+    uninstall_strip = re.search(
+        r"\$removedLegacy = Remove-FllProfileChunk -Path \$ProfilePath -Chunk \$script:FllLegacyProfileChunk",
+        text,
+    )
+    missing = [
+        name
+        for name, got in (("-Install", install_strip), ("-Uninstall", uninstall_strip))
+        if not got
+    ]
+    if missing:
+        bad(
+            "fllkali.completion.ps1 does not strip the stale pre-rename block everywhere",
+            "missing from: " + ", ".join(missing)
+            + "\n→ an upgraded profile keeps dot-sourcing fll.completion.ps1, which the "
+            "upgrade deleted, so every new PowerShell session errors.",
+        )
+    else:
+        ok("fllkali.completion.ps1: -Install and -Uninstall both strip the stale pre-rename block")
 
 
 def check_installer_enumerates_every_launcher() -> None:
@@ -520,6 +661,8 @@ def run_static() -> None:
     check_completion_is_dot_sourceable()
     check_installer_marker_consistency()
     check_installer_uninstall_removes_marker()
+    check_legacy_names_are_swept()
+    check_legacy_profile_marker_is_stripped()
 
 
 # --------------------------------------------------------------------------
@@ -574,6 +717,40 @@ foreach ($c in $cases) {
     Remove-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue
 }
 if ($fail -eq 0) { Write-Host 'RT_PROFILE_ROUNDTRIP_OK' } else { Write-Host ('RT_PROFILE_FAILURES=' + $fail) }
+"""
+
+
+MIGRATE_PS1 = r"""
+$ErrorActionPreference = 'Stop'
+$comp = Join-Path $PSScriptRoot 'fllkali.completion.ps1'
+$p = Join-Path $PSScriptRoot 'migrate_profile.ps1'
+$u8 = New-Object System.Text.UTF8Encoding($false)
+
+# Reproduce exactly what the PRE-RENAME installer appended to $PROFILE.
+$userLine = '# user line'
+$legacyMarker = '# fulilian-cmd completion'
+$legacyLine = '. "$env:USERPROFILE\bin\fll.completion.ps1"'
+$legacyChunk = "`r`n" + $legacyMarker + "`r`n" + $legacyLine + "`r`n"
+$newMarker = '# fllkali completion'
+
+[System.IO.File]::WriteAllText($p, ($userLine + "`r`n" + $legacyChunk), $u8)
+
+$fail = @()
+
+& $comp -Install -ProfilePath $p | Out-Null
+$afterInstall = [System.IO.File]::ReadAllText($p)
+if ($afterInstall.Contains($legacyMarker)) { $fail += 'legacy block survived -Install' }
+if (-not $afterInstall.Contains($newMarker)) { $fail += 'new block missing after -Install' }
+
+& $comp -Uninstall -ProfilePath $p | Out-Null
+$afterUninstall = [System.IO.File]::ReadAllText($p)
+if ($afterUninstall.Contains($legacyMarker)) { $fail += 'legacy block survived -Uninstall' }
+if ($afterUninstall.Contains($newMarker)) { $fail += 'new block survived -Uninstall' }
+if ($afterUninstall -ne ($userLine + "`r`n")) { $fail += 'profile did not return to its pre-wiring bytes' }
+
+Remove-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue
+if ($fail.Count -eq 0) { Write-Host 'MIGRATE_PROFILE_OK' }
+else { Write-Host ('MIGRATE_PROFILE_FAILURES=' + ($fail -join '; ')) }
 """
 
 
@@ -634,6 +811,9 @@ def run_runtime() -> bool:
 
     print("[runtime]")
     tmp = Path(tempfile.mkdtemp(prefix="fll-cmd-check-"))
+    # Windows-side extras created below. Cleaned in the finally so a run does not
+    # leave a fake `fll.exe` and a stub `reg.bat` sitting in %TEMP% forever.
+    extra: list[Path] = []
     try:
         probe = tmp / "probe"
         # encoding= is not decoration: without it Path.write_text uses the
@@ -745,8 +925,122 @@ def run_runtime() -> bool:
         else:
             bad("runtime: profile wiring does not round-trip", out.strip())
 
+        # Upgrading from the pre-rename install: the dead block in $PROFILE must go
+        # (it dot-sources fll.completion.ps1, which the upgrade deletes, so it
+        # would error on every new PowerShell session), and -Install must heal a
+        # profile that already carries it.
+        mig = staged / "migrate.ps1"
+        mig.write_text(MIGRATE_PS1, encoding="ascii")
+        rc, out = run_cmd(
+            f"cd /d {win_dir} && powershell.exe -NoProfile -ExecutionPolicy Bypass "
+            f"-File {win_dir}\\migrate.ps1",
+            staged,
+        )
+        if "MIGRATE_PROFILE_OK" in out:
+            ok("runtime: pre-rename $PROFILE block is stripped on -Install and -Uninstall")
+        else:
+            bad("runtime: pre-rename $PROFILE block is not cleaned up", out.strip())
+
+        # install.cmd must sweep the bare names it used to ship. %USERPROFILE%\bin
+        # is on the USER PATH, so a survivor is a live `fll` shadowing the native
+        # one -- and the stale fll.completion.ps1 is the file the profile block
+        # above pointed at. Exercised against a throwaway USERPROFILE with `reg`
+        # stubbed to report that dir as already on PATH: without the stub
+        # install.cmd would fall through to `setx` and rewrite the REAL user PATH.
+        mig_home = staged.parent / "fll-migrate-home"
+        mig_bin = mig_home / "bin"
+        outside = staged.parent / "fll-migrate-outside"
+        stubs = staged.parent / "fll-migrate-stubs"
+        extra.extend([mig_home, outside, stubs])
+        for d in (mig_bin, outside, stubs):
+            if d.exists():
+                shutil.rmtree(d)
+            d.mkdir(parents=True)
+        for name in LEGACY_LAUNCHER_NAMES:
+            (mig_bin / name).write_bytes(b"@echo off\r\nrem pre-rename\r\n")
+        # Must survive: a name the sweep does not own, and a non-launcher.
+        (mig_bin / "fll.exe").write_bytes(b"MZ native launcher")
+        (mig_bin / "keepme.txt").write_text("unrelated", encoding="ascii")
+        # The same bare name in ANOTHER directory: proves the sweep is DEST_DIR-scoped
+        # and cannot reach the native install's bin.
+        (outside / "fll.bat").write_bytes(b"@echo off\r\nrem not ours\r\n")
+        (stubs / "reg.bat").write_text(
+            "@echo off\r\necho     Path    REG_EXPAND_SZ    %DEST_DIR%\r\nexit /b 0\r\n",
+            encoding="ascii",
+        )
+        (stubs / "setx.bat").write_text(
+            "@echo off\r\necho called>\"%~dp0setx_was_called.txt\"\r\nexit /b 0\r\n",
+            encoding="ascii",
+        )
+        win_mig_home = str(mig_home).replace("/mnt/c", "C:").replace("/", "\\")
+        win_stubs = str(stubs).replace("/mnt/c", "C:").replace("/", "\\")
+
+        # The redirect has to happen in a wrapper BATCH FILE, and the paths must
+        # be written into it rather than passed through run_cmd's extra_env: on
+        # this host a stub `reg.bat` only wins name resolution from a batch file
+        # (on a single `cmd /c "set X=.. && cmd"` line the System32 reg.exe is
+        # picked anyway), and WSL interop builds cmd.exe's environment itself, so
+        # extra_env never arrives. Either mistake sends install.cmd down the setx
+        # branch against the real user PATH.
+        (staged / "migrate_install.bat").write_text(
+            "@echo off\r\n"
+            "setlocal\r\n"
+            f'set "USERPROFILE={win_mig_home}"\r\n'
+            f'set "PATH={win_stubs};%PATH%"\r\n'
+            'if /i "%~1"=="/preflight" (\r\n'
+            "    where reg\r\n"
+            "    exit /b 0\r\n"
+            ")\r\n"
+            'call "%~dp0install.cmd" /no-profile\r\n'
+            "exit /b %errorlevel%\r\n",
+            encoding="ascii",
+            newline="",
+        )
+
+        # Pre-flight: prove the stub resolves BEFORE install.cmd runs. If `reg`
+        # came from System32 instead, USER_PATH_NOW would be the real PATH, the
+        # dir would look absent, and install.cmd would call the real setx.
+        rc, out = run_cmd(f"cd /d {win_dir} && migrate_install.bat /preflight", staged)
+        first_line = next((ln for ln in out.splitlines() if ln.strip()), "")
+        if win_stubs.lower() not in first_line.lower():
+            bad(
+                "runtime: could not stub `reg` for the migration test",
+                "refusing to run install.cmd against the real registry.\n"
+                f"`where reg` said: {out.strip()}",
+            )
+        else:
+            rc, out = run_cmd(f"cd /d {win_dir} && migrate_install.bat", staged)
+            survivors = sorted(n for n in LEGACY_LAUNCHER_NAMES if (mig_bin / n).exists())
+            wrongly_deleted = [
+                label
+                for label, path in (
+                    ("fll.exe", mig_bin / "fll.exe"),
+                    ("keepme.txt", mig_bin / "keepme.txt"),
+                    (r"outside\fll.bat", outside / "fll.bat"),
+                )
+                if not path.exists()
+            ]
+            problems = []
+            if survivors:
+                problems.append("not swept: " + ", ".join(survivors))
+            if wrongly_deleted:
+                problems.append("deleted something it does not own: " + ", ".join(wrongly_deleted))
+            if not (mig_bin / "fllkali.bat").exists():
+                problems.append("the new launcher was not installed")
+            if (stubs / "setx_was_called.txt").exists():
+                problems.append("setx ran -- it may have touched the REAL user PATH")
+            if problems:
+                bad("runtime: legacy migration misbehaved", "\n".join(problems) + "\n" + out.strip())
+            else:
+                ok(
+                    f"runtime: upgrade sweeps all {len(LEGACY_LAUNCHER_NAMES)} pre-rename "
+                    "names and leaves everything else alone"
+                )
+
         return True
     finally:
+        for d in extra:
+            shutil.rmtree(d, ignore_errors=True)
         shutil.rmtree(tmp, ignore_errors=True)
 
 

@@ -119,6 +119,7 @@ setx FLLKALI_BIN /home/me/.local/bin/fll
 - **退出码透传**：以 `wsl.exe --exec` 启动并回传退出码，脚本化调用可靠。
 - **代码页处理**：启动切到 UTF-8（65001）保证 WSL 输出的框线/中文不乱码，退出前恢复原代码页。
 - **PATH 幂等**：`install.cmd` 只在 `%USERPROFILE%\bin` 缺失时追加，重复安装无副作用；`setx` 超过 1024 字符会截断，自检会提示。
+- **升级会清掉旧名**：改名前的安装用的是裸名 `fll.bat` / `fll.ps1` / `fll.cmd` / `fulilian.bat` / `fulilian.cmd` / `fll.completion.ps1`（在 `%USERPROFILE%\bin`）加一行 `$PROFILE` 里的 `# fulilian-cmd completion`。因为 `%USERPROFILE%\bin` 在 PATH 上，残留的 `fll.bat` 就是一个活的 `fll`，会顶掉原生那个；而那条旧 `$PROFILE` 块 dot-source 的是升级后已被删掉的文件，于是每次新开 PowerShell 都报错。`install.cmd` 在安装和 `/uninstall` 两条路径都会扫掉这些文件，`fllkali.completion.ps1` 负责剥掉那条块；只动 `%USERPROFILE%\bin`，绝不碰原生安装的 `bin`。
 - **UNC 提示**：若 CMD 当前目录在 `\\wsl.localhost\...` 下，CMD 自身会打一行 UNC 警告后回退到 Windows 目录，来自 CMD 而非本工具，无害。
 
 ## 前置条件

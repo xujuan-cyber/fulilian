@@ -10,6 +10,11 @@
 # cmd\install.cmd calls -Install for you (pass /no-profile to skip it) and
 # /uninstall reverses it. Loading it by hand just needs the dot-source line.
 #
+# Upgrading from a pre-rename install? -Install also removes the dead
+# '# fulilian-cmd completion' block that version left in $PROFILE - it
+# dot-sources fll.completion.ps1, which this version no longer ships, so
+# leaving it would error on every new PowerShell session.
+#
 # ---------------------------------------------------------------------------
 # NOTE ON DRIFT. The subcommand list below mirrors `fllkali --help`. It is a static
 # list on purpose: the real parser lives inside WSL, and asking it on every Tab
@@ -126,6 +131,37 @@ $script:FllProfileLine = '. "$env:USERPROFILE\bin\fllkali.completion.ps1"'
 # pair round-trips to the original bytes instead of leaving the separator behind.
 $script:FllProfileChunk = "`r`n$($script:FllProfileMarker)`r`n$($script:FllProfileLine)`r`n"
 
+# The PRE-RENAME pair. An upgrade from that version deletes fll.completion.ps1
+# but leaves this block in $PROFILE dot-sourcing it, so every new PowerShell
+# session prints a 'cannot find path' error. -Install and -Uninstall both strip
+# it: -Install so an upgrade heals an existing profile, -Uninstall so removing
+# this version does not leave the older block behind either.
+$script:FllLegacyProfileMarker = '# fulilian-cmd completion'
+$script:FllLegacyProfileLine = '. "$env:USERPROFILE\bin\fll.completion.ps1"'
+$script:FllLegacyProfileChunk = "`r`n$($script:FllLegacyProfileMarker)`r`n$($script:FllLegacyProfileLine)`r`n"
+
+# Remove one exact chunk from a profile, preserving a pre-existing BOM. Edits
+# the raw text rather than going through Get-Content/Set-Content: a line-array
+# round trip cannot represent a file that is nothing but a blank line, and
+# Set-Content without -Encoding writes ANSI on PS 5.1, mangling any non-ASCII
+# already in the user's profile. Returns $true when the chunk was removed.
+function Remove-FllProfileChunk {
+    param([string]$Path, [string]$Chunk)
+
+    if (-not (Test-Path -LiteralPath $Path)) { return $false }
+    $raw = [System.IO.File]::ReadAllText($Path)
+    if (-not $raw.Contains($Chunk)) { return $false }
+    $raw = $raw.Remove($raw.IndexOf($Chunk), $Chunk.Length)
+    $hasBom = $false
+    $bytes = [System.IO.File]::ReadAllBytes($Path)
+    if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+        $hasBom = $true
+    }
+    $utf8 = New-Object System.Text.UTF8Encoding($hasBom)
+    [System.IO.File]::WriteAllText($Path, $raw, $utf8)
+    return $true
+}
+
 if ($Install) {
     $profileDir = Split-Path -Parent $ProfilePath
     if ($profileDir -and -not (Test-Path -LiteralPath $profileDir)) {
@@ -133,6 +169,11 @@ if ($Install) {
     }
     if (-not (Test-Path -LiteralPath $ProfilePath)) {
         New-Item -ItemType File -Path $ProfilePath -Force | Out-Null
+    }
+    # Upgrading from the pre-rename layout: drop the dead block it left behind
+    # before writing ours, so the profile never carries both.
+    if (Remove-FllProfileChunk -Path $ProfilePath -Chunk $script:FllLegacyProfileChunk) {
+        Write-Host "[fllkali] removed stale pre-rename completion block from $ProfilePath"
     }
     $existing = @(Get-Content -LiteralPath $ProfilePath -ErrorAction SilentlyContinue)
     if ($existing -match [regex]::Escape($script:FllProfileMarker)) {
@@ -152,28 +193,20 @@ if ($Install) {
 }
 
 if ($Uninstall) {
-    if (Test-Path -LiteralPath $ProfilePath) {
-        # Edit the raw text rather than going through Get-Content/Set-Content:
-        # a line-array round trip cannot represent a file that is nothing but a
-        # blank line, and Set-Content without -Encoding writes ANSI on PS 5.1,
-        # which would mangle any non-ASCII already in the user's profile.
-        $raw = [System.IO.File]::ReadAllText($ProfilePath)
-        if ($raw.Contains($script:FllProfileChunk)) {
-            $idx = $raw.IndexOf($script:FllProfileChunk)
-            $raw = $raw.Remove($idx, $script:FllProfileChunk.Length)
-            $hasBom = $false
-            $bytes = [System.IO.File]::ReadAllBytes($ProfilePath)
-            if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
-                $hasBom = $true
-            }
-            $utf8 = New-Object System.Text.UTF8Encoding($hasBom)
-            [System.IO.File]::WriteAllText($ProfilePath, $raw, $utf8)
-            Write-Host "[fllkali] completion unwired from $ProfilePath"
-        } else {
-            Write-Host "[fllkali] completion not wired into $ProfilePath - nothing to unwire"
-        }
+    # Strip both generations: ours, and the pre-rename block an older install
+    # may have left pointing at the now-absent fll.completion.ps1.
+    $removedOurs = Remove-FllProfileChunk -Path $ProfilePath -Chunk $script:FllProfileChunk
+    $removedLegacy = Remove-FllProfileChunk -Path $ProfilePath -Chunk $script:FllLegacyProfileChunk
+
+    if ($removedOurs) {
+        Write-Host "[fllkali] completion unwired from $ProfilePath"
+    } elseif (Test-Path -LiteralPath $ProfilePath) {
+        Write-Host "[fllkali] completion not wired into $ProfilePath - nothing to unwire"
     } else {
         Write-Host "[fllkali] no profile at $ProfilePath - nothing to unwire"
+    }
+    if ($removedLegacy) {
+        Write-Host "[fllkali] removed stale pre-rename completion block from $ProfilePath"
     }
     return
 }

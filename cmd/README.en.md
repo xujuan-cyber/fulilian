@@ -119,6 +119,7 @@ setx FLLKALI_BIN /home/me/.local/bin/fll
 - **Exit codes** are forwarded from `wsl.exe --exec`, so scripted calls are reliable.
 - **Code page**: switches to UTF-8 (65001) for correct box-drawing/CJK output, restores the previous page on exit.
 - **Idempotent PATH**: `install.cmd` only appends `%USERPROFILE%\bin` when missing; repeated installs are no-ops. Note `setx` truncates PATH beyond 1024 chars.
+- **Upgrading heals the old names**: the pre-rename install used the bare `fll.bat` / `fll.ps1` / `fll.cmd` / `fulilian.bat` / `fulilian.cmd` / `fll.completion.ps1` in `%USERPROFILE%\bin`, plus a `# fulilian-cmd completion` block in `$PROFILE`. Since `%USERPROFILE%\bin` is on PATH, a survivor is a live `fll` shadowing the native one — and the stale block dot-sources a file the upgrade deletes, so every new PowerShell session errors. `install.cmd` sweeps those files on install **and** `/uninstall`, and `fllkali.completion.ps1` strips the block; only `%USERPROFILE%\bin` is touched, never the native install's `bin`.
 - **UNC notice**: if CMD starts in a `\\wsl.localhost\...` directory, CMD itself prints a UNC warning and falls back to a Windows directory. That comes from CMD, not this tool; it is harmless.
 
 ## Prerequisites
