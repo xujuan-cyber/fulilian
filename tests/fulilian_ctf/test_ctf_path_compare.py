@@ -180,6 +180,28 @@ def test_incomplete_batch_is_reported_not_silently_dropped(tmp_path):
     assert "没跑齐对照题集" in out
 
 
+def test_compare_records_where_each_side_came_from(tmp_path):
+    """⚠️ 回归锁：对照结论只在"两侧差异 = 你要测的那个改动"时成立。
+
+    归档记不下代码差异（v1 没记过 commit）。实测踩过：一份 09-12 的对照与
+    一份 09-11 的基线比出 +0.40×，中间夹着六个提交 —— 不手工 diff 就不知道
+    这 0.40× 该记给谁。所以至少把跑批来源固定进档案，并在报告里把"另半个
+    前提要你自己核对"说出来。
+    """
+    base = _archive(tmp_path, "base", {"alpha-01": [10, 12]})
+    base["generated_at"] = "2026-09-11T15:28:42+00:00"
+    base["batches"] = ["/tmp/ctf-n3/run1", "/tmp/ctf-n3/run2"]
+    cmp = collector.compare_archives(base,
+                                     _archive(tmp_path, "changed", {"alpha-01": [30, 31]}))
+    assert cmp["sources"]["base"]["generated_at"] == "2026-09-11T15:28:42+00:00"
+    assert cmp["sources"]["base"]["batches"] == ["/tmp/ctf-n3/run1", "/tmp/ctf-n3/run2"]
+
+    out = _capture(collector.print_comparison, cmp)
+    assert "采集来源" in out
+    assert "/tmp/ctf-n3/run1" in out
+    assert "代码差了什么" in out      # 那半个前提被明说，而不是留白
+
+
 def test_compare_needs_both_archives_in_repeat_schema(tmp_path):
     bad = tmp_path / "bad.json"
     bad.write_text(json.dumps({"schema": "something-else"}), encoding="utf-8")

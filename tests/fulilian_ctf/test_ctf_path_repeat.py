@@ -160,6 +160,54 @@ def test_repeat_mode_writes_json_archive(tmp_path):
     assert {s["batch"] for s in payload["samples"]["alpha-01"]} == {"run1", "run2"}
 
 
+def test_stray_agent_output_dirs_are_excluded_from_the_batch(tmp_path, capsys):
+    """⚠️ 回归锁：agent 写进跑批目录的目录不是题目。
+
+    实测：misc-chunkconcat-01 那题，agent 把分通道的中间产物写到了 work_dir
+    的**上一级** ``$OUT/out/chan*.bin``，采集器按目录名把它当成第 5 道
+    fixture —— 虚增题数、还把"解出率"从 12/12 拉成 12/13。有 manifest 就按
+    manifest 认题。
+    """
+    batches, meta = _batches(tmp_path, {
+        "run1": {"alpha-01": 10},
+        "run2": {"alpha-01": 30},
+    })
+    # agent 的中间产物目录：不在 manifest 里
+    junk = batches[0] / "out"
+    junk.mkdir()
+    (junk / "chan01.bin").write_bytes(b"\x00\x01")
+    (batches[0] / "decode.py").write_text("print(1)", encoding="utf-8")
+
+    collector.run_repeat_mode(batches, meta, None)
+    out = capsys.readouterr().out
+    assert "不在 manifest 里，已排除" in out
+    assert "`out/`" in out
+    assert "agent 写在 work_dir 上一级的中间产物" in out
+    # 被排除 ≠ 这题没跑 —— 必须说清楚，否则会被读成缺失
+    assert "别把它读成「这题没跑」" in out
+    # 统计里只有 alpha-01
+    assert "1 题 × 2 次" in out
+
+
+def test_without_manifest_it_warns_that_junk_cannot_be_told_apart(tmp_path, capsys):
+    """没 manifest 时不静默 —— 明说它分不出题目与杂物。"""
+    batches, _ = _batches(tmp_path, {"run1": {"alpha-01": 10},
+                                     "run2": {"alpha-01": 30}})
+    collector.run_repeat_mode(batches, {}, None)
+    assert "无法把「题目」与「agent 写进来的杂物」区分开" in capsys.readouterr().out
+
+
+def test_excluded_dirs_are_archived(tmp_path):
+    """排除项要落档 —— 它们是"跑批目录被污染"的证据，得能看趋势。"""
+    batches, meta = _batches(tmp_path, {"run1": {"alpha-01": 10},
+                                        "run2": {"alpha-01": 30}})
+    (batches[0] / "out").mkdir()
+    out_json = tmp_path / "a.json"
+    collector.run_repeat_mode(batches, meta, out_json)
+    payload = json.loads(out_json.read_text(encoding="utf-8"))
+    assert payload["excluded_non_fixture"] == {"out": ["run1"]}
+
+
 def test_dirs_and_runs_are_mutually_exclusive():
     with pytest.raises(SystemExit):
         collector.main(["--dirs", "/tmp/x", "--runs", "/tmp/y"])

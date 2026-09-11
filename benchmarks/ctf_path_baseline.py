@@ -515,17 +515,36 @@ def print_repeat_summary(stats: list[dict[str, Any]]) -> None:
 def run_repeat_mode(batch_dirs: list[Path], meta: dict[str, dict[str, Any]],
                     json_path: Path | None) -> int:
     groups: dict[str, list[dict[str, Any]]] = {}
+    unknown: dict[str, list[str]] = {}
     for batch in batch_dirs:
         if not batch.is_dir():
             print(f"⚠️  跳过（不是目录）：{batch}", file=sys.stderr)
             continue
         mirror = batch / "_mirror"
         for d in discover_batch(batch):
+            # 有 manifest 就按 manifest 认题：跑批目录**不是** agent 够不着的地方，
+            # 实测 agent 会把中间产物写到 work_dir 的上一级（misc-chunkconcat-01
+            # 那题的 $OUT/out/chan*.bin）。按目录名猜"这是不是一道题"会把它算成
+            # 一道 fixture，虚增题数、还把解出率拉低 —— 缺数据变成了假数据。
+            if meta and d.name not in meta:
+                unknown.setdefault(d.name, []).append(batch.name)
+                continue
             m = meta.get(d.name, {})
             row = analyze(d, m.get("expected_flag"), m.get("steps"),
                           mirror if mirror.is_dir() else None)
             row["batch"] = batch.name
             groups.setdefault(d.name, []).append(row)
+
+    if unknown:
+        print(f"\n⚠️ **跑批目录里有 {len(unknown)} 项不在 manifest 里，已排除** —— "
+              f"多半是 agent 写在 work_dir 上一级的中间产物，不是题目：")
+        for name, batches in sorted(unknown.items()):
+            print(f"  - `{name}/`（出现在 {', '.join(sorted(set(batches)))}）")
+        print("  > 与「agent 用 write_file 覆盖 solver.log」同源：**跑批目录也在"
+              "agent 的可写范围内**。排除是对的，但别把它读成「这题没跑」。")
+    elif not meta:
+        print("\n⚠️ 未给 `--manifest`，无法把「题目」与「agent 写进来的杂物」区分开 —— "
+              "目录里出现的每一项都会被当成一道题。做对照跑时请务必给 manifest。")
 
     if not groups:
         sys.exit("❌ 没有任何可分析的 work_dir")
@@ -553,6 +572,9 @@ def run_repeat_mode(batch_dirs: list[Path], meta: dict[str, dict[str, Any]],
             "fixture_count": len(stats),
             "stats": stats,
             "samples": groups,
+            # 落档：跑批目录里被排除的非 fixture 项 —— 它们是"agent 写了东西到
+            # work_dir 之外"的证据，留着可以判断这类污染有没有变多。
+            "excluded_non_fixture": unknown,
         }
         json_path.parent.mkdir(parents=True, exist_ok=True)
         json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2),
@@ -577,6 +599,23 @@ def load_repeat_archive(path: Path) -> dict[str, Any]:
     if schema != "ctf-path-baseline/2-repeat":
         raise ValueError(f"{path} 不是 2-repeat 归档（schema={schema!r}）")
     return payload
+
+
+def _archive_provenance(archive: dict[str, Any]) -> dict[str, Any]:
+    """归档自述：这份数据是**哪些跑批、什么时候**采的。
+
+    为什么要落这个：判断"这次对照说明什么"需要用到一个归档本身记不下的
+    事实 —— **两侧之间代码差了什么**。实测踩过：一份 09-12 的对照跑与
+    一份 09-11 的基线比出 +0.40×，而这两次采集之间还夹着六个提交；不手工
+    `git diff` 一遍就没法知道这 0.40× 该记给谁。归档能固定的只有跑批来源，
+    剩下那半必须由写结论的人核对后**明写**，否则同一个 Δ 可以被读成任何
+    一次提交的效果。
+    """
+    return {
+        "generated_at": archive.get("generated_at"),
+        "batches": list(archive.get("batches") or []),
+        "fixture_count": archive.get("fixture_count"),
+    }
 
 
 def _batch_aggregates(archive: dict[str, Any], names: set[str], side: str
@@ -686,6 +725,8 @@ def compare_archives(base: dict[str, Any], changed: dict[str, Any]) -> dict[str,
 
     agg_delta = None if mul_b is None or mul_c is None else round(mul_c - mul_b, 2)
     return {
+        "sources": {"base": _archive_provenance(base),
+                    "changed": _archive_provenance(changed)},
         "rows": rows,
         "only_base": only_base,
         "only_changed": only_changed,
@@ -711,6 +752,16 @@ def compare_archives(base: dict[str, Any], changed: dict[str, Any]) -> dict[str,
 def print_comparison(cmp: dict[str, Any]) -> None:
     rows = cmp["rows"]
     print("\n### 对照（改动前 → 改动后）\n")
+
+    src = cmp.get("sources") or {}
+    if src:
+        print("采集来源 —— **归档记不下「两侧之间代码差了什么」**，那半个前提"
+              "必须自己核对后写进结论，否则下面这个 Δ 可以被读成任何一次提交的效果：")
+        for key, label in (("base", "改动前"), ("changed", "改动后")):
+            s = src.get(key) or {}
+            batches = "、".join(s.get("batches") or []) or "未记录"
+            print(f"  - {label}: {s.get('generated_at') or '时间未记录'}（{batches}）")
+        print()
 
     if cmp["steps_mismatch"]:
         print("⚠️ **以下题目的参考步数在两组间不一致，已排除在对照之外** ——"
