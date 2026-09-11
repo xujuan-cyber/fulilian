@@ -561,6 +561,251 @@ def run_repeat_mode(batch_dirs: list[Path], meta: dict[str, dict[str, Any]],
     return 0
 
 
+def _span_of(stat: dict[str, Any]) -> float | None:
+    """一题自身 ×参考解 的跨度；只采过 1 次就没有跨度可言。"""
+    if stat.get("n", 0) < 2:
+        return None
+    lo, hi = stat.get("mult_min"), stat.get("mult_max")
+    if lo is None or hi is None:
+        return None
+    return hi - lo
+
+
+def load_repeat_archive(path: Path) -> dict[str, Any]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    schema = payload.get("schema")
+    if schema != "ctf-path-baseline/2-repeat":
+        raise ValueError(f"{path} 不是 2-repeat 归档（schema={schema!r}）")
+    return payload
+
+
+def _batch_aggregates(archive: dict[str, Any], names: set[str], side: str
+                      ) -> tuple[dict[str, float], list[str]]:
+    """每个跑批各自的合并 ×参考解；只算**跑齐了全部对照题**的批。
+
+    这是合并指标噪声地板的来源：同一份代码、同题集，逐批之间的摆动就是
+    该指标的分辨率上限。缺题的批（新题只在前一批出现过之类）不参与，
+    但要**点名报出来** —— 静默少一批等于偷偷缩小样本。
+
+    ``side`` 只用于给跳过的批加前缀：两侧的跑批常同名（各自根目录下的
+    ``run1``/``run2``…），不带前缀的话"哪一侧少了批"读不出来。
+    """
+    by_batch: dict[str, dict[str, dict[str, Any]]] = {}
+    for fx, samples in archive.get("samples", {}).items():
+        if fx not in names:
+            continue
+        for s in samples:
+            by_batch.setdefault(s.get("batch"), {})[fx] = s
+
+    out: dict[str, float] = {}
+    skipped: list[str] = []
+    for batch, got in sorted(by_batch.items(), key=lambda kv: str(kv[0])):
+        if set(got) != names or any(
+                got[f].get("api_calls") is None or not got[f].get("ref_steps")
+                for f in names):
+            skipped.append(f"{side}/{batch}")
+            continue
+        api = sum(got[f]["api_calls"] for f in names)
+        ref = sum(got[f]["ref_steps"] for f in names)
+        out[str(batch)] = api / ref
+    return out, skipped
+
+
+def compare_archives(base: dict[str, Any], changed: dict[str, Any]) -> dict[str, Any]:
+    """两组 ``--runs`` 归档的对照，判据是**噪声地板**。
+
+    为什么不把两组批目录塞进一次 ``--runs``：那样算出来的"地板"会把两组
+    之间的真实差异一起算进去，等于用被测量的东西当尺子 —— 差异越大，
+    尺子越长，永远测不出显著。**两侧各自的内部摆动必须是分开估的。**
+
+    地板取两侧跨度的较大者：两侧都是同一套 harness 的噪声实现，合并起来
+    是同一个量的更多样本，取大偏保守（改动压低方差时不会因此误判显著）。
+    """
+    b_by = {s["fixture"]: s for s in base.get("stats", [])}
+    c_by = {s["fixture"]: s for s in changed.get("stats", [])}
+
+    rows, only_base, only_changed, steps_mismatch = [], [], [], []
+    for name in sorted(set(b_by) | set(c_by)):
+        b, c = b_by.get(name), c_by.get(name)
+        if b is None:
+            only_changed.append(name)
+            continue
+        if c is None:
+            only_base.append(name)
+            continue
+        if b.get("ref_steps") != c.get("ref_steps"):
+            # 参考步数变了 = 题目本身变了，两侧跑的不是同一道题，差值无意义
+            steps_mismatch.append((name, b.get("ref_steps"), c.get("ref_steps")))
+            continue
+
+        spans = [s for s in (_span_of(b), _span_of(c)) if s is not None]
+        floor = max(spans) if spans else None
+        dm = (None if b["mult_mean"] is None or c["mult_mean"] is None
+              else round(c["mult_mean"] - b["mult_mean"], 2))
+        rows.append({
+            "fixture": name,
+            "ref_steps": b.get("ref_steps"),
+            "n_base": b["n"], "n_changed": c["n"],
+            "mult_base": b["mult_mean"], "mult_changed": c["mult_mean"],
+            "mult_delta": dm,
+            "floor": None if floor is None else round(floor, 2),
+            # 只有两侧都采到 ≥2 次，跨度才存在，差异才谈得上能不能归因
+            "resolvable": (None if floor is None or dm is None
+                           else abs(dm) > floor),
+            "api_mean_base": b["api_mean"], "api_mean_changed": c["api_mean"],
+            "api_delta": (None if b["api_mean"] is None or c["api_mean"] is None
+                          else round(c["api_mean"] - b["api_mean"], 1)),
+            "token_mean_base": b["token_mean"], "token_mean_changed": c["token_mean"],
+            "solved_base": f"{b['solved']}/{b['n']}",
+            "solved_changed": f"{c['solved']}/{c['n']}",
+        })
+
+    # 合并经济性。只统计**可对照**的题（steps 一致、两侧都有），否则分子
+    # 分母和逐题行对不上。
+    def _pooled(by: dict[str, dict[str, Any]], names: set[str]) -> tuple[float, float]:
+        a = sum(by[n]["api_mean"] * by[n]["n"]
+                for n in names if by[n]["api_mean"])
+        r = sum(by[n]["ref_steps"] * by[n]["n"]
+                for n in names if by[n].get("ref_steps"))
+        return a, r
+
+    names = {r["fixture"] for r in rows}
+    api_b, ref_b = _pooled(b_by, names)
+    api_c, ref_c = _pooled(c_by, names)
+    mul_b = api_b / ref_b if ref_b else None
+    mul_c = api_c / ref_c if ref_c else None
+
+    # 合并指标的噪声地板**直接按跑批量**：把每个跑批各自的合并 ×参考解 算出来，
+    # 取同侧逐批摆动的最大跨度。这样地板与被判的量是同一个统计量，不靠
+    # 「只有一题在摆」之类的假设。代价是需要每侧 ≥2 个跑批。
+    batches_b, skip_b = _batch_aggregates(base, names, "改动前")
+    batches_c, skip_c = _batch_aggregates(changed, names, "改动后")
+    spans = [max(v.values()) - min(v.values())
+             for v in (batches_b, batches_c) if len(v) >= 2]
+    agg_floor = max(spans) if spans else None
+
+    agg_delta = None if mul_b is None or mul_c is None else round(mul_c - mul_b, 2)
+    return {
+        "rows": rows,
+        "only_base": only_base,
+        "only_changed": only_changed,
+        "steps_mismatch": steps_mismatch,
+        "incomplete_batches": skip_b + skip_c,
+        "pooled": {
+            "api_base": round(api_b), "api_changed": round(api_c),
+            "ref_steps": ref_b if ref_b == ref_c else None,
+            "mult_base": None if mul_b is None else round(mul_b, 2),
+            "mult_changed": None if mul_c is None else round(mul_c, 2),
+            "mult_delta": agg_delta,
+            "floor": None if agg_floor is None else round(agg_floor, 2),
+            "resolvable": (None if agg_floor is None or agg_delta is None
+                           else abs(agg_delta) > agg_floor),
+            "batches_base": None if not batches_b else
+                {k: round(v, 2) for k, v in sorted(batches_b.items())},
+            "batches_changed": None if not batches_c else
+                {k: round(v, 2) for k, v in sorted(batches_c.items())},
+        },
+    }
+
+
+def print_comparison(cmp: dict[str, Any]) -> None:
+    rows = cmp["rows"]
+    print("\n### 对照（改动前 → 改动后）\n")
+
+    if cmp["steps_mismatch"]:
+        print("⚠️ **以下题目的参考步数在两组间不一致，已排除在对照之外** ——"
+              "参考步数变了说明题目本身变了，两侧跑的不是同一道题：")
+        for name, rb, rc in cmp["steps_mismatch"]:
+            print(f"  - {name}: {rb} → {rc}")
+        print()
+    if cmp["only_base"]:
+        print(f"ℹ️ **只在改动前那组出现过、无法对照：** {', '.join(cmp['only_base'])}"
+              f" —— 单侧数据不构成对照，不许拿它下结论。")
+    if cmp["only_changed"]:
+        print(f"ℹ️ **只在改动后那组出现过、无法对照：** "
+              f"{', '.join(cmp['only_changed'])}")
+
+    if not rows:
+        print("\n❌ **没有任何一题是可对照的** —— 两组之间没有共同题目。")
+        return
+
+    hdr = ("fixture", "n 前/后", "×参考解 前", "×参考解 后", "Δ", "地板",
+           "判据", "api Δ", "token 前→后", "解出 前/后")
+    print("\n| " + " | ".join(hdr) + " |")
+    print("|" + "---|" * len(hdr))
+    for r in rows:
+        verdict = {True: "✅ 可归因", False: "❌ 分辨不了", None: "— 采样不足"}[r["resolvable"]]
+        floor = "—" if r["floor"] is None else f"{r['floor']:.2f}×"
+        delta = "—" if r["mult_delta"] is None else f"{r['mult_delta']:+.2f}×"
+        apid = "—" if r["api_delta"] is None else f"{r['api_delta']:+.1f}"
+        tk = (f"{r['token_mean_base']:,}→{r['token_mean_changed']:,}"
+              if r["token_mean_base"] and r["token_mean_changed"] else "—")
+        print(f"| {r['fixture']} | {r['n_base']}/{r['n_changed']} "
+              f"| {r['mult_base'] if r['mult_base'] is not None else '—'}× "
+              f"| {r['mult_changed'] if r['mult_changed'] is not None else '—'}× "
+              f"| {delta} | {floor} | {verdict} | {apid} | {tk} "
+              f"| {r['solved_base']} → {r['solved_changed']} |")
+
+    p = cmp["pooled"]
+    print(f"\n- **合并经济性：** {p['mult_base']}× → {p['mult_changed']}× "
+          f"（{p['api_base']:,} → {p['api_changed']:,} api / {p['ref_steps']} 参考步数）")
+    if p["mult_delta"] is None or p["floor"] is None:
+        print("  > ⚠️ 合并判据不可用（每侧至少要 2 个跑批才估得出逐批摆动，"
+              "参考步数也要一致）—— 只看逐题行，别用合并数字下结论。")
+    else:
+        mark = "✅ 可归因" if p["resolvable"] else "❌ 分辨不了"
+        print(f"  > Δ {p['mult_delta']:+.2f}× vs 逐批地板 {p['floor']:.2f}× → **{mark}**")
+        if p["batches_base"]:
+            print(f"  > 改动前逐批：{p['batches_base']}")
+        if p["batches_changed"]:
+            print(f"  > 改动后逐批：{p['batches_changed']}")
+        print("  > 地板是被判统计量自身的逐批摆动（同一份代码跑两遍的差），"
+              "不是推导出来的近似。**合并指标比逐题指标灵敏得多** —— "
+              "逐题地板 0.75–1.40× 量级，合并后常常只有 0.1× 量级，"
+              "因为各题噪声互相抵消。")
+    if cmp.get("incomplete_batches"):
+        print(f"  > ℹ️ 有 {len(cmp['incomplete_batches'])} 个跑批没跑齐对照题集，"
+              f"未参与地板估计：{', '.join(cmp['incomplete_batches'])}")
+
+    resolved = [r for r in rows if r["resolvable"]]
+    n_ok, n_no, n_na = (len(resolved),
+                        sum(1 for r in rows if r["resolvable"] is False),
+                        sum(1 for r in rows if r["resolvable"] is None))
+    print(f"\n- **可归因 {n_ok} 题 / 分辨不了 {n_no} 题 / 采样不足 {n_na} 题**")
+    if n_ok == 0 and n_no == 0:
+        print("  > 一题都没采够 —— 这份对照**什么都没证明**，不是「无效果」。")
+    elif n_ok == 0:
+        print("  > 全部差异都在地板以内：**这批采样分辨不了这个改动**。"
+              "这不等于改动无效，只等于当前 n 看不见它。")
+
+
+def run_compare_mode(base_path: Path, changed_path: Path,
+                     json_path: Path | None) -> int:
+    try:
+        base = load_repeat_archive(base_path)
+        changed = load_repeat_archive(changed_path)
+    except (OSError, ValueError, json.JSONDecodeError) as e:
+        sys.exit(f"❌ 读不了对照归档：{e}")
+
+    print(f"改动前：{base_path}\n改动后：{changed_path}")
+    cmp = compare_archives(base, changed)
+    print_comparison(cmp)
+
+    if json_path:
+        payload = {
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "schema": "ctf-path-baseline/2-compare",
+            "base_archive": str(base_path),
+            "changed_archive": str(changed_path),
+            "comparison": cmp,
+        }
+        json_path.parent.mkdir(parents=True, exist_ok=True)
+        json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2),
+                             encoding="utf-8")
+        print(f"\n✅ 已写入 {json_path}")
+    return 0
+
+
 # ── 入口 ────────────────────────────────────────────────────────────────
 
 def main(argv: list[str] | None = None) -> int:
@@ -579,13 +824,21 @@ def main(argv: list[str] | None = None) -> int:
                          "work_dir 里被 agent 覆盖过的那份不再影响读数")
     ap.add_argument("--manifest", type=Path,
                     help="benchmark manifest，用于期望 flag 交叉校验")
+    ap.add_argument("--compare", nargs=2, type=Path,
+                    metavar=("改动前", "改动后"),
+                    help="对照模式：两份 --runs 归档（schema 2-repeat）。"
+                         "逐题给 Δ 与其自身噪声地板，判据是 |Δ| > 地板 —— "
+                         "低于地板的差异这批采样分辨不了，不许归因于改动")
     ap.add_argument("--json", type=Path, help="结果写成 JSON（基线归档）")
     args = ap.parse_args(argv)
 
-    if not args.dirs and not args.runs:
-        ap.error("至少要给 --dirs 或 --runs")
-    if args.dirs and args.runs:
-        ap.error("--dirs 与 --runs 互斥：单批看明细，多批看分布")
+    modes = [bool(args.dirs), bool(args.runs), bool(args.compare)]
+    if sum(modes) != 1:
+        ap.error("--dirs / --runs / --compare 三选一：单批看明细，"
+                 "多批看分布，两份归档做对照")
+
+    if args.compare:
+        return run_compare_mode(args.compare[0], args.compare[1], args.json)
 
     meta = load_expected(args.manifest) if args.manifest else {}
 
