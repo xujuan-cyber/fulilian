@@ -356,19 +356,52 @@ def check_installer_marker_consistency() -> None:
 
 
 def check_installer_uninstall_removes_marker() -> None:
-    """-Uninstall must drop the marker line, or the completer is resurrected on
-    the next install check while the file it points at is gone.
+    """-Install and -Uninstall must agree on the exact block added.
+
+    -Uninstall dropping only the marker line leaves the separator -Install added
+    behind, so the pair does not round-trip; and a half-removed wiring resurrects
+    a completer pointing at a file that is gone. Both sides therefore go through
+    $script:FllProfileChunk, and the invariant checked here is that the chunk
+    interpolates the marker and the dot-source line, -Install appends exactly
+    those two, and -Uninstall removes the chunk.
     """
     path = CMD_DIR / "fll.completion.ps1"
     if not path.exists():
         return
     text = path.read_text(encoding="utf-8", errors="replace")
-    if "FllProfileMarker" in text and re.search(r"\$Uninstall[\s\S]{0,600}?FllProfileMarker", text):
-        ok("fll.completion.ps1: -Uninstall removes the marker")
+
+    chunk = re.search(r"\$script:FllProfileChunk\s*=\s*\"([^\"]*)\"", text)
+    composed = (
+        chunk is not None
+        and "FllProfileMarker" in chunk.group(1)
+        and "FllProfileLine" in chunk.group(1)
+    )
+    install = re.search(
+        r"Add-Content -LiteralPath \$ProfilePath -Value \$script:FllProfileMarker"
+        r"[\s\S]{0,200}?Add-Content -LiteralPath \$ProfilePath -Value \$script:FllProfileLine",
+        text,
+    )
+    uninstall = re.search(
+        r"\$raw\.Remove\(\s*\$idx\s*,\s*\$script:FllProfileChunk\.Length\s*\)", text
+    )
+
+    if composed and install and uninstall:
+        ok("fll.completion.ps1: -Install/-Uninstall share one removable chunk")
     else:
+        missing = [
+            name
+            for name, got in (
+                ("chunk definition", composed),
+                ("install append", install is not None),
+                ("uninstall removal", uninstall is not None),
+            )
+            if not got
+        ]
         bad(
-            "fll.completion.ps1: -Uninstall does not remove the profile marker",
-            "the wiring line would survive and point at a deleted file.",
+            "fll.completion.ps1: the installed block is not removed as a whole",
+            "missing/mismatched: " + ", ".join(missing)
+            + " — install and uninstall must agree on the exact bytes, "
+            "or residue is left in $PROFILE.",
         )
 
 
@@ -428,6 +461,42 @@ case "$1" in
   --stdin) n=$(cat | wc -l); echo "PROBE_STDIN_LINES=$n" ;;
   --exit)  exit "${2:-0}" ;;
 esac
+"""
+
+
+# Exercises -Install/-Uninstall through -ProfilePath against throwaway files and
+# asserts a byte-exact round trip. Deliberately ASCII-only (CJK fixture bytes are
+# spelled as hex) because PowerShell 5.1 reads a BOM-less .ps1 as ANSI, which
+# would mangle any literal non-ASCII in this script itself.
+#
+# Never pass a real profile path to this: -ProfilePath defaults to $PROFILE, and
+# the default is the one thing that must not be touched here.
+ROUNDTRIP_PS1 = r"""
+$ErrorActionPreference = 'Stop'
+$comp = Join-Path $PSScriptRoot 'fll.completion.ps1'
+$u8 = New-Object System.Text.UTF8Encoding($false)
+$cases = @(
+    @{ n = 'empty'; b = [byte[]]@() },
+    @{ n = 'blank'; b = [byte[]](0x0D, 0x0A) },
+    @{ n = 'nonl';  b = [byte[]](0x57, 0x72, 0x69, 0x74, 0x65) },
+    @{ n = 'cjk';   b = [byte[]](0x23, 0x20, 0xE4, 0xB8, 0xAD, 0xE6, 0x96, 0x87, 0x0D, 0x0A) }
+)
+$fail = 0
+foreach ($c in $cases) {
+    $p = Join-Path $PSScriptRoot ('rt_' + $c.n + '.ps1')
+    [System.IO.File]::WriteAllBytes($p, $c.b)
+    $before = (Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash
+    & $comp -Install -ProfilePath $p | Out-Null
+    $wired = ([System.IO.File]::ReadAllText($p)).Contains('# fulilian-cmd completion')
+    & $comp -Uninstall -ProfilePath $p | Out-Null
+    $after = (Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash
+    if (-not ($before -eq $after -and $wired)) {
+        $fail++
+        Write-Host ("RT_FAIL " + $c.n)
+    }
+    Remove-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue
+}
+if ($fail -eq 0) { Write-Host 'RT_PROFILE_ROUNDTRIP_OK' } else { Write-Host ('RT_PROFILE_FAILURES=' + $fail) }
 """
 
 
@@ -571,6 +640,21 @@ def run_runtime() -> bool:
             ok("runtime: install.cmd /check resolves its own directory")
         else:
             bad("runtime: install.cmd /check resolved the wrong source path", out.strip())
+
+        # -Install/-Uninstall must round-trip the profile byte-for-byte. A
+        # separator the installer adds but the uninstaller forgets is exactly the
+        # kind of residue nobody notices until it is in a thousand profiles.
+        rt = staged / "roundtrip.ps1"
+        rt.write_text(ROUNDTRIP_PS1, encoding="ascii")
+        rc, out = run_cmd(
+            f"cd /d {win_dir} && powershell.exe -NoProfile -ExecutionPolicy Bypass "
+            f"-File {win_dir}\\roundtrip.ps1",
+            staged,
+        )
+        if "RT_PROFILE_ROUNDTRIP_OK" in out:
+            ok("runtime: profile -Install/-Uninstall round-trips exactly")
+        else:
+            bad("runtime: profile wiring does not round-trip", out.strip())
 
         return True
     finally:
