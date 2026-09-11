@@ -124,29 +124,42 @@ M1–M10 测的是 `fulilian chat` 人工路径。CTF 求解器（`mode="ctf"`�
 `tools/tool_result_storage.py` 的落盘机制**一次都没跑过** ——
 P0.1 在这批 fixture 上**零效果**（因为输出本来就小）。
 
-**证据二：prompt 几乎不增长。** 逐次 `📊 Request size`（§8.7 可复现）：
+**证据二：prompt 几乎不增长，主导成本是"每次重发首屏"。**
 
-| fixture | 调用数 | 首次 prompt | 末次 prompt | 全程增长 | 累计 | 固定开销占比 |
-|---|---|---|---|---|---|---|
-| misc-morse-01 | 12 | 9,460 | 13,804 | **+4,344** | 146,346 | **77.6%** |
-| crypto-rsa-01 | 10 | 9,525 | 14,264 | **+4,739** | 120,616 | **79.0%** |
-| web-robots-01 | 12 | 9,454 | 16,220 | **+6,766** | 165,650 | **68.5%** |
+`📊 Request size: N messages, ~X tokens (~Y chars)` **只统计 messages，不含工具 schema**；
+而 `💾 Cache: hit/total` 那行的 total 是**含工具的整包**。两者相减即得工具占用。
+以 web-robots-01 第 1 次调用为例：messages 9,454 / 整包 14,561 → **工具 ≈ 5,107 tokens**。
 
-*（"固定开销占比" = 首次 prompt × 调用数 ÷ 累计，即"每次都要重发的那部分"。
-三次调用序列之和 432,612；`usage.json` 的 provider 计数更高，差额是重试与
-压缩轮不落日志 —— 见采集器 docstring 的已知局限。）*
+逐次 messages 序列（§8.7 可复现）：
 
-**结论：** 一次 12 调用的简单题，70%+ 的 prompt token 是**每次调用原样重发的
-那 ~9.5K 基线**，真正的对话增长只有 4–7K。**省钱靠两件事：减少调用次数、
-压小那 9.5K 基线** —— 不是靠历史压缩，更不是靠输出落盘。
+| fixture | 调用数 | 首次 | 末次 | 全程增长 | Σmessages |
+|---|---|---|---|---|---|
+| misc-morse-01 | 12 | 9,460 | 13,804 | **+4,344** | 146,346 |
+| crypto-rsa-01 | 10 | 9,525 | 14,264 | **+4,739** | 120,616 |
+| web-robots-01 | 12 | 9,454 | 16,220 | **+6,766** | 165,650 |
 
-**证据三：那 9.5K 里 61% 是工具 schema。** 实测
-`get_tool_definitions(enabled_toolsets=["ctf_solve"])`：
+**对账（关键一步）：** 用「Σmessages + 调用数 × 工具占用」还原 provider 计数：
 
 ```
-CTF 工具集工具数: 14
-工具 schema 总字符: 22,942    ≈ 5,735 tokens（按 4 字符/token 估）
+misc-morse-01: 146,346 + 12 × 5,107 = 207,630   vs usage.json input_tokens = 210,781
 ```
+
+**误差 1.5%** —— 说明这条成本模型成立：
+
+```
+input_tokens ≈ Σ(每次 messages) + 调用数 × 工具 schema tokens
+```
+
+**结论：** 一次 12 调用的简单题，
+**~83% 的 input token 是首屏那 14.5K（工具 5.1K + messages 9.5K）被原样重发 12 次**，
+真正的对话增长只有 4.3K（占 2%）。
+**省钱靠两件事：减少调用次数、压小首屏** —— 不是靠历史压缩，更不是靠输出落盘。
+
+**证据三（修正 §3.K 对 CTF 的适用性）：CTF 只加载 14 个工具，不是 53 个。**
+日志实测：`🛠️ Final tool selection (17 tools)` → `🛠️ Loaded 14 tools`
+（`🔎 Tool Search (tier 1): 6 MCP/plugin tools deferred (~1272 tokens)`）。
+§3.K 的「53 个 core tool 永不 defer」是 **chat 路径**的问题；CTF 路径经
+`tool_search` 折叠后只有 14 个 —— 但**这 14 个仍然每次全量重发**。
 
 | 工具 | schema 字符 |
 |---|---|
@@ -162,46 +175,105 @@ CTF 工具集工具数: 14
 | write_file | 1,270 |
 | web_extract | 1,112 |
 
-`memory` + `skill_manage` 合计 **5,631 字符 ≈ 1,408 tokens**，
-**每次调用都要重发** —— 而 `toolsets.py:646` 的注释写明它们存在的唯一理由是
-「回合后自省触发依赖」，即供 `background_review` fork 写入
-（`toolsets.py:637-640`：「主会话带上这两个工具后 fork 可正常执行写入」）。
-
-**A3 已经把那把 fork 关掉了**（`skip_background_review=True`）。
-所以这两个工具现在是**纯死重**：消费方已不存在，成本仍在每次请求上支付。
+`memory` + `skill_manage` = **5,631 字符 / 22,942 字符 = 24.5% 的工具 schema**
+= **~1,400 tokens/次调用 ≈ 全部 input token 的 8%**。
+而 `toolsets.py:646` 的注释写明它们存在的唯一理由是「回合后自省触发依赖」
+（`toolsets.py:637-640`：「主会话带上这两个工具后 fork 可正常执行写入」）——
+**A3 已关掉那条 fork**。消费方不存在了，成本仍在每次请求上支付。
 → 新增 **P0.5.4**。
 
 > **自我更正：** A3 条目里我写「不加 `skip_memory=True`，因为 `ctf_solve`
 > toolset 刻意保留了 memory 工具」。**不加 flag 是对的，但推理不完整** ——
-> 我当时只看到"toolset 保留了它"，没看出保留它的**唯一理由**正是被 A3 关掉的
+> 当时只看到"toolset 保留了它"，没看出保留它的**唯一理由**正是被 A3 关掉的
 > 那条 fork。flag 不该加，而 toolset 里这两个工具该删。
 
 **对优先级的影响（重要）：**
 在现有 fixture 上，P0.1 的机制**从未触发**；真正的杠杆是
-**P3/P7（砍固定开销）> P0.5.4（删死重工具）> 减少调用数**。
+**P0.5.4（删死重工具）≈ P3/P7（砍首屏）> 减少调用次数**。
 P0.1 只有在**难题**上才可能见效（长扫描、反编译转储、爆破日志），
-而当前 3 题全 easy —— **这批基线验证不了 P0.1**，需要难题 holdout。
+而当前 3 题全 easy —— **这批基线验证不了 P0.1**。
 （这不否定 P0.1 的价值，但改变了它的排序与验证方式。）
+
+### 1.5 两条附带读数（2026-09-11，来自同一份 solver.log）
+
+**（1）CTF 路径的压缩阈值实际是 600,000 —— 简单题上压缩永不触发。**
+
+```
+📊 Context limit: 1,000,000 tokens (compress at 70% = 700,000)
+🧩 CTF mode: compression threshold capped 0.70 → 0.60
+```
+
+即 CTF 认为窗口是 **1,000,000**，0.70 被封顶到 0.60 → **600,000 才压缩**，
+而实际用量 ~15K。**推论：**
+- §2/§3.H/P0.5.3 所有关于压缩的分析，在 CTF easy 路径上是**惰性的** ——
+  压缩一次都没发生。P0.5.3（0.60 vs 0.75）在这批题上**无可测量差异**。
+- ⚠️ **潜在风险：** 若该模型真实窗口远小于 1,000,000（`DeepSeek-V4-Flash`
+  经 `custom`/scnet.cn 转发），则 600K 的压缩闸**永远晚于** provider 的硬上限 ——
+  长跑会在压缩之前先撞 400。**未验证**，需查 model metadata 与该 provider
+  的实际上限（列为待办）。
+
+**（2）§3.E 的具体实例：注入的 WP 参考确实无关。**
+
+web-robots-01（robots.txt 题）被注入的三条"相似历史 WP"：
+
+```
+- cve-2024-29296 — ...{[baseline]*1000:.1...        （Portainer 中间件漏洞）
+- harbor-tactics — ...[Web]hook 滥用 Harbo...
+- mcp-attack-payloads — ...ool_[baseline](tool...   （MCP 攻击载荷）
+```
+
+**三条对 robots.txt 全部无关**，且正文被截成 `...{[baseline]*1000:.1...`
+这样的碎片（疑似脱敏或模板渲染残留）。整个注入块 2,453 字符 ≈ 613 tokens，
+其中 WP 段 474 字符 —— **成本不大，但信噪比接近 0**，且**每题必注入**。
+→ 对应 P4（修知识层）。
 
 ---
 
-## 2. 冒烟枪：压缩不是"摘要"，是"删除"
+## 2. 压缩后**无法找回内容**（原题：冒烟枪）
 
-这是全部问题里最重要的单点，也是投入产出比最高的修复目标。
+> **2026-09-11 修正（A8）：** 本节初稿称"旧工具输出被整条替换成占位符、
+> 无摘要无指针"。**该描述只对其中一条路径成立**，且**两条路径在 CTF 路径上都
+> 尚未触发过**（§1.5：CTF 压缩阈值 600K，easy 题用量 ~15K）。
+> 下面是核对代码后的准确版本。
 
-```python
-# agent/context_compressor.py:763
-_PRUNED_TOOL_PLACEHOLDER = "[Old tool output cleared to save context space]"
+`agent/context_compressor.py` 里有**两套**不同的处置，严重度不同：
 
-# agent/context_compressor.py:769
-_PRUNE_MIN_CHARS = 200
+**（一）主路径 `_prune_old_tool_results`（`:3974`）—— 有摘要，但没有回程票。**
+
+它调 `_summarize_tool_result()`（`:2004`）生成**保留关键元数据的一行摘要**：
+
+```
+[terminal] ran `curl -s http://t/p/` -> exit 0, 47 lines output
+[read_file] read src/app.py from line 1 (3,400 chars)
 ```
 
-旧工具输出被**整条替换成这一句话**。没有摘要、没有头尾、没有指针、没有路径。超过 200 字符一律照删。
+命令、退出码、行数、文件路径都还在。**所以不是"删得干干净净"。**
 
-**这解释了重复调用循环的确切机制**：模型不是"忘了"，是**它的发现被 runtime 从上下文里物理删除了**，且没有任何找回途径，只能重跑。
+**真正的问题是内容无处可寻：** 那 47 行输出**从未落盘**，摘要里因此
+**没有任何路径可指**。模型知道"我跑过这条命令、它成功了"，但要拿回输出内容
+**只能重跑** —— 这正是重复调用循环的机制，也是 P0.1 的靶子。
+（判据：`_PRUNE_MIN_CHARS = 200`，`:769`，超过才摘。）
 
-同时它解释了 M3 的构成：75% 消息被标记 `compacted`，但只有 116 条带摘要标记。**绝大多数是 Phase-1 的 tool-result prune（替换为占位符），而非 Phase-2 的摘要。** 也就是说大部分"压缩"根本没产生摘要，只是留了个洞。
+**（二）salvage 路径 `_prune_stale_reasoning_replay`（`:355`）—— 才是真·删除。**
+
+```python
+# agent/context_compressor.py:556-557
+if isinstance(content, str) and len(content) > _PRUNE_MIN_CHARS:
+    msg["content"] = _PRUNED_TOOL_PLACEHOLDER     # "[Old tool output cleared...]"
+# agent/context_compressor.py:445
+_SALVAGE_KEEP_RECENT_TOOLS = 2
+```
+
+**只保留最后 2 条**工具结果，其余超 200 字符的一律换成那句占位符 ——
+**没有摘要、没有头尾、没有指针**。这条才是初稿描述的形状，但它是
+**salvage 兜底路径**，不是常态。
+
+**对 M3 的解释仍然成立：** 75% 消息被标记 `compacted`，但只有 116 条带摘要标记
+→ 大多数"压缩"走的是 Phase-1 的 prune，而非 Phase-2 的 LLM 摘要。
+**（该数字来自 chat 路径基线。）**
+
+**修正后的 P0.1 定义：** 不是"把删除改成摘要"（主路径已经在摘要了），
+而是**让摘要里有东西可指** —— 输出先落盘，摘要带上路径。§10 记了具体落点。
 
 ---
 
