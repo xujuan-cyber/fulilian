@@ -601,6 +601,34 @@ def load_repeat_archive(path: Path) -> dict[str, Any]:
     return payload
 
 
+def _parse_ts(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def _chronology_warning(base: dict[str, Any], changed: dict[str, Any]) -> str | None:
+    """「改动后」比「改动前」还早 —— 大概率是两个参数传反了。
+
+    这个校验现在做得了，是因为归档开始记 ``generated_at`` 了。踩过一次：
+    清理提交与对照跑交错的窗口里，很容易顺手把新采的那份放在第一个位置，
+    于是 ``改动后`` 实际是**更旧**的代码，Δ 的符号整个反过来 —— 而报告上
+    看不出任何异常，两个数字照样印得整整齐齐。
+
+    只报"可疑"，不断言传反了：倒着比（新 → 旧）本身是合法的，Δ 就按
+    ``后 − 前`` 的字面意思读。
+    """
+    tb, tc = _parse_ts(base.get("generated_at")), _parse_ts(changed.get("generated_at"))
+    if tb is None or tc is None or tc >= tb:
+        return None
+    return (f"「改动后」那份采集于 {changed['generated_at']}，**早于**「改动前」的 "
+            f"{base['generated_at']} —— 两个参数是不是传反了？Δ 的符号按"
+            f"「后 − 前」的字面定义读，若确实是有意倒着比，忽略本警告。")
+
+
 def _archive_provenance(archive: dict[str, Any]) -> dict[str, Any]:
     """归档自述：这份数据是**哪些跑批、什么时候**采的。
 
@@ -727,6 +755,7 @@ def compare_archives(base: dict[str, Any], changed: dict[str, Any]) -> dict[str,
     return {
         "sources": {"base": _archive_provenance(base),
                     "changed": _archive_provenance(changed)},
+        "chronology_warning": _chronology_warning(base, changed),
         "rows": rows,
         "only_base": only_base,
         "only_changed": only_changed,
@@ -761,6 +790,8 @@ def print_comparison(cmp: dict[str, Any]) -> None:
             s = src.get(key) or {}
             batches = "、".join(s.get("batches") or []) or "未记录"
             print(f"  - {label}: {s.get('generated_at') or '时间未记录'}（{batches}）")
+        if cmp.get("chronology_warning"):
+            print(f"  ⚠️ {cmp['chronology_warning']}")
         print()
 
     if cmp["steps_mismatch"]:

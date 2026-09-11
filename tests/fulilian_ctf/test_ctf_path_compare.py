@@ -202,6 +202,39 @@ def test_compare_records_where_each_side_came_from(tmp_path):
     assert "代码差了什么" in out      # 那半个前提被明说，而不是留白
 
 
+def test_compare_flags_an_inverted_pair(tmp_path):
+    """⚠️ 回归锁：参数传反了要报出来。
+
+    「改动后」比「改动前」还早 = 新采的那份被放在了第一个位置，于是
+    「改动后」实际是更旧的代码，Δ 的符号整个反过来 —— 而报告上看不出任何
+    异常，两个数字照样印得整整齐齐。这个校验只有在归档记了 generated_at
+    之后才做得了。
+    """
+    base = _archive(tmp_path, "base", {"alpha-01": [10, 12]})
+    base["generated_at"] = "2026-09-12T16:08:07+00:00"      # 更新的那份
+    changed = _archive(tmp_path, "changed", {"alpha-01": [30, 31]})
+    changed["generated_at"] = "2026-09-11T15:28:42+00:00"   # 更旧的那份
+    cmp = collector.compare_archives(base, changed)
+    assert "传反了" in (cmp["chronology_warning"] or "")
+    assert "传反了" in _capture(collector.print_comparison, cmp)
+
+    # 正序不报
+    ok = _archive(tmp_path, "ok", {"alpha-01": [10, 12]})
+    ok["generated_at"] = "2026-09-11T00:00:00+00:00"
+    later = _archive(tmp_path, "later", {"alpha-01": [30, 31]})
+    later["generated_at"] = "2026-09-11T15:28:42+00:00"
+    assert collector.compare_archives(ok, later)["chronology_warning"] is None
+    # 缺时间戳不许瞎报（手造的归档、早期档案都没有 generated_at）——
+    # 猜不出来就不说话，比按缺省值断言"顺序错了"安全。
+    naive = _archive(tmp_path, "naive", {"alpha-01": [10, 12]})
+    assert collector.compare_archives(naive, later)["chronology_warning"] is None
+    assert collector.compare_archives(ok, naive)["chronology_warning"] is None
+    # 时间戳格式不认识时同样闭嘴，而不是抛异常把对照跑整个打断
+    odd = _archive(tmp_path, "odd", {"alpha-01": [10, 12]})
+    odd["generated_at"] = "昨天下午"
+    assert collector.compare_archives(odd, later)["chronology_warning"] is None
+
+
 def test_compare_needs_both_archives_in_repeat_schema(tmp_path):
     bad = tmp_path / "bad.json"
     bad.write_text(json.dumps({"schema": "something-else"}), encoding="utf-8")
