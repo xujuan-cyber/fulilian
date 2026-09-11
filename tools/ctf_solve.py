@@ -207,7 +207,7 @@ def _git_auto_commit_impl(work_dir: str, message: str) -> str:
                     ".DS_Store\n"
                     ".http_sessions/\n"
                 )
-                gitignore_path.write_text(gitignore_content)
+                gitignore_path.write_text(gitignore_content, encoding="utf-8")
 
         # 配置本地身份（无全局配置时避免 commit 失败）
         for key, value in (("user.email", "fulilian@local"), ("user.name", "fulilian")):

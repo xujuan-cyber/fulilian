@@ -143,7 +143,12 @@ class PTYManager:
                 if hasattr(os, "killpg") and hasattr(os, "getpgid"):
                     try:
                         pgid = os.getpgid(self._process.pid)
-                        os.killpg(pgid, signal.SIGKILL)
+                        # SIGKILL 在 Windows 上不存在，用 getattr 兜底；整段由上一行的
+                        # hasattr(os, "killpg") 平台闸门保护，Windows 走不到这里。
+                        os.killpg(  # windows-footgun: ok
+                            pgid,
+                            getattr(signal, "SIGKILL", signal.SIGTERM),
+                        )
                     except (OSError, ProcessLookupError):
                         pass
                 self._process.terminate()
