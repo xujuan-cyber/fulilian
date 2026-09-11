@@ -19,7 +19,7 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FIX="$REPO/benchmarks/fixtures-hard"
 OUT="${1:-/tmp/ctf-hard}"
 LOGS="$OUT/logs"
-IDS=(misc-bigscan-01 reverse-obfchain-01 forensics-brutelog-01)
+IDS=(misc-bigscan-01 misc-chunkconcat-01 reverse-obfchain-01 forensics-brutelog-01)
 
 rm -rf "$OUT"
 mkdir -p "$LOGS"
@@ -71,6 +71,11 @@ print(s.solve('.'))
 done
 
 echo "ALL DONE $(date +%H:%M:%S)"
+
+# 采集命令从 IDS 生成，不硬编码 —— 初版把三个 id 写死在这里，
+# 加第四题时就会静默漏采（跑批说做了四题，采集只报三题）。
+dirs=""
+for id in "${IDS[@]}"; do dirs="$dirs $OUT/$id"; done
 echo "采集： python $REPO/benchmarks/ctf_path_baseline.py \\"
-echo "         --dirs $OUT/misc-bigscan-01 $OUT/reverse-obfchain-01 $OUT/forensics-brutelog-01 \\"
+echo "         --dirs$dirs \\"
 echo "         --manifest $REPO/benchmarks/manifest-ctf-hard.yaml"

@@ -8,3 +8,4 @@ scan.log
 auth.log
 data.bin
 decompiled.c
+transfer.log
