@@ -141,7 +141,8 @@ def tool_signature(call: dict[str, Any]) -> str:
 
 # ── 单题指标 ────────────────────────────────────────────────────────────
 
-def analyze(work_dir: Path, expected_flag: str | None = None) -> dict[str, Any]:
+def analyze(work_dir: Path, expected_flag: str | None = None,
+            ref_steps: int | None = None) -> dict[str, Any]:
     usage = parse_usage(work_dir)
     log = parse_solver_log(work_dir)
 
@@ -172,6 +173,14 @@ def analyze(work_dir: Path, expected_flag: str | None = None) -> dict[str, Any]:
         "expected_flag": expected_flag,
         "flag_matches": (flag == expected_flag) if expected_flag else None,
         "solved": bool(flag),
+        # C1b 路径经济性 —— 「解出率」在难题上会饱和，这个不会。
+        # ref_multiple = api_calls / 参考解最少步骤：题解得出，但绕了几倍远路。
+        # 参考解步数取自 manifest 的 solve_reference_steps；老 manifest 没有该
+        # 键则为 None，指标整体退化为不可用而不是报错。
+        "ref_steps": ref_steps,
+        "ref_multiple": (round(api_calls / ref_steps, 2)
+                         if (ref_steps and (api_calls := usage.get("api_calls")))
+                         else None),
         # C2–C4 代价
         "attempts": usage.get("attempts"),
         "api_calls": usage.get("api_calls"),
@@ -202,37 +211,43 @@ def analyze(work_dir: Path, expected_flag: str | None = None) -> dict[str, Any]:
 
 # ── manifest 交叉校验 ───────────────────────────────────────────────────
 
-def load_expected(manifest: Path) -> dict[str, str]:
-    """极简 YAML 读取：只抽 `- id:` / `expected_flag:` 两个键。
+def load_expected(manifest: Path) -> dict[str, dict[str, Any]]:
+    """极简 YAML 读取：抽 `- id:` / `expected_flag:` / `solve_reference_steps`。
 
-    刻意不引 PyYAML —— 只为两个字段引入依赖不划算，且 manifest 由本项目生成，
-    形态稳定（见 benchmarks/manifest-unit.yaml）。
+    刻意不引 PyYAML —— 只为几个字段引入依赖不划算，且 manifest 由本项目生成，
+    形态稳定（见 benchmarks/manifest-unit.yaml）。老 manifest（unit 那份）没有
+    solve_reference_steps，取到 None 即可，不报错 —— 经济性指标随之退化，
+    但解出率/flag 校验照常。
     """
-    out: dict[str, str] = {}
+    out: dict[str, dict[str, Any]] = {}
     cur: str | None = None
     for line in manifest.read_text(encoding="utf-8").splitlines():
         s = line.strip()
         if s.startswith("- id:"):
             cur = s.split(":", 1)[1].strip().strip('"\'')
+            out.setdefault(cur, {})
         elif cur and s.startswith("expected_flag:"):
-            out[cur] = s.split(":", 1)[1].strip().strip('"\'')
-            cur = None
+            out[cur]["expected_flag"] = s.split(":", 1)[1].strip().strip('"\'')
+        elif cur and s.startswith("solve_reference_steps:"):
+            out[cur]["steps"] = int(s.split(":", 1)[1].strip())
     return out
 
 
 # ── 输出 ────────────────────────────────────────────────────────────────
 
 def print_table(rows: list[dict[str, Any]]) -> None:
-    hdr = ("fixture", "解出", "flag对", "尝试", "api", "总token", "工具", "重复率",
+    hdr = ("fixture", "解出", "flag对", "尝试", "api", "×参考解", "总token", "工具", "重复率",
            "发现开销", "shell/read", "延迟均值", "缓存命中")
     print()
     print("| " + " | ".join(hdr) + " |")
     print("|" + "---|" * len(hdr))
     for r in rows:
         ok = "✓" if r["flag_matches"] else ("—" if r["flag_matches"] is None else "✗")
+        econ = f"{r['ref_multiple']}×" if r["ref_multiple"] is not None else "—"
         print(
             f"| {r['fixture']} | {'✓' if r['solved'] else '✗'} | {ok} "
             f"| {r['attempts']} | {r['api_calls']} "
+            f"| {econ} "
             f"| {(r['total_tokens'] or 0):,} | {r['tool_calls']} "
             f"| {r['tool_repeat_rate']*100:.0f}% | {r['discovery_calls']} "
             f"({r['discovery_share']*100:.0f}%) "
@@ -267,6 +282,21 @@ def print_aggregate(rows: list[dict[str, Any]]) -> None:
     print(f"- **shell : read_file =** {sum(r['shell_calls'] for r in rows)} : "
           f"{sum(r['read_calls'] for r in rows)}（CTF 本该 shell 主导）")
 
+    # 路径经济性 —— 解出率在难题上会饱和（3/3 就没有下降空间了），
+    # 这个指标不会：绕远路是连续的，任何一次减冗余都能在它上面看到位移。
+    graded_econ = [r for r in rows if r["ref_multiple"] is not None]
+    if graded_econ:
+        ref_sum = sum(r["ref_steps"] for r in graded_econ)
+        api_sum = sum(r["api_calls"] for r in graded_econ)
+        worst = max(graded_econ, key=lambda r: r["ref_multiple"])
+        print(f"- **路径经济性：** api_calls {api_sum} / 参考解最少步数 {ref_sum} "
+              f"= **{api_sum / ref_sum:.1f}×**（越接近 1 越经济；"
+              f"最不经济：{worst['fixture']} {worst['ref_multiple']}×）")
+        print("  > 解出率饱和时以本项为主指标：题解得出但绕远路，"
+              "正是 P0.1/减冗余类改动的靶子。")
+    else:
+        print("- **路径经济性：** 不可用（manifest 无 solve_reference_steps）")
+
 
 # ── 入口 ────────────────────────────────────────────────────────────────
 
@@ -281,14 +311,15 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--json", type=Path, help="结果写成 JSON（基线归档）")
     args = ap.parse_args(argv)
 
-    expected = load_expected(args.manifest) if args.manifest else {}
+    meta = load_expected(args.manifest) if args.manifest else {}
 
     rows = []
     for d in args.dirs:
         if not d.is_dir():
             print(f"⚠️  跳过（不是目录）：{d}", file=sys.stderr)
             continue
-        rows.append(analyze(d, expected.get(d.name)))
+        m = meta.get(d.name, {})
+        rows.append(analyze(d, m.get("expected_flag"), m.get("steps")))
 
     if not rows:
         sys.exit("❌ 没有任何可分析的 work_dir")

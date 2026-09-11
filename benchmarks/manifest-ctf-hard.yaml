@@ -14,6 +14,11 @@
 # 字段与 manifest-unit.yaml 一致，额外多一个 solve_reference_steps：
 # 参考解的最少步骤数。它是**难度的代理指标**，也是验收时的分母 ——
 # solver 的 api_calls 若数倍于它，即使解出也说明路径不经济。
+#
+# 2026-09-11 起 ctf_path_baseline.py 直接消费这个字段，输出 `×参考解` 列与
+# 「路径经济性」汇总。原因：这三题的**解出率会饱和**（首次跑批就 3/3 一次通过），
+# 拿"解出率"验收任何优化都没有下降空间。而 api_calls/参考解步数 是连续量 ——
+# 题解得出、但绕了 2–4 倍远路，这个位移看得见。**解出率饱和时以它为主指标。**
 - id: misc-bigscan-01
   category: misc
   fixture: fixtures-hard/misc-bigscan-01/
