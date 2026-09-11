@@ -25,16 +25,21 @@
 
 | # | 指标 | 实测基线 | 采集方式 |
 |---|---|---|---|
-| M1 | **重复工具调用占比** | 62–79% | §8.1 |
-| M2 | **平均工具调用数 / assistant 消息** | **1.12** | §8.1 |
-| M3 | **被压缩消息占比** | **75%**（19,541 / 26,127） | §8.1 |
-| M4 | **CTF 工具调用次数** | **0** | §8.2 |
+| M1 | **重复工具调用占比** | **79.9%**（8 个 CTF 会话汇总，3,353/4,196 冗余） | §8.1 / §8.6 |
+| M2 | **平均工具调用数 / assistant 消息** | **1.04** | §8.1 / §8.6 |
+| M3 | **被压缩消息占比** | **82.2%**（7,094/8,634） | §8.1 / §8.6 |
+| M4 | **CTF 工具调用次数** | **0** | §8.2 / §8.6 |
 | M5 | 到 flag 的工具调用数（简单题） | 7（logd）/ 26（ezRSA）/ **127（WEB2）** | §8.1 |
 | M6 | 到 flag 的工具调用数（难题） | 397 | §8.1 |
-| M7 | cache-read token / 难题会话 | **42.9M** | §8.1 |
+| M7 | cache-read token / 难题会话 | **42.9M**（迷路的魔法少女）；8 会话合计 86.2M | §8.1 / §8.6 |
 | M8 | 固定开销（中性 cwd） | 75.6 KB ≈ 22k tokens | §8.3 |
 | M9 | 固定开销（仓库 cwd） | **175 KB** | §8.3 |
 | M10 | 知识检索 2 字中文命中 | `"注入"`/`"上传"`/`"逆向"` → **0 行** | §8.4 |
+
+> **基线存档（2026-09-11）：** `benchmarks/baselines/2026-09-11-ctf-chatpath.json`
+> 采集器：`benchmarks/process_metrics.py`（只读 state.db，纯新增）。
+> ⚠️ 该基线测的是 **`fulilian chat` 人工解题路径** —— 见 §3.D2，CTF 层从未执行过。
+> 只作用于 `mode="ctf"` 的改动无法用它验证。
 
 ### 1.1 逐会话明细
 
@@ -117,6 +122,26 @@ git_auto_commit, compile_check, checkpoint, generate_writeup  →  全部 0 次
 - 多出的 96 KB 是 fulilian 自己的开发指南 `AGENTS.md`（96,318 B），在仓库 cwd 下每回合注入。
 - 189 条 skill 名字占系统提示词 **20,239 字符**（~5.1K tokens）。
 - **7.5 MB 的 `ctf-knowledge` 卡片集**：因为 `~/.fulilian/skills/ctf-knowledge/SKILL.md` 没有 YAML frontmatter，在索引里只渲染为一行 `    - ctf-knowledge`，没有任何描述 —— 模型不知道里面有什么。
+
+### D2. CTF 层从未被真正执行过（2026-09-11 新发现）
+
+`find ~/.fulilian -name usage.json` → **全盘不存在**。
+
+`usage.json` 由 `fulilian_ctf/solver.py:88 write_usage_record()` 在每次
+`fulilian solve` 尝试结束时写入 work_dir。它不存在，意味着
+**`run_agent.main(mode="ctf")` 这条 CTF 路径一次都没有跑过**。
+
+`state.db` 里那 8 个"解题"会话全部是 `fulilian chat`（`source=cli`）里
+**人工对话解题**，不是 `fulilian solve`。
+
+**推论（重要）：**
+- 15,460 行 CTF 层从未在真实解题中承担过职责 —— 这解释了 M4 为何是 0，
+  且比"工具没注册"更根本：**整条路径没被走过**。
+- 因此**任何只作用于 `mode="ctf"` 的改动（如 P0.5.1），都无法用现有
+  基线验证** —— 基线测的是另一条代码路径。
+- `sessions.cache_write_tokens` 在全部 112 个会话、所有模型上**均为 0**
+  → §3.H「压缩强制一次缓存全价重写」**无法从 state.db 验证**，只有代码
+  逻辑支撑，属机制推断而非实测证据。**该条已从"证据"降级。**
 
 ### E. 知识检索基本是噪声
 
@@ -486,3 +511,73 @@ sqlite3 "$FULILIAN_CTF_KB" \
 | ctf_solve toolset | `toolsets.py:642-653` |
 | 检索引擎 | `fulilian_ctf/knowledge_retriever.py` |
 | 自证 benchmark | `benchmarks/sampling/build_retrieval_golden.py:94` |
+
+### 8.6 过程指标采集器（2026-09-11 新增）
+
+```bash
+cd ~/.fulilian/fulilian-agent
+
+# 列出可选会话
+python3 benchmarks/process_metrics.py --list
+
+# 单会话 / 批量 / 落基线
+python3 benchmarks/process_metrics.py --session <id>
+python3 benchmarks/process_metrics.py --recent 10
+python3 benchmarks/process_metrics.py --recent 10 --json benchmarks/baselines/<日期>-<标签>.json
+```
+
+只读 `state.db`（`mode=ro&immutable=1`），**不碰 solver 一行代码**。
+
+---
+
+## 9. 实施日志
+
+### 2026-09-11 · 分支隔离
+
+```
+ctf-opt                          ← 本次工作分支
+wip/root-layout-2026-09-11       ← 你在途的布局重构（89 个变更）已快照
+refactor/root-layout @ 974ac6b   ← 原分支，未被触碰
+```
+
+- `44d89a7` 根目录布局重构 WIP 快照（86 个文件）
+- `383a63b` 本计划书
+
+### 2026-09-11 · A1 完成
+
+在途工作已快照到 `wip/root-layout-2026-09-11`，工作树干净，`ctf-opt` 为工作分支。
+**未推送任何分支到 origin。**
+
+### 2026-09-11 · A4 完成（过程指标采集器）
+
+新增 `benchmarks/process_metrics.py` + `benchmarks/baselines/2026-09-11-ctf-chatpath.json`。
+
+**验证：** 既有 harness 在布局重构后完好 —— `python3 -m fulilian_ctf.benchmark --suite unit`
+仍 25/25 通过。
+
+**核实的两处缺口：**
+1. `--suite unit` 把 solver mock 成参考解（README 自承）→ **测不了 agent 质量**。
+2. `--suite smoke` 是待填骨架（`"[BUUCTF 题号待填]"`），且 runner 一律 exit 2 →
+   真 API 的真题测量**不存在**。
+3. unit 摘要里 `平均token = None` → 连 token 都没在记。
+
+**基线（8 个 CTF 会话）：** M1 79.9% · M2 1.04 · M3 82.2% · M4 0 ·
+M6 86.2M cache_read / 1,036 api_calls / 平均 83k per call。
+
+**本轮产生的修正：**
+- §3.H 从「证据」降级为「机制推断」—— `cache_write_tokens` 全库为 0，无法验证。
+- 新增 §3.D2：CTF 层从未执行过（`usage.json` 全盘不存在）。
+- M5 是弱代理指标，只认同版本前后对照，不可跨版本比较。
+
+**对后续步骤的影响：**
+P0.5.1 / P0.5.2 只作用于 `mode="ctf"`，而**该路径从未跑过** →
+要么先做一次真实 `fulilian solve` 建立 CTF 路径基线（需题 + API 配额），
+要么接受 A2/A3 仅作代码级验证、把效果测量推迟到首次真实解题。
+
+---
+
+## 10. 当前状态
+
+- **代码改动：0 处。** 计划书与采集器是纯新增。
+- 分支：`ctf-opt`（未推送）。
+- 下一步待定：见 §9 末「对后续步骤的影响」。

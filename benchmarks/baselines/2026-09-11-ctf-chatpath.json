@@ -1,0 +1,403 @@
+{
+  "generated_at": "2026-09-11T12:06:47.146912+00:00",
+  "schema": "ctf-process-metrics/1",
+  "session_count": 8,
+  "sessions": [
+    {
+      "session_id": "20260907_155650_52d4d5",
+      "source": "cli",
+      "model": "glm-5.3-flash",
+      "title": "破解 ezRSA CTF 挑战",
+      "started_at": 1788767852.6176264,
+      "M1_repeat_rate": 0.76,
+      "M1_redundant_calls": 38,
+      "M2_calls_per_turn": 1.316,
+      "M2_max_calls_in_turn": 2,
+      "M3_compacted_pct": 0.402,
+      "M4_ctf_tool_calls": 0,
+      "M5_calls_before_flag": 15,
+      "M6_total_tool_calls": 50,
+      "M6_distinct_commands": 12,
+      "M6_assistant_turns": 38,
+      "M6_messages": 102,
+      "M6_compacted_messages": 41,
+      "M6_api_calls": 26,
+      "M6_input_tokens": 213509,
+      "M6_output_tokens": 59158,
+      "M6_cache_read_tokens": 766464,
+      "M6_cache_write_tokens": 0,
+      "tool_mix": {
+        "terminal": 22,
+        "read_file": 8,
+        "patch": 7,
+        "write_file": 6,
+        "search_files": 4,
+        "skill_view": 3
+      },
+      "top_repeated_commands": [
+        {
+          "count": 4,
+          "command": "~/.venvs/ctf/bin/python /home/xujuan/ezrsa_solve.py 2>&1"
+        },
+        {
+          "count": 2,
+          "command": "printf '%s\\n' '2026-09-07 ezRSA(dasctf) 附件=/mnt/d/Downloads/fe1673ff464f34c8ddf0a5a0a91aacf2223b3712404aafa9bef2cfc43c20ee3f.py：输出5个数 N, gift=P^(Q>>16), pow(n,e"
+        },
+        {
+          "count": 2,
+          "command": "ls /home/xujuan/.fulilian/ctf-knowledge/ ; echo ---- ; ls /home/xujuan/.fulilian/ctf-knowledge/CTF大赛WP集合/self-solved/ 2>/dev/null | head -20 ; echo ---- ; ls /h"
+        },
+        {
+          "count": 2,
+          "command": "python3 -c \"\nimport json\nd=json.load(open('/home/xujuan/.fulilian/ctf-knowledge/CTF大赛WP集合/wp_technique_index.json'))\nprint(type(d))\nitems = d if isinstance(d,li"
+        },
+        {
+          "count": 2,
+          "command": "ls /home/xujuan/.fulilian/ctf-knowledge/CTF常用脚本及工具/ | head -30; echo ----; ls /home/xujuan/.fulilian/ctf-knowledge/CTF常用脚本及工具/RSA* 2>/dev/null | head; echo ----"
+        }
+      ]
+    },
+    {
+      "session_id": "20260908_083926_262f63",
+      "source": "cli",
+      "model": "glm-5.3-flash",
+      "title": "md5强比较绕过登录payload",
+      "started_at": 1788828083.225264,
+      "M1_repeat_rate": 0.3333,
+      "M1_redundant_calls": 1,
+      "M2_calls_per_turn": 1.5,
+      "M2_max_calls_in_turn": 2,
+      "M3_compacted_pct": 0.0,
+      "M4_ctf_tool_calls": 0,
+      "M5_calls_before_flag": null,
+      "M6_total_tool_calls": 3,
+      "M6_distinct_commands": 2,
+      "M6_assistant_turns": 2,
+      "M6_messages": 7,
+      "M6_compacted_messages": 0,
+      "M6_api_calls": 2,
+      "M6_input_tokens": 38278,
+      "M6_output_tokens": 5940,
+      "M6_cache_read_tokens": 1088,
+      "M6_cache_write_tokens": 0,
+      "tool_mix": {
+        "terminal": 2,
+        "write_file": 1
+      },
+      "top_repeated_commands": []
+    },
+    {
+      "session_id": "20260908_084859_ddc8ec",
+      "source": "cli",
+      "model": "glm-5.3-flash",
+      "title": "Check 123.57.12.5:34869 URL",
+      "started_at": 1788828544.095723,
+      "M1_repeat_rate": 0.5652,
+      "M1_redundant_calls": 13,
+      "M2_calls_per_turn": 1.353,
+      "M2_max_calls_in_turn": 2,
+      "M3_compacted_pct": 0.6154,
+      "M4_ctf_tool_calls": 0,
+      "M5_calls_before_flag": 11,
+      "M6_total_tool_calls": 23,
+      "M6_distinct_commands": 10,
+      "M6_assistant_turns": 17,
+      "M6_messages": 52,
+      "M6_compacted_messages": 32,
+      "M6_api_calls": 14,
+      "M6_input_tokens": 78072,
+      "M6_output_tokens": 6169,
+      "M6_cache_read_tokens": 420608,
+      "M6_cache_write_tokens": 0,
+      "tool_mix": {
+        "terminal": 15,
+        "skill_view": 8
+      },
+      "top_repeated_commands": [
+        {
+          "count": 2,
+          "command": "echo \"--- 浏览器直接填 username=1&password=2 的效果 ---\"; curl -s --max-time 15 -X POST http://123.57.12.5:34869/login.php -d \"username=1&password=2\" | grep -oE \"(密码错误|F"
+        },
+        {
+          "count": 2,
+          "command": "echo \"=== Web/网络类 ===\"; for t in curl nmap ffuf gobuster dirsearch whatweb sqlmap nc socat tcpdump wireshark tshark hydra john hashcat; do command -v $t >/dev/n"
+        },
+        {
+          "count": 2,
+          "command": "check(){ command -v \"$1\" >/dev/null 2>&1 && echo \"$1: $(command -v $1)\" || echo \"$1: 未装\"; }\necho \"=== Web/网络 ===\"\nfor t in curl wget nmap ffuf gobuster dirsearc"
+        },
+        {
+          "count": 2,
+          "command": "echo \"=== CTF venv Python 包 ===\"; ~/.venvs/ctf/bin/pip list 2>/dev/null | grep -iE \"pwntools|requests|pycrypto|z3|capstone|scapy|easyocr|flask|numpy|pillow|symp"
+        },
+        {
+          "count": 2,
+          "command": "ls -la /usr/share/wordlists/seclists 2>/dev/null | head -3; echo \"---\"; du -sh /usr/share/seclists/ 2>/dev/null; ls /usr/share/seclists/ 2>/dev/null | head -12;"
+        }
+      ]
+    },
+    {
+      "session_id": "20260908_151138_bd02ed",
+      "source": "cli",
+      "model": "glm-5.3-flash",
+      "title": "Access URL 123.57.12.5:34912",
+      "started_at": 1788851508.6659334,
+      "M1_repeat_rate": 0.2667,
+      "M1_redundant_calls": 12,
+      "M2_calls_per_turn": 1.047,
+      "M2_max_calls_in_turn": 2,
+      "M3_compacted_pct": 0.0,
+      "M4_ctf_tool_calls": 0,
+      "M5_calls_before_flag": null,
+      "M6_total_tool_calls": 45,
+      "M6_distinct_commands": 33,
+      "M6_assistant_turns": 43,
+      "M6_messages": 96,
+      "M6_compacted_messages": 0,
+      "M6_api_calls": 45,
+      "M6_input_tokens": 196009,
+      "M6_output_tokens": 51965,
+      "M6_cache_read_tokens": 1835264,
+      "M6_cache_write_tokens": 0,
+      "tool_mix": {
+        "terminal": 28,
+        "execute_code": 5,
+        "process": 5,
+        "skill_view": 4,
+        "write_file": 2,
+        "web_search": 1
+      },
+      "top_repeated_commands": []
+    },
+    {
+      "session_id": "20260908_155942_e96c8a",
+      "source": "cli",
+      "model": "glm-5.3-flash",
+      "title": "解CTF题迷路的魔法少女",
+      "started_at": 1788854488.128317,
+      "M1_repeat_rate": 0.8442,
+      "M1_redundant_calls": 1707,
+      "M2_calls_per_turn": 1.001,
+      "M2_max_calls_in_turn": 2,
+      "M3_compacted_pct": 0.8476,
+      "M4_ctf_tool_calls": 0,
+      "M5_calls_before_flag": 42,
+      "M6_total_tool_calls": 2022,
+      "M6_distinct_commands": 315,
+      "M6_assistant_turns": 2020,
+      "M6_messages": 4200,
+      "M6_compacted_messages": 3560,
+      "M6_api_calls": 397,
+      "M6_input_tokens": 1552097,
+      "M6_output_tokens": 252394,
+      "M6_cache_read_tokens": 42897600,
+      "M6_cache_write_tokens": 0,
+      "tool_mix": {
+        "terminal": 1521,
+        "write_file": 318,
+        "search_files": 71,
+        "process": 31,
+        "skill_view": 29,
+        "skill_manage": 22,
+        "memory": 12,
+        "read_file": 8,
+        "web_search": 5,
+        "execute_code": 5
+      },
+      "top_repeated_commands": [
+        {
+          "count": 14,
+          "command": "bash /home/xujuan/ctf_work/easyssti/exploit.sh 'dict(cat=1)|join~(config|string|batch(8)|first|last)~(config|string|batch(280)|first|last)~dict(flag=1)|join'"
+        },
+        {
+          "count": 14,
+          "command": "bash /home/xujuan/ctf_work/babyssti3/exploit.sh"
+        },
+        {
+          "count": 8,
+          "command": "mkdir -p ~/ctf_work/unserialize1 && cd ~/ctf_work/unserialize1 && T=\"http://9ade09a1e0828e4622c3a703.http-ctf2.dasctf.com\" && echo \"=== HEADERS ===\" && curl -sI"
+        },
+        {
+          "count": 8,
+          "command": "mkdir -p ~/ctf_work/const_python && cd ~/ctf_work/const_python && T=\"http://4b6f9b256367db03aae7bb6d.http-ctf2.dasctf.com\" && echo \"=== HEADERS ===\" && curl -sI"
+        },
+        {
+          "count": 8,
+          "command": "cd ~/ctf_work/const_python && T=\"http://4b6f9b256367db03aae7bb6d.http-ctf2.dasctf.com\" && echo \"=== /src ===\" && curl -s -m 10 -i \"$T/src\" | head -50 && echo \"="
+        }
+      ]
+    },
+    {
+      "session_id": "20260908_160152_dc8f56",
+      "source": "cli",
+      "model": "glm-5.3-flash",
+      "title": "Power Cookie CTF challenge",
+      "started_at": 1788854588.1267402,
+      "M1_repeat_rate": 0.8132,
+      "M1_redundant_calls": 958,
+      "M2_calls_per_turn": 1.019,
+      "M2_max_calls_in_turn": 2,
+      "M3_compacted_pct": 0.8136,
+      "M4_ctf_tool_calls": 0,
+      "M5_calls_before_flag": 59,
+      "M6_total_tool_calls": 1178,
+      "M6_distinct_commands": 220,
+      "M6_assistant_turns": 1156,
+      "M6_messages": 2457,
+      "M6_compacted_messages": 1999,
+      "M6_api_calls": 302,
+      "M6_input_tokens": 803304,
+      "M6_output_tokens": 226287,
+      "M6_cache_read_tokens": 23561472,
+      "M6_cache_write_tokens": 0,
+      "tool_mix": {
+        "terminal": 702,
+        "write_file": 320,
+        "execute_code": 75,
+        "skill_view": 35,
+        "patch": 14,
+        "web_search": 12,
+        "vision_analyze": 8,
+        "read_file": 5,
+        "web_extract": 4,
+        "computer_use": 3
+      },
+      "top_repeated_commands": [
+        {
+          "count": 8,
+          "command": "cd ~/ctf-web2 && python3 fmt_matrix.py"
+        },
+        {
+          "count": 8,
+          "command": "cd ~/ctf-web2 && gcc -O3 -o mt7 mt7.c && ./mt7 12345 && ./mt7 99999999"
+        },
+        {
+          "count": 7,
+          "command": "mkdir -p ~/ctf-wfy2 && cd ~/ctf-wfy2 && T='http://bf94690c0dcf4655a0658c9a.http-ctf2.dasctf.com:80' && curl -s -m 15 \"$T/\" -o home.html -D h.txt && cat h.txt &&"
+        },
+        {
+          "count": 7,
+          "command": "cd ~/ctf-wfy2 && T='http://bf94690c0dcf4655a0658c9a.http-ctf2.dasctf.com:80' && echo '=== NewCTFer ===' && curl -s -m 15 \"$T/comments.php\" --data-urlencode 'nam"
+        },
+        {
+          "count": 7,
+          "command": "cd ~/ctf-wfy2 && python3 probe1.py"
+        }
+      ]
+    },
+    {
+      "session_id": "20260909_171249_535992",
+      "source": "cli",
+      "model": "glm-5.3-flash",
+      "title": "Solve WEB2 BUUCTF CTF challenge",
+      "started_at": 1788945272.8863435,
+      "M1_repeat_rate": 0.6836,
+      "M1_redundant_calls": 255,
+      "M2_calls_per_turn": 1.117,
+      "M2_max_calls_in_turn": 3,
+      "M3_compacted_pct": 0.7712,
+      "M4_ctf_tool_calls": 0,
+      "M5_calls_before_flag": 183,
+      "M6_total_tool_calls": 373,
+      "M6_distinct_commands": 118,
+      "M6_assistant_turns": 334,
+      "M6_messages": 721,
+      "M6_compacted_messages": 556,
+      "M6_api_calls": 123,
+      "M6_input_tokens": 335579,
+      "M6_output_tokens": 94979,
+      "M6_cache_read_tokens": 8479168,
+      "M6_cache_write_tokens": 0,
+      "tool_mix": {
+        "terminal": 272,
+        "patch": 38,
+        "write_file": 27,
+        "skill_view": 11,
+        "read_file": 11,
+        "search_files": 6,
+        "execute_code": 5,
+        "web_search": 3
+      },
+      "top_repeated_commands": [
+        {
+          "count": 6,
+          "command": "cd /tmp/web2 && gcc -O3 -march=native -o brute_any brute_any.c && time ./brute_any 120996676 829675014 1682206777 | tee brute_any_hit.txt"
+        },
+        {
+          "count": 4,
+          "command": "mkdir -p /tmp/shiro && cd /tmp/shiro && echo \"# Shiro notes $(date)\" > ctf-notes.md && echo \"- $(date) target=39.99.235.26 scenario=blackbox multi-flag(4), flag"
+        },
+        {
+          "count": 4,
+          "command": "cd /tmp/shiro && nmap -sT -Pn -T4 --top-ports 1000 39.99.235.26 -oN recon-nmap.txt 2>&1 | tail -30"
+        },
+        {
+          "count": 4,
+          "command": "cd /tmp/shiro && B64=$(base64 -w0 jout/Evil.class) && java --add-exports java.xml/com.sun.org.apache.xalan.internal.xsltc.trax=ALL-UNNAMED --add-exports java.xm"
+        },
+        {
+          "count": 3,
+          "command": "mkdir -p /tmp/web2 && cd /tmp/web2 && T=http://e12723bb03f4144765a50670.http-ctf2.dasctf.com && echo \"=== headers ===\" && curl -sI -m 15 \"$T/\" && echo \"=== home"
+        }
+      ]
+    },
+    {
+      "session_id": "20260910_082318_6ef23d",
+      "source": "cli",
+      "model": "glm-5.3-flash",
+      "title": "Solve BUUCTF WEB2 challenge",
+      "started_at": 1789007507.7368956,
+      "M1_repeat_rate": 0.7351,
+      "M1_redundant_calls": 369,
+      "M2_calls_per_turn": 1.173,
+      "M2_max_calls_in_turn": 2,
+      "M3_compacted_pct": 0.9069,
+      "M4_ctf_tool_calls": 0,
+      "M5_calls_before_flag": null,
+      "M6_total_tool_calls": 502,
+      "M6_distinct_commands": 133,
+      "M6_assistant_turns": 428,
+      "M6_messages": 999,
+      "M6_compacted_messages": 906,
+      "M6_api_calls": 127,
+      "M6_input_tokens": 607579,
+      "M6_output_tokens": 261493,
+      "M6_cache_read_tokens": 8210560,
+      "M6_cache_write_tokens": 0,
+      "tool_mix": {
+        "terminal": 348,
+        "read_file": 32,
+        "web_search": 24,
+        "patch": 22,
+        "memory": 20,
+        "search_files": 18,
+        "skill_view": 17,
+        "process": 11,
+        "vision_analyze": 6,
+        "clarify": 4
+      },
+      "top_repeated_commands": [
+        {
+          "count": 5,
+          "command": "grep -n \"2\\.2g\\|text:\\|viewBox\" /home/xujuan/.fulilian/skills/ctf-web-exploitation/SKILL.md | head -20; echo \"---WP---\"; grep -n \"备用文件读\\|text:\\|1e9\\|99999999\" \""
+        },
+        {
+          "count": 5,
+          "command": "find /home/xujuan/.fulilian/skills -maxdepth 3 -iname \"*web-exploit*\" -type d 2>/dev/null; ls /tmp/mtbrute.c /tmp/decrypt_flag.py 2>&1; grep -n \"1e9\\|999999999\\"
+        },
+        {
+          "count": 5,
+          "command": "find /home/xujuan/.fulilian/ctf-knowledge -iname \"*multiSQL*\" -o -iname \"*multisql*\" | head -5; ls /home/xujuan/.fulilian/skills/ | grep -i recipe; ls /home/xuj"
+        },
+        {
+          "count": 5,
+          "command": "grep -n \"^#\\{2,3\\} \" /home/xujuan/.fulilian/skills/ctf-web-recipes/SKILL.md | head -40; wc -l /home/xujuan/.fulilian/skills/ctf-web-recipes/SKILL.md; ls /home/x"
+        },
+        {
+          "count": 5,
+          "command": "grep -n \"MySQL/MariaDB 黑名单注入\\|堆叠判定不能用 SLEEP\\|REPLACE INTO\" /home/xujuan/.fulilian/skills/ctf-web-recipes/SKILL.md | head -6; wc -c /home/xujuan/.fulilian/skills"
+        }
+      ]
+    }
+  ]
+}
