@@ -106,16 +106,82 @@ M1–M10 测的是 `fulilian chat` 人工路径。CTF 求解器（`mode="ctf"`�
 
 三条直接指向优化项的读数：
 
-- **C4 = 68 : 1。** 三道简单题烧掉 62 万 prompt token，只换来 9 千补全 token。
-  这正是 P0.1（工具输出落盘 + 只留头尾指针）要打的靶子：钱花在反复重发历史，
-  不是花在思考。
 - **C8 = 16.3%。** 43 次工具往返里有 7 次纯粹用于「问出工具签名」（模型必须靠
   `tool_describe` / `tool_search` 才发现 `record_fact` 要 `work_dir`、
-  `submit_flag` 要 `work_dir`）。这是 CTF 工具被推迟（不在 `_FULILIAN_CORE_TOOLS`）
-  的直接代价 —— 对应 P0.2 与 P7。
+  `submit_flag` 要 `work_dir`）。这是 CTF 工具被推迟的直接代价 —— 对应 P0.2 与 P7。
 - **C9 = 8 : 15。** CTF 解题本该 shell 主导（`curl`/`python -c`/`grep`），实测
   `read_file` 是 `terminal` 的近两倍。模型在「看」而不是「打」—— 对应 P1/C2
   （分批工具 + 持久 shell）。
+- **C4 = 68 : 1 —— 见下方 §1.4，成因与初判不同，已重测修正。**
+
+### 1.4 C4 的真正成因：每次调用重发固定开销，不是历史膨胀（2026-09-11 重测）
+
+初版 §1.3 把 68:1 归因为「钱花在反复重发历史」，指向 P0.1。**重测后该归因不成立。**
+
+**证据一：截断机制从未触发。** 三个 fixture 的 `solver.log` 里
+`OUTPUT TRUNCATED` **0 次**、`persisted-output` **0 次**。
+即 `tools/terminal_tool.py:3695` 的丢弃式截断与
+`tools/tool_result_storage.py` 的落盘机制**一次都没跑过** ——
+P0.1 在这批 fixture 上**零效果**（因为输出本来就小）。
+
+**证据二：prompt 几乎不增长。** 逐次 `📊 Request size`（§8.7 可复现）：
+
+| fixture | 调用数 | 首次 prompt | 末次 prompt | 全程增长 | 累计 | 固定开销占比 |
+|---|---|---|---|---|---|---|
+| misc-morse-01 | 12 | 9,460 | 13,804 | **+4,344** | 146,346 | **77.6%** |
+| crypto-rsa-01 | 10 | 9,525 | 14,264 | **+4,739** | 120,616 | **79.0%** |
+| web-robots-01 | 12 | 9,454 | 16,220 | **+6,766** | 165,650 | **68.5%** |
+
+*（"固定开销占比" = 首次 prompt × 调用数 ÷ 累计，即"每次都要重发的那部分"。
+三次调用序列之和 432,612；`usage.json` 的 provider 计数更高，差额是重试与
+压缩轮不落日志 —— 见采集器 docstring 的已知局限。）*
+
+**结论：** 一次 12 调用的简单题，70%+ 的 prompt token 是**每次调用原样重发的
+那 ~9.5K 基线**，真正的对话增长只有 4–7K。**省钱靠两件事：减少调用次数、
+压小那 9.5K 基线** —— 不是靠历史压缩，更不是靠输出落盘。
+
+**证据三：那 9.5K 里 61% 是工具 schema。** 实测
+`get_tool_definitions(enabled_toolsets=["ctf_solve"])`：
+
+```
+CTF 工具集工具数: 14
+工具 schema 总字符: 22,942    ≈ 5,735 tokens（按 4 字符/token 估）
+```
+
+| 工具 | schema 字符 |
+|---|---|
+| terminal | 3,281 |
+| **memory** | **3,176** |
+| **skill_manage** | **2,455** |
+| search_files | 1,982 |
+| patch | 1,970 |
+| read_file | 1,675 |
+| tool_search | 1,467 |
+| vision_analyze | 1,358 |
+| process | 1,356 |
+| write_file | 1,270 |
+| web_extract | 1,112 |
+
+`memory` + `skill_manage` 合计 **5,631 字符 ≈ 1,408 tokens**，
+**每次调用都要重发** —— 而 `toolsets.py:646` 的注释写明它们存在的唯一理由是
+「回合后自省触发依赖」，即供 `background_review` fork 写入
+（`toolsets.py:637-640`：「主会话带上这两个工具后 fork 可正常执行写入」）。
+
+**A3 已经把那把 fork 关掉了**（`skip_background_review=True`）。
+所以这两个工具现在是**纯死重**：消费方已不存在，成本仍在每次请求上支付。
+→ 新增 **P0.5.4**。
+
+> **自我更正：** A3 条目里我写「不加 `skip_memory=True`，因为 `ctf_solve`
+> toolset 刻意保留了 memory 工具」。**不加 flag 是对的，但推理不完整** ——
+> 我当时只看到"toolset 保留了它"，没看出保留它的**唯一理由**正是被 A3 关掉的
+> 那条 fork。flag 不该加，而 toolset 里这两个工具该删。
+
+**对优先级的影响（重要）：**
+在现有 fixture 上，P0.1 的机制**从未触发**；真正的杠杆是
+**P3/P7（砍固定开销）> P0.5.4（删死重工具）> 减少调用数**。
+P0.1 只有在**难题**上才可能见效（长扫描、反编译转储、爆破日志），
+而当前 3 题全 easy —— **这批基线验证不了 P0.1**，需要难题 holdout。
+（这不否定 P0.1 的价值，但改变了它的排序与验证方式。）
 
 ---
 
@@ -395,7 +461,12 @@ _PROACTIVE_COMPRESS_TURNS = 45   # 注释写 "(15)"
 
 ## 4. 优化建议（按 ROI 排序）
 
-### P0 — 修数据丢失（最高 ROI）
+### P0 — 修数据丢失
+
+> ⚠️ **CTF 路径上本节已降级**（§1.4 / A7）：P0.1 的机制在 easy fixture 上
+> **0 次触发**，而固定开销占 68–79%。当前 CTF 的最高 ROI 是 **P0.5.4** 与 **P3/P7**。
+> P0.1 保留给难题（长扫描 / 反编译转储 / 爆破日志），需先有难题 holdout 才能验收。
+> 本节内容对 `fulilian chat` 路径仍然成立。
 
 **P0.1 · 工具输出落盘，上下文只留指针**
 
@@ -446,6 +517,32 @@ agent = AIAgent(
 - **已验证的前提：** 该 0.60 封顶**确实生效**（曾怀疑被 `_SMALL_CTX_THRESHOLD_PERCENT`
   这条 floor 抬回 0.75 从而失效 —— 查证后 floor 就是 0.60，`max(0.60, 0.60) = 0.60`，
   假设不成立，见 A2 条目）。
+
+**P0.5.4 · 从 `ctf_solve` 工具集删掉 `memory` 与 `skill_manage`** ⏳ **未实施（ROI 最高）**
+
+```python
+# toolsets.py:642-650
+"ctf_solve": {
+    "tools": [
+        "verify_flag", "checkpoint", "generate_writeup", "compile_check",
+        # 回合后自省触发依赖（见上方注释）：记忆 + skill 写入
+        "memory", "skill_manage",          # ← 删这两行
+    ],
+    "includes": ["terminal", "file", "web", "vision"],
+}
+```
+
+- **为什么：** §1.4 的证据三。两者合计 **5,631 字符 ≈ 1,408 tokens，每次调用都重发**；
+  而 `toolsets.py:637-640` 的注释写明它们存在的**唯一理由**是供
+  `background_review` fork 写入 —— **A3 已关掉那条 fork**，消费方不存在了。
+- **预期效果：** ~1.4K tokens/次调用。12 次的简单题 ≈ 17K；
+  50 次的难题 ≈ 70K。改动是删两行 + 改注释，**零逻辑风险**。
+- **前提：** 必须先确认 A3 的 `skip_background_review=True` 保持生效，
+  否则会打断 fork 的写入（这正是当初保留它们的原因）。
+- **验证：** 重跑一题，对比 C3（api_calls）与 C5（总 token）；
+  并确认 `run_agent.py:9211` 处 flag 仍在。
+- **与 A3 的关系：** 这是 A3 的**另一半**。A3 只关掉了 fork，没清理
+  为 fork 服务的工具。两条一起做才是完整的。
 
 ### P1 — 减少往返
 
@@ -540,9 +637,13 @@ agent = AIAgent(
 3. 一项一项改，每项单独重测。
 4. 防回归：`M1`/`C6` 必须单调下降；`M4` 应变为非零（CTF 工具真正进入链路）。
 
-**建议的动手顺序：** ~~P0.5.1 + P0.5.2（各一行 → 干净基线）~~ 已完成（A2/A3）
-→ 补做 A3 的 `skip_background_review=False` 对照跑（拿到 A3 的净效果）
-→ P0.1（单函数）→ 重测 M1/M3 与 C4/C5。
+**建议的动手顺序（已按 §1.4 重排）：** ~~P0.5.1 + P0.5.2~~ 已完成（A2/A3）
+→ **P0.5.4**（删死重工具，零风险，~1.4K tok/次调用）
+→ 一次对照跑同时验 A3 与 P0.5.4（`skip_background_review=False` vs 默认）
+→ **P3/P7** 砍固定开销 → 最后才是 P0.1（需先有难题 holdout）。
+
+**注意：** 现有 3 题基线**无法验收 P0.1**（§1.4 证据一：机制 0 次触发）。
+在拿到难题 holdout 之前，P0.1 的任何"效果"都不可测 —— 别用它当第一个改动。
 
 ---
 
@@ -558,6 +659,9 @@ agent = AIAgent(
 | C1–C11 数字 | **3 题，全 easy，样本极小** | 足以做前后对照，**不足以断言能力**；难题 holdout 仍缺 |
 | A3 的效果 | **未测** | 需 `skip_background_review=False` 对照跑（§10） |
 | CTF API 无读超时 | **实测会挂死** | 一次挂起样本；属 P0 邻域，未处理 |
+| **P0.1 在本基线零效果** | **实测：机制 0 次触发** | §1.4 证据一；**不能用现有基线验收 P0.1** |
+| **C4 的归因** | **已重测修正** | 初判"重发历史"**错误**；实为每次重发固定开销（68–79%） |
+| schema 字符→token | **4 字符/token 为估算** | 字符数是实测，token 数是换算；provider 计数可能不同 |
 
 ---
 
@@ -681,6 +785,35 @@ python3 benchmarks/ctf_path_baseline.py \
 
 **交叉校验：** 采集器读 `manifest-unit.yaml` 的 `expected_flag` 与 work_dir 的
 `FLAG` 文件逐字比对（`flag_matches`），避免"解出来了但答案是错的"被记成成功。
+
+### 8.8 §1.4 的两项测量（A7 新增）
+
+```bash
+cd ~/.fulilian/fulilian-agent
+
+# (1) 逐次 prompt 大小 —— 看固定开销 vs 对话增长
+for d in misc-morse-01 crypto-rsa-01 web-robots-01; do
+  echo "=== $d ==="
+  grep -o "📊 Request size: [0-9]* messages, ~[0-9,]* tokens" \
+      /tmp/ctf-baseline/$d/solver.log | sed 's/📊 Request size: //'
+done
+
+# (2) 截断/落盘机制是否触发过（A7 证据一，期望 0）
+grep -c "OUTPUT TRUNCATED"  /tmp/ctf-baseline/*/solver.log
+grep -c "persisted-output"  /tmp/ctf-baseline/*/solver.log
+
+# (3) CTF 工具集的 schema 体积（A7 证据三）
+./venv/bin/python - <<'PY'
+import json, sys; sys.path.insert(0, ".")
+from model_tools import get_tool_definitions
+defs = get_tool_definitions(enabled_toolsets=["ctf_solve"], quiet_mode=True)
+blob = json.dumps(defs, ensure_ascii=False)
+print(f"{len(defs)} 个工具, {len(blob):,} 字符")
+for n, d in sorted(((len(json.dumps(d, ensure_ascii=False)), d["function"]["name"])
+                    for d in defs), reverse=True):
+    print(f"  {n:>7,}  {d}")
+PY
+```
 
 ---
 
@@ -830,6 +963,37 @@ P0.5.1 / P0.5.2 只作用于 `mode="ctf"`，而**该路径从未跑过** →
 CPU 冻结、`ESTAB ... Send-Q 4290`、最后活动 20:27:38 停在 API call #7）——
 长跑有静默卡死风险，属 P0 邻域。
 
+### 2026-09-11 · A7：C4 归因重测 —— 推翻自己的初判，优先级重排
+
+**触发：** 准备动手做 P0.1（工具输出落盘）前，先去核实它的触发条件在基线里
+到底出现过没有。**结果是 0 次** —— 于是回头重测了 C4 的成因。
+
+**测到的三件事：**
+1. `OUTPUT TRUNCATED` / `persisted-output` 在三个 fixture 里**各 0 次**。
+   截断与落盘机制从未触发 → P0.1 在这批 fixture 上**零效果**。
+2. prompt 全程只增长 4.3–6.8K（9.5K → 13.8K），**固定开销占累计的 68.5–79.0%**。
+3. CTF 工具集 14 个工具、schema 22,942 字符；其中 `memory`(3,176) +
+   `skill_manage`(2,455) = **5,631 字符/次调用**。
+
+**推翻的结论：** §1.3 初版写「68:1 是 P0.1 要打的靶子」—— **错**。
+那 62 万 token 主要不是历史膨胀，而是**每次调用原样重发的 ~9.5K 基线**。
+
+**自我更正的第二处：** A3 条目里我以「toolset 刻意保留了 memory」为由说明
+为何不加 `skip_memory=True`。不加 flag 仍是对的，但**遗漏了**：保留这两个工具的
+**唯一理由**就是被 A3 关掉的那条 fork（`toolsets.py:637-647`）。
+→ 新增 **P0.5.4**，并把它标为当前 ROI 最高的一项。
+
+**对计划的结构性影响：**
+- **优先级重排：** P3/P7（砍固定开销）与 P0.5.4 > P0.1。原顺序把 P0.1 排第一，
+  是建立在"钱花在重发历史"这个**未经验证的假设**上的。
+- **基线的适用边界收窄：** 这 3 题**验证不了 P0.1**（机制不触发）。
+  要验证 P0.1 必须有难题 holdout（长扫描 / 反编译转储 / 爆破日志）。
+- **§1.4 记录了两条可复现的测量方法**（逐次 `📊 Request size` 抽取、
+  `get_tool_definitions()` schema 计量），后续改动可直接复用。
+
+**方法论备注：** 这次是"动手前先验证触发条件"，而不是"改完再测效果"。
+如果直接按原计划写 P0.1，会得到一个**无法被现有基线证伪、也无法被证明**的改动。
+
 ---
 
 ## 10. 当前状态
@@ -862,7 +1026,23 @@ CPU 冻结、`ESTAB ... Send-Q 4290`、最后活动 20:27:38 停在 API call #7�
 1. **CTF API 路径无读超时** —— 实测挂死一次（§9）。长跑静默卡死风险。
 2. `test_json_mode_emits_start_and_result` **先存的失败**（HEAD 上同样失败）。
 3. `solver.log` 被 `"w"` 覆盖 —— 跑完不立刻采集就丢数据。
+4. **没有难题 holdout** —— 现有 3 题全 easy，验证不了 P0.1 与任何历史膨胀类修复（§1.4）。
 
-**下一步（阶段 B）：** P0.1 工具输出落盘 —— `_prune_old_tool_results` 落在
-`agent/context_compressor.py:763` 的 `_PRUNED_TOOL_PLACEHOLDER`（把旧工具输出
-**物理删除**而非摘要）+ 输出侧截断。先设计再编码；C4 的 68:1 是它的计分板。
+**下一步（已按 §1.4 重排）：**
+
+| 顺序 | 项 | 理由 | 状态 |
+|---|---|---|---|
+| 1 | **P0.5.4** 删 `memory`+`skill_manage` | 1,408 tok/次调用，零逻辑风险，消费方已被 A3 关掉 | 待做 |
+| 2 | **P0.5 验证跑** A3 对照（`skip_background_review=False`） | 拿 A3 净效果；顺带验 P0.5.4 | 待做 |
+| 3 | **P3/P7** 砍固定开销（terminal schema 3,281 字符最肥） | 固定开销占 68–79% | 待做 |
+| 4 | **P0.1** 工具输出落盘 | 只在难题上见效 —— **先要难题 holdout** | 降级 |
+
+> P0.1 的具体形态已查清，实施时不必重新调研：
+> `tools/tool_result_storage.py` 的 `maybe_persist_tool_result`（Layer 2，
+> 落 `$FULILIAN_HOME/cache/spillover`，24h 自动清理）**已经是**计划里想建的东西；
+> 问题是 `tools/terminal_tool.py:3695` 在**工具内部**就先按 `tool_output.max_bytes`
+> （用户配 20000，默认 50000）把中段**丢弃**了，而 Layer 2 的阈值是 78,643 字符
+> （128K 窗口）。**20K 的刀比 78K 的闸早 4 倍落下，并且不带路径** ——
+> Layer 2 因此永远拿不到超限的输入。所以 P0.1 不是"新建落盘"，而是
+> **让工具内截断改走已有的落盘原语**（或抬高工具内阈值让 Layer 2 接手）。
+> 但在 easy fixture 上这条路径**从不触发**（§1.4），所以先做上面三项。
