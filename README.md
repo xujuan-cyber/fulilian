@@ -83,16 +83,16 @@ fulilian doctor
 
 ### Windows CMD frontend
 
-Prefer the Windows CMD terminal? [`cmd/`](cmd/README.en.md) installs a `fll` launcher that runs FuLiLian inside WSL while behaving like a native CMD command — UTF-8 output, verbatim argument and exit-code forwarding, installer with self-check and uninstall:
+Prefer the Windows CMD terminal? [`cmd/`](cmd/README.en.md) installs an `fllkali` launcher that runs FuLiLian inside WSL while behaving like a native CMD command — UTF-8 output, verbatim argument and exit-code forwarding, installer with self-check and uninstall:
 
 ```bat
 git clone https://github.com/xujuan-cyber/fulilian.git
 cd fulilian\cmd
 install.cmd          :: then open a new CMD window
-fll --version
+fllkali --version
 ```
 
-This delegates to WSL. To install FuLiLian **natively on Windows** instead (no WSL), use [`scripts\install.cmd`](scripts/install.cmd). See [`cmd/README.en.md`](cmd/README.en.md) for which one you want.
+The name is deliberate: in a CMD window `fll` and `fulilian` belong to the **native** Windows install (which likewise puts `fll` and `fulilian` on PATH), and `fllkali` / `fuliliankali` are the WSL door. Inside WSL, `fll` and `fulilian` are unchanged. See [`cmd/README.en.md`](cmd/README.en.md) for which install you want.
 
 ## Documentation
 

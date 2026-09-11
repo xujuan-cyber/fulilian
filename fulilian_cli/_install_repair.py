@@ -122,7 +122,7 @@ def _venv_scripts_dir(root: Path) -> Path | None:
 #: managed binary dir (the default Fulilian root's ``bin``, next to uv.exe)
 #: on the user PATH. Keep in lockstep with the launcher list in
 #: scripts/install.ps1.
-_WINDOWS_BIN_LAUNCHERS = ("fulilian", "fulilian-acp")
+_WINDOWS_BIN_LAUNCHERS = ("fll", "fulilian", "fulilian-acp")
 
 
 def _venv_is_relocatable(venv_dir: Path) -> bool:

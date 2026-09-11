@@ -71,9 +71,17 @@ def test_noop_when_no_launchers_staged(tmp_path: Path, monkeypatch: pytest.Monke
     assert uninstall.remove_windows_bin_launchers(windows=True) == []
 
 
+#: The only names the product may put on the user PATH. ``fll`` is the
+#: product's OWN short alias, declared next to ``fulilian`` in pyproject
+#: ``[project.scripts]`` -- a reviewed, owned name, not somebody else's
+#: command being shadowed. This stays a closed list, so widening the
+#: installer to a genuinely generic name (say ``sh``) still fails below.
+_OWNED_LAUNCHER_NAMES = frozenset({"fll", "fulilian", "fulilian-acp"})
+
+
 def test_launcher_names_stay_in_lockstep_with_install_ps1():
     """The sweep must cover exactly the names install.ps1 stages, and no
-    generic name it could clobber. Reads the real installer list so the two
+    name the product does not own. Reads the real installer list so the two
     sides cannot drift apart silently."""
     import re
 
@@ -85,8 +93,8 @@ def test_launcher_names_stay_in_lockstep_with_install_ps1():
     staged = set(re.findall(r'"([^"]+)"', match.group(1)))
 
     assert staged == set(_WINDOWS_BIN_LAUNCHERS)
-    for name in _WINDOWS_BIN_LAUNCHERS:
-        assert name.startswith("fulilian")  # never a generic name it could clobber
+    clobbering = sorted(set(_WINDOWS_BIN_LAUNCHERS) - _OWNED_LAUNCHER_NAMES)
+    assert not clobbering, f"installer stages a name the product does not own: {clobbering}"
 
 
 class TestManagedBinPathMarker:

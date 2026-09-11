@@ -1,17 +1,17 @@
 # ============================================================================
-# FuLiLian CMD Edition - fll.completion.ps1
+# FuLiLian CMD Edition - fllkali.completion.ps1
 # ============================================================================
-# Tab completion for `fll` in Windows PowerShell / PowerShell 7.
+# Tab completion for `fllkali` in Windows PowerShell / PowerShell 7.
 #
-#   . .\fll.completion.ps1              load for the current session only
-#   .\fll.completion.ps1 -Install       wire into $PROFILE (idempotent)
-#   .\fll.completion.ps1 -Uninstall     remove that wiring again
+#   . .\fllkali.completion.ps1              load for the current session only
+#   .\fllkali.completion.ps1 -Install       wire into $PROFILE (idempotent)
+#   .\fllkali.completion.ps1 -Uninstall     remove that wiring again
 #
 # cmd\install.cmd calls -Install for you (pass /no-profile to skip it) and
 # /uninstall reverses it. Loading it by hand just needs the dot-source line.
 #
 # ---------------------------------------------------------------------------
-# NOTE ON DRIFT. The subcommand list below mirrors `fll --help`. It is a static
+# NOTE ON DRIFT. The subcommand list below mirrors `fllkali --help`. It is a static
 # list on purpose: the real parser lives inside WSL, and asking it on every Tab
 # press would cost a WSL round trip plus an interpreter start (about a second)
 # per keystroke. When the CLI grows a subcommand, add it here too - the list is
@@ -118,8 +118,8 @@ $script:FllCompletionBlock = {
 
 # --- $PROFILE wiring ---------------------------------------------------------
 # Idempotent in both directions: the marker comment is what identifies our line.
-$script:FllProfileMarker = '# fulilian-cmd completion'
-$script:FllProfileLine = '. "$env:USERPROFILE\bin\fll.completion.ps1"'
+$script:FllProfileMarker = '# fllkali completion'
+$script:FllProfileLine = '. "$env:USERPROFILE\bin\fllkali.completion.ps1"'
 
 # The exact bytes -Install appends: a blank separator, the marker, the dot-source
 # line, each newline-terminated. -Uninstall removes this chunk verbatim, so the
@@ -136,14 +136,14 @@ if ($Install) {
     }
     $existing = @(Get-Content -LiteralPath $ProfilePath -ErrorAction SilentlyContinue)
     if ($existing -match [regex]::Escape($script:FllProfileMarker)) {
-        Write-Host "[fll] completion already wired into $ProfilePath"
+        Write-Host "[fllkali] completion already wired into $ProfilePath"
     } else {
         Add-Content -LiteralPath $ProfilePath -Value ''
         Add-Content -LiteralPath $ProfilePath -Value $script:FllProfileMarker
         Add-Content -LiteralPath $ProfilePath -Value $script:FllProfileLine
-        Write-Host "[fll] completion wired into $ProfilePath"
+        Write-Host "[fllkali] completion wired into $ProfilePath"
     }
-    Write-Host "[fll] reload with:  . `$PROFILE"
+    Write-Host "[fllkali] reload with:  . `$PROFILE"
     # `return`, never `exit`: this file is meant to be dot-sourced, and `exit`
     # in a dot-sourced script tears down the caller's whole session.
     # NB: $PROFILE is host-specific - Windows PowerShell 5.1 and PowerShell 7
@@ -168,16 +168,16 @@ if ($Uninstall) {
             }
             $utf8 = New-Object System.Text.UTF8Encoding($hasBom)
             [System.IO.File]::WriteAllText($ProfilePath, $raw, $utf8)
-            Write-Host "[fll] completion unwired from $ProfilePath"
+            Write-Host "[fllkali] completion unwired from $ProfilePath"
         } else {
-            Write-Host "[fll] completion not wired into $ProfilePath - nothing to unwire"
+            Write-Host "[fllkali] completion not wired into $ProfilePath - nothing to unwire"
         }
     } else {
-        Write-Host "[fll] no profile at $ProfilePath - nothing to unwire"
+        Write-Host "[fllkali] no profile at $ProfilePath - nothing to unwire"
     }
     return
 }
 
-# `fll` is the command on the Windows side; `fulilian` is the same entry point,
-# registered too so an alias or a hand-made shim still completes.
-Register-ArgumentCompleter -Native -CommandName fll, fulilian -ScriptBlock $script:FllCompletionBlock
+# `fllkali` is the command on the Windows side; `fuliliankali` is the same entry
+# point, registered too so an alias or a hand-made shim still completes.
+Register-ArgumentCompleter -Native -CommandName fllkali, fuliliankali -ScriptBlock $script:FllCompletionBlock

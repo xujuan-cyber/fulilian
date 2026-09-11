@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 Grep-based checker for the cmd/ Windows frontend
-(fll.bat / fll.cmd / fulilian.bat / fulilian.cmd / fll.ps1 /
-fll.completion.ps1 / install.cmd).
+(fllkali.bat / fllkali.cmd / fuliliankali.bat / fuliliankali.cmd / fllkali.ps1 /
+fllkali.completion.ps1 / install.cmd).
 
 Two layers:
 
@@ -46,11 +46,14 @@ CMD_DIR = REPO_ROOT / "cmd"
 GITATTRIBUTES = REPO_ROOT / ".gitattributes"
 
 # The six launcher files install.cmd promises to ship, side by side. The
-# `fulilian` pair are aliases of `fll.bat`, so the long name resolves the same
-# way the short one does; `fll` stays the canonical name.
+# `fuliliankali` pair are aliases of `fllkali.bat`, so the long name resolves the
+# same way the short one does; `fllkali` stays the canonical name.
+#
+# They all carry the `kali` suffix because in a CMD window `fll`/`fulilian` mean the
+# NATIVE Windows fulilian; these launchers are the WSL door and must not shadow it.
 EXPECTED_FILES = (
-    "fll.bat", "fll.cmd", "fulilian.bat", "fulilian.cmd",
-    "fll.ps1", "fll.completion.ps1",
+    "fllkali.bat", "fllkali.cmd", "fuliliankali.bat", "fuliliankali.cmd",
+    "fllkali.ps1", "fllkali.completion.ps1",
 )
 # Plus the installer itself, which the runtime layer exercises but does not ship.
 ALL_CMD_FILES = EXPECTED_FILES + ("install.cmd",)
@@ -60,9 +63,9 @@ ALL_CMD_FILES = EXPECTED_FILES + ("install.cmd",)
 CRLF_FILES = ALL_CMD_FILES
 LF_FILES = ("README.md", "README.en.md")
 
-# install.cmd and fll.completion.ps1 must agree on this string; it is how the
+# install.cmd and fllkali.completion.ps1 must agree on this string; it is how the
 # installer's self-check decides whether $PROFILE is wired.
-PROFILE_MARKER = "# fulilian-cmd completion"
+PROFILE_MARKER = "# fllkali completion"
 
 failures: list[str] = []
 passes = 0
@@ -198,7 +201,7 @@ def check_gitattributes_policy() -> None:
 def check_dp0_after_shift() -> None:
     """`shift` also shifts %0, so any %~dp0 evaluated after the argument loop
     resolves to the wrong directory. This shipped once: install.cmd printed
-    `source : C:\\fll.bat` because %~dp0 had become the last argument's drive.
+    `source : C:\\fllkali.bat` because %~dp0 had become the last argument's drive.
     """
     for name in ALL_CMD_FILES:
         path = CMD_DIR / name
@@ -262,10 +265,10 @@ def check_no_escaped_quotes_to_powershell() -> None:
 
 
 def check_completion_is_dot_sourceable() -> None:
-    """fll.completion.ps1 is documented to be dot-sourced. A top-level `exit`
+    """fllkali.completion.ps1 is documented to be dot-sourced. A top-level `exit`
     in a dot-sourced script tears down the caller's whole session.
     """
-    path = CMD_DIR / "fll.completion.ps1"
+    path = CMD_DIR / "fllkali.completion.ps1"
     if not path.exists():
         return
     text = path.read_text(encoding="utf-8", errors="replace")
@@ -292,7 +295,7 @@ def check_completion_is_dot_sourceable() -> None:
                 break
     if start is None or end is None:
         bad(
-            "fll.completion.ps1: could not locate the completion scriptblock",
+            "fllkali.completion.ps1: could not locate the completion scriptblock",
             "the top-level-exit check needs $script:FllCompletionBlock = { ... } to bound it.",
         )
     else:
@@ -302,22 +305,22 @@ def check_completion_is_dot_sourceable() -> None:
         ]
         if offenders:
             bad(
-                "fll.completion.ps1: exit outside the completion scriptblock breaks dot-sourcing",
+                "fllkali.completion.ps1: exit outside the completion scriptblock breaks dot-sourcing",
                 "lines " + ", ".join(map(str, offenders))
                 + " — a dot-sourced script's `exit` ends the caller's session; use `return`.",
             )
         else:
-            ok(f"fll.completion.ps1: no exit outside the completion scriptblock (L{start}-L{end})")
+            ok(f"fllkali.completion.ps1: no exit outside the completion scriptblock (L{start}-L{end})")
 
     if re.search(r"Register-ArgumentCompleter\s+-Native", text):
-        ok("fll.completion.ps1: registers a native argument completer")
+        ok("fllkali.completion.ps1: registers a native argument completer")
     else:
-        bad("fll.completion.ps1: no Register-ArgumentCompleter -Native call")
+        bad("fllkali.completion.ps1: no Register-ArgumentCompleter -Native call")
 
 
 def check_installer_marker_consistency() -> None:
     """install.cmd's self-check greps $PROFILE for the marker that
-    fll.completion.ps1 writes, and -Uninstall removes it by exact equality.
+    fllkali.completion.ps1 writes, and -Uninstall removes it by exact equality.
 
     Substring containment is NOT good enough here, and testing it that way is
     how this check was vacuous: "M" is a substring of "M-v2", so a drifted
@@ -326,7 +329,7 @@ def check_installer_marker_consistency() -> None:
     the user's $PROFILE forever. Compare the two literals exactly.
     """
     install = (CMD_DIR / "install.cmd")
-    completion = (CMD_DIR / "fll.completion.ps1")
+    completion = (CMD_DIR / "fllkali.completion.ps1")
     if not install.exists() or not completion.exists():
         return
     install_text = install.read_text(encoding="utf-8", errors="replace")
@@ -337,7 +340,7 @@ def check_installer_marker_consistency() -> None:
 
     if not written:
         bad(
-            "fll.completion.ps1: could not find the profile marker literal",
+            "fllkali.completion.ps1: could not find the profile marker literal",
             "expected `$script:FllProfileMarker = '<marker>'` so the check has something to compare.",
         )
         return
@@ -352,13 +355,13 @@ def check_installer_marker_consistency() -> None:
     if wrote != PROFILE_MARKER or greps != PROFILE_MARKER:
         bad(
             "profile marker drifted",
-            f"fll.completion.ps1 writes   {wrote!r}\n"
+            f"fllkali.completion.ps1 writes   {wrote!r}\n"
             f"install.cmd greps for       {greps!r}\n"
             f"expected both to be         {PROFILE_MARKER!r} — "
             "-Uninstall removes by exact equality, so a mismatch leaves the old line in $PROFILE.",
         )
     else:
-        ok(f"install.cmd and fll.completion.ps1 agree on the profile marker ({wrote!r})")
+        ok(f"install.cmd and fllkali.completion.ps1 agree on the profile marker ({wrote!r})")
 
 
 def check_installer_uninstall_removes_marker() -> None:
@@ -371,7 +374,7 @@ def check_installer_uninstall_removes_marker() -> None:
     interpolates the marker and the dot-source line, -Install appends exactly
     those two, and -Uninstall removes the chunk.
     """
-    path = CMD_DIR / "fll.completion.ps1"
+    path = CMD_DIR / "fllkali.completion.ps1"
     if not path.exists():
         return
     text = path.read_text(encoding="utf-8", errors="replace")
@@ -392,7 +395,7 @@ def check_installer_uninstall_removes_marker() -> None:
     )
 
     if composed and install and uninstall:
-        ok("fll.completion.ps1: -Install/-Uninstall share one removable chunk")
+        ok("fllkali.completion.ps1: -Install/-Uninstall share one removable chunk")
     else:
         missing = [
             name
@@ -404,7 +407,7 @@ def check_installer_uninstall_removes_marker() -> None:
             if not got
         ]
         bad(
-            "fll.completion.ps1: the installed block is not removed as a whole",
+            "fllkali.completion.ps1: the installed block is not removed as a whole",
             "missing/mismatched: " + ", ".join(missing)
             + " — install and uninstall must agree on the exact bytes, "
             "or residue is left in $PROFILE.",
@@ -475,16 +478,16 @@ def check_installer_enumerates_every_launcher() -> None:
 
 
 def check_launcher_is_a_bat() -> None:
-    """install.cmd and the launcher entry points are batch; fll.ps1 is not. A
+    """install.cmd and the launcher entry points are batch; fllkali.ps1 is not. A
     launcher saved under the wrong extension fails at the shell level, not at
     review. Every .bat/.cmd ships a twin because hosts differ in which
     extension their PATHEXT resolves, so both halves of each pair must be batch.
     """
     known = {
-        "fll.bat": "bat", "fll.cmd": "bat",
-        "fulilian.bat": "bat", "fulilian.cmd": "bat",
+        "fllkali.bat": "bat", "fllkali.cmd": "bat",
+        "fuliliankali.bat": "bat", "fuliliankali.cmd": "bat",
         "install.cmd": "bat",
-        "fll.ps1": "ps1", "fll.completion.ps1": "ps1",
+        "fllkali.ps1": "ps1", "fllkali.completion.ps1": "ps1",
     }
     wrong = []
     for name, kind in known.items():
@@ -547,7 +550,7 @@ esac
 # the default is the one thing that must not be touched here.
 ROUNDTRIP_PS1 = r"""
 $ErrorActionPreference = 'Stop'
-$comp = Join-Path $PSScriptRoot 'fll.completion.ps1'
+$comp = Join-Path $PSScriptRoot 'fllkali.completion.ps1'
 $u8 = New-Object System.Text.UTF8Encoding($false)
 $cases = @(
     @{ n = 'empty'; b = [byte[]]@() },
@@ -561,7 +564,7 @@ foreach ($c in $cases) {
     [System.IO.File]::WriteAllBytes($p, $c.b)
     $before = (Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash
     & $comp -Install -ProfilePath $p | Out-Null
-    $wired = ([System.IO.File]::ReadAllText($p)).Contains('# fulilian-cmd completion')
+    $wired = ([System.IO.File]::ReadAllText($p)).Contains('# fllkali completion')
     & $comp -Uninstall -ProfilePath $p | Out-Null
     $after = (Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash
     if (-not ($before -eq $after -and $wired)) {
@@ -653,32 +656,32 @@ def run_runtime() -> bool:
             shutil.copy2(CMD_DIR / f, staged / f)
         win_dir = str(staged).replace("/mnt/c", "C:").replace("/", "\\")
 
-        base = f"cd /d {win_dir} && set FLL_BIN={probe_wsl}&& set FLL_QUIET=1&& "
+        base = f"cd /d {win_dir} && set FLLKALI_BIN={probe_wsl}&& set FLLKALI_QUIET=1&& "
 
         cases: list[tuple[str, str, callable]] = [
             ("spaces+quotes survive",
-             'fll.bat a "b c" --version',
+             'fllkali.bat a "b c" --version',
              lambda rc, o: parse_probe(o) == (3, ["a", "b c", "--version"])),
             ("quoted Windows path stays one arg",
-             'fll.bat "C:\\Program Files\\my app\\a.txt"',
+             'fllkali.bat "C:\\Program Files\\my app\\a.txt"',
              lambda rc, o: parse_probe(o) == (1, ["C:\\Program Files\\my app\\a.txt"])),
             ("CJK argument survives",
-             'fll.bat "中文 参数"',
+             'fllkali.bat "中文 参数"',
              lambda rc, o: parse_probe(o) == (1, ["中文 参数"])),
             ("Windows path translated to /mnt",
-             "fll.bat C:\\Users\\me\\ctf\\chall.bin",
+             "fllkali.bat C:\\Users\\me\\ctf\\chall.bin",
              lambda rc, o: parse_probe(o) == (1, ["/mnt/c/Users/me/ctf/chall.bin"])),
-            ("fll.cmd alias forwards the same way",
-             'fll.cmd a "b c"',
+            ("fllkali.cmd alias forwards the same way",
+             'fllkali.cmd a "b c"',
              lambda rc, o: parse_probe(o) == (2, ["a", "b c"])),
             # The `fulilian` pair must forward identically - they are thin
-            # delegators to fll.bat, and a delegator that re-quotes or
+            # delegators to fllkali.bat, and a delegator that re-quotes or
             # re-tokenises the argument text would show up right here.
-            ("fulilian.bat alias forwards the same way",
-             'fulilian.bat a "b c"',
+            ("fuliliankali.bat alias forwards the same way",
+             'fuliliankali.bat a "b c"',
              lambda rc, o: parse_probe(o) == (2, ["a", "b c"])),
-            ("fulilian.cmd alias forwards the same way",
-             'fulilian.cmd C:\\Users\\me\\ctf\\chall.bin',
+            ("fuliliankali.cmd alias forwards the same way",
+             'fuliliankali.cmd C:\\Users\\me\\ctf\\chall.bin',
              lambda rc, o: parse_probe(o) == (1, ["/mnt/c/Users/me/ctf/chall.bin"])),
         ]
 
@@ -695,34 +698,34 @@ def run_runtime() -> bool:
                 bad(f"runtime: {label}", f"got argc={argc} args={args}\n{out.strip()}")
 
         # exit code
-        rc, _ = run_cmd(base + "fll.bat --exit 7", staged)
+        rc, _ = run_cmd(base + "fllkali.bat --exit 7", staged)
         if rc == 7:
             ok("runtime: exit code 7 forwarded")
         else:
             bad("runtime: exit code not forwarded", f"expected 7, got {rc}")
 
         # stdin
-        rc, out = run_cmd(base + "fll.bat --stdin", staged, stdin=b"l1\nl2\nl3\n")
+        rc, out = run_cmd(base + "fllkali.bat --stdin", staged, stdin=b"l1\nl2\nl3\n")
         if "PROBE_STDIN_LINES=3" in out:
             ok("runtime: stdin reaches WSL intact")
         else:
             bad("runtime: stdin drained or lost", out.strip())
 
-        # The batch launcher must reach fll.ps1 at all — if it silently took the
+        # The batch launcher must reach fllkali.ps1 at all — if it silently took the
         # :no_powershell fallback, every case above passes for the wrong reason.
-        rc, out = run_cmd(base + "fll.bat --version", staged)
-        if "[fll] WARNING: PowerShell not found" in out:
+        rc, out = run_cmd(base + "fllkali.bat --version", staged)
+        if "[fllkali] WARNING: PowerShell not found" in out:
             bad(
-                "runtime: fll.bat fell back to the no-PowerShell branch",
-                "the argv cases above then prove nothing about fll.ps1.",
+                "runtime: fllkali.bat fell back to the no-PowerShell branch",
+                "the argv cases above then prove nothing about fllkali.ps1.",
             )
         else:
-            ok("runtime: fll.bat delegated to fll.ps1 (no degraded fallback)")
+            ok("runtime: fllkali.bat delegated to fllkali.ps1 (no degraded fallback)")
 
         # install.cmd /check must resolve its own directory even after the
         # argument parse loop (the shift bug).
         rc, out = run_cmd(f"cd /d C:\\ && {win_dir}\\install.cmd /check", staged)
-        if win_dir.lower() + "\\fll.bat" in out.lower():
+        if win_dir.lower() + "\\fllkali.bat" in out.lower():
             ok("runtime: install.cmd /check resolves its own directory")
         else:
             bad("runtime: install.cmd /check resolved the wrong source path", out.strip())

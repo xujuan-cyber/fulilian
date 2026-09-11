@@ -3017,7 +3017,11 @@ function Install-FulilianCommandLaunchers {
     if (Test-Path -LiteralPath $pyvenvCfg) {
         $venvRelocatable = [bool](Select-String -Path $pyvenvCfg -Pattern '^\s*relocatable\s*=\s*true\s*$' -Quiet)
     }
-    foreach ($launcher in @("fulilian", "fulilian-acp")) {
+    # `fll` is declared next to `fulilian` in pyproject [project.scripts], so
+    # both exes exist; shipping only the long name would leave the short one
+    # -- the one people actually type -- resolving to nothing. `fuliliankali`
+    # / `fllkali` stay in cmd\ (the WSL forwarders); these are the native ones.
+    foreach ($launcher in @("fll", "fulilian", "fulilian-acp")) {
         $src = Join-Path $scriptsDir "$launcher.exe"
         if (-not (Test-Path -LiteralPath $src -PathType Leaf)) { continue }
         if ($venvRelocatable) {

@@ -4,19 +4,23 @@ setlocal EnableExtensions
 rem ============================================================================
 rem FuLiLian CMD Edition - installer / uninstaller / self-check
 rem ============================================================================
-rem Installs the fll / fulilian launchers into %USERPROFILE%\bin and adds that
-rem directory
-rem to the USER PATH (only when missing). Optionally wires Tab completion into
-rem the PowerShell $PROFILE. The WSL side must already have fulilian installed
-rem (fll shim present in ~/.local/bin or /usr/local/bin).
+rem Installs the fllkali / fuliliankali launchers into %USERPROFILE%\bin and adds
+rem that directory to the USER PATH (only when missing). Optionally wires Tab
+rem completion into the PowerShell $PROFILE. The WSL side must already have
+rem fulilian installed (fll shim present in ~/.local/bin or /usr/local/bin).
+rem
+rem WHY fllkali: in a CMD window `fll` and `fulilian` belong to the NATIVE Windows
+rem fulilian (scripts\install.ps1 puts those on PATH). This installer ships the
+rem other door - the one that forwards into WSL - so it is named apart, and the
+rem two installs coexist without fighting over a name.
 rem
 rem Files installed (all six, side by side - they reference each other):
-rem   fll.bat            entry point for CMD; delegates to fll.ps1
-rem   fll.cmd            alias of fll.bat, for hosts where PATHEXT omits .BAT
-rem   fulilian.bat       alias of fll.bat, so the long name works too
-rem   fulilian.cmd       alias of fll.bat, same reason as fll.cmd
-rem   fll.ps1            the real launcher logic (PowerShell)
-rem   fll.completion.ps1 Tab completion + $PROFILE wiring
+rem   fllkali.bat            entry point for CMD; delegates to fllkali.ps1
+rem   fllkali.cmd            alias of fllkali.bat, for hosts where PATHEXT omits .BAT
+rem   fuliliankali.bat       alias of fllkali.bat, so the long name works too
+rem   fuliliankali.cmd       alias of fllkali.bat, same reason as fllkali.cmd
+rem   fllkali.ps1            the real launcher logic (PowerShell)
+rem   fllkali.completion.ps1 Tab completion + $PROFILE wiring
 rem
 rem Usage (from CMD, any directory):
 rem   cmd\install.cmd                install
@@ -42,18 +46,18 @@ goto :parse_args
 :args_done
 
 set "DEST_DIR=%USERPROFILE%\bin"
-set "SRC_BAT=%SRC_DIR%fll.bat"
-set "SRC_PS1=%SRC_DIR%fll.ps1"
-set "SRC_CMD=%SRC_DIR%fll.cmd"
-set "SRC_FULBAT=%SRC_DIR%fulilian.bat"
-set "SRC_FULCMD=%SRC_DIR%fulilian.cmd"
-set "SRC_COMP=%SRC_DIR%fll.completion.ps1"
-set "DEST_BAT=%DEST_DIR%\fll.bat"
-set "DEST_PS1=%DEST_DIR%\fll.ps1"
-set "DEST_CMD=%DEST_DIR%\fll.cmd"
-set "DEST_FULBAT=%DEST_DIR%\fulilian.bat"
-set "DEST_FULCMD=%DEST_DIR%\fulilian.cmd"
-set "DEST_COMP=%DEST_DIR%\fll.completion.ps1"
+set "SRC_BAT=%SRC_DIR%fllkali.bat"
+set "SRC_PS1=%SRC_DIR%fllkali.ps1"
+set "SRC_CMD=%SRC_DIR%fllkali.cmd"
+set "SRC_FULBAT=%SRC_DIR%fuliliankali.bat"
+set "SRC_FULCMD=%SRC_DIR%fuliliankali.cmd"
+set "SRC_COMP=%SRC_DIR%fllkali.completion.ps1"
+set "DEST_BAT=%DEST_DIR%\fllkali.bat"
+set "DEST_PS1=%DEST_DIR%\fllkali.ps1"
+set "DEST_CMD=%DEST_DIR%\fllkali.cmd"
+set "DEST_FULBAT=%DEST_DIR%\fuliliankali.bat"
+set "DEST_FULCMD=%DEST_DIR%\fuliliankali.cmd"
+set "DEST_COMP=%DEST_DIR%\fllkali.completion.ps1"
 
 echo.
 echo  FuLiLian CMD Edition installer
@@ -65,7 +69,7 @@ echo.
 
 rem --- Sanity: source exists ----------------------------------------------------
 if not exist "%SRC_BAT%" (
-    echo [install] ERROR: fll.bat not found next to install.cmd.
+    echo [install] ERROR: fllkali.bat not found next to install.cmd.
     echo [install]        Run this from the repo's cmd\ directory or pass its full path.
     exit /b 1
 )
@@ -78,12 +82,12 @@ rem ============================ INSTALL =======================================
 rem 1) Copy launchers
 if not exist "%DEST_DIR%" mkdir "%DEST_DIR%"
 copy /y "%SRC_BAT%" "%DEST_BAT%" >nul
-echo [install] copied fll.bat
-if exist "%SRC_PS1%"  (copy /y "%SRC_PS1%"  "%DEST_PS1%"  >nul && echo [install] copied fll.ps1)
-if exist "%SRC_CMD%"  (copy /y "%SRC_CMD%"  "%DEST_CMD%"  >nul && echo [install] copied fll.cmd)
-if exist "%SRC_FULBAT%" (copy /y "%SRC_FULBAT%" "%DEST_FULBAT%" >nul && echo [install] copied fulilian.bat)
-if exist "%SRC_FULCMD%" (copy /y "%SRC_FULCMD%" "%DEST_FULCMD%" >nul && echo [install] copied fulilian.cmd)
-if exist "%SRC_COMP%" (copy /y "%SRC_COMP%" "%DEST_COMP%" >nul && echo [install] copied fll.completion.ps1)
+echo [install] copied fllkali.bat
+if exist "%SRC_PS1%"  (copy /y "%SRC_PS1%"  "%DEST_PS1%"  >nul && echo [install] copied fllkali.ps1)
+if exist "%SRC_CMD%"  (copy /y "%SRC_CMD%"  "%DEST_CMD%"  >nul && echo [install] copied fllkali.cmd)
+if exist "%SRC_FULBAT%" (copy /y "%SRC_FULBAT%" "%DEST_FULBAT%" >nul && echo [install] copied fuliliankali.bat)
+if exist "%SRC_FULCMD%" (copy /y "%SRC_FULCMD%" "%DEST_FULCMD%" >nul && echo [install] copied fuliliankali.cmd)
+if exist "%SRC_COMP%" (copy /y "%SRC_COMP%" "%DEST_COMP%" >nul && echo [install] copied fllkali.completion.ps1)
 
 rem 2) Ensure %USERPROFILE%\bin is on the USER PATH (idempotent)
 set "ADD_PATH=1"
@@ -125,19 +129,19 @@ goto :check
 rem ============================ UNINSTALL ======================================
 
 :uninstall
-rem Unwire completion FIRST - it needs fll.completion.ps1 to still be on disk.
+rem Unwire completion FIRST - it needs fllkali.completion.ps1 to still be on disk.
 if exist "%DEST_COMP%" (
     where powershell.exe >nul 2>&1
     if not errorlevel 1 (
         powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%DEST_COMP%" -Uninstall
     )
 )
-if exist "%DEST_BAT%"  del /q "%DEST_BAT%"  && echo [uninstall] removed fll.bat
-if exist "%DEST_PS1%"  del /q "%DEST_PS1%"  && echo [uninstall] removed fll.ps1
-if exist "%DEST_CMD%"  del /q "%DEST_CMD%"  && echo [uninstall] removed fll.cmd
-if exist "%DEST_FULBAT%" del /q "%DEST_FULBAT%" && echo [uninstall] removed fulilian.bat
-if exist "%DEST_FULCMD%" del /q "%DEST_FULCMD%" && echo [uninstall] removed fulilian.cmd
-if exist "%DEST_COMP%" del /q "%DEST_COMP%" && echo [uninstall] removed fll.completion.ps1
+if exist "%DEST_BAT%"  del /q "%DEST_BAT%"  && echo [uninstall] removed fllkali.bat
+if exist "%DEST_PS1%"  del /q "%DEST_PS1%"  && echo [uninstall] removed fllkali.ps1
+if exist "%DEST_CMD%"  del /q "%DEST_CMD%"  && echo [uninstall] removed fllkali.cmd
+if exist "%DEST_FULBAT%" del /q "%DEST_FULBAT%" && echo [uninstall] removed fuliliankali.bat
+if exist "%DEST_FULCMD%" del /q "%DEST_FULCMD%" && echo [uninstall] removed fuliliankali.cmd
+if exist "%DEST_COMP%" del /q "%DEST_COMP%" && echo [uninstall] removed fllkali.completion.ps1
 set "REMOVED_PATH=0"
 for /f "usebackq tokens=2,*" %%a in (`reg query HKCU\Environment /v Path 2^>nul`) do set "USER_PATH_NOW=%%b"
 if defined USER_PATH_NOW (
@@ -181,7 +185,7 @@ if not errorlevel 1 (
         echo [check]    OK - /usr/local/bin/fll
     ) else (
         echo [check]    FAIL - fll shim not found in WSL default distro.
-        echo [check]           Install fulilian inside WSL first, or set FLL_BIN/FLL_DISTRO.
+        echo [check]           Install fulilian inside WSL first, or set FLLKALI_BIN/FLLKALI_DISTRO.
         exit /b 1
     )
 )
@@ -190,25 +194,25 @@ if "%ACTION%"=="check" goto :check_installed
 
 echo [check] 3/5 launchers installed
 set "MISSING="
-if not exist "%DEST_BAT%"  set "MISSING=%MISSING% fll.bat"
-if not exist "%DEST_PS1%"  set "MISSING=%MISSING% fll.ps1"
-if not exist "%DEST_CMD%"  set "MISSING=%MISSING% fll.cmd"
-if not exist "%DEST_FULBAT%" set "MISSING=%MISSING% fulilian.bat"
-if not exist "%DEST_FULCMD%" set "MISSING=%MISSING% fulilian.cmd"
-if not exist "%DEST_COMP%" set "MISSING=%MISSING% fll.completion.ps1"
+if not exist "%DEST_BAT%"  set "MISSING=%MISSING% fllkali.bat"
+if not exist "%DEST_PS1%"  set "MISSING=%MISSING% fllkali.ps1"
+if not exist "%DEST_CMD%"  set "MISSING=%MISSING% fllkali.cmd"
+if not exist "%DEST_FULBAT%" set "MISSING=%MISSING% fuliliankali.bat"
+if not exist "%DEST_FULCMD%" set "MISSING=%MISSING% fuliliankali.cmd"
+if not exist "%DEST_COMP%" set "MISSING=%MISSING% fllkali.completion.ps1"
 if defined MISSING (
     echo [check]    FAIL - missing:%MISSING%
 ) else (
     echo [check]    OK - all 6 files in %DEST_DIR%
 )
 
-echo [check] 4/5 fll on PATH for NEW windows
+echo [check] 4/5 fllkali on PATH for NEW windows
 echo %PATH% | findstr /i /c:"%DEST_DIR%" >nul
 if not errorlevel 1 (
     echo [check]    OK
 ) else (
     echo [check]    NOTE - %DEST_DIR% not on PATH of THIS window.
-    echo [check]           Open a new CMD window, then run: fll --version
+    echo [check]           Open a new CMD window, then run: fllkali --version
 )
 
 echo [check] 5/5 Tab completion wired into $PROFILE
@@ -228,8 +232,8 @@ rem NB: no \" escapes here - cmd.exe does not honour them, they would reach
 rem PowerShell as literal backslash-quote. Single-quoted PS strings + concatenation
 rem keep every double quote out of the command line.
 powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
-  "$p=$PROFILE; if ((Test-Path -LiteralPath $p) -and ((Get-Content -LiteralPath $p -ErrorAction SilentlyContinue) -match [regex]::Escape('# fulilian-cmd completion'))) { Write-Host ('[check]    OK - ' + $p); exit 0 } else { Write-Host ('[check]    NOT WIRED - run: . ' + $p); exit 1 }"
-if errorlevel 1 echo [check]           Completion is optional; `fll` works without it.
+  "$p=$PROFILE; if ((Test-Path -LiteralPath $p) -and ((Get-Content -LiteralPath $p -ErrorAction SilentlyContinue) -match [regex]::Escape('# fllkali completion'))) { Write-Host ('[check]    OK - ' + $p); exit 0 } else { Write-Host ('[check]    NOT WIRED - run: . ' + $p); exit 1 }"
+if errorlevel 1 echo [check]           Completion is optional; `fllkali` works without it.
 goto :check_done
 
 :check_installed
