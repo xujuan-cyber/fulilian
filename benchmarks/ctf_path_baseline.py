@@ -20,7 +20,10 @@
     ``api_calls``（实测 crypto-rsa-01: 10 vs 24）—— 重试与压缩轮不会逐条落进
     日志。跨字段比较时以 usage.json 为准，日志只用于拆解结构。
   * 只看过程，不看能力：本脚本无法回答"agent 变聪明了吗"，那需要 holdout 真题。
-  * ``solver.log`` 每跑一次被 ``"w"`` 覆盖，基线必须当次跑完立刻采集。
+  * ``work_dir/solver.log`` 是 **agent 的地盘** —— 它可以用 write_file 把它
+    覆盖成解题报告（实测发生过）。给 ``--mirror-dir`` 时优先采信 solve 目录
+    之外那份镜像（跑批器设 ``FULILIAN_SOLVER_LOG_MIRROR``）；没有镜像则回落
+    work_dir，并对被扰动的那份报 ⚠️ 而不是把 0 读成"高效"。
 
 用法：
     # 采集若干 work_dir
