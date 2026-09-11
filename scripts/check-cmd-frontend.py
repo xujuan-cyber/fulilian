@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 Grep-based checker for the cmd/ Windows frontend
-(fll.bat / fll.cmd / fll.ps1 / fll.completion.ps1 / install.cmd).
+(fll.bat / fll.cmd / fulilian.bat / fulilian.cmd / fll.ps1 /
+fll.completion.ps1 / install.cmd).
 
 Two layers:
 
@@ -44,8 +45,13 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 CMD_DIR = REPO_ROOT / "cmd"
 GITATTRIBUTES = REPO_ROOT / ".gitattributes"
 
-# The four launcher files install.cmd promises to ship, side by side.
-EXPECTED_FILES = ("fll.bat", "fll.cmd", "fll.ps1", "fll.completion.ps1")
+# The six launcher files install.cmd promises to ship, side by side. The
+# `fulilian` pair are aliases of `fll.bat`, so the long name resolves the same
+# way the short one does; `fll` stays the canonical name.
+EXPECTED_FILES = (
+    "fll.bat", "fll.cmd", "fulilian.bat", "fulilian.cmd",
+    "fll.ps1", "fll.completion.ps1",
+)
 # Plus the installer itself, which the runtime layer exercises but does not ship.
 ALL_CMD_FILES = EXPECTED_FILES + ("install.cmd",)
 
@@ -108,7 +114,7 @@ def check_files_present() -> None:
     if missing:
         bad("cmd/ is missing launcher files", f"missing: {', '.join(missing)}")
     else:
-        ok("all four launchers present")
+        ok(f"all {len(EXPECTED_FILES)} launchers present")
 
 
 def check_no_backup_residue() -> None:
@@ -405,12 +411,79 @@ def check_installer_uninstall_removes_marker() -> None:
         )
 
 
+def check_installer_enumerates_every_launcher() -> None:
+    """install.cmd enumerates the launchers by hand in three places — the copy
+    lines, the `del` lines and the MISSING accumulator — plus a fourth as a
+    literal count in the self-check's "all N files" message.
+
+    Adding a launcher means editing all four, and every omission is silent in
+    the worst direction: a file that installs but never uninstalls leaves
+    residue in the user's bin, one the self-check does not know about reports
+    OK while `fll` quietly fails to resolve, and a stale count reads as
+    authoritative. Nothing else in this file can catch that, so tie all four
+    back to EXPECTED_FILES.
+    """
+    path = CMD_DIR / "install.cmd"
+    if not path.exists():
+        return
+    code = [
+        line
+        for _, line in strip_comments(path.read_text(encoding="utf-8", errors="replace"), "bat")
+    ]
+
+    buckets = {
+        "install": [ln for ln in code if "copied " in ln],
+        "uninstall": [ln for ln in code if "removed " in ln],
+        "self-check": [ln for ln in code if "MISSING=%MISSING%" in ln],
+    }
+    gaps = []
+    for name in EXPECTED_FILES:
+        absent = [
+            label
+            for label, lines in buckets.items()
+            if not any(re.search(re.escape(name), ln) for ln in lines)
+        ]
+        if absent:
+            gaps.append(f"{name}: missing from {', '.join(absent)}")
+    if gaps:
+        bad(
+            "install.cmd does not enumerate every launcher",
+            "\n".join(gaps)
+            + "\n→ install, uninstall and the self-check each list the launchers; "
+            "an omission ships silently.",
+        )
+    else:
+        ok(f"install.cmd copies, deletes and self-checks all {len(EXPECTED_FILES)} launchers")
+
+    m = re.search(
+        r"OK - all (\d+) files in %DEST_DIR%",
+        path.read_text(encoding="utf-8", errors="replace"),
+    )
+    if m is None:
+        bad(
+            "install.cmd: self-check no longer reports an 'all N files' count",
+            "the count is checked against EXPECTED_FILES; keep the message greppable.",
+        )
+    elif int(m.group(1)) != len(EXPECTED_FILES):
+        bad(
+            "install.cmd: self-check file count is stale",
+            f"says 'all {m.group(1)} files' but EXPECTED_FILES has {len(EXPECTED_FILES)} — "
+            "the message is the only thing a user reads, so a wrong count reads as a wrong install.",
+        )
+    else:
+        ok(f"install.cmd: self-check reports 'all {m.group(1)} files' (matches EXPECTED_FILES)")
+
+
 def check_launcher_is_a_bat() -> None:
-    """install.cmd, fll.bat and fll.cmd are batch; fll.ps1 is not. A launcher
-    saved under the wrong extension fails at the shell level, not at review.
+    """install.cmd and the launcher entry points are batch; fll.ps1 is not. A
+    launcher saved under the wrong extension fails at the shell level, not at
+    review. Every .bat/.cmd ships a twin because hosts differ in which
+    extension their PATHEXT resolves, so both halves of each pair must be batch.
     """
     known = {
-        "fll.bat": "bat", "fll.cmd": "bat", "install.cmd": "bat",
+        "fll.bat": "bat", "fll.cmd": "bat",
+        "fulilian.bat": "bat", "fulilian.cmd": "bat",
+        "install.cmd": "bat",
         "fll.ps1": "ps1", "fll.completion.ps1": "ps1",
     }
     wrong = []
@@ -438,6 +511,7 @@ def run_static() -> None:
     check_line_endings()
     check_gitattributes_policy()
     check_launcher_is_a_bat()
+    check_installer_enumerates_every_launcher()
     check_dp0_after_shift()
     check_no_escaped_quotes_to_powershell()
     check_completion_is_dot_sourceable()
@@ -594,6 +668,15 @@ def run_runtime() -> bool:
             ("fll.cmd alias forwards the same way",
              'fll.cmd a "b c"',
              lambda rc, o: parse_probe(o) == (2, ["a", "b c"])),
+            # The `fulilian` pair must forward identically - they are thin
+            # delegators to fll.bat, and a delegator that re-quotes or
+            # re-tokenises the argument text would show up right here.
+            ("fulilian.bat alias forwards the same way",
+             'fulilian.bat a "b c"',
+             lambda rc, o: parse_probe(o) == (2, ["a", "b c"])),
+            ("fulilian.cmd alias forwards the same way",
+             'fulilian.cmd C:\\Users\\me\\ctf\\chall.bin',
+             lambda rc, o: parse_probe(o) == (1, ["/mnt/c/Users/me/ctf/chall.bin"])),
         ]
 
         for label, invocation, assertion in cases:

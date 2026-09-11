@@ -8,7 +8,7 @@ This repository ships **two different `install.cmd` files**, and picking the wro
 
 | What you want | Which installer | What it installs |
 |---|---|---|
-| **Type `fll` in CMD, actually run the fulilian inside WSL** | `cmd\install.cmd` (this directory) | Four launchers into `%USERPROFILE%\bin`. Does not install fulilian itself — WSL must already have it. |
+| **Type `fll` or `fulilian` in CMD, actually run the fulilian inside WSL** | `cmd\install.cmd` (this directory) | Six launchers into `%USERPROFILE%\bin`. Does not install fulilian itself — WSL must already have it. |
 | **Run fulilian natively on Windows, no WSL** | [`scripts\install.cmd`](../scripts/install.cmd) | The native Windows fulilian itself (uv / Python / Node / PortableGit) |
 
 The two can coexist: the `fll` installed by `cmd\install.cmd` only hands you off to WSL and never touches the native install. **Delegating to WSL is the whole point of this directory** — it will not, and should not, guess whether you meant native or WSL.
@@ -19,6 +19,8 @@ The two can coexist: the `fll` installed by `cmd\install.cmd` only hands you off
 |---|---|
 | `fll.bat` | CMD entry point: UTF-8 code page switch/restore, delegates to `fll.ps1`; degraded fallback when PowerShell is absent |
 | `fll.cmd` | Alias of `fll.bat`, for hosts whose PATHEXT omits `.BAT` |
+| `fulilian.bat` | Alias of `fll.bat`, so the long name works too |
+| `fulilian.cmd` | Alias of `fll.bat`, same reason as `fll.cmd` |
 | `fll.ps1` | **The real logic**: WSL and `fll` path probing, Windows path → `/mnt/...` rewriting, argument forwarding |
 | `fll.completion.ps1` | PowerShell Tab completion; `-Install` / `-Uninstall` read and write `$PROFILE` |
 | `install.cmd` | Installer: copies launchers to `%USERPROFILE%\bin`, idempotent USER PATH append, self-check; supports `/check`, `/uninstall`, `/no-profile` |
@@ -52,7 +54,10 @@ fll                        :: interactive session
 fll --version
 fll solve C:\ctf\chall     :: Windows paths are rewritten to /mnt/c/ctf/chall
 fll <any fll args...>      :: all subcommands/args forwarded verbatim
+fulilian <any fll args...> :: the same command under its long name
 ```
+
+`fll` and `fulilian` are two names for one entry point: the installer ships both, and argument and exit-code handling is identical. The rest of this document says `fll`; substitute `fulilian` freely.
 
 ### Do you get the TUI or the classic REPL?
 

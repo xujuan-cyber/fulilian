@@ -4,14 +4,17 @@ setlocal EnableExtensions
 rem ============================================================================
 rem FuLiLian CMD Edition - installer / uninstaller / self-check
 rem ============================================================================
-rem Installs the fll launchers into %USERPROFILE%\bin and adds that directory
+rem Installs the fll / fulilian launchers into %USERPROFILE%\bin and adds that
+rem directory
 rem to the USER PATH (only when missing). Optionally wires Tab completion into
 rem the PowerShell $PROFILE. The WSL side must already have fulilian installed
 rem (fll shim present in ~/.local/bin or /usr/local/bin).
 rem
-rem Files installed (all four, side by side - they reference each other):
+rem Files installed (all six, side by side - they reference each other):
 rem   fll.bat            entry point for CMD; delegates to fll.ps1
 rem   fll.cmd            alias of fll.bat, for hosts where PATHEXT omits .BAT
+rem   fulilian.bat       alias of fll.bat, so the long name works too
+rem   fulilian.cmd       alias of fll.bat, same reason as fll.cmd
 rem   fll.ps1            the real launcher logic (PowerShell)
 rem   fll.completion.ps1 Tab completion + $PROFILE wiring
 rem
@@ -42,10 +45,14 @@ set "DEST_DIR=%USERPROFILE%\bin"
 set "SRC_BAT=%SRC_DIR%fll.bat"
 set "SRC_PS1=%SRC_DIR%fll.ps1"
 set "SRC_CMD=%SRC_DIR%fll.cmd"
+set "SRC_FULBAT=%SRC_DIR%fulilian.bat"
+set "SRC_FULCMD=%SRC_DIR%fulilian.cmd"
 set "SRC_COMP=%SRC_DIR%fll.completion.ps1"
 set "DEST_BAT=%DEST_DIR%\fll.bat"
 set "DEST_PS1=%DEST_DIR%\fll.ps1"
 set "DEST_CMD=%DEST_DIR%\fll.cmd"
+set "DEST_FULBAT=%DEST_DIR%\fulilian.bat"
+set "DEST_FULCMD=%DEST_DIR%\fulilian.cmd"
 set "DEST_COMP=%DEST_DIR%\fll.completion.ps1"
 
 echo.
@@ -74,6 +81,8 @@ copy /y "%SRC_BAT%" "%DEST_BAT%" >nul
 echo [install] copied fll.bat
 if exist "%SRC_PS1%"  (copy /y "%SRC_PS1%"  "%DEST_PS1%"  >nul && echo [install] copied fll.ps1)
 if exist "%SRC_CMD%"  (copy /y "%SRC_CMD%"  "%DEST_CMD%"  >nul && echo [install] copied fll.cmd)
+if exist "%SRC_FULBAT%" (copy /y "%SRC_FULBAT%" "%DEST_FULBAT%" >nul && echo [install] copied fulilian.bat)
+if exist "%SRC_FULCMD%" (copy /y "%SRC_FULCMD%" "%DEST_FULCMD%" >nul && echo [install] copied fulilian.cmd)
 if exist "%SRC_COMP%" (copy /y "%SRC_COMP%" "%DEST_COMP%" >nul && echo [install] copied fll.completion.ps1)
 
 rem 2) Ensure %USERPROFILE%\bin is on the USER PATH (idempotent)
@@ -126,6 +135,8 @@ if exist "%DEST_COMP%" (
 if exist "%DEST_BAT%"  del /q "%DEST_BAT%"  && echo [uninstall] removed fll.bat
 if exist "%DEST_PS1%"  del /q "%DEST_PS1%"  && echo [uninstall] removed fll.ps1
 if exist "%DEST_CMD%"  del /q "%DEST_CMD%"  && echo [uninstall] removed fll.cmd
+if exist "%DEST_FULBAT%" del /q "%DEST_FULBAT%" && echo [uninstall] removed fulilian.bat
+if exist "%DEST_FULCMD%" del /q "%DEST_FULCMD%" && echo [uninstall] removed fulilian.cmd
 if exist "%DEST_COMP%" del /q "%DEST_COMP%" && echo [uninstall] removed fll.completion.ps1
 set "REMOVED_PATH=0"
 for /f "usebackq tokens=2,*" %%a in (`reg query HKCU\Environment /v Path 2^>nul`) do set "USER_PATH_NOW=%%b"
@@ -182,11 +193,13 @@ set "MISSING="
 if not exist "%DEST_BAT%"  set "MISSING=%MISSING% fll.bat"
 if not exist "%DEST_PS1%"  set "MISSING=%MISSING% fll.ps1"
 if not exist "%DEST_CMD%"  set "MISSING=%MISSING% fll.cmd"
+if not exist "%DEST_FULBAT%" set "MISSING=%MISSING% fulilian.bat"
+if not exist "%DEST_FULCMD%" set "MISSING=%MISSING% fulilian.cmd"
 if not exist "%DEST_COMP%" set "MISSING=%MISSING% fll.completion.ps1"
 if defined MISSING (
     echo [check]    FAIL - missing:%MISSING%
 ) else (
-    echo [check]    OK - all 4 files in %DEST_DIR%
+    echo [check]    OK - all 6 files in %DEST_DIR%
 )
 
 echo [check] 4/5 fll on PATH for NEW windows

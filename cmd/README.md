@@ -8,7 +8,7 @@
 
 | 你想要的效果 | 用哪个 | 装的是什么 |
 |---|---|---|
-| **在 CMD 里敲 `fll`，实际跑 WSL 里那份 fulilian** | `cmd\install.cmd`（本目录） | 四个启动器 → `%USERPROFILE%\bin`，不装 fulilian 本体；前提是 WSL 里已经装好 fulilian |
+| **在 CMD 里敲 `fll` 或 `fulilian`，实际跑 WSL 里那份 fulilian** | `cmd\install.cmd`（本目录） | 六个启动器 → `%USERPROFILE%\bin`，不装 fulilian 本体；前提是 WSL 里已经装好 fulilian |
 | **在 Windows 上原生跑 fulilian，不经过 WSL** | [`scripts\install.cmd`](../scripts/install.cmd) | 原生 Windows 版 fulilian 本体（uv / Python / Node / PortableGit） |
 
 两者可以共存：`cmd\install.cmd` 装的 `fll` 只负责把你送进 WSL，不碰原生安装。**本目录这套的唯一目的就是委派 WSL**，它不会、也不该替你决定走原生还是 WSL。
@@ -19,6 +19,8 @@
 |---|---|
 | `fll.bat` | CMD 入口：切 UTF-8 代码页（退出前恢复）、委派给 `fll.ps1`；无 PowerShell 时走降级分支 |
 | `fll.cmd` | `fll.bat` 的别名，给 PATHEXT 不含 `.BAT` 的宿主 |
+| `fulilian.bat` | `fll.bat` 的别名，让长名 `fulilian` 与 `fll` 等价 |
+| `fulilian.cmd` | `fll.bat` 的别名，同 `fll.cmd` 的理由（PATHEXT 不含 `.BAT`） |
 | `fll.ps1` | **真正的逻辑**：探测 WSL 与 `fll` 路径、Windows 路径改写为 `/mnt/...`、参数转发 |
 | `fll.completion.ps1` | PowerShell Tab 补全；`-Install` / `-Uninstall` 写读 `$PROFILE` |
 | `install.cmd` | 安装器：装入 `%USERPROFILE%\bin`、USER PATH 幂等追加、自检；支持 `/check`、`/uninstall`、`/no-profile` |
@@ -52,7 +54,10 @@ fll                        :: 交互会话
 fll --version
 fll solve C:\ctf\chall     :: Windows 路径会自动改写成 /mnt/c/ctf/chall
 fll <任意 fll 参数...>       :: 其余子命令/参数原样透传
+fulilian <任意 fll 参数...>  :: fll 的长名别名，转发行为完全一致
 ```
+
+`fll` 与 `fulilian` 是同一个入口的两个名字，安装器两个都装、参数与退出码的处理完全相同。下面文档一律写 `fll`；把命令名换成 `fulilian` 即可。
 
 ### 裸跑 `fll` 起来的是 TUI 还是经典 REPL
 
