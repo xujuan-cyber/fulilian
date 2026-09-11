@@ -75,15 +75,29 @@ fuliliankali <任意 fll 参数...>  :: fllkali 的长名别名，转发行为�
 
 ### 裸跑 `fllkali` 起来的是 TUI 还是经典 REPL
 
-界面由 fulilian 自己按终端能力判定，不由本前端指定（见 `fulilian_cli/main.py` 的 `_resolve_use_tui`）：
+界面由 fulilian 自己判定，本前端不参与（见 `fulilian_cli/main.py` 的 `_resolve_use_tui`）。优先级从高到低：
 
-- **Ink TUI**：要求 stdin 与 stdout **同时**是终端；满足就进 TUI。
-- **经典 REPL**：任一不是终端时自动回退，不会卡住。
-- 强制指定：`fllkali --cli` 永远走经典 REPL；`fllkali --tui` 强制 TUI，终端能力不足时给一句明确提示后退出。
+1. `--cli` → 经典 REPL
+2. `--tui` → TUI
+3. stdin 或 stdout 不是终端 → 经典 REPL
+4. `FULILIAN_TUI=1` → TUI
+5. 配置 `display.interface: tui` → TUI
+6. 都没有 → **经典 REPL**（默认）
+
+第 3 条只说明「不是终端就一定经典 REPL」，**不是**「是终端就进 TUI」——终端只是必要条件，默认走的仍是经典 REPL。
+
+**CMD 下实测**（真 conhost 窗口，经 `wsl.exe` 启动）：stdin/stdout/stderr 都是终端，Node 侧 `process.stdin.isTTY` / `process.stdout.isTTY` 也为真，窗口尺寸 120×30 被正确上报。**所以 TUI 在 CMD 下是可达的**——两道闸门都通过，只是默认配置不选它。想进 TUI：
+
+```bat
+fllkali --tui                              :: 这一次用 TUI
+fllkali config set display.interface tui   :: 以后默认用 TUI（写的是 WSL 侧配置）
+```
+
+> Windows 侧 `setx FULILIAN_TUI 1` **不会**生效：转发器只传参数，不把 Windows 环境变量带进 WSL。要设就设在 WSL 侧（`~/.fulilian/config.yaml`，或 WSL 的 shell profile）。
 
 管道不算终端，所以 `fllkali > log`、`fllkali | more` 这类用法会走经典 REPL。这是刻意设计——TUI 在非终端下只会打印 `no TTY` 就退出，脚本化调用会拿到空结果。
 
-想确认自己这台机器上实际是哪种：在 CMD 里裸跑 `fllkali`，出现全屏边框（TUI）还是行式的 `╭─…╮` 横幅（经典 REPL）。
+颜色深度实测为 8 bit（256 色，非 24 bit 真彩）——控制台把 `TERM=xterm-256color` 传了进来；TUI 侧另有 `forceTruecolor` 是为这种情况准备的。至于全屏渲染的观感（框线、配色、鼠标），需要在真窗口里亲眼确认，本前端不做承诺。
 
 PowerShell 侧：
 

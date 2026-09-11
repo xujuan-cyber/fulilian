@@ -75,15 +75,29 @@ fuliliankali <any fll args...> :: the same command under its long name
 
 ### Do you get the TUI or the classic REPL?
 
-fulilian picks the interface from terminal capability; this frontend does not choose for you (see `_resolve_use_tui` in `fulilian_cli/main.py`):
+fulilian decides this for itself; this frontend does not choose for you (see `_resolve_use_tui` in `fulilian_cli/main.py`). Precedence, highest first:
 
-- **Ink TUI** — requires stdin **and** stdout to both be terminals.
-- **Classic REPL** — the automatic fallback when either is not. It never hangs.
-- To force it: `fllkali --cli` always runs the classic REPL; `fllkali --tui` forces the TUI and prints a clear message instead of hanging when the terminal cannot host it.
+1. `--cli` → classic REPL
+2. `--tui` → TUI
+3. stdin or stdout is not a terminal → classic REPL
+4. `FULILIAN_TUI=1` → TUI
+5. config `display.interface: tui` → TUI
+6. none of the above → **classic REPL** (the default)
+
+Rule 3 only says "not a terminal ⇒ classic REPL". It does **not** say "a terminal ⇒ TUI" — a terminal is necessary, not sufficient, and the default is still the classic REPL.
+
+**Measured under CMD** (a real conhost window, launched through `wsl.exe`): stdin/stdout/stderr are all terminals, Node's `process.stdin.isTTY` / `process.stdout.isTTY` are true too, and the window size is reported correctly as 120×30. **So the TUI is reachable from CMD** — both gates pass; the default config simply does not pick it. To get it:
+
+```bat
+fllkali --tui                              :: for this run
+fllkali config set display.interface tui   :: as the new default (writes the WSL-side config)
+```
+
+> A Windows-side `setx FULILIAN_TUI 1` will **not** work: the forwarder passes arguments only, and does not carry Windows environment variables into WSL. Set it on the WSL side instead (`~/.fulilian/config.yaml`, or WSL's shell profile).
 
 A pipe is not a terminal, so `fllkali > log` and `fllkali | more` take the classic REPL. That is deliberate: the TUI's only move on a non-terminal is to print `no TTY` and exit, which would hand scripted callers an empty result.
 
-To see which one your machine actually gets, run a bare `fllkali` in CMD and look for a full-screen bordered TUI versus the line-oriented `╭─…╮` banner.
+Color depth measured at 8 bit (256 colors, not 24-bit truecolor) — the console hands through `TERM=xterm-256color`; the TUI's `forceTruecolor` exists for exactly this. How the full-screen rendering *looks* (borders, palette, mouse) needs a human eye in a real window; this frontend makes no promise about it.
 
 PowerShell side:
 
