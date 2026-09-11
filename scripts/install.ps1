@@ -3019,8 +3019,7 @@ function Install-FulilianCommandLaunchers {
     }
     # `fll` is declared next to `fulilian` in pyproject [project.scripts], so
     # both exes exist; shipping only the long name would leave the short one
-    # -- the one people actually type -- resolving to nothing. `fuliliankali`
-    # / `fllkali` stay in cmd\ (the WSL forwarders); these are the native ones.
+    # -- the one people actually type -- resolving to nothing.
     foreach ($launcher in @("fll", "fulilian", "fulilian-acp")) {
         $src = Join-Path $scriptsDir "$launcher.exe"
         if (-not (Test-Path -LiteralPath $src -PathType Leaf)) { continue }

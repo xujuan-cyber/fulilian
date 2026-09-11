@@ -79,18 +79,21 @@ fulilian status
 fulilian doctor
 ```
 
-### Windows CMD 前端
+### Windows 原生安装
 
-习惯用 Windows CMD 终端？[`cmd/`](cmd/README.md) 提供一套 `fllkali` 启动器——实际执行在 WSL 内的完整 FuLiLian 上，而在 CMD 里用起来就像原生命令（UTF-8 输出、参数与退出码原样透传、带自检与卸载的安装器）：
+习惯用 Windows CMD 终端？FuLiLian 在 Windows 上是**原生**安装的，不经过 WSL，并把 `fll`、`fulilian` 放进 PATH。在 CMD 里：
 
 ```bat
-git clone https://github.com/xujuan-cyber/fulilian.git
-cd fulilian\cmd
-install.cmd          :: 然后开一个新的 CMD 窗口
-fllkali --version
+curl -fsSL https://raw.githubusercontent.com/xujuan-cyber/fulilian/main/scripts/install.cmd -o install.cmd && install.cmd && del install.cmd
 ```
 
-名字是刻意区分的：CMD 里的 `fll` / `fulilian` 属于**原生 Windows** 那份安装（原生安装同样会把 `fll`、`fulilian` 放进 PATH），`fllkali` / `fuliliankali` 才是进 WSL 的那扇门；WSL 内部 `fll` / `fulilian` 保持不变。两者怎么选见 [`cmd/README.md`](cmd/README.md)。
+在 PowerShell 里可以直接跑安装器：
+
+```powershell
+iex (irm https://raw.githubusercontent.com/xujuan-cyber/fulilian/main/scripts/install.ps1)
+```
+
+装完开一个新的 CMD 窗口，用 `fll --version` 验证。
 
 ## 文档
 

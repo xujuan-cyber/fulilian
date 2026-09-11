@@ -32,10 +32,3 @@ docker/entrypoint.sh text eol=lf
 *.html  text eol=lf
 *.svg   text eol=lf
 *.ps1   text eol=crlf
-
-# Windows CMD frontend (cmd/). The PowerShell launchers are already covered by
-# the `*.ps1` rule above; these two lines give the batch launchers the same
-# treatment, so a clone on any platform yields CRLF — the format cmd.exe and
-# PowerShell 5.1 expect — instead of whatever the cloning host happens to use.
-cmd/*.bat text eol=crlf
-cmd/*.cmd text eol=crlf
