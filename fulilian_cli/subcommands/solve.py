@@ -34,7 +34,13 @@ def build_solve_parser(subparsers, *, cmd_solve: Callable, cmd_solve_all: Callab
                                    "(default: blackboard open intents or built-in defaults)")
     solve_parser.add_argument("--explorers", type=int, default=None,
                               help="Number of explorer agents for --multi-agent (default: 4)")
-    solve_parser.add_argument("-p", "--print", dest="oneshot", action="store_true",
+    # dest 必须是 ctf_oneshot，不能叫 oneshot：argparse 子解析器与顶层共用同一个
+    # Namespace，而顶层 -z/--oneshot（_parser.py:153，metavar=PROMPT，存字符串）
+    # 同名。dest="oneshot" 会让 `fulilian solve <id> -p` 把顶层那个开关置成布尔
+    # True，main() 在派发 args.func 之前就命中 `if getattr(args,"oneshot",None)`
+    # （main.py:14789）分流到通用一次性对话，cmd_solve 永不执行 —— prompt 收到的是
+    # bool True，provider 回 HTTP 400 "Format Error"，且仍退出 0。
+    solve_parser.add_argument("-p", "--print", dest="ctf_oneshot", action="store_true",
                               help="Non-interactive mode (print result)")
     solve_parser.add_argument("--json", action="store_true",
                               help="Output structured JSON progress")

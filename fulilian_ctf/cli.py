@@ -380,7 +380,12 @@ def handle_solve_command(args: argparse.Namespace) -> None:
             pass
 
     # F4-002：-p / --json 非交互模式
-    oneshot = bool(getattr(args, "oneshot", False))
+    # ctf_oneshot 是 argparse 的真实 dest（见 subcommands/solve.py：顶层 -z/--oneshot
+    # 占了 oneshot 这个名字，共用 Namespace 会导致 `solve <id> -p` 被误判成顶层
+    # 一次性对话）。回退读 oneshot 只为兼容直接构造 Namespace 的既有测试与调用方。
+    oneshot = bool(getattr(args, "ctf_oneshot", False)) or bool(
+        getattr(args, "oneshot", False)
+    )
     as_json = bool(getattr(args, "json", False))
     if oneshot or as_json:
         code = _run_solve_once(
