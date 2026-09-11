@@ -1,0 +1,10 @@
+# 生成的语料不进 git —— 4 MB 文本 + 3.3 MB 日志是纯负担。
+# 确定性由 make_data.py 的固定 seed 保证，任何人可复现逐字节相同的语料，
+# 这比入库一个二进制大文件更硬（能独立验证"题目没被偷偷换过"）。
+#
+# runner 正常会把语料生成到 work_dir（/tmp/...），这里的规则是防止
+# 本地手动跑 make_data.py 时把 4 MB 误提交进去。
+scan.log
+auth.log
+data.bin
+decompiled.c

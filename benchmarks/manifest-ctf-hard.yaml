@@ -1,0 +1,43 @@
+# 难题 holdout manifest —— 与 manifest-unit.yaml 刻意分开。
+#
+# 为什么单独一份、单独一个 fixtures-hard/ 目录：
+# manifest-unit.yaml 那 25 题是 easy 单元语料，**已经被针对性地改过**，
+# 它的数字不再能回答"难不难"。holdout 的全部价值在于"没被调过"，
+# 所以它必须物理隔离 —— 让 `git log benchmarks/fixtures-hard/` 一眼可查：
+# 这里应当只有新增，任何对已有题面的修改都是污染信号。
+#
+# 这三题各自测一个**不同的**能力维度，不是同一维度的三个样本：
+#   misc-bigscan-01       工具输出纪律（4 MB 输入，整读必丢）
+#   reverse-obfchain-01   调用图推理（3,514 行反编译产物里的死链诱饵）
+#   forensics-brutelog-01 交叉判断（"成功"与"来源可信"必须分开看）
+#
+# 字段与 manifest-unit.yaml 一致，额外多一个 solve_reference_steps：
+# 参考解的最少步骤数。它是**难度的代理指标**，也是验收时的分母 ——
+# solver 的 api_calls 若数倍于它，即使解出也说明路径不经济。
+- id: misc-bigscan-01
+  category: misc
+  fixture: fixtures-hard/misc-bigscan-01/
+  expected_flag: "flag{backup_dir_left_open_2026}"
+  expect: solved
+  solve_reference_steps: 4
+  generator: fixtures-hard/misc-bigscan-01/make_data.py
+  title: "长扫描输出里的备份目录"
+  description: "4 MB 的 nmap 输出，命中行埋在 65% 深度且不含任何关键字。"
+- id: reverse-obfchain-01
+  category: reverse
+  fixture: fixtures-hard/reverse-obfchain-01/
+  expected_flag: "flag{decompiled_chain_not_the_decoy}"
+  expect: solved
+  solve_reference_steps: 6
+  generator: fixtures-hard/reverse-obfchain-01/make_data.py
+  title: "反编译产物里的死链诱饵"
+  description: "3,514 行 C，40 个同形解码函数，只有一条调用链从 main 可达。"
+- id: forensics-brutelog-01
+  category: forensics
+  fixture: fixtures-hard/forensics-brutelog-01/
+  expected_flag: "flag{pivot_from_the_only_external_accept}"
+  expect: solved
+  solve_reference_steps: 5
+  generator: fixtures-hard/forensics-brutelog-01/make_data.py
+  title: "失败最多的不是攻击者"
+  description: "9,004 条 Accepted 里只有 1 条来自内网段之外。"
