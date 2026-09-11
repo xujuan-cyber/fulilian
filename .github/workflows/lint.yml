@@ -178,3 +178,12 @@ jobs:
 
       - name: Run footgun checker
         run: python scripts/check-windows-footguns.py --all
+
+      - name: Run CMD frontend checker
+        # cmd/ batch and PowerShell launchers carry footguns that are silent on
+        # the author's machine — %~dp0 still resolving after `shift`, \" escapes
+        # reaching PowerShell, a top-level `exit` in a dot-sourced script, a
+        # drifted $PROFILE marker, CRLF policy drift. The checker's runtime
+        # layer needs WSL + cmd.exe interop and self-skips here, so CI runs the
+        # static layer only; run it without --static on a Windows+WSL box.
+        run: python scripts/check-cmd-frontend.py --static

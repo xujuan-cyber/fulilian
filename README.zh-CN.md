@@ -49,6 +49,19 @@ fulilian model
 fulilian chat
 ```
 
+### Windows CMD 前端
+
+习惯用 Windows CMD 终端？[`cmd/`](cmd/README.md) 提供一套 `fll` 启动器——实际执行在 WSL 内的完整 FuLiLian 上，而 `fll` 在 CMD 里就像原生命令（UTF-8 输出、参数与退出码原样透传、带自检与卸载的安装器）：
+
+```bat
+git clone https://github.com/xujuan-cyber/fulilian.git
+cd fulilian\cmd
+install.cmd          :: 然后开一个新的 CMD 窗口
+fll --version
+```
+
+这条路径**委派给 WSL**。若想在 Windows 上**原生**安装 FuLiLian（不经 WSL），用 [`scripts\install.cmd`](scripts/install.cmd)；两者怎么选见 [`cmd/README.md`](cmd/README.md)。
+
 ## 文档
 
 - [GitHub Wiki](https://github.com/xujuan-cyber/fulilian/wiki) — 安装指南、CTF 工作流与 API 参考
