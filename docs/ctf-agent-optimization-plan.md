@@ -1368,6 +1368,8 @@ n≥3；单点差异一律不当证据（与 §1.4 对 P0.1 的判断同源）�
 | 基准 | **探针题 `misc-chunkconcat-01`**（4 题 holdout） | `benchmarks/fixtures-hard/misc-chunkconcat-01/` |
 | 基准 | **v2 跑批基线（4 题，含经济性）** | `benchmarks/baselines/2026-09-11-ctf-hard-holdout-v2.json` |
 | 基准 | **运行日志可信性检测（`log_issue`）** | `benchmarks/ctf_path_baseline.py` `analyze()` / `print_table()` |
+| 代码 | **运行日志镜像（根治 §10 第 3 条）** | `fulilian_ctf/solver.py` `SOLVER_LOG_MIRROR_ENV` / `tee_solver_log` / `_TeeStream` |
+| 测试 | 镜像日志回归锁（4 项，含"agent 覆盖后镜像仍完整"） | `tests/fulilian_ctf/test_solver_log_tee.py` |
 | 文档 | 本计划书 | `docs/ctf-agent-optimization-plan.md` |
 
 **已验证：** A5 —— 修复前 3/3 瞬间失败（HTTP 400，退出码 0）；修复后
@@ -1418,11 +1420,17 @@ n≥3；单点差异一律不当证据（与 §1.4 对 P0.1 的判断同源）�
    「跑完不立刻采集就丢数据」**低估了它**。真实形态在
    `misc-chunkconcat-01` 上实测到了：agent 用 `write_file` 把 `solver.log`
    覆盖成解题报告，**就发生在跑的过程中**，跑批完立刻采集也拿不到。
-   → **已做的（`5d55fe7`）是检测与报警**：采集器出 `log_issue`，不可信行
-   工具面置 `—` 并打 ⚠️，汇总把工具总数标注为下界 —— 至少不再把"数据没了"
-   静默读成"零浪费"。**根治未做**：`solver.log` 应写到 work_dir 之外
-   （与 `7603a78` 的参考解污染同源，都是基准产物落在 agent 地盘）。
-   在那之前，跑批后必须核对 ⚠️ 标记后再引用任何工具面数字。
+   → 检测（`5d55fe7`）：采集器出 `log_issue`，不可信行工具面置 `—` 并打 ⚠️，
+   汇总把工具总数标注为下界 —— 不再把"数据没了"静默读成"零浪费"。
+   → **根治（镜像日志）**：`tee_solver_log` 支持 `FULILIAN_SOLVER_LOG_MIRROR`，
+   同一份字节额外写一份到指定路径；跑批器把它指到 `$OUT/_mirror/`（solve 目录
+   之外）。**刻意只在增不改**：`work_dir/solver.log` 原地保留，dispatcher 的
+   增量扫描、replay/writeup、racer / multi_agent 的子目录证据全部不受影响 ——
+   移动日志会打断这些消费者（`dispatcher.py:1005,1096` 按字节偏移追增长）。
+   采集器加 `--mirror-dir`，有镜像就优先采信，并**单独**报 work_dir 那份是否
+   被扰动（测量有效、产物损坏，两件事分开说）。
+   → **仍存在的边界**：只覆盖默认 solve 路径（`tee_solver_log`）；
+   `--race` / `--multi-agent` 各自开日志，未接镜像。环境变量不设时行为不变。
 4. ~~**没有难题 holdout**~~ —— **已解除**（`9f1caf1`），**2b 已实施**
    （`c0746cd` 经济性指标 + `ce3cb11` 第 4 题 + `5d55fe7` 日志可信性）。
    当前 4 题，v2 跑批 4/4 一次通过 → **天花板效应仍在**，但可用信号已经落地：
@@ -1442,7 +1450,7 @@ n≥3；单点差异一律不当证据（与 §1.4 对 P0.1 的判断同源）�
 | 2 | ~~**难题 holdout（长扫描 / 反编译转储 / 爆破日志）**~~ | 已建成并跑通（`9f1caf1`）；A10 遵守率据此证明 3/3 | **✅ 完成** |
 | 2b | ~~**路径经济性提为主指标 + 加更硬的探针题**~~ | 已实施：`c0746cd` 指标 + `ce3cb11` 第 4 题 + `5d55fe7` 日志可信性；v2 4/4 解出、经济性 2.9× | **✅ 完成** |
 | 2c | **经济性采样 n≥3** | 单跑方差已实测（v1 3.7× / v2 2.9×，obfchain 26→14 api）—— 不做 n≥3，经济性就只是"有指标"，不是"能验收" | **新增（由 2b 派生）** |
-| 2d | **`solver.log` 移出 work_dir** | 根治 §10 第 3 条：日志在 agent 地盘里会被 `write_file` 覆盖，实测发生过 | **新增（由 2b 派生）** |
+| 2d | ~~**`solver.log` 移出 work_dir**~~ | 已实施为**镜像日志**（只增不改）：`FULILIAN_SOLVER_LOG_MIRROR` + 采集器 `--mirror-dir`。移动会打断 dispatcher 按偏移追增长的消费者，故取镜像 | **✅ 完成** |
 | 3 | **A3 对照跑**（`skip_background_review=False`） | 拿 A3 的净效果（P0.5.4 已单独验收） | 待做 |
 | 4 | **P3/P7** 砍固定开销（terminal schema 3,281 字符最肥） | 固定开销是主体；§1.6 证明"够不着的工具"是同一类浪费 | 待做 |
 | 5 | **P0.1** 工具输出落盘 | 只在难题上见效 —— 且需先解决 2b 的天花板效应 | 降级 |

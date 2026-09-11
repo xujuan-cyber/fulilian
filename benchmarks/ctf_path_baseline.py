@@ -66,6 +66,8 @@ READ_TOOLS = frozenset({"read_file", "read_many_files", "search_files"})
 FLAG_FILE = "FLAG"
 SOLVER_LOG = "solver.log"
 USAGE_FILE = "usage.json"
+# 镜像日志的命名后缀，与 ctf_hard_run.sh 的 FULILIAN_SOLVER_LOG_MIRROR 取值配对
+MIRROR_SUFFIX = ".solver.log"
 
 
 # ── 解析 ────────────────────────────────────────────────────────────────
@@ -89,10 +91,28 @@ def parse_usage(work_dir: Path) -> dict[str, Any]:
     return data
 
 
-def parse_solver_log(work_dir: Path) -> dict[str, Any]:
-    """从 solver.log 拆出 API 节奏、缓存命中、工具调用序列。"""
-    p = work_dir / SOLVER_LOG
+def mirror_path_for(work_dir: Path, mirror_dir: Path) -> Path:
+    """镜像日志的约定路径：``<mirror_dir>/<fixture>.solver.log``。
+
+    与 ctf_hard_run.sh 给 ``FULILIAN_SOLVER_LOG_MIRROR`` 的取值一致。
+    """
+    return mirror_dir / f"{work_dir.name}{MIRROR_SUFFIX}"
+
+
+def parse_solver_log(work_dir: Path, mirror_dir: Path | None = None) -> dict[str, Any]:
+    """从 solver.log 拆出 API 节奏、缓存命中、工具调用序列。
+
+    优先读 ``mirror_dir`` 下的镜像副本：work_dir 是 agent 的地盘，它可以用
+    write_file 覆盖掉那份日志（实测发生过）。镜像由 solver 侧的 tee 同时写，
+    落在 solve 目录之外。没有镜像时回落 work_dir —— 老跑批的目录照常可采。
+    """
+    mirror = mirror_path_for(work_dir, mirror_dir) if mirror_dir else None
+    if mirror is not None and mirror.is_file():
+        p, source = mirror, "mirror"
+    else:
+        p, source = work_dir / SOLVER_LOG, "work_dir"
     out: dict[str, Any] = {
+        "log_source": source,
         "log_present": p.is_file(),
         "api_call_lines": 0,
         "latencies_s": [],
@@ -142,9 +162,10 @@ def tool_signature(call: dict[str, Any]) -> str:
 # ── 单题指标 ────────────────────────────────────────────────────────────
 
 def analyze(work_dir: Path, expected_flag: str | None = None,
-            ref_steps: int | None = None) -> dict[str, Any]:
+            ref_steps: int | None = None,
+            mirror_dir: Path | None = None) -> dict[str, Any]:
     usage = parse_usage(work_dir)
-    log = parse_solver_log(work_dir)
+    log = parse_solver_log(work_dir, mirror_dir)
 
     flag_path = work_dir / FLAG_FILE
     flag = flag_path.read_text(encoding="utf-8", errors="replace").strip() if flag_path.is_file() else ""
@@ -171,6 +192,16 @@ def analyze(work_dir: Path, expected_flag: str | None = None,
         log_issue = "overwritten"
     else:
         log_issue = None
+
+    # 镜像在用时，单独看 work_dir 那份坏没坏 —— 读数取自镜像，但 work_dir
+    # 那份是 replay/writeup 的证据源，坏了要报（不是本次测量的错，是产物的错）。
+    workdir_log_issue = None
+    if log["log_source"] == "mirror" and log_issue is None:
+        wd = parse_solver_log(work_dir, None)
+        if not wd["log_present"]:
+            workdir_log_issue = "missing"
+        elif usage.get("api_calls") and not wd["api_call_lines"]:
+            workdir_log_issue = "overwritten"
 
     return {
         "fixture": work_dir.name,
@@ -209,8 +240,10 @@ def analyze(work_dir: Path, expected_flag: str | None = None,
         # 运行日志必然含 "Making API call" 行；一条都没有却又有 api_calls，
         # 就说明这份 solver.log 不是运行日志。
         # 日志根本不存在同样不可用 —— 没有日志就没有工具面数据，不是"零工具"。
+        "log_source": log["log_source"],
         "log_issue": log_issue,
         "log_is_runtime": log_issue is None,
+        "workdir_log_issue": workdir_log_issue,
         "tool_mix": dict(sorted(name_counts.items(), key=lambda kv: -kv[1])),
         "discovery_calls": discovery,
         "discovery_share": round(discovery / len(calls), 4) if calls else 0.0,
@@ -281,6 +314,9 @@ def print_table(rows: list[dict[str, Any]]) -> None:
             f"| {sr} "
             f"| {lat} | {cache} |"
         )
+    if any(r["log_source"] == "mirror" for r in rows):
+        print("\n> 标注：读数取自**镜像日志**（solve 目录之外），"
+              "work_dir 内那份可能被 agent 改过。")
 
 
 def print_aggregate(rows: list[dict[str, Any]]) -> None:
@@ -322,7 +358,16 @@ def print_aggregate(rows: list[dict[str, Any]]) -> None:
         print("  > `solver.log` 落在 work_dir 里，而 work_dir 是 agent 的地盘 —— "
               "它可以用 `write_file` 把它覆盖成解题报告（实测发生过）。"
               "这些题的工具数/重复率/延迟/缓存**全部不可用**，"
-              "尤其别把「工具 0」读成「高效」。")
+              "尤其别把「工具 0」读成「高效」。跑批时给 `--mirror-dir` 可避免："
+              "镜像由 solver 侧同时写到 solve 目录之外。")
+
+    # 读数取自镜像、但 work_dir 那份坏了：本次测量有效，坏的是产物本身
+    # （replay/writeup 的证据源）。分开报，别混进上面那条。
+    broken = [r for r in rows if r.get("workdir_log_issue")]
+    if broken:
+        names = "；".join(f"{r['fixture']}（{r['workdir_log_issue']}）" for r in broken)
+        print(f"- ⚠️ **work_dir 内的 solver.log 已被扰动：** {names}。"
+              f"本次读数取自镜像，测量有效；但 replay/writeup 读的是 work_dir 那份。")
 
     # 路径经济性 —— 解出率在难题上会饱和（3/3 就没有下降空间了），
     # 这个指标不会：绕远路是连续的，任何一次减冗余都能在它上面看到位移。
@@ -348,6 +393,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     ap.add_argument("--dirs", nargs="+", type=Path, required=True,
                     help="题目 work_dir 列表")
+    ap.add_argument("--mirror-dir", type=Path,
+                    help="镜像运行日志目录（solve 侧 FULILIAN_SOLVER_LOG_MIRROR 的"
+                         "落点）。给了它且存在 <fixture>.solver.log 时优先采信镜像，"
+                         "work_dir 里被 agent 覆盖过的那份不再影响读数")
     ap.add_argument("--manifest", type=Path,
                     help="benchmark manifest，用于期望 flag 交叉校验")
     ap.add_argument("--json", type=Path, help="结果写成 JSON（基线归档）")
@@ -361,7 +410,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"⚠️  跳过（不是目录）：{d}", file=sys.stderr)
             continue
         m = meta.get(d.name, {})
-        rows.append(analyze(d, m.get("expected_flag"), m.get("steps")))
+        rows.append(analyze(d, m.get("expected_flag"), m.get("steps"),
+                            args.mirror_dir))
 
     if not rows:
         sys.exit("❌ 没有任何可分析的 work_dir")

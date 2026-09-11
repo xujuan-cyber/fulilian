@@ -20,7 +20,7 @@ from pathlib import Path
 
 import pytest
 
-from fulilian_ctf.solver import SOLVER_LOG, tee_solver_log
+from fulilian_ctf.solver import SOLVER_LOG, SOLVER_LOG_MIRROR_ENV, tee_solver_log
 from fulilian_ctf.trace import (
     TRACE_FILENAME,
     build_trace,
@@ -78,6 +78,95 @@ def test_tee_flushes_immediately_for_mid_run_readers(tmp_path, monkeypatch):
         assert "in-flight line" in (tmp_path / SOLVER_LOG).read_text(
             encoding="utf-8"
         )
+
+
+def test_tee_mirror_env_var_gets_same_bytes(tmp_path, monkeypatch):
+    """镜像日志（FULILIAN_SOLVER_LOG_MIRROR）：两份内容必须逐字节一致。
+
+    存在的理由：work_dir 是 agent 的地盘，它能用 write_file 把 solver.log
+    覆盖掉（实测发生过，见 solver.tee_solver_log 类文档）。镜像给采集器
+    留一份 agent 没理由去动的副本。
+    """
+    monkeypatch.setattr(sys, "stdout", _MemoryStream())
+    monkeypatch.setattr(sys, "stderr", _MemoryStream())
+    work, mirror = tmp_path / "work", tmp_path / "outside" / "mirror.log"
+    monkeypatch.setenv(SOLVER_LOG_MIRROR_ENV, str(mirror))
+
+    with tee_solver_log(work):
+        print("hello solve")
+        print("to stderr", file=sys.stderr)
+
+    assert (work / SOLVER_LOG).read_text(encoding="utf-8") == \
+        mirror.read_text(encoding="utf-8")
+    assert "hello solve" in mirror.read_text(encoding="utf-8")
+    # 镜像的父目录不存在时自建，不要求调用方先 mkdir
+    assert mirror.parent.is_dir()
+
+
+def test_tee_mirror_absent_by_default(tmp_path, monkeypatch):
+    """未设环境变量时行为与从前完全一致 —— 不落任何镜像。"""
+    monkeypatch.delenv(SOLVER_LOG_MIRROR_ENV, raising=False)
+    monkeypatch.setattr(sys, "stdout", _MemoryStream())
+    monkeypatch.setattr(sys, "stderr", _MemoryStream())
+
+    assert tee_solver_log(tmp_path).mirror_path is None
+    with tee_solver_log(tmp_path) as log_path:
+        print("hello solve")
+
+    assert log_path == tmp_path / SOLVER_LOG
+    assert "hello solve" in log_path.read_text(encoding="utf-8")
+
+
+def test_tee_mirror_survives_agent_truncating_solver_log(tmp_path, monkeypatch):
+    """agent 覆盖 work_dir/solver.log 时，镜像仍保有完整运行日志。
+
+    这是该机制存在的全部理由 —— 用真实形态复现：求解中途一份 write_file
+    把 solver.log 截断成一份解题报告。
+    """
+    monkeypatch.setattr(sys, "stdout", _MemoryStream())
+    monkeypatch.setattr(sys, "stderr", _MemoryStream())
+    work, mirror = tmp_path / "work", tmp_path / "mirror.log"
+    monkeypatch.setenv(SOLVER_LOG_MIRROR_ENV, str(mirror))
+
+    with tee_solver_log(work):
+        print("🔄 Making API call #1/50")
+        print("📞 Tool 1: terminal(grep chan=07 transfer.log) - exit 0")
+        # agent 的 write_file：截断 + 写进一份解题报告
+        (work / SOLVER_LOG).write_text("# Solution\n\n## Flag\n", encoding="utf-8")
+        print("🔄 Making API call #2/50")
+
+    # 主日志：被截断过，早于覆盖点的运行行**永久丢失**（tee 的 fd 停在原
+    # 偏移，之后的写入落在 NUL 空洞之后 —— 文件既不完整也不再是合法日志）。
+    main = (work / SOLVER_LOG).read_text(encoding="utf-8", errors="replace")
+    assert "📞 Tool 1: terminal" not in main
+    # 镜像：完整三段都在，且不含 agent 的 writeup
+    kept = mirror.read_text(encoding="utf-8")
+    assert "🔄 Making API call #1/50" in kept
+    assert "📞 Tool 1: terminal" in kept
+    assert "🔄 Making API call #2/50" in kept
+    assert "# Solution" not in kept
+
+
+def test_tee_mirror_failure_degrades_without_breaking_main_log(
+    tmp_path, monkeypatch
+):
+    """镜像打不开只降级：主日志照常，求解不受影响。"""
+    monkeypatch.setattr(sys, "stdout", _MemoryStream())
+    monkeypatch.setattr(sys, "stderr", _MemoryStream())
+    # 用一个「父路径是文件」的目标，mkdir 必然失败
+    blocker = tmp_path / "blocker"
+    blocker.write_text("not a dir", encoding="utf-8")
+    monkeypatch.setenv(SOLVER_LOG_MIRROR_ENV, str(blocker / "mirror.log"))
+
+    out = _MemoryStream()
+    monkeypatch.setattr(sys, "stdout", out)
+    with tee_solver_log(tmp_path / "work"):
+        print("hello solve")
+
+    assert "hello solve" in out.getvalue()
+    assert "hello solve" in (tmp_path / "work" / SOLVER_LOG).read_text(
+        encoding="utf-8"
+    )
 
 
 def test_tee_restores_streams_on_success_and_exception(tmp_path, monkeypatch):

@@ -19,10 +19,11 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FIX="$REPO/benchmarks/fixtures-hard"
 OUT="${1:-/tmp/ctf-hard}"
 LOGS="$OUT/logs"
+MIRROR="$OUT/_mirror"          # 镜像运行日志：在 solve 目录之外，agent 够不着
 IDS=(misc-bigscan-01 misc-chunkconcat-01 reverse-obfchain-01 forensics-brutelog-01)
 
 rm -rf "$OUT"
-mkdir -p "$LOGS"
+mkdir -p "$LOGS" "$MIRROR"
 
 for id in "${IDS[@]}"; do
   d="$OUT/$id"          # solve 工作目录：只许有题面 + 语料
@@ -63,8 +64,13 @@ print(s.solve('.'))
     exit 1
   fi
 
+  # 运行日志镜像到 solve 目录之外。work_dir 是 agent 的地盘：实测它用
+  # write_file 把 solver.log 覆盖成过一份解题报告（misc-chunkconcat-01），
+  # 那一跑的工具面数据全丢，0 被读成了"高效"。镜像只增不改，与 work_dir
+  # 内那份并存 —— stopper 的增量扫描、replay/writeup 都不受影响。
   echo "=== [$id] $(date +%H:%M:%S) 开始 solve ==="
-  ( cd "$d" && timeout 3600 "$HOME/.local/bin/fulilian" solve "$d" -p ) \
+  ( cd "$d" && FULILIAN_SOLVER_LOG_MIRROR="$MIRROR/$id.solver.log" \
+      timeout 3600 "$HOME/.local/bin/fulilian" solve "$d" -p ) \
       > "$LOGS/$id.log" 2>&1
   rc=$?
   echo "=== [$id] $(date +%H:%M:%S) 结束 rc=$rc flag=$(cat "$d/FLAG" 2>/dev/null) ==="
@@ -78,4 +84,5 @@ dirs=""
 for id in "${IDS[@]}"; do dirs="$dirs $OUT/$id"; done
 echo "采集： python $REPO/benchmarks/ctf_path_baseline.py \\"
 echo "         --dirs$dirs \\"
+echo "         --mirror-dir $MIRROR \\"
 echo "         --manifest $REPO/benchmarks/manifest-ctf-hard.yaml"

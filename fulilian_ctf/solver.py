@@ -34,6 +34,10 @@ FLAG_FILENAME = "FLAG"
 SOLVER_LOG = "solver.log"
 USAGE_FILE = "usage.json"
 
+# 镜像日志的目标路径。设了它，tee_solver_log 会把同一份字节额外写到这里 ——
+# 供采集器拿一份 agent 没理由去动的副本。见 tee_solver_log 的类文档。
+SOLVER_LOG_MIRROR_ENV = "FULILIAN_SOLVER_LOG_MIRROR"
+
 # CTF solver 最大轮数按难度分档（2026-09-04 起默认不启用）：
 # 默认 max_turns 不设上限（AIAgent 库默认 sys.maxsize，题目一直解到
 # 出 flag 为止）；本表仅在 --max-turns=0/未设时**不生效**——只有调用方
@@ -245,19 +249,22 @@ class _TeeStream:
     也能被捕获；其余属性（isatty/encoding/buffer…）透传原流，保持终端
     语义不变。日志写失败只降级（不阻断终端输出），与「证据落盘不应影响
     求解本身」的原则一致。
+
+    可挂**多个**落盘目标（``log_file`` + ``mirror_file``）：见
+    ``tee_solver_log`` 对镜像日志的说明。
     """
 
-    def __init__(self, stream, log_file) -> None:
+    def __init__(self, stream, log_file, mirror_file=None) -> None:
         self._stream = stream
-        self._log_file = log_file
+        self._sinks = [f for f in (log_file, mirror_file) if f is not None]
         self._lock = threading.Lock()
 
     def write(self, text: str) -> int:
         with self._lock:
-            if self._log_file is not None:
+            for sink in self._sinks:
                 try:
-                    self._log_file.write(text)
-                    self._log_file.flush()
+                    sink.write(text)
+                    sink.flush()
                 except (OSError, ValueError):
                     pass  # 日志写失败不阻断终端输出
             if self._stream is None:
@@ -266,9 +273,9 @@ class _TeeStream:
 
     def flush(self) -> None:
         with self._lock:
-            if self._log_file is not None:
+            for sink in self._sinks:
                 try:
-                    self._log_file.flush()
+                    sink.flush()
                 except (OSError, ValueError):
                     pass
             if self._stream is not None:
@@ -294,11 +301,28 @@ class tee_solver_log:
     - 日志文件打不开（如只读目录）时静默降级为纯透传，不阻断求解
     - 退出时按对象身份精确还原被替换的 sys.stdout/sys.stderr（支持嵌套），
       异常安全，不吞异常
+
+    **镜像日志（``FULILIAN_SOLVER_LOG_MIRROR``，2026-09-11 新增）：**
+    ``work_dir`` 是 agent 的地盘 —— 它自己就能用 write_file 把
+    ``solver.log`` 覆盖掉，而且**就发生在求解过程中**。实测
+    （misc-chunkconcat-01，2026-09-11）：那一跑解出 flag、api_calls 15，
+    但日志被换成一份解题报告，工具面数据全部丢失 —— 0 被读成了"高效"。
+
+    设了该环境变量时，同样的字节**再写一份**到指定路径。刻意是**只增不改**：
+    ``work_dir/solver.log`` 原地保留，stopper 的增量扫描、replay/writeup、
+    racer / multi_agent 的子目录证据全部不受影响；镜像只是给采集器留一份
+    agent 没有理由去动的副本。变量为空/未设时不改变任何行为。
     """
 
-    def __init__(self, work_dir: str | Path, filename: str = SOLVER_LOG) -> None:
+    def __init__(self, work_dir: str | Path, filename: str = SOLVER_LOG,
+                 mirror: str | Path | None = None) -> None:
         self.log_path = Path(work_dir) / filename
+        # 显式参数优先；否则读环境变量（跑批器用它把副本放到 work_dir 之外）
+        if mirror is None:
+            mirror = os.environ.get(SOLVER_LOG_MIRROR_ENV) or None
+        self.mirror_path = Path(mirror) if mirror else None
         self._log_file = None
+        self._mirror_file = None
         self._saved: tuple = ()
         self._out_tee = None
         self._err_tee = None
@@ -313,9 +337,17 @@ class tee_solver_log:
             # 证据落盘失败只降级：不换流、不阻断求解
             self._log_file = None
             return self.log_path
+        if self.mirror_path is not None:
+            try:
+                self.mirror_path.parent.mkdir(parents=True, exist_ok=True)
+                self._mirror_file = open(
+                    self.mirror_path, "w", encoding="utf-8", errors="replace"
+                )
+            except OSError:
+                self._mirror_file = None  # 镜像失败不影响主日志
         self._saved = (sys.stdout, sys.stderr)
-        self._out_tee = _TeeStream(self._saved[0], self._log_file)
-        self._err_tee = _TeeStream(self._saved[1], self._log_file)
+        self._out_tee = _TeeStream(self._saved[0], self._log_file, self._mirror_file)
+        self._err_tee = _TeeStream(self._saved[1], self._log_file, self._mirror_file)
         sys.stdout = self._out_tee
         sys.stderr = self._err_tee
         return self.log_path
@@ -326,13 +358,14 @@ class tee_solver_log:
             sys.stdout = self._saved[0]
         if self._err_tee is not None and sys.stderr is self._err_tee:
             sys.stderr = self._saved[1]
-        if self._log_file is not None:
-            try:
-                self._log_file.flush()
-            except (OSError, ValueError):
-                pass
-            self._log_file.close()
-            self._log_file = None
+        for fh in (self._log_file, self._mirror_file):
+            if fh is not None:
+                try:
+                    fh.flush()
+                except (OSError, ValueError):
+                    pass
+                fh.close()
+        self._log_file = self._mirror_file = None
         self._out_tee = self._err_tee = None
         return False  # 不吞异常
 
@@ -631,6 +664,7 @@ def switch_solver_model(agent, new_model: str, new_provider: str = "") -> None:
 __all__ = [
     "FLAG_FILENAME",
     "SOLVER_LOG",
+    "SOLVER_LOG_MIRROR_ENV",
     "SolverResult",
     "bootstrap_blackboard",
     "build_solve_query",
