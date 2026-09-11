@@ -633,7 +633,10 @@ def run_runtime() -> bool:
     tmp = Path(tempfile.mkdtemp(prefix="fll-cmd-check-"))
     try:
         probe = tmp / "probe"
-        probe.write_text(PROBE)
+        # encoding= is not decoration: without it Path.write_text uses the
+        # locale encoding (cp936 on a zh-CN Windows host), which is a silent
+        # trap the moment PROBE gains a non-ASCII line.
+        probe.write_text(PROBE, encoding="utf-8")
         probe.chmod(0o755)
         probe_wsl = str(probe)
 
