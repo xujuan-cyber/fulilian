@@ -35,17 +35,50 @@ Beyond the core agent foundation, FuLiLian adds a CTF-focused layer:
 
 ## Quick Start
 
+### From source (Linux / macOS / WSL)
+
 ```bash
-# Install from source
 git clone https://github.com/xujuan-cyber/fulilian.git
 cd fulilian
-pip install -e .
 
-# Configure your model provider
-fulilian model
+# One-shot installer: creates the venv, installs dependencies, seeds bundled
+# skills into ~/.fulilian/skills/, and symlinks `fulilian` / `fll` onto PATH
+bash setup-fulilian.sh
 
-# Start a CTF session
+# Interactive wizard: pick provider + model, write API key, generate
+# ~/.fulilian/config.yaml and ~/.fulilian/.env
+fulilian setup
+
+# Start a chat session
 fulilian chat
+```
+
+### Where does the config live?
+
+Cloning the repo gives you **code only** — the runtime data directory is
+created on first run, not by `git clone`:
+
+| Path | Created by | Contents |
+|------|-----------|----------|
+| `~/.fulilian/` | first launch (auto-mkdir: `config.py::ensure_fulilian_home()`) | data dir root |
+| `~/.fulilian/config.yaml` | `fulilian setup` wizard (or `fulilian model`) | model provider, display, feature settings |
+| `~/.fulilian/.env` | `fulilian setup` / installer | API keys only (chmod 600) |
+| `~/.fulilian/skills/` | `setup-fulilian.sh` (seeded from the repo's `skills/`) | bundled skills |
+| `~/.fulilian/{sessions,memories,logs,cron,...}/` | first launch (auto) | runtime state |
+
+Set `FULILIAN_HOME` to relocate the data directory; on native Windows it
+defaults to `%LOCALAPPDATA%\fulilian`. Uninstalling code (deleting the repo)
+never touches `~/.fulilian/`.
+
+### Other install methods
+
+```bash
+# One-line remote install (downloads to ~/.fulilian/fulilian-agent)
+curl -fsSL https://raw.githubusercontent.com/xujuan-cyber/fulilian/main/scripts/install.sh | bash
+
+# Verify your install
+fulilian status
+fulilian doctor
 ```
 
 ### Windows CMD frontend

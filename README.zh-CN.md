@@ -36,17 +36,47 @@
 
 ## 快速开始
 
+### 从源码安装（Linux / macOS / WSL）
+
 ```bash
-# 从源码安装
 git clone https://github.com/xujuan-cyber/fulilian.git
 cd fulilian
-pip install -e .
 
-# 配置模型提供商
-fulilian model
+# 一键安装脚本：创建 venv、安装依赖、把内置 skills 同步到 ~/.fulilian/skills/、
+# 并将 `fulilian` / `fll` 命令软链到 PATH
+bash setup-fulilian.sh
 
-# 启动 CTF 会话
+# 交互式配置向导：选择提供商与模型、写入 API key、生成
+# ~/.fulilian/config.yaml 与 ~/.fulilian/.env
+fulilian setup
+
+# 启动会话
 fulilian chat
+```
+
+### 配置文件在哪里？
+
+`git clone` 只会得到**代码本身**——运行时数据目录是首次运行时才创建的，clone 不会自动生成：
+
+| 路径 | 由谁创建 | 内容 |
+|------|---------|------|
+| `~/.fulilian/` | 首次运行（自动 mkdir：`config.py::ensure_fulilian_home()`） | 数据目录根 |
+| `~/.fulilian/config.yaml` | `fulilian setup` 向导（或 `fulilian model`） | 模型提供商、显示、功能设置 |
+| `~/.fulilian/.env` | `fulilian setup` / 安装脚本 | 仅 API 密钥（权限 600） |
+| `~/.fulilian/skills/` | `setup-fulilian.sh`（从仓库 `skills/` 同步） | 内置技能 |
+| `~/.fulilian/{sessions,memories,logs,cron,...}/` | 首次运行（自动） | 运行时状态 |
+
+设置 `FULILIAN_HOME` 环境变量可迁移数据目录；原生 Windows 下默认在 `%LOCALAPPDATA%\fulilian`。删除代码仓库（卸载）不会影响 `~/.fulilian/`。
+
+### 其他安装方式
+
+```bash
+# 一行远程安装（安装到 ~/.fulilian/fulilian-agent）
+curl -fsSL https://raw.githubusercontent.com/xujuan-cyber/fulilian/main/scripts/install.sh | bash
+
+# 验证安装
+fulilian status
+fulilian doctor
 ```
 
 ### Windows CMD 前端
