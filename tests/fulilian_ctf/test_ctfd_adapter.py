@@ -8,6 +8,14 @@
 - create_poll_job：复用 cron.jobs.create_job（monkeypatch，不碰真实 jobs.json）
 - MCP server（F3-012）：initialize / tools/list / tools/call / 未知方法 /
   tool 报错的 JSON-RPC 处理
+- 分值容错：CTFd 的 ``value`` 是选手可填字符串，非数字不得打挂整场同步
+
+预修复基线（``git checkout HEAD -- fulilian_ctf/ctfd_adapter.py`` 后跑
+``-k "as_int or non_numeric"``，再按 md5 恢复）::
+
+    10 failed, 17 deselected
+    （_as_int 尚不存在 → ImportError；行为锁那条是真实缺陷：
+      ValueError: invalid literal for int() with base 10: '100 分'）
 """
 
 from __future__ import annotations
@@ -153,6 +161,41 @@ def test_sync_challenges_degrades_without_detail(ctfd_base_url, tmp_path):
     out = tmp_path / "plat2"
     entries = sync_challenges(CTFdAdapter(ctfd_base_url, "valid-key"), out)
     assert all(e["title"] for e in entries)
+
+
+# ── 分值容错（回归：选手可填的 value 把整场 sync 打挂）────────────────────
+
+@pytest.mark.parametrize(
+    "raw,want",
+    [
+        ("100", 100),
+        (300, 300),
+        (" 250 ", 250),
+        ("1000.0", 1000),      # CTFd 允许小数分值
+        ("100 分", 0),         # 非数字 → 退回默认值，不是抛异常
+        ("N/A", 0),
+        ("", 0),
+        (None, 0),
+        (["x"], 0),
+    ],
+)
+def test_as_int_never_raises(raw, want):
+    """``_as_int`` 对任何输入都必须给出 int —— 裸 ``int()`` 一道烂题废整场同步。"""
+    from fulilian_ctf.ctfd_adapter import _as_int
+
+    assert _as_int(raw) == want
+    assert _as_int(raw, default=-1) in (want, -1)
+
+
+def test_entry_from_ctfd_survives_non_numeric_score():
+    """端到端：value 是 "100 分" 时条目仍能生成（分值为默认值）。"""
+    from fulilian_ctf.ctfd_adapter import _entry_from_ctfd
+
+    entry = _entry_from_ctfd({"id": 7, "name": "Weird Score", "value": "100 分"},
+                            {"description": "d"})
+    assert entry["id"] == "ctfd-7"
+    assert entry["score"] == 0
+    assert entry["difficulty"] == "easy"
 
 
 # ── F3-011 轮询 ───────────────────────────────────────────────────────────

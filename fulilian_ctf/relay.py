@@ -17,9 +17,7 @@ v2 结构化协议（向后兼容）：
 from __future__ import annotations
 
 import json
-import os
 import re
-import threading
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -27,6 +25,8 @@ from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Optional
+
+from .fsutil import atomic_write_text as _fsutil_atomic_write_text
 
 RELAY_HEADER = "[已达成原语]"
 DEAD_END_HEADER = "[已证死路]"
@@ -43,6 +43,8 @@ RELAY_SECTIONS = {
 # 进入 RELAY「已达成原语」并被回注黑板，随重试线性膨胀（滚雪球）。
 RELAY_META_FACT_PREFIX = "solver attempt "
 
+SOLVER_META_SOURCE = "solver"
+
 
 def is_relay_meta_text(text: str) -> bool:
     """判断接力块条目是否为运行时元信息（不是解题原语）。"""
@@ -50,34 +52,55 @@ def is_relay_meta_text(text: str) -> bool:
     return t.startswith("solver ran ") or t.startswith(RELAY_META_FACT_PREFIX)
 
 
+def is_solver_meta_fact(fact) -> bool:
+    """Fact 是否为 solver 运行时元信息（**内容口径**，不是解题原语）。
+
+    「别把元信息当发现」全仓曾有三份内容口径：本模块用
+    ``"solver attempt "``/``"solver ran "`` 两个前缀、multi_agent 共享记忆
+    发布与 racer 子黑板合并用 ``content.startswith("solver ")``。后者顺带
+    把「solver X」这类真发现也一并丢掉（今天没有生产者，但口径本身就是错的），
+    统一到本谓词：只认那两个已知前缀，其余一切内容都当发现。
+
+    **本谓词只看内容，不看 source** —— 这一点与 ``is_relay_meta_fact`` 不同，
+    是刻意的，别再「统一」掉：共享记忆与子黑板合并要的正是 solver 自己发现
+    的事实，按 ``source == "solver"`` 一刀切会把「new finding from A」这类
+    发现一起丢掉（实测：test_merge_all_boards_dedupes 与
+    test_multi_agent_solved_flag_survives_hallucination_check 立即失败）。
+    """
+    return is_relay_meta_text(getattr(fact, "content", "") or "")
+
+
+def is_relay_meta_fact(fact) -> bool:
+    """RELAY 口径：是否不该进「已达成原语」列表。
+
+    比 ``is_solver_meta_fact`` 多一条 ``source == "solver"`` —— RELAY 是
+    跨尝试续接的原语清单，solver 的自述一旦进去就会被回注黑板、随重试
+    线性膨胀（滚雪球），所以整个 source 类别都挡掉，而不只是带前缀的那些。
+    dead_ends 不经过本谓词，永不过滤。
+    """
+    if getattr(fact, "source", "") == SOLVER_META_SOURCE:
+        return True
+    return is_solver_meta_fact(fact)
+
+
 def relay_worthy_fact(fact) -> bool:
     """A-4：Fact 是否可进 RELAY「已达成原语」（dispatcher / solver 共用谓词）。
 
-    过滤 source=="solver" 的元 Fact 与 content 以 "solver attempt " 开头
-    的条目；宁窄勿宽——其他一切 Fact（含任意自定义 source）都放行。
-    dead_ends 不经过本谓词，永不过滤。
+    宁窄勿宽——除 solver 自述外一切 Fact（含任意自定义 source）都放行。
     """
-    if getattr(fact, "source", "") == "solver":
-        return False
-    content = getattr(fact, "content", "") or ""
-    return not content.startswith(RELAY_META_FACT_PREFIX)
+    return not is_relay_meta_fact(fact)
 
 
 def atomic_write_text(path: Path, text: str) -> None:
-    """tmp + os.replace 原子写（与 blackboard.save_blackboard 同模式）。
+    """tmp + os.replace 原子写。
 
-    中断时旧文件完好，不会留下截断文件；异常路径允许 .tmp 残留（下次覆盖）。
-    tmp 文件名带 pid+线程 id：并发写者各用各的 tmp，避免共享 tmp 被并发
-    截断后把半截内容 replace 进正式文件（P1-3 契约 6 的竞态窗口由此消除；
-    跨写者仍是 last-writer-wins，无锁语义不变）。
+    实现统一到 ``fsutil.atomic_write_text``（本模块曾自持一份等价实现，两处
+    tmp 命名/返回值漂移没有收益）。保留本名只为兼容既有导入；新代码请直接用
+    fsutil 的实现。``lock=False``：relay 的写者是「单写者 + 多读者」形态，
+    加 ``<name>.lock`` 只会往工作目录里多留一个锁文件，不改变 last-writer-wins
+    语义（写者之间的串行化靠调用方）。
     """
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(
-        f"{path.suffix}.{os.getpid()}.{threading.get_ident()}.tmp"
-    )
-    tmp.write_text(text, encoding="utf-8")
-    os.replace(tmp, path)
+    _fsutil_atomic_write_text(path, text, lock=False)
 
 
 def build_relay(
@@ -430,9 +453,10 @@ def write_relay_block(work_dir: Path, block: RelayBlock) -> None:
     work_dir = Path(work_dir)
     work_dir.mkdir(parents=True, exist_ok=True)
 
-    # 写入 JSON 格式
+    # 写入 JSON 格式（原子写：接力块是跨进程/跨轮次交接点，读者可能在
+    # 任意时刻读同一个文件 —— 普通 write_text 的 truncate 窗口会被读到空文件）
     json_path = work_dir / RELAY_BLOCK_FILENAME
-    json_path.write_text(block.to_json(), encoding="utf-8")
+    atomic_write_text(json_path, block.to_json())
 
     # 同步写入旧版 RELAY.md（向后兼容）
     relay_md = build_relay(
@@ -457,11 +481,20 @@ def read_relay_block(work_dir: Path) -> Optional[RelayBlock]:
     work_dir = Path(work_dir)
     json_path = work_dir / RELAY_BLOCK_FILENAME
 
-    if json_path.exists():
+    if json_path.is_file():   # is_file：同名目录不该让 read_text 抛 IsADirectoryError
         try:
             data = json.loads(json_path.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                raise ValueError(
+                    f"relay block 顶层应为对象，实为 {type(data).__name__}"
+                )
             return RelayBlock.from_dict(data)
-        except (json.JSONDecodeError, KeyError, ValueError):
+        except (json.JSONDecodeError, KeyError, ValueError, TypeError, AttributeError):
+            # 「结构合法但形状不对」也必须降级：顶层是列表/字符串/数字、或
+            # messages 不是列表时，from_dict 抛的是 AttributeError/TypeError
+            # （实测：'[]' → AttributeError、'{"messages": "x"}' → AttributeError、
+            # '{"achieved_primitives": 5}' → TypeError）。契约是「坏了就回落到
+            # RELAY.md / None」，不该把解析细节漏给调用方（dispatcher 轮次循环）。
             pass
 
     # 兼容旧版 RELAY.md
@@ -486,6 +519,10 @@ __all__ = [
     "parse_relay",
     "write_relay_file",
     "read_relay_file",
+    "is_relay_meta_text",
+    "is_solver_meta_fact",
+    "is_relay_meta_fact",
+    "relay_worthy_fact",
     # v2 结构化协议
     "RELAY_BLOCK_FILENAME",
     "PROTOCOL_VERSION",

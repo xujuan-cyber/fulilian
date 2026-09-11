@@ -53,35 +53,65 @@ def _safe_filename_stem(challenge_id: str) -> str:
     return stem or "challenge"
 
 
+def _technique_index_path(wp_path: Path) -> Path:
+    return wp_path.parent.parent / "wp_technique_index.json"
+
+
+def _is_registered(wp_path: Path) -> bool:
+    """该 WP 是否已在 wp_technique_index.json 登记（幂等重跑判据）。
+
+    只看文件是否存在做去重是不够的：文件写完、登记执行前进程被杀，重跑时
+    文件已存在便直接 return，该 WP 永远进不了索引（similar_by_technique
+    再也搜不到）。因此去重必须同时要求「已登记」。
+    """
+    index_path = _technique_index_path(wp_path)
+    try:
+        data = json.loads(index_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return isinstance(data, dict) and wp_path.name in data
+
+
 def _register_technique_index(wp_path: Path, title: str, category: str,
-                              challenge_id: str) -> None:
+                              challenge_id: str) -> bool:
     """把自产 WP 登记进 wp_technique_index.json（元数据单源）。
 
     该文件是 kr.similar_by_technique() 的唯一数据源，不登记则"按考点找
     相似题"永远搜不到本篇。已存在时读入合并追加，绝不覆盖既有条目。
     自动通道 tags 最少给 [category, challenge_id]，人工复盘可补全。
+
+    并发安全：锁内读—改—写 + 原子替换（多个 solve 进程同时达到回灌门槛时，
+    原来的裸读改写会让后写者抹掉先写者的登记；读失败时还会用仅含新条目的
+    dict 覆盖整个文件，历史登记全灭）。
+
+    Returns:
+        bool: 是否登记成功。失败仅 stderr 告警（fail-open）。
     """
-    index_path = wp_path.parent.parent / "wp_technique_index.json"
-    try:
-        data = {}
-        if index_path.exists():
-            data = json.loads(index_path.read_text(encoding="utf-8"))
+    index_path = _technique_index_path(wp_path)
+    entry = {
+        "title": title,
+        "source_path": str(wp_path),
+        "tags": [tag for tag in (category, challenge_id) if tag],
+    }
+
+    def _merge(data: dict) -> dict:
         if not isinstance(data, dict):
             data = {}
-        data[wp_path.name] = {
-            "title": title,
-            "source_path": str(wp_path),
-            "tags": [tag for tag in (category, challenge_id) if tag],
-        }
-        index_path.write_text(
-            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        data[wp_path.name] = entry
+        return data
+
+    try:
+        from fulilian_ctf.fsutil import update_json
+
+        update_json(index_path, _merge, {})
+        return True
     except (OSError, ValueError) as exc:
         print(
             f"[kb_writeback] technique index 登记失败"
             f"（similar_by_technique 将搜不到本篇）: {exc}",
             file=sys.stderr,
         )
+        return False
 
 
 def _incremental_index(file_path: Path, category: str, content: str) -> bool:
@@ -169,13 +199,20 @@ def writeback_wp_for_solve(
 
         kb_path = kr.KB_PATH
         target_dir = kb_path / "CTF大赛WP集合" / "self-solved"
-        # 题级去重：同 challenge 已沉淀（不带日期后缀，同题不重写）
+        # 题级去重：同 challenge 已沉淀（不带日期后缀，同题不重写）。
+        # 判据是「文件存在 **且** 已登记」——只判文件存在会漏补：写完文件、
+        # 登记执行前进程被杀，重跑时直接 return，该 WP 永远进不了 technique
+        # index（FTS 可靠 force 重建补救，index 不会）。
         target = target_dir / f"{_safe_filename_stem(challenge_id)}.md"
-        if target.exists():
+        registered = _is_registered(target)
+        if target.exists() and registered:
             return None
+        if not target.exists():
+            target_dir.mkdir(parents=True, exist_ok=True)
+            # 原子写：进程中断不会留下半截 WP 被后续 build_index 摄入
+            from fulilian_ctf.fsutil import atomic_write_text
 
-        target_dir.mkdir(parents=True, exist_ok=True)
-        target.write_text(writeup_md, encoding="utf-8")
+            atomic_write_text(target, writeup_md)
 
         # 元数据单源登记（similar_by_technique 的数据源）
         title = writeup_md.splitlines()[0].lstrip("# ").strip() or challenge_id

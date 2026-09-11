@@ -63,7 +63,15 @@ def load_historical_trace(challenge_id: str) -> Optional[dict]:
     try:
         from fulilian_constants import FULILIAN_HOME
 
-        trace_file = FULILIAN_HOME / "traces" / f"{challenge_id}.json"
+        # 文件名净化口径必须与写入方（experiential_learning.trace_file_for）
+        # 一致，否则含 "/" 的 challenge_id 写入与读取会指向不同文件。
+        # 目录仍在调用时从 FULILIAN_HOME 解析（不 import 模块常量——那会在
+        # import 时固化路径，运行期替换 FULILIAN_HOME 的调用方读不到）。
+        from fulilian_ctf.fsutil import safe_filename_stem
+
+        trace_file = (
+            FULILIAN_HOME / "traces" / f"{safe_filename_stem(challenge_id)}.json"
+        )
         if trace_file.is_file():
             return json.loads(trace_file.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError, ImportError):
@@ -102,12 +110,9 @@ def _resolve(challenge_id: str) -> Optional[str]:
         challenge_json = path / CHALLENGE_MANIFEST
         if not challenge_json.is_file():
             return str(path.absolute())
-        from fulilian_ctf.registry import challenge_to_project
+        from fulilian_ctf.registry import challenge_json_to_project
 
-        project = challenge_to_project(
-            json.loads(challenge_json.read_text(encoding="utf-8")),
-            base_dir=path.parent,
-        )
+        project = challenge_json_to_project(challenge_json)
         return solve_work_dir_for(project, challenge_id)
 
     # 2) 平台清单文件 / 其它 load_challenges 可解析形态（ctfd sync 产物等）

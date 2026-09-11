@@ -77,6 +77,23 @@ class CTFdAdapter:
 # ── manifest 同步（对接 Phase 2 调度引擎）────────────────────────────────
 
 
+def _as_int(value, default: int = 0) -> int:
+    """尽力把 CTFd 字段转 int（转不动就退回默认值）。
+
+    CTFd 的 ``value`` 是选手可填的字符串：``"100"`` 正常，但 ``"100 分"``、
+    ``"N/A"``、``"1000.0"`` 都出现过。裸 ``int()`` 遇上一个就把整个 sync
+    打挂（一道烂题废掉整场比赛的同步），而分值本来就是可选信息 ——
+    宁可退回默认值。
+    """
+    try:
+        return int(str(value).strip())
+    except (TypeError, ValueError):
+        try:
+            return int(float(str(value).strip()))
+        except (TypeError, ValueError):
+            return default
+
+
 def _entry_from_ctfd(item: dict, detail: dict = None) -> dict:
     """CTFd 题目 → registry.load_challenges 兼容条目。
 
@@ -88,7 +105,7 @@ def _entry_from_ctfd(item: dict, detail: dict = None) -> dict:
         "id": f"ctfd-{item.get('id', '')}",
         "title": str(item.get("name") or detail.get("name") or ""),
         "category": str(item.get("category") or detail.get("category") or "misc").lower(),
-        "score": int(item.get("value") or detail.get("value") or 0),
+        "score": _as_int(item.get("value") or detail.get("value") or 0),
         "description": str(detail.get("description") or ""),
     }
     # 难度映射：CTFd 无难度字段，按分值粗分（与 DIFFICULTY_FACTORS 对齐）

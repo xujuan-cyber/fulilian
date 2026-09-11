@@ -28,6 +28,7 @@ import argparse
 import contextlib
 import importlib.util
 import json
+import multiprocessing
 import os
 import queue as queue_mod
 import re
@@ -44,7 +45,8 @@ from .blackboard import BLACKBOARD_FILENAME, load_blackboard
 from .dispatcher import Project
 from .knowledge_retriever import DB_PATH as REAL_KB_DB_PATH
 from .knowledge_retriever import search as kb_search
-from .solver import FLAG_FILENAME, SOLVER_LOG, solver_worker
+from .racer import _stop_process
+from .solver import FLAG_FILENAME, SOLVER_LOG, SolverResult, solver_worker
 from .verify import check_output_for_flag
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -122,6 +124,63 @@ def _load_reference(fixture_dir: Path):
     return _load_module(fixture_dir / "solve_reference.py", f"solve_ref_{fixture_dir.name}")
 
 
+# 参考解子进程超时（秒）。参考解是我们自己的 fixture 脚本，但它会真连
+# socket / 真读文件：卡在网络上的参考解在进程内调用会让自证与整个用例
+# 循环永久挂住（实测语义：跑到这里就不会再有输出，也没有任何超时能救）。
+REFERENCE_SOLVE_TIMEOUT = 180.0
+
+
+def _reference_solve_target(fixture_dir: str, work_dir: str, q) -> None:
+    """子进程入口：加载 fixture 参考解并执行（必须模块级，forkserver 要 pickle）。"""
+    try:
+        ref = _load_module(
+            Path(fixture_dir) / "solve_reference.py",
+            f"solve_ref_{Path(fixture_dir).name}",
+        )
+        q.put(("ok", str(ref.solve(work_dir))))
+    except BaseException as e:  # noqa: BLE001 — 子进程里的异常只能靠回传
+        try:
+            q.put(("err", f"{type(e).__name__}: {e}"))
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def _reference_solve(
+    fixture_dir: Path, work_dir: Path, timeout: float | None = None
+) -> tuple[str, str]:
+    """在子进程里跑参考解，返回 ``(output, error)``（error 非空即失败）。
+
+    进程内跑参考解无法设超时（线程超时杀不掉卡在 C 层的调用），这里用
+    子进程 + ``_stop_process``：超时就真杀死，自证与本用例循环都能继续。
+    """
+    ctx = multiprocessing.get_context(
+        "forkserver" if "forkserver" in multiprocessing.get_all_start_methods() else "spawn"
+    )
+    q = ctx.Queue()
+    proc = ctx.Process(
+        target=_reference_solve_target,
+        args=(str(fixture_dir), str(work_dir), q),
+        daemon=True,
+    )
+    limit = REFERENCE_SOLVE_TIMEOUT if timeout is None else timeout
+    proc.start()
+    try:
+        proc.join(limit)
+        if proc.is_alive():
+            _stop_process(proc)
+            return "", f"reference solver timed out after {limit:g}s"
+        try:
+            kind, payload = q.get_nowait()
+        except Exception:  # noqa: BLE001 — 子进程没回传（被信号杀/解释器崩）
+            return "", f"reference solver exited without result (exit={proc.exitcode})"
+        if kind == "err":
+            return "", payload
+        return payload, ""
+    finally:
+        if proc.is_alive():
+            _stop_process(proc)
+
+
 def make_mock_solver(fixture_dir: Path, stats: dict):
     """mock solver_impl：执行 fixture 参考解（脚本化的正确解题流程），
     输出"工具输出"后走**真实** verify 三重校验门 + FLAG 文件声明式提交。
@@ -135,7 +194,13 @@ def make_mock_solver(fixture_dir: Path, stats: dict):
 
     def impl(project, work_dir, query) -> int:
         stats["tool_calls"] = steps  # 参考解内部工具步数
-        output = ref.solve(str(work_dir))
+        # 参考解走子进程 + 超时：进程内直调没有超时，参考解一卡（网络是最
+        # 常见的一种），整个用例循环就永久停在这里，连"失败"都报不出来。
+        output, ref_err = _reference_solve(fixture_dir, Path(work_dir))
+        if ref_err:
+            stats["tool_calls"] += 1
+            stats["reference_error"] = ref_err
+            return 1
         stats["tool_calls"] += 1  # 提交扫描（check_output_for_flag）也是一次工具调用
         flag = check_output_for_flag(output, flag_file=str(Path(work_dir) / FLAG_FILENAME))
         return 0 if flag else 1
@@ -191,8 +256,9 @@ def validate_fixture(entry: dict) -> tuple[bool, str]:
         with tempfile.TemporaryDirectory(prefix="bench-validate-") as td:
             work = Path(td) / "work"
             _copy_fixture(fixture_dir, work)
-            ref = _load_reference(fixture_dir)
-            output = ref.solve(str(work))
+            output, ref_err = _reference_solve(fixture_dir, work)
+            if ref_err:
+                return False, ref_err
             flag = check_output_for_flag(output, flag_file=str(work / FLAG_FILENAME))
             if flag != entry["expected_flag"]:
                 return False, f"gate returned {flag!r}, expected {entry['expected_flag']!r}"
@@ -228,10 +294,22 @@ def run_unit_suite(manifest_path: Path, show_validation: bool = False) -> dict:
 
         fixture_dir = BENCH_DIR / entry["fixture"]
         stats: dict = {}
-        with tempfile.TemporaryDirectory(prefix="bench-unit-") as td:
-            work = Path(td) / "work"
-            _copy_fixture(fixture_dir, work)
-            result, elapsed = _run_mock_challenge(entry, fixture_dir, work, stats=stats)
+        try:
+            with tempfile.TemporaryDirectory(prefix="bench-unit-") as td:
+                work = Path(td) / "work"
+                _copy_fixture(fixture_dir, work)
+                result, elapsed = _run_mock_challenge(entry, fixture_dir, work, stats=stats)
+        except BaseException as e:  # noqa: BLE001 — 逐用例隔离
+            # 一个用例自己炸掉（fixture 拷贝失败 / 队列空 / 未知异常）不该
+            # 让整轮基准丢掉已经跑完的结果，也不该让它在分母里消失 ——
+            # 如实记成 crashed 并继续，与上面「fixture 不自证」的处理同款。
+            cases.append({
+                "id": fid, "category": entry["category"],
+                "status": "crashed", "detail": f"{type(e).__name__}: {e}",
+                "seconds": None, "tokens": None, "tool_calls": None,
+                "solved": False,
+            })
+            continue
         got = (result.flag or "").strip()
         solved = result.ok and got == entry["expected_flag"]
         if result.ok and got and got != entry["expected_flag"]:
@@ -384,7 +462,13 @@ def _run_two_challenge_scenario(inject) -> dict:
             with inject_ctx:
                 result_a, _ = _run_mock_challenge(
                     manifest[fid_a], fixture_a, work_a, solver_impl=inject_ctx.mock_impl)
-                checks["challengeA_degraded_without_crash"] = isinstance(result_a, object)
+                # 这里原本写的是 ``isinstance(result_a, object)`` —— 对任何对象
+                # 恒真，等于「只要没抛异常就算过」，检查项本身永远不可能失败。
+                # 要断的是「降级路径仍然返回一个正常的 SolverResult」：返回
+                # None / 换了类型（重构时把失败转成别的信号）应当在这里暴露。
+                checks["challengeA_degraded_without_crash"] = isinstance(
+                    result_a, SolverResult
+                )
                 checks["challengeA_result"] = {
                     "ok": result_a.ok, "flag": result_a.flag, "error": result_a.error}
                 # 后续题继续跑

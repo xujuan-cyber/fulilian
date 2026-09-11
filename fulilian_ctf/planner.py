@@ -77,11 +77,14 @@ class ContextManager:
         if total <= self.max_tokens:
             return
         system_part = [t for t in self.history if t.role == TurnRole.SYSTEM]
-        recent = [t for t in self.history if t.role != TurnRole.SYSTEM][-3:]
-        early = [
-            t for t in self.history
-            if t.role != TurnRole.SYSTEM and t not in recent
-        ]
+        # 按位置切，不要用 ``t not in recent``：Turn 是普通 dataclass，
+        # ``in`` 走字段相等，于是「早先那轮与最近 3 轮内容雷同」时会被判成
+        # 同一个对象、从 early 里消失——那几轮不再进摘要，等于凭空丢历史。
+        # 内容雷同在本项目里并不罕见（"solver attempt N finished ok=False"
+        # 这类重复行）。切分只关心「哪几轮是最近的」，位置是唯一正解。
+        non_system = [t for t in self.history if t.role != TurnRole.SYSTEM]
+        recent = non_system[-3:]
+        early = non_system[:-3]
         if early:
             reasoning_parts = [t.content for t in early if t.is_reasoning]
             if reasoning_parts:
@@ -229,11 +232,14 @@ class Planner:
             )
         try:
             return executor.execute(task)
-        except Exception:  # noqa: BLE001 — 执行器异常不阻断循环
+        except Exception as e:  # noqa: BLE001 — 执行器异常不阻断循环
+            # 异常类型与消息必须带上：这条 summary 是上层唯一的故障线索，
+            # 只写 "Executor error for <id>" 会让「执行器为什么挂」无从查起
+            # （实测排查时只能靠外部 traceback）。
             return TaskResult(
                 task_id=task.id,
                 success=False,
-                summary=f"Executor error for {task.id}",
+                summary=f"Executor error for {task.id}: {type(e).__name__}: {e}",
                 is_stuck=True,
             )
 

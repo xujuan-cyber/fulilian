@@ -8,6 +8,14 @@
 - 收割轮重跑已放弃的题（F2-008）
 - 自动调度：新题优先 + EV 排序（F2-007）
 - 难度自适应预算（F2-010）
+- P2 回归锁：Project 序列化往返（description / timebox_override）、
+  探活逐题隔离（单题探活异常不得终止整轮调度）
+
+预修复基线（``git checkout HEAD -- fulilian_ctf/dispatcher.py`` 后跑对应
+``-k``，再按 md5 恢复）::
+
+    -k round_trip        → 1 failed（AssertionError: description 未往返）
+    -k isolates_probe    → 1 failed（RuntimeError: dns exploded 直接外溢）
 """
 
 from __future__ import annotations
@@ -276,6 +284,78 @@ def test_flag_file_channel_passes_gate(tmp_path):
     assert p.status == ChallengeStatus.ABANDONED
     assert p.flag == ""
     assert "rejected by gate" in p.stop_reason
+
+
+# ── 探活逐题隔离（回归：单题探活异常终止整轮多题调度）────────────────────
+
+def test_spawn_candidates_isolates_probe_exception(tmp_path, monkeypatch):
+    """一个候选探活抛异常时：不得外溢，其余候选照常处理。
+
+    ``ex.map`` 会把单题异常重抛给调用方，于是 ``_spawn_candidates`` 当场
+    中断、后面的候选连探活都不做，最终由 ``run()`` 的 ``except BaseException``
+    终止整轮多题调度。
+    """
+    d = Dispatcher(max_workers=2, solver_fn=fake_solver_solve, quiet=True)
+    a = _project("a", tmp_path)
+    bad = _project("bad", tmp_path)
+    c = _project("c", tmp_path)
+    seen: list[str] = []
+
+    # 注意签名要带 self：往类上挂普通函数后仍走描述符绑定，
+    # self._probe_and_maybe_spawn(project, ...) 会额外传入实例。
+    def fake_probe(self, project, limit=None):
+        seen.append(project.challenge_id)
+        if project.challenge_id == "bad":
+            raise RuntimeError("dns exploded")
+        return True
+
+    monkeypatch.setattr(Dispatcher, "_probe_and_maybe_spawn", fake_probe)
+
+    d._spawn_candidates([a, bad, c], limit=None)  # 不得抛出
+
+    assert sorted(seen) == ["a", "bad", "c"]  # 崩溃之后的候选仍被处理
+    assert "probe error" in bad.stop_reason
+    assert "dns exploded" in bad.stop_reason
+    # 代码异常 ≠ 环境不可达：不许标成 INFRA_BLOCKED（那会让整题被跳过）
+    assert bad.status == ChallengeStatus.NEW
+    assert a.stop_reason == "" and c.stop_reason == ""
+
+
+# ── Project 序列化往返（回归：description / timebox_override 静默丢失）──────
+
+def test_project_round_trip_preserves_all_fields():
+    """``to_dict`` → ``from_dict`` 必须逐字段还原。
+
+    旧 ``to_dict`` 漏发 ``description`` 与 ``timebox_override``：状态文件里
+    没有这两项，重启后 from_dict 只能退回默认值 —— description 是题干/提示
+    的唯一载体，timebox_override 又直接决定时间盒（丢回 None 等于用默认预算
+    重跑一道已被人工调过预算的题），两者都是静默劣化。
+    """
+    src = Project(
+        challenge_id="rt-01",
+        category="web",
+        difficulty="hard",
+        score=500,
+        status=ChallengeStatus.SOLVED,
+        attempts=3,
+        ev_score=12.5,
+        flag="flag{round_trip}",
+        model="deepseek-flash",
+        challenge_dir="/tmp/rt-01",
+        target_host="10.0.0.9",
+        target_port=8080,
+        title="Backup Leak",
+        description="题干：在 backup.rar 里找 flag",
+        stop_reason="solved",
+        last_tier="hard",
+        started_at=1234.5,
+        finished_at=1300.0,
+        timebox_override=42,
+    )
+    back = Project.from_dict(src.to_dict())
+
+    for fname in src.__dataclass_fields__:
+        assert getattr(back, fname) == getattr(src, fname), f"{fname} 未往返"
 
 
 def test_package_exports_match_all():

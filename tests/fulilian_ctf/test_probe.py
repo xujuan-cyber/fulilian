@@ -55,9 +55,47 @@ def test_open_port_reachable():
         srv.close()
 
 
-def test_refused_means_host_up():
-    """ECONNREFUSED：主机在线（端口关闭）→ REACHABLE，不依赖 ping。"""
+def test_refused_means_host_up(monkeypatch):
+    """ECONNREFUSED：主机在线（端口关闭）→ REACHABLE，不依赖 ping。
+
+    mock 掉兜底端口扫描：宿主机可能真有常见端口在监听
+    （如本机 5901），真实扫描会误入 DISCOVERED 分支。
+    """
+    monkeypatch.setattr(
+        "fulilian_ctf.probe._scan_common_ports", lambda *a, **k: []
+    )
     assert probe_challenge("127.0.0.1", 1, timeout=2) == ProbeResult.REACHABLE
+
+
+def test_refused_with_hidden_port_discovered(monkeypatch):
+    """ECONNREFUSED + 兜底扫描发现监听端口 → (DISCOVERED, port)。
+
+    主端口连接用 FakeSock 保证拒绝；兜底扫描用真实 socket
+    连到测试自己起的监听器（通过 _SCAN_PORTS 注入端口号）。
+    """
+    srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    srv.bind(("127.0.0.1", 0))
+    srv.listen(1)
+    hidden_port = srv.getsockname()[1]
+    monkeypatch.setattr("fulilian_ctf.probe._SCAN_PORTS", [hidden_port])
+    real_socket = socket.socket
+    first = {"used": False}
+
+    def first_refused(*a, **k):
+        if not first["used"]:
+            first["used"] = True
+            return FakeSock(errno.ECONNREFUSED)
+        return real_socket(*a, **k)
+
+    monkeypatch.setattr(socket, "socket", first_refused)
+    try:
+        assert probe_challenge("127.0.0.1", 1, timeout=2) == (
+            ProbeResult.DISCOVERED,
+            hidden_port,
+        )
+    finally:
+        srv.close()
 
 
 def test_no_route_is_infra_blocked(monkeypatch):

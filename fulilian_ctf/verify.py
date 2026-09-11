@@ -34,6 +34,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Callable, List, Optional
 
+from .fsutil import atomic_write_text
+
 __all__ = [
     "VerificationResult",
     "ConfidenceLevel",
@@ -383,6 +385,11 @@ def check_output_for_flag(
             if flag_file:
                 path = Path(flag_file)
                 path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(candidate + "\n", encoding="utf-8")
+                # 原子写（tmp + os.replace）：FLAG 是跨进程沟通渠道，写者在这里
+                # （探索者子进程），读者在父进程（收割 _confirm_flag / 幻觉检测
+                # 器 / read_flag_file）。普通 write_text 先 truncate 再写，读者在
+                # 这个窗口里读到空文件 →「已解出」被判成「没解出」（实测：4000
+                # 轮并发读里 12970/16028 次读到空；原子写 0/18931）。
+                atomic_write_text(path, candidate + "\n", lock=False)
             return candidate
     return None

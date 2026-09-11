@@ -39,7 +39,8 @@ class SpecialistFactory:
             category: 题目类别（pwn/rev/web/crypto/forensics/misc，不区分大小写）
 
         Returns:
-            BaseSpecialist | None: 专家实例，类别未注册时返回 None
+            BaseSpecialist: 专家实例；类别未注册时**降级返回 MiscSpecialist**，
+            从不返回 None（调用方无需判空）。
         """
         cat = category.lower()
         specialist_cls = cls._registry.get(cat)

@@ -38,8 +38,11 @@ from .blackboard import (
     Fact,
     Hint,
     load_blackboard,
+    merge_into_blackboard,
     save_blackboard,
+    update_blackboard,
 )
+from .fsutil import atomic_write_text
 from .monitor import scan_log_for_anomalies
 from .racer import (
     _confirm_flag,
@@ -48,7 +51,15 @@ from .racer import (
     model_slug,
 )
 from .reasoner import Reasoner, TaskCategory
-from .solver import FLAG_FILENAME, SOLVER_LOG, SolverResult, resolve_default_model, solver_worker
+from .relay import is_solver_meta_fact
+from .solver import (
+    FLAG_FILENAME,
+    SOLVER_LOG,
+    SolverResult,
+    resolve_default_model,
+    shrink_result,
+    solver_worker,
+)
 from .timebox import Timebox, difficulty_adjusted_budget
 from .verify import (
     VerificationResult,
@@ -142,6 +153,7 @@ class SharedMemory:
         if manager is None:
             manager = _SAFE_MP_CONTEXT.Manager()
         self._manager = manager
+        self._lock = manager.Lock()  # 串行化 flag 的先到先得判定（见 try_publish_flag）
         self.data = manager.dict()
         self.data["flag"] = ""
         self.data["winner_index"] = -1
@@ -150,20 +162,36 @@ class SharedMemory:
         self.stop_event = manager.Event()
 
     def publish_facts(self, explorer_index: int, contents: list[str]) -> None:
-        bucket = dict(self.data["facts"])
-        existing = list(bucket.get(explorer_index) or [])
+        """发布某探索者的发现（按 index 分桶）。
+
+        只读改写**自己那一桶**。旧实现把整个 facts 字典 ``dict(...)`` 读出来、
+        改完再整体 ``self.data["facts"] = bucket`` 写回：两次 IPC 之间可被插入，
+        两个探索者进程并发退出时后写者用陈旧快照覆盖先写者 —— 实测 4 进程
+        ×25 条只剩 35 条（丢 65%）。每个 index 只有它自己的探索者进程写，
+        按桶读改写不存在同键竞争，跨桶也互不覆盖。
+        """
+        facts = self.data["facts"]
+        existing = list(facts.get(explorer_index) or [])
         for c in contents:
             if c not in existing:
                 existing.append(c)
-        bucket[explorer_index] = existing
-        self.data["facts"] = bucket
+        facts[explorer_index] = existing      # 单键写入：只影响本桶
 
     def try_publish_flag(self, flag: str, explorer_index: int) -> bool:
-        """发布 flag（先到先得）。返回是否本调用写入。"""
-        if not flag or self.data.get("flag"):
+        """发布 flag（先到先得）。返回是否本调用写入。
+
+        判定与写入必须在同一把锁内：``if self.data.get("flag")`` 与
+        ``self.data["flag"] = flag`` 是两次独立 IPC，两个探索者同时找到 flag
+        时都能看到「还没有 flag」而双双返回 True，且 flag 与 winner_index 可能
+        来自不同的探索者（实测 40 轮里 36 轮出现多个 True、5 轮归属错位）。
+        """
+        if not flag:
             return False
-        self.data["flag"] = flag
-        self.data["winner_index"] = explorer_index
+        with self._lock:
+            if self.data.get("flag"):
+                return False
+            self.data["flag"] = flag
+            self.data["winner_index"] = explorer_index
         self.stop_event.set()
         return True
 
@@ -177,12 +205,17 @@ class SharedMemory:
 
     def __getstate__(self):
         """Pickle 支持：排除不可 pickle 的 _manager，保留 proxy 对象。"""
-        return {"data": self.data, "stop_event": self.stop_event}
+        return {
+            "data": self.data,
+            "stop_event": self.stop_event,
+            "lock": self._lock,
+        }
 
     def __setstate__(self, state):
         self._manager = None
         self.data = state["data"]
         self.stop_event = state["stop_event"]
+        self._lock = state["lock"]
 
 
 def merge_all_boards(
@@ -255,8 +288,13 @@ class MemoryCompressor:
         summary = self.compress_fn(facts)
         if not summary or not summary.strip():
             return None
-        board.add_hint(Hint(content=summary, source="memory-compressor"))
-        save_blackboard(board, self.board_path)
+        # 加 Hint 走带锁的 read-modify-write：上面的 load 只用于判断阈值和
+        # 取材（compress_fn 可能很慢，不该占着锁），写回时以锁内的磁盘最新
+        # 状态为基底，不用这份可能已过期的快照覆盖并发写者。
+        update_blackboard(
+            self.board_path,
+            lambda b: b.add_hint(Hint(content=summary, source="memory-compressor")),
+        )
         self.summaries.append(summary)
         return summary
 
@@ -270,6 +308,10 @@ class MemoryCompressor:
 
 # ── 幻觉检测 agent（F3-009）───────────────────────────────────────────────
 
+# 幻觉检测读日志的字节上限（尾部）。solver.log 是单次 attempt 的 stdout tee，
+# 长 attempt 可以很大，而「flag 刚找到就打印」意味着尾部足够覆盖。
+_HALLUCINATION_EVIDENCE_TAIL = 1024 * 1024
+
 
 def detect_hallucinations(
     explorer_dir: Path, explorer_index: int
@@ -278,12 +320,24 @@ def detect_hallucinations(
 
     检查对象：FLAG 文件内容 + solver.log 中的 flag 候选。
     返回未通过校验门的候选记录（通过校验门的不是幻觉，不返回）。
+
+    grounding 必须开着。此前这里传的是 ``require_grounding=False``，而该
+    路径在格式门按形状放行——实测任何 flag 形状的候选都直接 CONFIRMED
+    （``flag{从未出现过的值}`` → confirmed）。于是本函数只能记下非 flag
+    形状的碎片，「幻觉 flag 检测」（F3-009）整条链路实际上是空的。
+    开着 grounding 后语义才成立：**日志里出现的候选必然逐字命中日志** →
+    CONFIRMED，不会被误报；只有「声明了却不存在于任何输出」的才会被记
+    下来——那正是幻觉的定义。
+
+    证据只取日志尾部（``_HALLUCINATION_EVIDENCE_TAIL``）：本函数在检测
+    线程里每 ``interval`` 秒对每个探索者跑一遍，全量读 + 全量正则扫描在
+    长 attempt 上是纯浪费；flag 是「刚找到就打印」的，尾部足够覆盖。
     """
     records: list[dict] = []
     evidence = ""
     log_file = explorer_dir / SOLVER_LOG
     if log_file.is_file():
-        evidence = log_file.read_text(encoding="utf-8", errors="replace")
+        evidence = _tail(log_file, _HALLUCINATION_EVIDENCE_TAIL)
 
     candidates: list[str] = []
     flag_file = explorer_dir / FLAG_FILENAME
@@ -302,7 +356,7 @@ def detect_hallucinations(
         if not cand or cand in seen:
             continue
         seen.add(cand)
-        gate = verify_flag(cand, evidence=evidence or "", require_grounding=False)
+        gate = verify_flag(cand, evidence=evidence or "")
         if gate is not VerificationResult.CONFIRMED:
             records.append(
                 {
@@ -358,17 +412,19 @@ class HallucinationDetector:
                 new_records.append(rec)
                 self.shared.add_hallucination(rec)
                 try:
-                    board = load_blackboard(self.board_path) or Blackboard()
-                    board.add_fact(
-                        Fact(
-                            content=(
-                                f"HALLUCINATION: explorer-{rec['explorer']} candidate "
-                                f"{rec['candidate']} rejected ({rec['verdict']})"
-                            ),
-                            source="hallucination-detector",
-                        )
+                    # 同样走带锁 read-modify-write（见 MemoryCompressor.tick_once）
+                    update_blackboard(
+                        self.board_path,
+                        lambda b: b.add_fact(
+                            Fact(
+                                content=(
+                                    f"HALLUCINATION: explorer-{rec['explorer']} candidate "
+                                    f"{rec['candidate']} rejected ({rec['verdict']})"
+                                ),
+                                source="hallucination-detector",
+                            )
+                        ),
                     )
-                    save_blackboard(board, self.board_path)
                 except Exception:  # noqa: BLE001 — 公示失败不阻断检测
                     pass
                 if self.on_hallucination:
@@ -439,7 +495,11 @@ def _explorer_target(
         solver_fn(project, work_dir, model, queue)
     except BaseException as e:  # noqa: BLE001 — 进程隔离
         try:
-            queue.put(SolverResult(ok=False, exit_code=1, error=f"{type(e).__name__}: {e}"))
+            # 异常消息可能极长（traceback 塞进 str(e)），必须截断后再回传：
+            # 超过管道缓冲会让子进程卡在退出的 feeder 线程上（见 shrink_result）
+            queue.put(shrink_result(SolverResult(
+                ok=False, exit_code=1, error=f"{type(e).__name__}: {e}"
+            )))
         except Exception:  # noqa: BLE001
             pass
 
@@ -452,15 +512,17 @@ def _explorer_target(
                 f.content
                 for f in board.get_facts()
                 if f.state.value in ("confirmed", "refuted")
-                and not f.content.startswith("solver ")
+                # 元信息过滤走共享谓词（口径原本三处各写一份，
+                # 见 relay.is_solver_meta_fact）
+                and not is_solver_meta_fact(f)
             ]
             shared.publish_facts(explorer_index, contents)
     except Exception:  # noqa: BLE001
         pass
     try:
-        from .racer import _confirm_flag as _cf
-
-        flag = _cf(work)
+        # 直接用模块顶部的 _confirm_flag：这里原本又 import 了一次同名的
+        # 副本，两处一旦不同步就是「子进程判定口径 ≠ 父进程判定口径」。
+        flag = _confirm_flag(work)
         if flag:
             shared.try_publish_flag(flag, explorer_index)
     except Exception:  # noqa: BLE001
@@ -611,32 +673,44 @@ def run_multi_agent(
                     s["reaped"] = True
                     s["proc"].join(timeout=3)
                     try:
-                        if not s["queue"].empty():
-                            res = s["queue"].get(timeout=1)
+                        res = s.get("pending") or _drain_queue(s["queue"])
+                        if res is not None:
                             s["result"].ok = res.ok
                             s["result"].error = res.error
                     except Exception:  # noqa: BLE001
                         pass
-                    s["result"].flag = _confirm_flag(s["dir"])
+                    # 逐槽隔离：某个目录的文件系统异常不该毁掉整次收割
+                    s["result"].flag = _safe_confirm_flag(
+                        s["dir"], label=f"explorer#{s['index']}", quiet=quiet
+                    )
                     if not quiet:
                         print(
                             f"[multi-agent] explorer#{s['index']} finished "
                             f"flag={'yes' if s['result'].flag else 'no'}",
                             flush=True,
                         )
-            # flag 判定：共享记忆（探测者回传）或已收割目录（过校验门的才认）
+            # flag 判定：共享记忆（探索者子进程回传）或已收割目录（过校验门才认）
             if winner is None:
                 if shared.data.get("flag"):
                     widx = shared.data.get("winner_index", -1)
+                    # 归属按 index 匹配。对不上任何槽时**不**退化为 slots[0]：
+                    # 那会把「子进程报的胜者」嫁接到一个未必有关的目录上，
+                    # 且 winner["result"].flag 仍为空，直接掉进兜底扫描。
                     winner = next((s for s in slots if s["index"] == widx), None)
-                    if winner is None and slots:
-                        winner = slots[0]
             if winner is None:
                 for s in slots:
                     if s.get("reaped") and s["result"].flag:
                         winner = s
                         shared.try_publish_flag(s["result"].flag, s["index"])
                         break
+            if winner is not None and not winner["result"].flag:
+                # 胜者来自共享记忆时，它的目录还没被收割过：子进程
+                # try_publish_flag 之后还要走完解释器退出，父进程这段窗口里
+                # 读到的 s["result"].flag 仍是空的（实测靠 winidx 抢跑 → 提前
+                # break → 「有胜者但无 flag」）。补一次目录判定，再退到共享值。
+                winner["result"].flag = _safe_confirm_flag(
+                    winner["dir"], label=f"explorer#{winner['index']}", quiet=quiet
+                ) or (shared.data.get("flag") or "")
             if winner is not None or all(s.get("reaped") for s in slots):
                 break
             # 对手监控（F3-013）：扫描各探索者日志尾部，告警累积进结果
@@ -656,6 +730,15 @@ def run_multi_agent(
                         key = (a.level, a.label, a.source, a.excerpt)
                         if key not in known:
                             collected_alerts.append(a)
+            # 排空仍在运行的子进程队列（超管道缓冲的载荷会卡住子进程退出：
+            # 子进程阻塞在 feeder 写端，而收割只在「子进程已死」后才读队列，
+            # 双方互等直到时间盒耗尽 —— 见 SolverResult/shrink_result 的说明）
+            for s in slots:
+                if not s.get("reaped") and s.get("pending") is None:
+                    try:
+                        s["pending"] = _drain_queue(s["queue"])
+                    except Exception:  # noqa: BLE001
+                        pass
             if timebox.check():
                 if not quiet:
                     print(f"[multi-agent] {project.challenge_id}: timebox expired", flush=True)
@@ -698,6 +781,13 @@ def run_multi_agent(
         compressed_summaries=list(compressor.summaries if compressor else []),
         alerts=[a.to_dict() for a in collected_alerts],
     )
+    # 幻觉候选的排除是**尽力而为**的一层，只作用于下面的兜底路径：
+    # 检测线程按 interval（≥3s）跑，胜者可能在它记下任何东西之前就定了，
+    # 此时 hallucinated 为空、这一层等于不存在——所以它不能承担唯一防线的
+    # 角色，兜底路径的 flag 本身也都过了校验门。
+    # 胜者路径（上面的 winner 分支）**有意**不查这个集合：胜者 flag 是 solver
+    # 自己过门后的声明，用「定时器可能还没跑到」的启发式去否决它，只会让
+    # 同一次运行的结果随时序漂移。
     hallucinated = {
         r["candidate"] for r in result.hallucinations
     }
@@ -706,10 +796,19 @@ def run_multi_agent(
         if winner is not None and s is winner and s["result"].flag:
             result.flag = s["result"].flag
             result.winner_index = s["index"]
+    if not result.flag and (shared.data.get("flag") or ""):
+        # 兜底 1：共享记忆里的 flag（子进程自己过门后回传的）。放在目录扫描
+        # 之前 —— 目录读不了时共享值往往还在，且不碰文件系统就没有异常风险。
+        sf = shared.data["flag"]
+        if sf not in hallucinated:
+            result.flag = sf
+            result.winner_index = int(shared.data.get("winner_index", -1))
     if not result.flag:
-        # 兜底：任意探索者目录的 flag（过门），排除已知幻觉
+        # 兜底 2：任意探索者目录的 flag（过门），排除已知幻觉
         for s in slots:
-            f = _confirm_flag(s["dir"])
+            f = _safe_confirm_flag(
+                s["dir"], label=f"explorer#{s['index']}", quiet=quiet
+            )
             if f and f not in hallucinated:
                 result.flag = f
                 result.winner_index = s["index"]
@@ -725,14 +824,21 @@ def run_multi_agent(
             )
         )
         try:
-            (base_dir / FLAG_FILENAME).write_text(result.flag + "\n", encoding="utf-8")
+            # 原子写：FLAG 落盘与其它进程/线程的读取（幻觉检测、中继、CLI）
+            # 并发，普通 write_text 的 truncate 窗口会被读成「没有 flag」。
+            atomic_write_text(base_dir / FLAG_FILENAME, result.flag + "\n", lock=False)
         except OSError:
             pass
 
     # 黑板合并 + 共享记忆统计
     explorer_dirs = [Path(s["dir"]) for s in slots]
     result.facts_shared = merge_all_boards(explorer_dirs, parent_board)
-    save_blackboard(parent_board, board_path)
+    # 收尾必须走带锁的 read-modify-write：parent_board 是 explorer 启动前的
+    # 快照（见上面的 load_blackboard），而 MemoryCompressor /
+    # HallucinationDetector 在整段运行期间往同一个 board_path 写 Hint/Fact。
+    # 直接 save_blackboard(parent_board) 会拿旧快照整体覆盖，把它们全抹掉
+    # ——实测压缩器产出 1 条摘要、落盘 0 条（确定性丢失，非竞态）。
+    merge_into_blackboard(parent_board, board_path)
     result.explorers.sort(key=lambda e: e.index)
     if not quiet:
         if result.flag:
@@ -762,17 +868,48 @@ def _tail(path: Path, nbytes: int) -> str:
         return ""
 
 
+def _drain_queue(queue) -> Optional[SolverResult]:
+    """非阻塞取一条子进程回传（没有就返回 None）。异常一律降级为 None。"""
+    try:
+        if queue.empty():
+            return None
+        return queue.get(timeout=1)
+    except Exception:  # noqa: BLE001 — 队列读失败等同于「没回传」
+        return None
+
+
+def _safe_confirm_flag(work_dir: Path, *, label: str = "", quiet: bool = False) -> str:
+    """单槽 flag 判定：任何文件系统异常都降级为「无 flag」。
+
+    ``_confirm_flag`` 会做 is_file / read_text / 正则扫描，末尾还有一层
+    ``scan_log_for_flag``（它按 ``exists()`` 判在、再 ``read_text``）。探索者
+    目录里出现读不了、或本不该是文件的东西（实测：``solver.log`` 是目录 →
+    IsADirectoryError）时，异常会顺着收割路径冒出去，把**别的探索者已经解出
+    的 flag 一起作废**。收割是收口环节，逐槽隔离优先于严谨：坏槽降级为
+    「无 flag」，其余槽照常判。
+    """
+    try:
+        return _confirm_flag(work_dir)
+    except Exception as e:  # noqa: BLE001
+        if not quiet:
+            print(f"[multi-agent] {label or work_dir.name} flag 判定失败: "
+                  f"{type(e).__name__}: {e}", flush=True)
+        return ""
+
+
 def run_multi_agent_for_challenge(challenge_id: str, **kwargs) -> MultiAgentResult:
     """便捷入口：challenge_id（目录或注册表条目）→ Project → run_multi_agent。"""
     from .dispatcher import Project
-    from .registry import challenge_to_project, load_challenges
+    from .registry import (
+        challenge_json_to_project,
+        challenge_to_project,
+        load_challenges,
+    )
 
     path = Path(challenge_id).expanduser()
     if path.is_dir():
         if (path / "challenge.json").is_file():
-            project = challenge_to_project(
-                json.loads(path.read_text(encoding="utf-8")), base_dir=path.parent
-            )
+            project = challenge_json_to_project(path / "challenge.json")
         else:
             project = Project(challenge_id=path.name, challenge_dir=str(path))
     else:
@@ -804,6 +941,17 @@ def run_boomerang(project, *, max_rounds: int = 2, max_explorers: int = 4,
         )
         final = result
         if result.solved:
+            # FLAG 也要落到 base：run_multi_agent 只把它写进自己那层的
+            # work_dir（这里是 boomerang-round-N，内部工作区）。调用方传进来的
+            # base 才是挑战目录，按「<挑战目录>/FLAG」找结果的下游（writeup /
+            # trace / 人工复核）否则会扑空 —— 表现为「解出了但没有 FLAG 文件」。
+            if result.flag:
+                try:
+                    atomic_write_text(
+                        base / FLAG_FILENAME, result.flag + "\n", lock=False
+                    )
+                except OSError:
+                    pass
             return result
         board = load_blackboard(round_dir / BLACKBOARD_FILENAME)
         if board is None:

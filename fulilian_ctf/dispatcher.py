@@ -31,9 +31,9 @@ from .blackboard import BLACKBOARD_FILENAME, Fact, State, load_blackboard, save_
 _SAFE_MP_CONTEXT = multiprocessing.get_context(
     "forkserver" if "forkserver" in multiprocessing.get_all_start_methods() else "spawn"
 )
+from .fsutil import atomic_write_text
 from .probe import ProbeResult, probe_challenge
 from .relay import (
-    atomic_write_text,
     build_relay,
     is_relay_meta_text,
     parse_relay,
@@ -129,6 +129,11 @@ class Project:
     last_tier: str = ""
 
     def to_dict(self) -> dict:
+        # 与 from_dict 必须逐键对齐：实测 from_dict 会读 description 与
+        # timebox_override，而旧 to_dict 不写它们 —— 一次
+        # Project.from_dict(p.to_dict()) 往返就把题干（注入探索者 prompt 的
+        # 主体）和人工时间盒覆盖悄悄清零。目前 from_dict 还没有调用方，
+        # 谁第一个接上状态加载就会踩到，这里先补齐。
         return {
             "id": self.challenge_id,
             "title": self.title,
@@ -140,10 +145,12 @@ class Project:
             "ev_score": round(self.ev_score, 3),
             "stop_reason": self.stop_reason,
             "flag": self.flag,
+            "description": self.description,
             "target_host": self.target_host,
             "target_port": self.target_port,
             "challenge_dir": self.challenge_dir,
             "model": self.model,
+            "timebox_override": self.timebox_override,
             "started_at": self.started_at,
             "finished_at": self.finished_at,
             "last_tier": self.last_tier,
@@ -151,7 +158,6 @@ class Project:
 
     @classmethod
     def from_dict(cls, d: dict) -> "Project":
-        known = {f.name for f in cls.__dataclass_fields__.values()}  # noqa: F841
         return cls(
             challenge_id=str(d.get("id", "")),
             challenge_dir=str(d.get("challenge_dir", "")),
@@ -173,6 +179,47 @@ class Project:
             finished_at=float(d.get("finished_at", 0.0) or 0.0),
             last_tier=str(d.get("last_tier", "")),
         )
+
+
+@dataclass
+class _Escalation:
+    """本次 respawn 的升级效果快照（P0-3）。
+
+    ``extend_timebox`` 的 1.5× 倍率与 ``switch_model`` 的换模型**都只对本次
+    respawn 生效**。旧实现把它们写进 ``self._timebox_multiplier`` /
+    ``project.model``，两处都是错的：
+
+    - ``self._timebox_multiplier`` 是 Dispatcher 级共享字段，而
+      ``_spawn_candidates`` 用 ThreadPoolExecutor 并行探活-分配多道题：
+      A 题设置的倍率会被先进入 ``_spawn`` 的 B 题线程消费并复位，A 题
+      自己拿不到延长；
+    - ``project.model`` 会被 ``_spawn`` 里的 ``self.model or project.model``
+      短路吞掉——CLI 传了 ``--model`` 时换模型升级完全不生效。
+
+    改为随调用栈传递的本对象：无共享状态，无线程竞态。
+    """
+
+    route: str = DEFAULT_ROUTE
+    detail: str = ""
+    timebox_multiplier: float = 1.0
+    model: str = ""
+
+
+def _load_blackboard_safe(path: Path):
+    """``load_blackboard`` 的降级包装：损坏/不可读 → None。
+
+    ``blackboard.json`` 可能被外部编辑、磁盘故障或被并发写入写坏。
+    ``load_blackboard`` 对非 JSON 内容抛 ``json.JSONDecodeError``，而调用点
+    （``_spawn`` / ``_reap`` / ``_write_relay`` / ``_record_experience``）
+    都在 ``run()`` 的 try 里，异常会被 ``except BaseException`` 捕获并终止
+    **整个**多题 run——一道题的黑板损坏会连带杀掉其它题的 solver 进程。
+
+    ``None`` 正是各调用点已有的「黑板缺失」语义（跳过该维度），直接复用。
+    """
+    try:
+        return load_blackboard(path)
+    except Exception:  # noqa: BLE001 — 损坏/权限/IO 一律降级为「无黑板」
+        return None
 
 
 class Dispatcher:
@@ -218,6 +265,9 @@ class Dispatcher:
         self.projects: dict[str, Project] = {}
         self._running: dict[str, dict] = {}  # challenge_id → slot
         self._spawns = 0
+        # 升级动作计数（P0-3）。声明在 __init__ 而非首次 getattr 兜底，
+        # 使 _apply_escalation 的自增可以走 _counters_lock（见该函数）。
+        self.escalations = 0
         # P1-2 / M-3：_spawns / attempts 的读改写发生在 _spawn_candidates
         # 的线程池并发上下文中，+= 非原子——计数器读写统一走此锁。
         self._counters_lock = threading.Lock()
@@ -473,6 +523,29 @@ class Dispatcher:
                     print(f"[probe] {project.challenge_id}: UNKNOWN — proceeding anyway")
         return self._spawn(project, limit)
 
+    def _probe_candidate_safe(self, project: Project, limit: Optional[int]) -> bool:
+        """``_probe_and_maybe_spawn`` 的逐题隔离包装（供线程池 map 调用）。
+
+        线程池里某个候选抛异常时，``ex.map`` 会在迭代到该项时把异常原样
+        **重抛给调用方**（不是存进 Future 等着查）——``_spawn_candidates``
+        当场中断，剩下的候选连探活都没做，再往上就是 ``run()`` 的
+        ``except BaseException`` 终止**整轮多题调度**。一道题的探活异常
+        （DNS 抖动、socket 报错、DISCOVERED 分支里的 int() 失败）会让别的
+        题一起不跑。
+
+        这里把异常收敛到单题：如实记进 ``stop_reason``（含类型与消息），
+        返回 False。**不改状态为 INFRA_BLOCKED** —— 那是探活层给出的「环境
+        不可达」判断，代码异常下次调度应当重试，混进同一个状态会让 26 题
+        全被跳过。
+        """
+        try:
+            return self._probe_and_maybe_spawn(project, limit=limit)
+        except Exception as e:  # noqa: BLE001 — 逐题隔离，异常不得外溢
+            project.stop_reason = f"probe error: {type(e).__name__}: {e}"
+            if not self.quiet:
+                print(f"[probe] {project.challenge_id}: {project.stop_reason}")
+            return False
+
     def _spawn_candidates(self, candidates: list[Project], limit: Optional[int]) -> None:
         """并行探活候选（≤4 并发），可达的分配 solver。"""
         remaining_limit = limit - self._spawns if limit is not None else None
@@ -484,13 +557,15 @@ class Dispatcher:
         with ThreadPoolExecutor(max_workers=min(PROBE_CONCURRENCY, self.max_workers)) as ex:
             # P1-2 / M-3：limit 透传到 _spawn，名额在锁内原子消耗
             # （remaining_limit 只是启发式预过滤，硬上限由锁内判断保证）
+            # P2：走逐题隔离包装 —— ex.map 会把单题异常重抛给调用方。
             reachable = list(
                 ex.map(
-                    functools.partial(self._probe_and_maybe_spawn, limit=limit),
+                    functools.partial(self._probe_candidate_safe, limit=limit),
                     targets,
                 )
             )
         # ex.map 已按序完成探活+分配；返回 False 的已被标记 INFRA_BLOCKED
+        # 或 probe error（见 _probe_candidate_safe）
 
     def _get_specialist_prompt(self, project: Project) -> str:
         """根据题目类别创建专家 prompt 并注入知识卡。
@@ -536,12 +611,18 @@ class Dispatcher:
             base_desc = base_desc[:prev]
         project.description = base_desc + marker + block
 
-    def _apply_escalation(self, project: Project, route: str, detail: str) -> None:
-        """P0-3：按路由执行升级动作。
+    def _apply_escalation(
+        self, project: Project, route: str, detail: str
+    ) -> _Escalation:
+        """P0-3：按路由执行升级动作，返回本次 respawn 的升级效果快照。
 
         v1 边界（契约 4）：只做 prompt 级升级 + timebox 1.5× 调整 + model
         换名；不在调度主循环同步调用 run_boomerang / race 多进程机制。
+
+        返回的 ``_Escalation`` 由 ``_spawn`` 消费：倍率与模型不再写实例/
+        project 字段（那会跨题竞态或被 ``self.model or`` 吞掉）。
         """
+        esc = _Escalation(route=route, detail=detail)
         if route == "switch_attack_class":
             block = (
                 "上一轮因假设空间重复被止损：\n"
@@ -563,29 +644,35 @@ class Dispatcher:
             )
             self._inject_block(project, "\n\n[Escalation]\n", block)
         elif route == "extend_timebox":
-            # 1.5 倍延长：只对本次 respawn 生效（_spawn 消费后复位）
-            self._timebox_multiplier = 1.5
+            # 1.5 倍延长：只对本次 respawn 生效。倍率随返回值传给 _spawn，
+            # 不写 self._timebox_multiplier —— 那是 Dispatcher 级共享字段，
+            # _spawn_candidates 的线程池并发下会被别的题抢先消费并复位。
+            esc.timebox_multiplier = 1.5
         elif route == "switch_model":
             try:
                 from .racer import resolve_race_models
 
-                models = [
-                    m for m in resolve_race_models()
-                    if m != (project.model or self.model)
-                ]
+                current = project.model or self.model
+                models = [m for m in resolve_race_models() if m != current]
                 if models:
-                    project.model = models[0]
+                    # 不写 project.model：_spawn 里 `self.model or project.model`
+                    # 在 self.model（CLI --model）非空时会短路吞掉换模型升级
+                    esc.model = models[0]
                 else:
-                    route = DEFAULT_ROUTE  # 取不到备选 → 退化为现状重试
+                    esc.route = DEFAULT_ROUTE  # 取不到备选 → 退化为现状重试
             except Exception:  # noqa: BLE001 — racer 不可用 → 退化为现状重试
-                route = DEFAULT_ROUTE
-        if route != DEFAULT_ROUTE:
-            self.escalations = getattr(self, "escalations", 0) + 1
+                esc.route = DEFAULT_ROUTE
+        if esc.route != DEFAULT_ROUTE:
+            # _apply_escalation 由 _spawn_candidates 的线程池并发调用，
+            # ++ 非原子 → 与其它计数器同锁
+            with self._counters_lock:
+                self.escalations += 1
             if not self.quiet:
                 print(
                     f"[dispatch] {project.challenge_id}: "
-                    f"escalate({detail[:60]}) → {route}"
+                    f"escalate({detail[:60]}) → {esc.route}"
                 )
+        return esc
 
     def _try_consume_spawn_slot(self, limit: Optional[int]) -> bool:
         """原子消耗一个 spawn 名额（P1-2 / M-3）；达到 limit 返回 False。
@@ -630,39 +717,42 @@ class Dispatcher:
         # P0-3：升级决策在状态重置前读取快照（status 此时仍为 ABANDONED/TIMEOUT）。
         # 注入顺序在 [Specialist Prompt] 之后，保证 [Escalation] 位于 prompt 末尾。
         route, detail = self._escalation_for(project)
-        if route != DEFAULT_ROUTE:
+        esc = (
             self._apply_escalation(project, route, detail)
+            if route != DEFAULT_ROUTE
+            else _Escalation()
+        )
         budget = (
             project.timebox_override
             or self.timebox_override
             or difficulty_adjusted_budget(project.difficulty)
         )
-        # P0-3：extend_timebox 路由的 1.5× 延长，只对本次 respawn 生效
-        multiplier = getattr(self, "_timebox_multiplier", 1.0)
-        if multiplier != 1.0:
-            budget = int(budget * multiplier)
-            self._timebox_multiplier = 1.0
+        # P0-3：extend_timebox 路由的 1.5× 延长，只对本次 respawn 生效；
+        # 倍率来自本次调用的升级快照（非 Dispatcher 共享字段，无跨题竞态）
+        if esc.timebox_multiplier != 1.0:
+            budget = int(budget * esc.timebox_multiplier)
         incremental = not (project.timebox_override or self.timebox_override)
         tb = Timebox(initial_budget=budget, incremental=incremental)
         tb.start()
         mp_context = _SAFE_MP_CONTEXT
         queue = mp_context.Queue()
+        # switch_model 升级的换模型值优先于 self.model：旧代码此处是
+        # `self.model or project.model`，CLI 传了 --model 时升级被静默吞掉
+        model = esc.model or self.model or project.model
         proc = mp_context.Process(
             target=_safe_target,
-            args=(self._solver_fn, project, str(work_dir), self.model or project.model, queue),
+            args=(self._solver_fn, project, str(work_dir), model, queue),
             name=f"solver-{project.challenge_id}",
         )
-        proc.start()
-        project.status = ChallengeStatus.IN_PROGRESS
-        with self._counters_lock:
-            project.attempts += 1
-        project.started_at = time.time()
-        project.last_tier = tb.tier_label
-        # P1-2 / M-3：_spawns 已在 _spawn 入口经 _try_consume_spawn_slot
-        # 原子消耗，此处不再自增。
-        # 续接注入：RELAY.md 的死路/已达成原语 → 黑板（07 指南集成步骤 1）
+        # 续接注入：RELAY.md 的死路/已达成原语 → 黑板（07 指南集成步骤 1）。
+        # 必须在 proc.start() **之前**完成：槽位注册（下面的 _running[...]）
+        # 一旦先于 start，任何中段异常都会让 _running 里留下一个未启动的
+        # Process 幽灵条目。
         self._inject_relay_into_board(work_dir)
-        board = load_blackboard(work_dir / BLACKBOARD_FILENAME)
+        board = _load_blackboard_safe(work_dir / BLACKBOARD_FILENAME)
+        # 先注册槽位再 start：proc.start() 之后、槽位注册之前若抛异常
+        # （黑板书损坏、内存不足 fork 失败），已启动的 solver 进程无人回收
+        # → 孤儿进程继续烧 token 直到时间盒在无人监管下永远不到期。
         self._running[project.challenge_id] = {
             "project": project,
             "process": proc,
@@ -688,11 +778,25 @@ class Dispatcher:
             "scan_tail": "",      # 上次扫描末尾残留（候选跨块时拼接用）
             "board_cache": None,  # ((mtime_ns, size), Board) 缓存对
         }
+        try:
+            proc.start()
+        except BaseException:
+            # 启动失败：撤掉刚注册的槽位，不留幽灵条目
+            self._running.pop(project.challenge_id, None)
+            raise
+        project.status = ChallengeStatus.IN_PROGRESS
+        with self._counters_lock:
+            project.attempts += 1
+        project.started_at = time.time()
+        project.last_tier = tb.tier_label
+        # P1-2 / M-3：_spawns 已在 _spawn 入口经 _try_consume_spawn_slot
+        # 原子消耗，此处不再自增。
         if not self.quiet:
             print(
                 f"[dispatch] {project.challenge_id}: spawn "
                 f"(pid={proc.pid}, tier0={budget}s, workers={len(self._running)}/{self.max_workers})"
             )
+        return True
 
     def _inject_relay_into_board(self, work_dir: Path) -> None:
         """续接时把 RELAY.md 的死路/已达成原语注入黑板（07 指南集成步骤 1）。
@@ -705,7 +809,7 @@ class Dispatcher:
         board_path = work_dir / BLACKBOARD_FILENAME
         if not relay_text or not board_path.is_file():
             return
-        board = load_blackboard(board_path)
+        board = _load_blackboard_safe(board_path)
         if board is None:
             return
         relay = parse_relay(relay_text)
@@ -727,6 +831,90 @@ class Dispatcher:
 
     # ── 内部：收割与中断 ────────────────────────────────────────────────
 
+    def _resolve_flag(
+        self, result: Optional[SolverResult], work_dir: Path
+    ) -> tuple[str, str]:
+        """解析一次尝试的产出 flag（所有出口统一口径）。
+
+        两级来源：solver 投递的声明式 FLAG（须过三重校验门——agent 可能绕过
+        ``submit_flag`` 直接写 FLAG 文件，占位/畸形内容不得判 SOLVED），
+        再以 ``solver.log`` 扫描兜底。
+
+        Returns:
+            (flag, gate_note)：flag 为空表示未解出；gate_note 记录被校验门
+            拒绝的原因（供 stop_reason 说明「有 flag 但不可信」）。
+        """
+        flag = ""
+        gate_note = ""
+        declared = (result.flag if result else "") or ""
+        if declared:
+            gate = verify_flag(declared, evidence="", require_grounding=False)
+            if gate is VerificationResult.CONFIRMED:
+                flag = declared
+            else:
+                gate_note = f"flag file rejected by gate: {gate.value}"
+        if not flag:
+            flag = scan_log_for_flag(work_dir)  # 兜底：扫描 solver.log（同样过校验门）
+        return flag, gate_note
+
+    def _mark_solved(self, project: Project, flag: str, work_dir: Path) -> None:
+        """落定 SOLVED 状态并持久化 FLAG 文件（best-effort 写盘）。"""
+        project.status = ChallengeStatus.SOLVED
+        project.flag = flag
+        project.stop_reason = ""
+        try:
+            # 原子写：FLAG 会被 CLI / 中继 / 监控线程独立读回，普通 write_text
+            # 的 truncate 窗口会被读成「没有 flag」（见 verify.check_output_for_flag）
+            atomic_write_text(work_dir / "FLAG", flag + "\n", lock=False)
+        except OSError:
+            pass
+
+    @staticmethod
+    def _drain_queue(queue) -> Optional[SolverResult]:
+        """取回队列中已投递的 solver 结果（中断路径专用）。
+
+        ``solver_worker`` 在进程退出前就先 ``queue.put(SolverResult)``，之后
+        才写 trace。主循环判定超时/止损时进程往往还活着（或刚退出），队列里
+        可能已有一份通过校验门的结果。旧实现在 terminate 后从不排空队列，
+        已到手的 flag 被丢弃、题目被误标 TIMEOUT/ABANDONED；更糟的是下一轮
+        收割 respawn 会以 ``"w"`` 截断重写 solver.log，只存在于日志里的 flag
+        就此永久丢失。
+        """
+        try:
+            if queue.empty():
+                return None
+            return queue.get(timeout=1)
+        except Exception:  # noqa: BLE001 — 队列已关闭/取空
+            return None
+
+    def _claim_flag_after_interrupt(self, project: Project, slot: dict) -> bool:
+        """中断（超时/止损）后认领 solver 已产出的 flag。
+
+        进程被 terminate 不等于「没有产出」：``solver_worker`` 先 ``put``
+        结果、后写 trace，主循环同一轮里判定中断时队列中可能已有一份通过的
+        flag。未排空队列就写 stop_reason，会把 SOLVED 误标为 TIMEOUT /
+        ABANDONED 并丢掉 flag；下一轮 respawn 以 ``"w"`` 截断 solver.log 后，
+        连日志兜底来源也一并消失。
+
+        Returns:
+            True 表示已认领 flag（project 已置 SOLVED，调用方应立即返回，
+            不再写接力块）；False 表示确实无产出，按原中断语义继续。
+        """
+        result = self._drain_queue(slot["queue"])
+        flag, gate_note = self._resolve_flag(result, slot["work_dir"])
+        if not flag:
+            return False
+        self._mark_solved(project, flag, slot["work_dir"])
+        if gate_note and not self.quiet:  # 理论上不可达，保留可观测性
+            print(f"[dispatch] {project.challenge_id}: {gate_note}")
+        if not self.quiet:
+            print(
+                f"[dispatch] {project.challenge_id}: solved flag={flag} "
+                "(claimed from result queue during interrupt)"
+            )
+        self._record_experience(project, success=True, work_dir=slot["work_dir"])
+        return True
+
     def _reap_finished(self) -> None:
         """收割已结束的 solver 进程，判定 SOLVED / ABANDONED。"""
         for cid, slot in list(self._running.items()):
@@ -741,34 +929,12 @@ class Dispatcher:
         self._running.pop(cid, None)
         proc.join(timeout=3)
 
-        result: Optional[SolverResult] = None
-        try:
-            if not queue.empty():
-                result = queue.get(timeout=1)
-        except Exception:  # noqa: BLE001
-            result = None
+        result = self._drain_queue(queue)
 
         project.finished_at = time.time()
-        flag = ""
-        gate_note = ""
-        declared = (result.flag if result else "") or ""
-        if declared:
-            # 声明式 FLAG 文件内容同样要过三重校验门：agent 可能绕过
-            # submit_flag 直接写 FLAG 文件，占位/畸形内容不得判 SOLVED
-            gate = verify_flag(declared, evidence="", require_grounding=False)
-            if gate is VerificationResult.CONFIRMED:
-                flag = declared
-            else:
-                gate_note = f"flag file rejected by gate: {gate.value}"
-        if not flag:
-            flag = scan_log_for_flag(work_dir)  # 兜底：扫描 solver.log（走三重校验门）
+        flag, gate_note = self._resolve_flag(result, work_dir)
         if flag:
-            project.status = ChallengeStatus.SOLVED
-            project.flag = flag
-            try:
-                (work_dir / "FLAG").write_text(flag + "\n", encoding="utf-8")
-            except OSError:
-                pass
+            self._mark_solved(project, flag, work_dir)
         else:
             project.status = ChallengeStatus.ABANDONED
             project.stop_reason = (
@@ -782,7 +948,7 @@ class Dispatcher:
             print(f"[dispatch] {project.challenge_id}: {project.status.value}{detail}")
 
         # 经验落库（F3-003/F3-004）：SOLVED / ABANDONED 都落，best-effort
-        board = load_blackboard(work_dir / BLACKBOARD_FILENAME)
+        board = _load_blackboard_safe(work_dir / BLACKBOARD_FILENAME)
         fact_contents = (
             [
                 f.content[:120]
@@ -875,7 +1041,7 @@ class Dispatcher:
         cached = slot.get("board_cache")
         if cached is not None and cached[0] == key:
             return cached[1]
-        board = load_blackboard(board_path)
+        board = _load_blackboard_safe(board_path)
         slot["board_cache"] = (key, board)
         return board
 
@@ -979,7 +1145,7 @@ class Dispatcher:
         任何失败只静默跳过，不影响调度。
         """
         try:
-            board = load_blackboard(work_dir / BLACKBOARD_FILENAME)
+            board = _load_blackboard_safe(work_dir / BLACKBOARD_FILENAME)
             fact_contents = (
                 [
                     f.content[:120]
@@ -1019,8 +1185,13 @@ class Dispatcher:
             proc.join(timeout=2)
 
         project.finished_at = time.time()
-        project.status = ChallengeStatus.ABANDONED
         project.last_tier = tb.tier_label
+        # 终止前 solver 可能已把通过的 flag 投进队列并使 FLAG 文件落盘——
+        # 先认领，否则已解出的题被误标 ABANDONED，且下轮 respawn 截断
+        # solver.log 后连日志兜底也没了
+        if self._claim_flag_after_interrupt(project, slot):
+            return
+        project.status = ChallengeStatus.ABANDONED
         project.stop_reason = (
             f"STOPPED: {reason} ({self.stopper.describe(reason)}) "
             f"after {int(tb.elapsed)}s at tier '{tb.tier_label}'"
@@ -1051,8 +1222,12 @@ class Dispatcher:
             proc.join(timeout=2)
 
         project.finished_at = time.time()
-        project.status = ChallengeStatus.TIMEOUT
         project.last_tier = tb.tier_label
+        # 时间盒到期的同一轮里 solver 可能刚投递了通过的 flag：先认领再判
+        # 超时（详见 _claim_flag_after_interrupt）
+        if self._claim_flag_after_interrupt(project, slot):
+            return
+        project.status = ChallengeStatus.TIMEOUT
         project.stop_reason = (
             f"timebox expired at tier '{tb.tier_label}' after {int(tb.elapsed)}s "
             f"(budget {tb.current_budget}s)"
@@ -1079,7 +1254,7 @@ class Dispatcher:
             f"(budget {tb.current_budget}s); progress log: {work_dir / 'solver.log'}"
         ]
         dead_ends: list[str] = []
-        board = load_blackboard(work_dir / BLACKBOARD_FILENAME)
+        board = _load_blackboard_safe(work_dir / BLACKBOARD_FILENAME)
         if board:
             # P1-3 / A-4：过滤 source=="solver" 与 "solver attempt " 元 Fact，
             # 防止运行时垃圾随重试线性膨胀进 RELAY 与回注 prompt
@@ -1122,7 +1297,9 @@ class Dispatcher:
 
     def save_state(self, summary: dict, path: str | Path) -> None:
         # P1-3：原子写，中断不留截断 JSON
-        atomic_write_text(Path(path), json.dumps(summary, indent=2, ensure_ascii=False))
+        atomic_write_text(
+            Path(path), json.dumps(summary, indent=2, ensure_ascii=False), lock=False
+        )
 
 
 __all__ = [

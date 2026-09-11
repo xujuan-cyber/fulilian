@@ -74,19 +74,41 @@ def _load_manifest_file(manifest: Path) -> list[dict]:
     return _validate_entries(entries, str(manifest))
 
 
+def _absolutize_work_dirs(entries: list[dict], base: Path) -> list[dict]:
+    """把条目中相对的 ``challenge_dir`` / ``dir`` 规范为绝对路径。
+
+    ``dir`` 的语义是「相对平台的挑战工作目录」（见模块 docstring），但下游
+    ``challenge_to_project`` 只在显式收到 ``base_dir`` 时才按 base 解析，否则
+    相对值会被当成相对 cwd —— ``fulilian solve /path/platform/manifest.json``
+    会在 cwd 下新建空目录求解，绕开真正的题目文件。
+
+    这里在加载期按已知的清单/平台位置统一规范化，使所有调用方（含不传
+    ``base_dir`` 的）拿到一致结果；已是绝对路径的值原样保留。
+    """
+    base_abs = base.expanduser().absolute()
+    for entry in entries:
+        for key in ("challenge_dir", "dir"):
+            raw = entry.get(key)
+            if isinstance(raw, str) and raw.strip():
+                expanded = Path(raw).expanduser()
+                if not expanded.is_absolute():
+                    entry[key] = str(base_abs / expanded)
+    return entries
+
+
 def load_challenges(platform: str | Path) -> list[dict]:
     """加载平台上的全部挑战（原始 dict 列表）。找不到/格式错抛 ValueError。"""
     p = Path(platform).expanduser()
 
     if p.is_file():
-        return _load_manifest_file(p)
+        return _absolutize_work_dirs(_load_manifest_file(p), p.parent)
 
     if p.is_dir():
         # 1) 平台清单
         for name in MANIFEST_NAMES:
             mf = p / name
             if mf.is_file():
-                return _load_manifest_file(mf)
+                return _absolutize_work_dirs(_load_manifest_file(mf), p)
         # 2) 平台根目录直接是单道题（challenge.json 在根下）
         root_cf = p / CHALLENGE_MANIFEST
         if root_cf.is_file():
@@ -96,7 +118,7 @@ def load_challenges(platform: str | Path) -> list[dict]:
                     f"{root_cf} is a platform manifest, not a single challenge object"
                 )
             entry.setdefault("challenge_dir", str(p))
-            return _validate_entries([entry], str(root_cf))
+            return _absolutize_work_dirs(_validate_entries([entry], str(root_cf)), p)
         # 3) 子目录 challenge.json
         found: list[dict] = []
         for sub in sorted(p.iterdir()):
@@ -112,7 +134,7 @@ def load_challenges(platform: str | Path) -> list[dict]:
                     entry.setdefault("challenge_dir", str(sub))
                     found.append(entry)
         if found:
-            return _validate_entries(found, str(p))
+            return _absolutize_work_dirs(_validate_entries(found, str(p)), p)
         raise ValueError(
             f"no challenges found under {p} "
             f"(no {CHALLENGE_MANIFEST} files and no platform manifest)"
@@ -144,9 +166,34 @@ def challenge_to_project(entry: dict, base_dir: Optional[Path] = None):
     )
 
 
+def challenge_json_to_project(challenge_json: Path):
+    """题目目录下的 ``challenge.json`` → Project（``solve <目录>`` 的入口）。
+
+    ``dir`` 的语义是「相对平台的工作目录」（见模块 docstring），所以 base_dir
+    取题目目录的**父目录**：``<platform>/<chal>/challenge.json`` 里写
+    ``"dir": "chal"`` 仍解析回 ``<platform>/chal``。
+
+    但条目本身没有 ``dir`` / ``challenge_dir`` 时，工作目录就是题目目录自己
+    ——不能让 ``challenge_to_project`` 回退到 base_dir，那会返回**父目录**，
+    agent 于是在题目目录之外求解（FLAG / AGENTS.md / solver.log 全写错位置）。
+    这里显式补上 ``challenge_dir`` 消除该回退。
+
+    Raises:
+        ValueError: challenge.json 不是合法 JSON 对象（由 ``_read_json`` 抛出）。
+    """
+    data = _read_json(Path(challenge_json))
+    parent = Path(challenge_json).parent
+    if not (data.get("challenge_dir") or data.get("dir")):
+        # 必须注入**绝对**路径：相对值会被 challenge_to_project 再与 base_dir
+        # 拼接，形成 platform/platform/... 的双重拼接
+        data["challenge_dir"] = str(parent.absolute())
+    return challenge_to_project(data, base_dir=parent.parent)
+
+
 __all__ = [
     "MANIFEST_NAMES",
     "CHALLENGE_MANIFEST",
     "load_challenges",
     "challenge_to_project",
+    "challenge_json_to_project",
 ]

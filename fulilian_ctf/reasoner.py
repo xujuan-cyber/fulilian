@@ -18,6 +18,11 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Optional
 
+# 扩展名/文件类型 → 类别的词表由 probe 独家维护（它还要用同一份表生成
+# prompt 策略）。这里复用而不是再抄一份：曾经本模块自带的子串匹配正是
+# `.webp` 被判成 WEB 的根因，两套词表再次跑偏只是时间问题。
+from .probe import _EXT_CATEGORY_MAP, _TYPE_CATEGORY_MAP
+
 
 class TaskCategory(str, Enum):
     """CTF 题目类别。"""
@@ -28,6 +33,37 @@ class TaskCategory(str, Enum):
     CRYPTO = "crypto"
     FORENSICS = "forensics"
     MISC = "misc"
+
+
+# probe / benchmark / cli / knowledge 各层写的是 "reverse"，而本模块（以及
+# specialists 注册表 —— factory 用 "rev" 注册、planner 用 category.value 取
+# executor）用的是 "rev"。同一个概念两套词表，交界处就在 _detect_category：
+# 不归一的话 probe 给的 hint="reverse" 永远匹配不上，逆向题会一路掉到 MISC，
+# planner 随后报 "No executor registered for category rev"。
+#
+# 注意方向：只能把 "reverse" 归一到 "rev"，不能反过来改枚举值 ——
+# specialists/factory.py 与 planner._executors 都以 "rev" 为键。
+_CATEGORY_ALIASES: dict[str, "TaskCategory"] = {
+    "reverse": TaskCategory.REV,
+    "reversing": TaskCategory.REV,
+    "reverse_engineering": TaskCategory.REV,
+    "re": TaskCategory.REV,
+    "pwnable": TaskCategory.PWN,
+    "binary": TaskCategory.PWN,
+    "forensic": TaskCategory.FORENSICS,
+    "cryptography": TaskCategory.CRYPTO,
+}
+
+
+def _normalize_category(text: Any) -> Optional["TaskCategory"]:
+    """把外部词表里的类别名归一成 :class:`TaskCategory`；认不出返回 None。"""
+    key = str(text or "").strip().lower().replace("-", "_").replace(" ", "_")
+    if not key:
+        return None
+    for cat in TaskCategory:
+        if cat.value == key:
+            return cat
+    return _CATEGORY_ALIASES.get(key)
 
 
 @dataclass
@@ -167,10 +203,12 @@ class Reasoner:
         """
         self._round += 1
 
-        # 检查是否有 flag 找到
+        # 检查是否有 flag 找到。r.flag 为空时**不能**编一个占位串：下游
+        # （racer 的 bool(self.flag)、plan/flag 落盘）把「非空 flag」当作已
+        # 解出的凭据，字面量 "found" 会被当成真 flag 传下去。原样透传。
         for r in feedback:
             if r.flag_found:
-                return Plan.done(flag=r.flag or "found")
+                return Plan.done(flag=r.flag)
 
         # 检查是否卡住
         stuck_count = sum(1 for r in feedback if r.is_stuck)
@@ -185,32 +223,36 @@ class Reasoner:
     def _detect_category(self, challenge: Any, env_info: Any) -> TaskCategory:
         """判断题目类别。
 
-        优先级：env_info.category_hint > 文件扩展名 > 默认 MISC。
+        优先级：env_info.category_hint > 文件扩展名/类型 > challenge.category
+        > 默认 MISC。外部来的类别名一律经 :func:`_normalize_category` 归一
+        （见 ``_CATEGORY_ALIASES`` 的说明）。
         """
         # 尝试从 env_info 的 category_hint 获取
         if env_info is not None:
-            hint = getattr(env_info, "category_hint", "") or ""
-            if hint:
-                hint_lower = hint.lower().strip()
-                for cat in TaskCategory:
-                    if cat.value == hint_lower:
+            cat = _normalize_category(getattr(env_info, "category_hint", ""))
+            if cat is not None:
+                return cat
+            # 尝试从文件列表推断：走 probe 的权威词表，扩展名按整段精确匹配
+            # （子串匹配会把 `.webp` 认成 WEB），file_type 按 probe 的关键词表。
+            for f in getattr(env_info, "files", []) or []:
+                ext = str(getattr(f, "extension", "") or "").lower()
+                if ext and not ext.startswith("."):
+                    ext = "." + ext
+                if ext:
+                    cat = _normalize_category(_EXT_CATEGORY_MAP.get(ext, ""))
+                    if cat is not None:
                         return cat
-            # 尝试从文件列表推断
-            files = getattr(env_info, "files", []) or []
-            for f in files:
-                ext = getattr(f, "extension", "") or ""
-                ftype = getattr(f, "file_type", "") or ""
-                for cat in TaskCategory:
-                    if cat.value in ext.lower() or cat.value in ftype.lower():
-                        return cat
+                ftype = str(getattr(f, "file_type", "") or "")
+                for key, value in _TYPE_CATEGORY_MAP.items():
+                    if key in ftype:
+                        cat = _normalize_category(value)
+                        if cat is not None:
+                            return cat
         # 从 challenge 元信息获取
         if challenge is not None:
-            cat_str = getattr(challenge, "category", "") or ""
-            if cat_str:
-                cat_lower = cat_str.lower().strip()
-                for cat in TaskCategory:
-                    if cat.value == cat_lower:
-                        return cat
+            cat = _normalize_category(getattr(challenge, "category", ""))
+            if cat is not None:
+                return cat
         return TaskCategory.MISC
 
     def _decompose(

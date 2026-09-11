@@ -3,11 +3,23 @@
 只覆盖快路径（少量 fixture + 2 个故障场景），全量 25 题与 4 故障
 由 `python3 -m fulilian_ctf.benchmark` 一条命令跑，见 benchmarks/README.md。
 全程离线：mock solver_impl + 真实 verify 三重校验门，不调 API。
+
+预修复基线（``git checkout HEAD -- fulilian_ctf/benchmark.py`` 后跑本文件
+的 `-k "isolat or reference_solve"`，再按 md5 恢复）::
+
+    3 failed, 11 deselected
+    FAILED test_unit_suite_isolates_crashing_case
+    FAILED test_reference_solve_times_out_instead_of_hanging
+    FAILED test_reference_solve_reports_reference_exception
+
+对应用例循环无逐题隔离（一个用例炸掉整轮丢结果）与参考解进程内直调
+（卡在网络上的参考解让自证与整个用例循环永久挂住）。
 """
 
 from __future__ import annotations
 
 import json
+import time
 
 import pytest
 
@@ -140,6 +152,103 @@ def test_baseline_save_and_compare(tmp_path):
     degraded["categories"]["web"]["pass_rate"] = 0.0
     regressions = compare_with_baseline(degraded, out)
     assert any("pass_rate" in r for r in regressions)
+
+
+# ── 逐用例隔离 + 参考解超时（回归：一个用例炸掉整轮 / 参考解卡死）──────────
+
+def test_unit_suite_isolates_crashing_case(tmp_path, monkeypatch):
+    """单个用例抛异常时：如实记 crashed 并继续跑后面的用例。
+
+    旧实现在循环体里没有任何隔离，一个用例炸掉（fixture 拷贝失败、队列空、
+    未知异常）整轮基准连同已经跑完的结果一起丢，连"失败"都报不出来。
+    """
+    from fulilian_ctf import benchmark
+    from fulilian_ctf.solver import SolverResult
+
+    manifest = [
+        {"id": "crash-01", "category": "web",
+         "fixture": "fixtures/web-info-leak-01/", "expected_flag": "flag{x}",
+         "expect": "solved"},
+        {"id": "ok-01", "category": "web",
+         "fixture": "fixtures/web-info-leak-01/", "expected_flag": "flag{a}",
+         "expect": "solved"},
+        {"id": "ok-02", "category": "reverse",
+         "fixture": "fixtures/reverse-rot13-01/", "expected_flag": "flag{b}",
+         "expect": "solved"},
+    ]
+    mpath = tmp_path / "manifest-crash.yaml"
+    mpath.write_text(json.dumps(manifest), encoding="utf-8")
+
+    ran: list[str] = []
+
+    def fake_run(entry, fixture_dir, work_dir, **kw):
+        ran.append(entry["id"])
+        if entry["id"] == "crash-01":
+            raise RuntimeError("boom: fixture exploded")
+        return SolverResult(ok=True, exit_code=0, flag=entry["expected_flag"]), 0.01
+
+    monkeypatch.setattr(benchmark, "validate_fixture", lambda e: (True, ""))
+    monkeypatch.setattr(benchmark, "_run_mock_challenge", fake_run)
+
+    summary = run_unit_suite(mpath)
+    by_id = {c["id"]: c for c in summary["cases"]}
+
+    assert by_id["crash-01"]["status"] == "crashed"
+    assert "boom: fixture exploded" in by_id["crash-01"]["detail"]
+    assert by_id["crash-01"]["solved"] is False
+    # 崩溃之后的用例照常跑（这就是隔离要保的东西）
+    assert ran == ["crash-01", "ok-01", "ok-02"]
+    assert by_id["ok-01"]["status"] == "solved"
+    assert by_id["ok-02"]["status"] == "solved"
+    # crashed 计入分母，不因为是异常就消失
+    assert summary["totals"]["total"] == 3
+    assert summary["totals"]["solved"] == 2
+
+
+def test_reference_solve_times_out_instead_of_hanging(tmp_path):
+    """参考解卡住时必须被超时杀掉并如实报错，而不是把调用方永久挂住。"""
+    from fulilian_ctf.benchmark import _reference_solve
+
+    fixture = tmp_path / "fixtures" / "hang-01"
+    fixture.mkdir(parents=True)
+    (fixture / "solve_reference.py").write_text(
+        "import time\n"
+        "SOLUTION_STEPS = 1\n"
+        "def solve(work_dir):\n"
+        "    time.sleep(60)\n"
+        "    return 'flag{never}'\n",
+        encoding="utf-8",
+    )
+    work = tmp_path / "work"
+    work.mkdir()
+
+    started = time.monotonic()
+    output, err = _reference_solve(fixture, work, timeout=2.0)
+    elapsed = time.monotonic() - started
+
+    assert output == ""
+    assert "timed out" in err
+    assert elapsed < 30, f"超时没生效，等了 {elapsed:.1f}s"
+
+
+def test_reference_solve_reports_reference_exception(tmp_path):
+    """参考解自己抛异常 → 以错误串返回，不向调用方抛（否则又是一处炸点）。"""
+    from fulilian_ctf.benchmark import _reference_solve
+
+    fixture = tmp_path / "fixtures" / "boom-01"
+    fixture.mkdir(parents=True)
+    (fixture / "solve_reference.py").write_text(
+        "SOLUTION_STEPS = 1\n"
+        "def solve(work_dir):\n"
+        "    raise ValueError('reference is broken')\n",
+        encoding="utf-8",
+    )
+    work = tmp_path / "work"
+    work.mkdir()
+
+    output, err = _reference_solve(fixture, work, timeout=30.0)
+    assert output == ""
+    assert "ValueError" in err and "reference is broken" in err
 
 
 def test_benchmarks_dir_layout():

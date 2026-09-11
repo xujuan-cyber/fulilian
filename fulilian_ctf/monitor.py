@@ -19,13 +19,23 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
+# 同一条简单命令内两段内容之间的最大间隔。多段 ``[^|;&]*`` 不设上界会让
+# 回溯引擎在尾部匹配失败时枚举三重分割（实测 8KB 文本 23 秒，规模翻倍约
+# ×15，≈O(n³)）。带界后每个起点只有常数种切法，整体回到线性。
+# 200 字符远超真实命令里相邻 token 的间距（下面的 credential-exfil 需要
+# curl → -d → build/api/hook → token 四段在同一命令里彼此靠近）。
+_MAX_GAP = 200
+_GAP = r"[^|;&]{0,%d}" % _MAX_GAP
+
 # (severity, compiled_pattern, label) — 命中即告警
 _TOOL_PATTERNS: list[tuple[str, re.Pattern, str]] = [
     ("high", re.compile(r"\brm\s+(-[a-zA-Z]*[rf][a-zA-Z]*\s+)+[\"']?/(?!tmp\b)", re.I), "destructive-rm"),
     ("high", re.compile(r"\bmkfs\b|\bdd\s+if=/dev/(zero|urandom|random)\s+of=/dev/", re.I), "destructive-dd"),
     ("high", re.compile(r"\bchmod\s+(-R\s+)?777\s+/(?!tmp\b)", re.I), "chmod-root"),
     ("high", re.compile(r"\b(curl|wget|nc|ncat|netcat)\b[^|;&]*\b(FLAG|flag)\{", re.I), "flag-exfil"),
-    ("high", re.compile(r"\b(curl|wget)[^|;&]*(-d|--data|--data-raw|-F)[^|;&]*\b(build|api|hook)[^|;&]*\b(token|key|flag)", re.I), "credential-exfil"),
+    ("high", re.compile(
+        r"\b(curl|wget)" + _GAP + r"(-d|--data|--data-raw|-F)" + _GAP
+        + r"\b(build|api|hook)" + _GAP + r"\b(token|key|flag)", re.I), "credential-exfil"),
     ("medium", re.compile(r"\b(bash|sh|zsh|python[0-9.]*)\s+-c\b[^;]*(/dev/tcp|socket\.socket|pty\.spawn)", re.I), "reverse-shell"),
     ("medium", re.compile(r"\bnc\s+-e\b|\bncat\s+-e\b", re.I), "nc-backconnect"),
     ("medium", re.compile(r"\bcurl\b[^|;&]*\|\s*(bash|sh|zsh)\b", re.I), "pipe-to-shell"),

@@ -134,6 +134,44 @@ def test_stop_loss_stats_unaffected(dispatcher, env):
     assert before == after
 
 
+# ── 3b. 两个口径的差异是刻意的 ───────────────────────────────────────
+
+def test_meta_fact_scope_differs_by_consumer():
+    """内容口径 ≠ RELAY 口径，两者不可「统一」。
+
+    共享记忆发布（multi_agent）与子黑板合并（racer）要的正是 solver 自己
+    发现的事实，按 ``source == "solver"`` 一刀切会连「new finding from A」
+    一起丢掉（实测：那样改 test_merge_all_boards_dedupes 与
+    test_multi_agent_solved_flag_survives_hallucination_check 立即失败）。
+    RELAY 不同：它是跨尝试续接的原语清单，solver 自述进去就会被回注黑板、
+    随重试线性膨胀，所以整个 source 类别都挡掉。
+    """
+    from fulilian_ctf.relay import (
+        is_relay_meta_fact,
+        is_solver_meta_fact,
+        relay_worthy_fact,
+    )
+
+    finding = Fact(content="new finding from A", source="solver")
+    attempt_noise = Fact(content="attempt finished", source="solver")
+    prefix_noise = Fact(content="solver attempt 3 started (pid 1)", source="solver")
+    real_agent_fact = Fact(content="port 80 open", source="agent")
+
+    # 内容口径：只看前缀 → solver 的真发现照常共享
+    assert not is_solver_meta_fact(finding)
+    assert is_solver_meta_fact(prefix_noise)
+    assert not is_solver_meta_fact(real_agent_fact)
+
+    # RELAY 口径：多一条 source 判据 → 连无前缀的 solver 自述也挡
+    assert is_relay_meta_fact(finding)
+    assert is_relay_meta_fact(attempt_noise)
+    assert is_relay_meta_fact(prefix_noise)
+    assert not is_relay_meta_fact(real_agent_fact)
+
+    assert relay_worthy_fact(real_agent_fact)
+    assert not relay_worthy_fact(finding)
+
+
 # ── 4. 原子写 ────────────────────────────────────────────────────────
 
 def test_atomic_write_normal_path(tmp_path):

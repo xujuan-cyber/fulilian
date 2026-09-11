@@ -140,9 +140,48 @@ def test_switch_model_picks_next(dispatcher, monkeypatch):
                         lambda *a, **kw: ["model-a", "model-b"])
     p = _project(tmp_path=None)
     p.model = "model-a"
-    dispatcher._apply_escalation(p, "switch_model", "STOPPED: BUDGET_EXCEEDED (...)")
-    assert p.model == "model-b"
+    esc = dispatcher._apply_escalation(p, "switch_model", "STOPPED: BUDGET_EXCEEDED (...)")
+    # 换模型值经返回值传递，而不是写 project.model —— _spawn 的
+    # `self.model or project.model` 会在 self.model 非空时吞掉后者
+    assert esc.model == "model-b"
+    assert esc.route == "switch_model"
     assert dispatcher.escalations == 1
+
+
+def test_switch_model_survives_global_model_override(dispatcher, monkeypatch, tmp_path):
+    """CLI 传了 --model（self.model 非空）时换模型升级仍须生效。
+
+    旧实现把新模型写进 project.model，被 _spawn 的
+    `self.model or project.model` 短路吞掉 → 升级静默失效。
+    """
+    import fulilian_ctf.racer as racer
+
+    class _RecordingCtx:
+        def __init__(self):
+            self.spawn_args: list[tuple] = []
+
+        def Queue(self):
+            return None
+
+        def Process(self, target=None, args=(), name=None):
+            self.spawn_args.append(args)
+
+            class _P:
+                pid = 4242
+
+                def start(self):
+                    pass
+
+            return _P()
+
+    monkeypatch.setattr(racer, "resolve_race_models", lambda *a, **kw: ["model-b"])
+    ctx = _RecordingCtx()
+    monkeypatch.setattr(dispatcher_mod, "_SAFE_MP_CONTEXT", ctx)
+    dispatcher.model = "global-model"  # 模拟 CLI --model
+    p = _project(tmp_path, stop_reason="STOPPED: BUDGET_EXCEEDED (...) after 1s")
+    dispatcher._spawn(p)
+    # Queue 目标参数顺序：(solver_fn, project, work_dir, model, queue)
+    assert ctx.spawn_args[0][3] == "model-b"  # 而非 global-model
 
 
 def test_switch_model_degrades_on_racer_error(dispatcher, monkeypatch):
@@ -166,17 +205,42 @@ def test_extend_timebox_multiplier_applied_once(dispatcher, tmp_path, fake_mp):
         tmp_path,
         stop_reason="STOPPED: NO_OUTPUT (无产出) after 60s",
     )
-    dispatcher._apply_escalation(p, "extend_timebox", p.stop_reason)
-    assert dispatcher._timebox_multiplier == 1.5
+    esc = dispatcher._apply_escalation(p, "extend_timebox", p.stop_reason)
+    assert esc.timebox_multiplier == 1.5
+    # 倍率不再落在 Dispatcher 实例上（跨题共享 → 竞态）
+    assert not hasattr(dispatcher, "_timebox_multiplier")
 
     base = 200
     p.timebox_override = base
     dispatcher._spawn(p)  # respawn 模拟（假进程）
     tb = dispatcher._running["c1"]["timebox"]
     assert tb.initial_budget == int(base * 1.5)
-    # 一次性生效：消费后复位
-    assert dispatcher._timebox_multiplier == 1.0
     assert p.status == ChallengeStatus.IN_PROGRESS
+
+
+def test_extend_timebox_multiplier_does_not_leak_to_other_project(
+    dispatcher, tmp_path, fake_mp
+):
+    """倍率只对触发升级的那道题生效，不污染同批 spawn 的其它题。
+
+    旧实现把倍率写进 self._timebox_multiplier：_spawn_candidates 用线程池
+    并行探活-分配，先进入 _spawn 的**别的题**会消费掉它并复位，触发升级的
+    题自己反而拿不到延长。
+    """
+    upgraded = _project(tmp_path, stop_reason="STOPPED: NO_OUTPUT (无产出) after 60s")
+    other = Project(
+        challenge_id="c2", challenge_dir=str(tmp_path / "other"), difficulty="easy",
+        title="t2", category="web", description="base", score=100,
+    )
+    # 升级动作先于两次 spawn 发生（旧代码下 other 会偷走倍率）
+    dispatcher._apply_escalation(upgraded, "extend_timebox", upgraded.stop_reason)
+    upgraded.timebox_override = other.timebox_override = 200
+
+    dispatcher._spawn(other)
+    dispatcher._spawn(upgraded)
+
+    assert dispatcher._running["c2"]["timebox"].initial_budget == 200  # 未被污染
+    assert dispatcher._running["c1"]["timebox"].initial_budget == 300  # 200 * 1.5
 
 
 # ── 5. 决策时序：升级决策读取的是状态重置前的快照 ───────────────────

@@ -61,6 +61,29 @@ def test_boomerang_requeues_open_intents(monkeypatch, tmp_path):
     assert seen[1][1] == ["inspect hidden endpoint HTTP headers"]
 
 
+def test_boomerang_writes_flag_to_base_dir(tmp_path):
+    """轮次目录（boomerang-round-N）是内部工作区，flag 也要落到调用方传的 base。
+
+    run_multi_agent 只写自己那层的 work_dir，CLI 的 --boomerang 又不传
+    work_dir（base 就是 challenge_dir）：修复前 flag 落在
+    base/boomerang-round-0/FLAG，按「<挑战目录>/FLAG」找结果的下游
+    （writeup / trace / 人工复核）会扑空。
+    """
+    from fulilian_ctf.multi_agent import run_boomerang
+
+    base = tmp_path / "boomerang"
+    project = Project(challenge_id="boom-01", challenge_dir=str(base))
+
+    result = run_boomerang(
+        project, max_rounds=2, max_explorers=1,
+        solver_fn=fake_ma_solved_flag, quiet=True,
+    )
+
+    assert result.solved
+    assert (base / "FLAG").is_file()
+    assert (base / "FLAG").read_text(encoding="utf-8").strip() == "flag{true_flag_1234}"
+
+
 # ── 模块级 fake solver（可 pickle，支持 forkserver/spawn）───────────────────
 
 def fake_ma_winner(project, work_dir, model, queue):
@@ -324,6 +347,53 @@ def test_multi_agent_solved_flag_survives_hallucination_check(tmp_path):
     assert result.flag == "flag{true_flag_1234}"
     assert result.facts_shared >= 1
     assert result.hallucinations == []
+
+
+def test_detect_hallucinations_catches_ungrounded_declared_flag(tmp_path):
+    """声明了、却不存在于任何输出的 flag —— 这才是幻觉的定义。
+
+    修复前本函数传的是 ``require_grounding=False``，而那条路径对任何 flag
+    形状的候选都直接 CONFIRMED（实测 ``flag{从未出现过的值}`` → confirmed，
+    见 verify._verify 的 strong_confidence 分支），于是「幻觉 flag 检测」
+    整条链路只会记下非 flag 形状的碎片，等于没接线。判据与
+    test_detect_hallucinations_rejects_fake_flag 一正一反：那条锁「日志里
+    逐字出现的真实 flag 不报」，这条锁「哪里都没有的声明必须报」。
+    """
+    d = tmp_path / "explore-0"
+    d.mkdir()
+    (d / "FLAG").write_text("flag{declared_but_nowhere}\n", encoding="utf-8")
+    (d / "solver.log").write_text(
+        "ran nmap against the target; no interesting response\n", encoding="utf-8"
+    )
+
+    records = detect_hallucinations(d, 0)
+
+    assert any("flag{declared_but_nowhere}" in r["candidate"] for r in records)
+
+
+def test_detect_hallucinations_reads_only_log_tail(tmp_path, monkeypatch):
+    """证据只取日志尾部：本函数在检测线程里按 interval 反复跑每个目录。"""
+    from fulilian_ctf import multi_agent as ma
+
+    d = tmp_path / "explore-0"
+    d.mkdir()
+    (d / "FLAG").write_text("flag{tail_probe}\n", encoding="utf-8")
+    (d / "solver.log").write_text(
+        "noise\n" * (ma._HALLUCINATION_EVIDENCE_TAIL // 6 + 1000), encoding="utf-8"
+    )
+
+    widths: list[int] = []
+    real = ma.verify_flag
+
+    def spy(candidate, evidence="", **kwargs):
+        widths.append(len(evidence))
+        return real(candidate, evidence=evidence, **kwargs)
+
+    monkeypatch.setattr(ma, "verify_flag", spy)
+    detect_hallucinations(d, 0)
+
+    assert widths, "校验门一次都没被调用，用例无效"
+    assert max(widths) <= ma._HALLUCINATION_EVIDENCE_TAIL
 
 
 # ── F3-013 对手监控（multi_agent 集成 + 纯函数）────────────────────────────

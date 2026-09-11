@@ -39,9 +39,19 @@ from .blackboard import (
     Fact,
     Hint,
     load_blackboard,
+    merge_into_blackboard,
     save_blackboard,
+    update_blackboard,
 )
-from .solver import FLAG_FILENAME, SolverResult, resolve_default_model, solver_worker
+from .fsutil import atomic_write_text
+from .relay import is_solver_meta_fact
+from .solver import (
+    FLAG_FILENAME,
+    SolverResult,
+    resolve_default_model,
+    shrink_result,
+    solver_worker,
+)
 from .timebox import Timebox, difficulty_adjusted_budget
 from .verify import VerificationResult, verify_flag
 
@@ -397,8 +407,14 @@ class CoordinatorLoop:
         if board is None:
             return None
         advice = coordinator_advice(board.to_dict(), llm_fn=self.llm_fn)
-        board.add_hint(Hint(content=advice, source="coordinator"))
-        save_blackboard(board, self.board_path)
+        # 加 Hint 走带锁的 read-modify-write：上面的 load 只为取材（llm_fn 可能
+        # 是真实网络调用，不能占着锁），写回时以锁内的磁盘最新状态为基底。
+        # 否则并发/父进程收尾的写入会被这份陈旧快照整体覆盖（实测 4 个并发
+        # tick_once 只有 1 条 Hint 落盘）。
+        update_blackboard(
+            self.board_path,
+            lambda b: b.add_hint(Hint(content=advice, source="coordinator")),
+        )
         self.advices.append(advice)
         if self.on_advice:
             try:
@@ -425,12 +441,17 @@ def _race_target(solver_fn, project, work_dir: str, model: str, queue) -> None:
         solver_fn(project, work_dir, model, queue)
     except BaseException as e:  # noqa: BLE001 — 进程隔离
         try:
-            queue.put(SolverResult(ok=False, exit_code=1, error=f"{type(e).__name__}: {e}"))
+            # 异常消息可能极长，必须先截断：超过管道缓冲会让子进程卡在退出的
+            # feeder 线程上，父进程只等哨兵 → 互等到时间盒耗尽（见 shrink_result）
+            queue.put(shrink_result(SolverResult(
+                ok=False, exit_code=1, error=f"{type(e).__name__}: {e}"
+            )))
         except Exception:  # noqa: BLE001
             pass
 
 
 def _reap_racer(queue) -> Optional[SolverResult]:
+    """非阻塞取一条 racer 回传（没有就返回 None）。异常一律降级为 None。"""
     try:
         if not queue.empty():
             return queue.get(timeout=1)
@@ -481,7 +502,8 @@ def _merge_board_into_parent(
         return
     existing = {f.content for f in parent_board.get_facts()}
     for f in board.get_facts():
-        if f.content.startswith("solver ") or f.content in existing:
+        # 元信息过滤走共享谓词（口径原本三处各写一份，见 relay.is_solver_meta_fact）
+        if is_solver_meta_fact(f) or f.content in existing:
             continue
         try:
             parent_board.add_fact(Fact(content=f.content, source=f.source or "race"))
@@ -569,12 +591,23 @@ def run_race(
                 if not s["proc"].is_alive() and not s.get("reaped"):
                     s["reaped"] = True
                     s["proc"].join(timeout=3)
-                    res = _reap_racer(s["queue"])
+                    res = s.get("pending") or _reap_racer(s["queue"])
                     rr: RacerResult = s["result"]
                     if res:
                         rr.ok = res.ok
                         rr.error = res.error
-                    rr.flag = _confirm_flag(s["dir"])
+                    # 逐槽隔离：某个目录的文件系统异常不该把整轮竞速的结果毁掉
+                    # （_confirm_flag 会做 is_file/read_text/正则扫描，见其实现）
+                    try:
+                        rr.flag = _confirm_flag(s["dir"])
+                    except Exception as e:  # noqa: BLE001
+                        rr.flag = ""
+                        if not quiet:
+                            print(
+                                f"[race] {project.challenge_id}: racer#{s['index']} "
+                                f"flag 判定失败: {type(e).__name__}: {e}",
+                                flush=True,
+                            )
                     if not quiet:
                         print(
                             f"[race] {project.challenge_id}: racer#{s['index']} "
@@ -588,6 +621,11 @@ def run_race(
                 break  # 第一个找到 flag → 停止其他（finally 统一终止）
             if all(s.get("reaped") for s in slots):
                 break  # 全部结束且无人解出
+            # 排空仍在运行的 racer 队列：超管道缓冲的载荷会卡住子进程退出，而
+            # 收割只在「子进程已死」后读队列 → 互等到时间盒耗尽（见 shrink_result）
+            for s in slots:
+                if not s.get("reaped") and s.get("pending") is None:
+                    s["pending"] = _reap_racer(s["queue"])
             if timebox.check():
                 if not quiet:
                     print(f"[race] {project.challenge_id}: timebox expired", flush=True)
@@ -629,10 +667,14 @@ def run_race(
             Fact(content=f"race won by model {result.winner_model} with flag", source="racer")
         )
         try:
-            (base_dir / FLAG_FILENAME).write_text(result.flag + "\n", encoding="utf-8")
+            # 原子写：与多 Agent 收尾同因（见 verify.check_output_for_flag 的说明）
+            atomic_write_text(base_dir / FLAG_FILENAME, result.flag + "\n", lock=False)
         except OSError:
             pass
-    save_blackboard(parent_board, parent_board_path)
+    # 收尾走带锁 read-modify-write：parent_board 是本函数早先 load 的快照，
+    # 而 CoordinatorLoop 是 join(timeout=3) 的，LLM 调用没回来时它仍在往同一
+    # 个文件写 Hint —— 直接 save 会把那些建议抹掉。
+    merge_into_blackboard(parent_board, parent_board_path)
     result.results.sort(key=lambda r: r.index)
     if not quiet:
         if result.flag:
@@ -652,14 +694,16 @@ def run_race(
 def run_race_for_challenge(challenge_id: str, models: Optional[list] = None, **kwargs) -> RaceResult:
     """便捷入口：challenge_id（目录或注册表条目）→ Project → run_race。"""
     from .dispatcher import Project
-    from .registry import challenge_to_project, load_challenges
+    from .registry import (
+        challenge_json_to_project,
+        challenge_to_project,
+        load_challenges,
+    )
 
     path = Path(challenge_id).expanduser()
     if path.is_dir():
         if (path / "challenge.json").is_file():
-            project = challenge_to_project(
-                json.loads(path.read_text(encoding="utf-8")), base_dir=path.parent
-            )
+            project = challenge_json_to_project(path / "challenge.json")
         else:
             project = Project(challenge_id=path.name, challenge_dir=str(path))
     else:

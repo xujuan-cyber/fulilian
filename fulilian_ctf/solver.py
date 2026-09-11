@@ -21,10 +21,11 @@ import os
 import sys
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Optional
 
+from .fsutil import atomic_write_text
 from .relay import read_relay_file
 from .sandbox import ENV_SANDBOX_MODE, SandboxMode
 from .verify import check_output_for_flag
@@ -112,9 +113,7 @@ def write_usage_record(work_dir: Path, agent, attempt: int = 1) -> Optional[dict
         )
         usage["attempts"] = int(prev.get("attempts", 0) or 0) + max(1, int(attempt or 1))
         # P1-3：原子写（tmp + os.replace），中断不留截断 usage.json
-        from .relay import atomic_write_text
-
-        atomic_write_text(path, json.dumps(usage, ensure_ascii=False, indent=2))
+        atomic_write_text(path, json.dumps(usage, ensure_ascii=False, indent=2), lock=False)
         return usage
     except (OSError, TypeError, ValueError):
         return None
@@ -128,6 +127,33 @@ class SolverResult:
     exit_code: int = 0
     error: str = ""
     flag: str = ""
+
+
+# 子进程 → 父进程的结果走 multiprocessing.Queue 的管道（Linux 默认 64KiB）。
+# 载荷一旦超过缓冲，feeder 线程阻塞在写端，而进程退出要等该线程收尾；父进程
+# 又只在「子进程已死」后才读队列 —— 双方互等，直到时间盒耗尽，整条回传丢失
+# （实测 200KB error：6s 时间盒被吃满、error 读到空串）。回传字段里唯一可能
+# 无界的就是 error（异常消息 / traceback），估值截断即可。
+MAX_RESULT_FIELD = 16_384
+
+
+def shrink_result(result: SolverResult) -> SolverResult:
+    """把超长的回传字段截断（保留头尾，便于定位），使载荷稳在管道缓冲内。
+
+    完整内容仍在 solver.log / trace_*.json 里，不因截断而丢证据。
+    """
+    error = result.error or ""
+    if len(error) <= MAX_RESULT_FIELD:
+        return result
+    head = MAX_RESULT_FIELD // 2
+    tail = MAX_RESULT_FIELD - head
+    return replace(
+        result,
+        error=(
+            f"{error[:head]}\n…[截断 {len(error) - MAX_RESULT_FIELD} 字符，"
+            f"完整内容见 solver.log]…\n{error[-tail:]}"
+        ),
+    )
 
 
 def build_solve_query(project, relay_text: Optional[str] = None) -> str:
@@ -177,9 +203,13 @@ def build_solve_query(project, relay_text: Optional[str] = None) -> str:
 
 
 def read_flag_file(work_dir: str | Path) -> str:
-    """读取工作目录的 FLAG 文件（声明式提交）。"""
+    """读取工作目录的 FLAG 文件（声明式提交）。
+
+    ``is_file`` 而非 ``exists``：同名目录在这里不该变成 IsADirectoryError
+    抛给调用方（solver_worker / cli 的 flag 检测链都是「读不到就当没有」）。
+    """
     flag_file = Path(work_dir) / FLAG_FILENAME
-    if flag_file.exists():
+    if flag_file.is_file():
         return flag_file.read_text(encoding="utf-8", errors="replace").strip()
     return ""
 
@@ -429,7 +459,9 @@ def _default_solver_impl(project, work_dir: Path, query: str) -> int:
     finally:
         sys.stdout, sys.stderr = old_out, old_err
         os.chdir(old_cwd)
-    return int(code or 0)
+    # None 原样上交：让 _solver_result_from_code 的 ``is None`` 失败判定
+    # 真正生效（``int(code or 0)`` 会把 None 折叠成 0，初始化失败被误报成功）
+    return None if code is None else int(code)
 
 
 def solver_worker(project, work_dir: str, model: str, queue, solver_impl=None) -> None:
@@ -511,7 +543,10 @@ def solver_worker(project, work_dir: str, model: str, queue, solver_impl=None) -
             tool_output=f"ok={result.ok}, exit_code={result.exit_code}",
         ))
     except SystemExit as e:  # run_agent 以 sys.exit 退出
-        result = SolverResult(ok=False, exit_code=int(e.code or 1), error=f"SystemExit: {e.code}")
+        # 语义：sys.exit() / sys.exit(0) = 成功（退出码 0）；非 0 整数原样；
+        # 字符串消息（sys.exit("msg")）按失败计 1（直接 int() 会二次抛异常）。
+        exit_code = 0 if e.code in (None, 0) else (e.code if isinstance(e.code, int) else 1)
+        result = SolverResult(ok=(exit_code == 0), exit_code=exit_code, error=f"SystemExit: {e.code}")
         solver_trace.add_entry(TraceEntry(
             timestamp=time.time(),
             round=1,
@@ -569,7 +604,7 @@ def solver_worker(project, work_dir: str, model: str, queue, solver_impl=None) -
     except Exception:  # noqa: BLE001 — 黑板接线失败不掩盖结果上报
         pass
     try:
-        queue.put(result)
+        queue.put(shrink_result(result))  # 截断见 shrink_result：超管道缓冲会死锁
     except Exception:  # noqa: BLE001 — 上报失败不掩盖结果
         pass
 

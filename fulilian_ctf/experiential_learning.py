@@ -19,6 +19,13 @@ from typing import Optional
 
 from fulilian_constants import FULILIAN_HOME
 
+from fulilian_ctf.fsutil import (
+    atomic_write_text,
+    load_json_or,
+    safe_filename_stem,
+    update_json,
+)
+
 LEARNING_FILE = FULILIAN_HOME / "learning.json"
 TRACES_DIR = FULILIAN_HOME / "traces"
 
@@ -41,23 +48,50 @@ def _is_noise(cmd: str) -> bool:
 # ── 数据操作 ────────────────────────────────────────────────────────────
 
 
-def load_learnings() -> dict:
-    """加载学习记录。"""
-    if LEARNING_FILE.exists():
-        try:
-            return json.loads(LEARNING_FILE.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            pass
+def _empty_learnings() -> dict:
+    """新建一份空的学习记录结构（损坏重建时也用它，保证 entries/index 齐备）。"""
     return {"entries": [], "index": {}}
 
 
+def load_learnings() -> dict:
+    """加载学习记录（缺失/损坏时返回空结构）。"""
+    return load_json_or(LEARNING_FILE, _empty_learnings())
+
+
 def save_learnings(data: dict) -> None:
-    """持久化学习记录。"""
+    """持久化学习记录（原子写 + 锁，见 ``fsutil``）。"""
     LEARNING_FILE.parent.mkdir(parents=True, exist_ok=True)
-    LEARNING_FILE.write_text(
-        json.dumps(data, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    update_json(LEARNING_FILE, lambda _cur: data, _empty_learnings())
+
+
+def trace_file_for(challenge_id: str) -> Path:
+    """``TRACES_DIR`` 下该题轨迹文件路径。
+
+    文件名经净化（``/``、``..`` 等替换），避免清单来源的 challenge_id 把轨迹
+    写到子目录之外或读时路径穿越。写入方与全部读取方共用本函数以保持口径一致。
+    """
+    return TRACES_DIR / f"{safe_filename_stem(challenge_id)}.json"
+
+
+def _append_entries(learnings: dict, new_entries: list[dict]) -> None:
+    """把条目追加进 ``entries`` 并同步更新 ATT&CK ``index`` 计数。
+
+    集中落库逻辑，避免 ``record_lesson`` / ``self_evolve`` 各写一份而口径漂移。
+    """
+    index = learnings.setdefault("index", {})
+    for entry in new_entries:
+        learnings.setdefault("entries", []).append(entry)
+        key = f"{entry['category']}::{entry['technique']}"
+        stats = index.get(key)
+        if not isinstance(stats, dict):
+            stats = {"success": 0, "fail": 0}
+            index[key] = stats
+        stats.setdefault("success", 0)
+        stats.setdefault("fail", 0)
+        if entry.get("success"):
+            stats["success"] += 1
+        else:
+            stats["fail"] += 1
 
 
 # ── 记录经验 ────────────────────────────────────────────────────────────
@@ -83,8 +117,6 @@ def record_lesson(
         notes: 备注
         verified: 该条经验是否经 flag 三重校验门确认（默认 False）
     """
-    learnings = load_learnings()
-
     entry = {
         "challenge_id": challenge_id,
         "category": category,
@@ -95,18 +127,14 @@ def record_lesson(
         "verified": bool(verified),
         "timestamp": datetime.now().isoformat(timespec="seconds"),
     }
-    learnings["entries"].append(entry)
 
-    # 更新 ATT&CK 索引（JSON 键必须为字符串）
-    key = f"{category}::{technique}"
-    if key not in learnings["index"]:
-        learnings["index"][key] = {"success": 0, "fail": 0}
-    if success:
-        learnings["index"][key]["success"] += 1
-    else:
-        learnings["index"][key]["fail"] += 1
-
-    save_learnings(learnings)
+    # 锁内读—改—写：并发记录的多个进程不会互相覆盖（原来各自 load 后整体
+    # save，后写者会抹掉先写者的条目与 index 计数）
+    update_json(
+        LEARNING_FILE,
+        lambda data: (_append_entries(data, [entry]), data)[1],
+        _empty_learnings(),
+    )
 
 
 # ── 查询经验 ────────────────────────────────────────────────────────────
@@ -192,9 +220,15 @@ def get_avoid_list(category: str, min_fail: int = 1) -> list[str]:
     """
     learnings = load_learnings()
     bad = []
-    for key, stats in learnings["index"].items():
+    for key, stats in learnings.get("index", {}).items():
         cat, _, tech = key.partition("::")
-        if cat == category and stats["fail"] >= min_fail:
+        if cat != category:
+            continue
+        # 与 query_experience 同款防御：index 可能被手工改坏（值非 dict /
+        # 缺 fail 键），一条坏数据不应让整份 avoid list 抛异常丢失
+        if not isinstance(stats, dict):
+            continue
+        if stats.get("fail", 0) >= min_fail:
             bad.append(tech)
     return bad
 
@@ -218,7 +252,7 @@ def self_evolve(challenge_id: str, verified: bool = False) -> Optional[dict]:
     Returns:
         dict | None: 提取结果（包含提取的知识点），无轨迹返回 None
     """
-    trace_file = TRACES_DIR / f"{challenge_id}.json"
+    trace_file = trace_file_for(challenge_id)
     if not trace_file.exists():
         return None
 
@@ -232,10 +266,21 @@ def self_evolve(challenge_id: str, verified: bool = False) -> Optional[dict]:
     key_commands = trace.get("key_commands", [])
     flag = trace.get("flag", "")
 
+    # 正/负知识以写入方显式给出的 success 为准。仅当 trace 里没有该字段
+    # （旧版轨迹）才退回「flag 非空」推断——否则一道「flag 找到了但提交被
+    # 判错/放弃」的题会把全部命令记成成功技巧，污染 avoid list。
+    if "success" in trace:
+        success = bool(trace.get("success"))
+    else:
+        success = bool(flag)
+
     # 构造可复用知识条目
     # 轨迹中的关键命令作为 technique 的来源
     knowledge_points = []
     existing = load_learnings()
+    # 去重快照：本轮已入队的技巧也要参与后续比较，否则同一次 trace 内的
+    # 重复命令（黑板同一结论双记常见）会各自落库、把 index 计数虚增一倍
+    known = _existing_keys(existing)
 
     for cmd in key_commands:
         if not isinstance(cmd, str) or not cmd.strip():
@@ -246,15 +291,17 @@ def self_evolve(challenge_id: str, verified: bool = False) -> Optional[dict]:
         # 简化命令为技术名称（取前 60 字符）
         technique = cmd.strip()[:60]
 
-        # 去重：检查是否已有相似记录
-        if _is_duplicate(existing, category, technique):
+        # 去重：检查是否已有相似记录（含本轮已收集的）
+        key = (category, technique)
+        if key in known:
             continue
+        known.add(key)
 
         knowledge_points.append({
             "challenge_id": challenge_id,
             "category": category,
             "technique": technique,
-            "success": bool(flag),
+            "success": success,
             "command": cmd,
             "notes": f"自进化提取自 {challenge_id}",
             "verified": bool(verified),
@@ -264,19 +311,12 @@ def self_evolve(challenge_id: str, verified: bool = False) -> Optional[dict]:
     if not knowledge_points:
         return {"challenge_id": challenge_id, "extracted": 0, "new_entries": []}
 
-    # 落库
-    learnings = load_learnings()
-    for kp in knowledge_points:
-        learnings["entries"].append(kp)
-        key = f"{kp['category']}::{kp['technique']}"
-        if key not in learnings["index"]:
-            learnings["index"][key] = {"success": 0, "fail": 0}
-        if kp["success"]:
-            learnings["index"][key]["success"] += 1
-        else:
-            learnings["index"][key]["fail"] += 1
-
-    save_learnings(learnings)
+    # 落库（锁内读—改—写，避免并发覆盖）
+    update_json(
+        LEARNING_FILE,
+        lambda data: (_append_entries(data, knowledge_points), data)[1],
+        _empty_learnings(),
+    )
 
     return {
         "challenge_id": challenge_id,
@@ -306,11 +346,15 @@ def record_solve_outcome(challenge_id: str, category: str, success: bool,
             "category": category,
             "key_commands": list(key_commands or []),
             "flag": flag,
+            # success 必须落进 trace：self_evolve 靠它判定正/负知识。此前
+            # 该参数被丢弃，自进化只能从 flag 反推，负知识被记成成功技巧。
+            "success": bool(success),
             "verified": bool(verified),
             "timestamp": datetime.now().isoformat(timespec="seconds"),
         }
-        (TRACES_DIR / f"{challenge_id}.json").write_text(
-            json.dumps(trace, ensure_ascii=False, indent=2), encoding="utf-8"
+        atomic_write_text(
+            trace_file_for(challenge_id),
+            json.dumps(trace, ensure_ascii=False, indent=2),
         )
     except (OSError, TypeError, ValueError):
         return None
@@ -320,12 +364,25 @@ def record_solve_outcome(challenge_id: str, category: str, success: bool,
         return None
 
 
+def _existing_keys(learnings: dict) -> set[tuple[str, str]]:
+    """已有条目的 ``(category, technique)`` 集合（去重用）。
+
+    对非 dict 条目 / 缺键条目跳过：旧版本残留或手工编辑过的 learning.json
+    不应让整次自进化抛 KeyError 失败。
+    """
+    keys: set[tuple[str, str]] = set()
+    for entry in learnings.get("entries", []):
+        if not isinstance(entry, dict):
+            continue
+        cat, tech = entry.get("category"), entry.get("technique")
+        if isinstance(cat, str) and isinstance(tech, str):
+            keys.add((cat, tech))
+    return keys
+
+
 def _is_duplicate(learnings: dict, category: str, technique: str) -> bool:
     """检查是否已有相似记录（去重）。"""
-    for entry in learnings["entries"]:
-        if entry["category"] == category and entry["technique"] == technique:
-            return True
-    return False
+    return (category, technique) in _existing_keys(learnings)
 
 
 def get_learning_stats() -> dict:

@@ -23,15 +23,16 @@ from fulilian_ctf.sandbox import ENV_SANDBOX_MODE, SandboxMode
 def _resolve_project(challenge_id: str):
     """challenge id（目录 / manifest 条目 / 裸 id）→ Project。"""
     from fulilian_ctf.dispatcher import Project
-    from fulilian_ctf.registry import challenge_to_project, load_challenges
+    from fulilian_ctf.registry import (
+        challenge_json_to_project,
+        challenge_to_project,
+        load_challenges,
+    )
 
     path = Path(challenge_id).expanduser()
     if path.is_dir():
         if (path / "challenge.json").is_file():
-            project = challenge_to_project(
-                json.loads((path / "challenge.json").read_text(encoding="utf-8")),
-                base_dir=path.parent,
-            )
+            project = challenge_json_to_project(path / "challenge.json")
         else:
             project = Project(challenge_id=path.name, challenge_dir=str(path))
         return project
@@ -137,16 +138,27 @@ def _run_solve_once(project, work_dir: Optional[Path], query: str, model: str,
             os.chdir(work_dir)
         with open(log_path, "w", encoding="utf-8", errors="replace") as log:
             sys.stdout, sys.stderr = log, log
-            code = int(solver_main(
+            _raw_code = solver_main(
                 query=query,
                 mode="ctf",
                 model=model,
                 architect_model=architect_model or "",
                 executor_model=executor_model or "",
-            ) or 0)
+            )
     finally:
         sys.stdout, sys.stderr = old_out, old_err
         os.chdir(old_cwd)
+    # None 视为失败（与 solver._solver_result_from_code 的 M-2 防线同口径）；
+    # 字符串退出码（sys.exit("msg")）按失败计 1，避免 int() 二次抛异常
+    if _raw_code is None:
+        code = 1
+    elif isinstance(_raw_code, int):
+        code = _raw_code
+    else:
+        try:
+            code = int(_raw_code)
+        except (TypeError, ValueError):
+            code = 1
 
     flag = ""
     try:
@@ -226,12 +238,9 @@ def _validate_solve_target(challenge_id: str) -> Optional[str]:
         if not challenge_json.is_file():
             return str(path.absolute())
         try:
-            from fulilian_ctf.registry import challenge_to_project
+            from fulilian_ctf.registry import challenge_json_to_project
 
-            project = challenge_to_project(
-                json.loads(challenge_json.read_text(encoding="utf-8")),
-                base_dir=path.parent,
-            )
+            project = challenge_json_to_project(challenge_json)
         except (OSError, ValueError, KeyError, TypeError):
             # 损坏的 challenge.json：目标无效，拒绝并给出清晰报错
             return None
@@ -620,12 +629,9 @@ def _resolve_writeup_inputs(challenge_id: str):
     path = Path(challenge_id).expanduser()
     if path.is_dir():
         if (path / "challenge.json").is_file():
-            from fulilian_ctf.registry import challenge_to_project
+            from fulilian_ctf.registry import challenge_json_to_project
 
-            project = challenge_to_project(
-                json.loads((path / "challenge.json").read_text(encoding="utf-8")),
-                base_dir=path.parent,
-            )
+            project = challenge_json_to_project(path / "challenge.json")
         else:
             project = Project(challenge_id=path.name, challenge_dir=str(path))
         return project, path
@@ -650,7 +656,11 @@ def _resolve_writeup_inputs(challenge_id: str):
         try:
             from fulilian_constants import FULILIAN_HOME
 
-            trace_file = FULILIAN_HOME / "traces" / f"{challenge_id}.json"
+            from fulilian_ctf.fsutil import safe_filename_stem
+
+            trace_file = (
+                FULILIAN_HOME / "traces" / f"{safe_filename_stem(challenge_id)}.json"
+            )
         except Exception:  # noqa: BLE001
             trace_file = None
         if trace_file and trace_file.is_file():
@@ -659,11 +669,18 @@ def _resolve_writeup_inputs(challenge_id: str):
 
 
 def _load_historical_trace(challenge_id: str) -> Optional[dict]:
-    """读取 FULILIAN_HOME/traces/{id}.json（record_solve_outcome 的历史轨迹）。"""
+    """读取 FULILIAN_HOME/traces/<id>.json（record_solve_outcome 写入）。
+
+    文件名净化口径与写入方一致；目录在调用时解析，不固化模块常量。
+    """
     try:
         from fulilian_constants import FULILIAN_HOME
 
-        trace_file = FULILIAN_HOME / "traces" / f"{challenge_id}.json"
+        from fulilian_ctf.fsutil import safe_filename_stem
+
+        trace_file = (
+            FULILIAN_HOME / "traces" / f"{safe_filename_stem(challenge_id)}.json"
+        )
         if trace_file.is_file():
             return json.loads(trace_file.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError, ImportError):
@@ -828,12 +845,17 @@ def handle_ctfd_command(args: argparse.Namespace) -> None:
         sys.exit(0 if status == "correct" else 1)
 
     if action == "sync":
-        entries = sync_challenges(adapter, args.out_dir)
+        # expanduser 后再用：`fulilian ctfd sync ... ~/ctfd` 会原样建一个名为
+        # "~" 的目录（shell 在引号内不展开），而后续 solve-all 又会把 ~ 展开
+        # —— 同步到 A、去 B 里找，静默扑空。本文件其余入口（_resolve_project
+        # / _prepare_work_dir）都先 expanduser，这里与它们对齐。
+        out_dir = Path(args.out_dir).expanduser()
+        entries = sync_challenges(adapter, str(out_dir))
         print(
             f"ctfd: synced {len(entries)} challenge(s) → "
-            f"{Path(args.out_dir) / 'manifest.json'}"
+            f"{out_dir / 'manifest.json'}"
         )
-        print(f"ctfd: run `fulilian solve-all {args.out_dir}` to batch-solve")
+        print(f"ctfd: run `fulilian solve-all {out_dir}` to batch-solve")
         sys.exit(0)
 
     if action == "poll":

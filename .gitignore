@@ -200,3 +200,10 @@ website/static/api/skills-meta.json
 
 # mimosa security-scan local state
 .mimosa/
+
+# fulilian solve 的工作目录残留。solve 会在 cwd 下建 AGENTS.md / solver.log /
+# .solve_start，目录名就是随手给的那个（a/ b/ demo/ 之类），既非源码也非语料。
+# 锚定到仓库根，避免误伤子目录里同名的真实目录。
+/a/
+/b/
+/demo/

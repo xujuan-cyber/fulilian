@@ -29,6 +29,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Optional
 
+from .fsutil import path_lock
+
 try:
     import fcntl  # POSIX 文件锁；Windows 无此模块（见 save_blackboard 降级逻辑）
 except ImportError:  # pragma: no cover - Windows only
@@ -278,7 +280,15 @@ class Blackboard:
         self.exclusions.add(path)
 
     def check_excluded(self, path: str) -> bool:
-        """检查路径是否已被排除，支持前缀匹配。"""
+        """检查路径是否已被排除，支持前缀匹配。
+
+        前缀是**裸前缀**：排除 ``port 80`` 也会命中 ``port 8080``，排除
+        ``/login`` 也会命中 ``/login-history``。当前 add_exclusion /
+        check_excluded 在本包里没有生产调用方（只有定义），所以这个误伤还
+        是潜在的；将来接线时若要按「路径段边界」匹配，得先定语义
+        （``/login`` 该不该挡 ``/login-history`` 本身就没有共识），
+        别直接拿它去挡端口/目录名。
+        """
         if path in self.exclusions:
             return True
         for e in self.exclusions:
@@ -328,7 +338,8 @@ class Blackboard:
         """从 to_dict 的输出重建黑板（父黑板由调用方注入）。"""
         board = cls(parent=parent, challenge_id=str(d.get("challenge_id", "")))
         for f in (d.get("facts") or {}).values():
-            board.facts[Fact.from_dict(f).id] = Fact.from_dict(f)
+            fact = Fact.from_dict(f)  # 只构造一次：重复构造会白造一个对象
+            board.facts[fact.id] = fact
         board.intents = [Intent.from_dict(i) for i in (d.get("intents") or [])]
         board.hints = [Hint.from_dict(h) for h in (d.get("hints") or [])]
         board.dead_ends = set(d.get("dead_ends") or [])
@@ -342,6 +353,21 @@ class Blackboard:
 BLACKBOARD_FILENAME = "blackboard.json"
 
 
+def _write_board(board: Blackboard, path: Path) -> Path:
+    """原子写盘（临时文件带 pid + uuid → replace）。
+
+    **不含加锁**：调用方必须已持有 ``path_lock(path)``（见 save_blackboard /
+    merge_into_blackboard / update_blackboard）。临时文件名的唯一性保证
+    replace 本身的原子性，锁负责的是别让两个写者的「读—改—写」区间交错。
+    """
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.{uuid.uuid4().hex[:8]}.tmp")
+    tmp.write_text(
+        json.dumps(board.to_dict(), indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+    tmp.replace(path)
+    return path
+
+
 def save_blackboard(board: Blackboard, path: str | Path) -> Path:
     """把黑板持久化为 blackboard.json（原子写：先写临时文件再替换）。
 
@@ -351,24 +377,103 @@ def save_blackboard(board: Blackboard, path: str | Path) -> Path:
       `replace` 可能把别人写的内容替换进正式文件；
     - 对同一目标路径用 flock 串行化替换动作（fcntl 在 Windows 不可用
       时降级为无锁——临时文件名的唯一性已足以保证 replace 的原子性）。
+
+    ⚠️ 本函数**整体覆盖**目标文件。若目的只是「把自己的发现加进去」，
+    必须用 :func:`merge_into_blackboard` / :func:`update_blackboard`——
+    覆盖式保存会丢掉调用方 load 之后、save 之前由别人写入的内容。
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(f"{path.name}.{os.getpid()}.{uuid.uuid4().hex[:8]}.tmp")
-    payload = json.dumps(board.to_dict(), indent=2, ensure_ascii=False)
-    if fcntl is not None:
-        lock_fd = os.open(path.with_name(path.name + ".lock"),
-                          os.O_CREAT | os.O_WRONLY, 0o644)
+    with path_lock(path):
+        return _write_board(board, path)
+
+
+def _merge_boards(target: "Blackboard", extra: "Blackboard") -> None:
+    """把 ``extra`` 的发现并入 ``target``（原地）。
+
+    - Fact 走 ``add_fact``：按 id 幂等，同 id 同内容静默跳过；同 id 不同内容
+      在磁盘上已有一份，跳过即可（不因一条冲突毁掉整次收尾回写）。
+    - Hint 是 list 且 ``add_hint`` 无条件 append，按 content 去重，否则每次
+      合并都会把历史 Hint 再堆一遍。
+    - Intent 按 id 去重；死路/排他/标签取并集。
+    """
+    for fact in extra.get_facts():
         try:
-            fcntl.flock(lock_fd, fcntl.LOCK_EX)
-            tmp.write_text(payload, encoding="utf-8")
-            tmp.replace(path)
-        finally:
-            os.close(lock_fd)
-    else:  # pragma: no cover - Windows only
-        tmp.write_text(payload, encoding="utf-8")
-        tmp.replace(path)
-    return path
+            target.add_fact(fact)
+        except ValueError:
+            continue
+    seen = {(h.content or "") for h in target.hints}
+    for hint in extra.hints:
+        content = hint.content or ""
+        if content not in seen:
+            target.add_hint(hint)
+            seen.add(content)
+    known = {i.id for i in target.intents}
+    target.intents.extend(i for i in extra.intents if i.id not in known)
+    target.dead_ends |= set(extra.dead_ends)
+    target.exclusions |= set(extra.exclusions)
+    target.tags.update(extra.tags)
+
+
+def merge_into_blackboard(board: Blackboard, path: str | Path) -> Blackboard:
+    """把 ``board`` 的发现并入 ``path`` 上的**最新**磁盘状态并写回。
+
+    整个「读—改—写」在同一把锁内完成，因此与并发的 ``save_blackboard`` /
+    ``update_blackboard`` 互斥。收尾回写必须走这里：调用方的黑板往往是运行
+    期开始前的快照，直接 ``save_blackboard`` 会抹掉运行期间别的写者
+    （MemoryCompressor / HallucinationDetector）落盘的内容。
+
+    Returns:
+        实际写入的黑板（磁盘基底 + 并入内容）；文件不存在时即为 ``board``。
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path_lock(path):
+        try:
+            disk = load_blackboard(path)
+        except Exception:  # noqa: BLE001 — 磁盘坏了就退回本黑板，至少不丢自己这份
+            disk = None
+        if disk is None:
+            _write_board(board, path)
+            return board
+        _merge_boards(disk, board)
+        _write_board(disk, path)
+        return disk
+
+
+def update_blackboard(
+    path: str | Path,
+    mutate: Callable[[Blackboard], None],
+    *,
+    create: bool = True,
+) -> Optional[Blackboard]:
+    """在锁内对 blackboard.json 做 read-modify-write。
+
+    给「往中心黑板加一条 Hint/Fact」这类写者用：``mutate`` 收到的是**磁盘上
+    的最新**黑板，原地修改即可。相比 ``load → add → save``，它把读取也放进
+    锁内，因此不会用陈旧快照覆盖并发写者的内容。
+
+    Args:
+        mutate: 原地修改回调。
+        create: 文件不存在时是否以空白板为基底；为 False 则返回 None 且不写。
+
+    Returns:
+        写入后的黑板；``create=False`` 且文件不存在时返回 None。
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path_lock(path):
+        try:
+            disk = load_blackboard(path)
+        except Exception:  # noqa: BLE001 — 同 merge_into_blackboard
+            disk = None
+        if disk is None:
+            if not create:
+                return None
+            disk = Blackboard()
+        mutate(disk)
+        _write_board(disk, path)
+        return disk
 
 
 def load_blackboard(
@@ -392,4 +497,6 @@ __all__ = [
     "BLACKBOARD_FILENAME",
     "save_blackboard",
     "load_blackboard",
+    "merge_into_blackboard",
+    "update_blackboard",
 ]
