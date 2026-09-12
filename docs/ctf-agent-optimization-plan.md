@@ -1758,6 +1758,67 @@ A9 改的是**静态前缀**，那就不该用"整轮总 token"去测它 —— 
    全为正、跨度 1.1% —— 而不配对时，同一批数据的 Δ 是 −0.42× ~ +1.07×。
    配对消掉的是"这一批恰好跑了多久"，那正是噪声的主成分。
 
+### 2026-09-13 · 答案泄漏围堵第二轮 + 第三轮：`4d7067c` 与本次提交
+
+**背景。** 天花板效应要修，前提是"基准自己不漏答案" —— 会漏时，后面所有关于
+难度的结论都不成立。第一轮（`4d7067c`）把 `logs/`/`mirror/`/`proof/` 挪出 `$OUT`，
+并给 `_gate()` 加了 `$OUT` 直属条目的**白名单**。那轮修的是"agent `ls ..` 能看见"。
+
+**第二轮：位置不是边界。** 复核时按"agent 会怎么找"重做了一遍，发现挪位置只挡住了
+`ls ..`，挡不住 `find /tmp`。实测三处仍在漏：
+
+1. `$RUN_ROOT/logs/<id>.reference.log` —— 参考解 stdout，是**当前这道题**的明文
+   flag，在它自己 solve 期间就躺在盘上，`find /tmp -name '*.reference.log'` 直接命中；
+2. **跑批器自己的 stdout**：`flag=$(cat "$d/FLAG")` 那行，而批日志被重定向到
+   `/tmp/ctf-n3.log` 之类 —— 同批后跑的题、以及后续每一批都读得到。实测五个历史批
+   日志里共 **34 处**明文 flag，全部出自这一行；
+3. 跑完那题的 **work_dir 原样留在盘上**，而 agent 自己写的 `ctf-notes.md` /
+   `blackboard.json` 里就是明文 flag。
+
+改法：判据从"放哪"换成"**跑批期间在不在盘上**"。参考解输出与源码自证通过后**立即
+删除**（只留 sha256）；跑完那题的整棵 work_dir / 日志 / 镜像立刻收进 `$SEALED`，
+等 agent 全部退出再还原 —— 还原是为了**不改采集器与归档格式**。
+
+**第三轮：`/tmp` 之外还有一个固定路径。** 清完 `/tmp` 后按 manifest 里那四个**真**
+flag 的字面量做全盘 grep（不是 `grep 'flag{'`，那样满屏误报），答案还在两处：
+
+4. **agent 自己的产品家目录 `~/.fulilian/`**：`traces/<题名>.json`（文件名就是
+   work_dir 名，agent 知道自己的名字，可以直接 `cat`）、`learning.json`（19 处明文
+   flag，00:25 还在被写）、`cache/terminal-output/*.log`。这是 `mktemp` 隔离**碰不到**
+   的固定路径，而且**它自己会长** —— 每跑一次写进新 flag 留给下一跑读，与 n3 那次
+   "run1/run2 互为兄弟"同一个病，只是搬进了产品目录。
+5. **编排者自己的会话记录** `~/.claude/projects/*.jsonl`、`file-history/`：agent 与
+   编排者同用户，读得到；编排过程中把明文 flag 打到过工具输出，就在里面。
+
+修法：每题给一个 `FULILIAN_HOME`（官方机制，`fulilian_constants.py` 明写 subprocess
+spawner 应当显式传它；本机无 `active_profile`）。答案态给**空的新目录**，其余 symlink
+（读得到、写不脏真身）。第 5 条跑批器**不删**（那是用户的对话记录与审计线索），只在
+preflight 报出来。
+
+**自测与证伪。**
+- 真跑一次单题冒烟（`misc-bigscan-01`）：`rc=0`、flag 已写、trace 与 learning 落在
+  隔离家里、**真身 `traces/` 指纹与 `learning.json` mtime 均未变**。
+- 新增 6 条锁（共 16 条，全绿），并用**变异体**逐条证伪：把 `traces` 从"给空"名单拿掉、
+  删掉传给 solve 的 `FULILIAN_HOME`、把"每题一个家"改回共用一个、把指纹比对改成假比对
+  —— 四条各自红在该红的测试上。这里**不能**拿旧提交跑功能测试：旧版不认 `--seed-home`，
+  会把它当成 `$OUT` 直接开跑一整批四道题。
+- 变异体还抓出**本测试自己的一个洞**：`test_isolated_home_actually_hides_the_poison`
+  最初只用 `grep -rlF`，而 `grep -r` 不跟进递归中遇到的目录符号链接（`-R` 才跟进），
+  于是"traces 被 symlink 回真身"的变异体下它照样绿。可 agent 不做递归搜索 —— 它知道
+  自己的题名，直接 `cat`。**断言方式弱于攻击方式时，锁就是装饰。**
+
+**教训（比这三轮的具体改动重要）：**
+1. **"换个位置"和"清掉某一处"都不是判据，"在不在它能读到的地方"才是。** 每修一处
+   都要重新做一次全盘搜索，而不是假设"这回想全了" —— 第二轮以为修完了，第三轮又找出两处。
+2. **残余边界要写出来，不要假装关上了。** `$SEALED` 里是 `.gz`，而 **gzip 不是加密**；
+   同用户同文件系统下真正关上门只能换用户/容器。第 5 条同理。
+3. **能自动化的验证就别靠"我读过源码"。** `_home_fp` 在开跑前后各取一次真身指纹并比对
+   —— `FULILIAN_HOME` 哪天被改名或被 profile 覆盖，泄漏会**静默**回来，而"跑完才发现
+   结果已被污染"是最贵的那种失败。
+4. **同一个病会换地方复发。** n3 的"兄弟目录"、第二轮的"批日志"、第三轮的"产品家目录"，
+   是同一个病（旧答案留在新 agent 读得到的地方）的三次复发。定位复发点的方法是固定的：
+   问"它会从哪儿找"，然后照着它的找法去搜。
+
 ## 10. 当前状态
 
 **分支 `ctf-opt`（未推送任何内容到 origin）。**
@@ -1775,6 +1836,9 @@ A9 改的是**静态前缀**，那就不该用"整轮总 token"去测它 —— 
 | 基准 | A6 CTF 路径采集器 + 基线 | `benchmarks/ctf_path_baseline.py`、`baselines/2026-09-11-ctf-path.json` |
 | 基准 | **A9 对照跑基线（改动后）** | `baselines/2026-09-11-ctf-path-p054.json` |
 | 基准 | **难题 holdout（4 题 / 4 个维度）+ 跑批器** | `benchmarks/fixtures-hard/`、`manifest-ctf-hard.yaml`、`ctf_hard_run.sh` |
+| 基准 | **答案围堵二轮：跑批期间答案不在盘上（暂存/还原 + stdout 只打哈希）** | `benchmarks/ctf_hard_run.sh` `_seal`/`_seal_tree`/`_unseal*` |
+| 基准 | **答案围堵三轮：`FULILIAN_HOME` 每题一个家 + 真身指纹不变量** | `benchmarks/ctf_hard_run.sh` `_seed_home`/`_home_fp`、`--seed-home` 自检模式 |
+| 测试 | **答案泄漏围堵回归锁（16 项；含变异体逐条证伪）** | `tests/fulilian_ctf/test_ctf_holdout_isolation.py` |
 | 基准 | **难题 holdout 干净基线** | `benchmarks/baselines/2026-09-11-ctf-hard-holdout.json` |
 | 基准 | **路径经济性指标（C1b，消费 `solve_reference_steps`）** | `benchmarks/ctf_path_baseline.py` `analyze()` / `print_aggregate()` |
 | 基准 | **探针题 `misc-chunkconcat-01`**（4 题 holdout） | `benchmarks/fixtures-hard/misc-chunkconcat-01/` |
@@ -1801,6 +1865,17 @@ n=3 配对复测 **−3,305 tokens/调用**（12/12，跨度 1.1%），难题 ho
 **送达与遵守均已证明** —— 难题 holdout 上 **3/3 生成 `ctf-notes.md`**
 （easy 单点上曾是 0/1，现已被 n=3 覆盖）。缓存代价也已排除：runs 命中
 81.6/81.4/72.8%，与无 overlay 基线同量级。
+
+**已验证：** **答案泄漏围堵（`4d7067c` + 本次提交）** —— 第二轮修掉的三处
+（参考解 stdout / 跑批器自己 stdout 的 34 处明文 / 跑完那题的 work_dir）与第三轮修掉的
+两处（产品家目录 `~/.fulilian` 的 traces+learning+cache / 编排者会话记录）见 §9。
+第三轮做了**真实冒烟**：单题 `misc-bigscan-01` 带 `FULILIAN_HOME` 跑通（`rc=0`、
+flag 已写），trace 与 learning 落在隔离家，**真身 `traces/` 指纹与 `learning.json`
+mtime 均未变**。回归锁 16 项全绿，并用四个变异体逐条证伪。
+**尚未关上的（写出来，不假装）：** `$SEALED` 用 gzip 而 **gzip 不是加密**；
+`~/.claude/projects/*.jsonl` 里的 flag 由 preflight 报出但不清除；fixture 是确定性的，
+flag 明文本来就在仓库里（`manifest-ctf-hard.yaml`）。这三条都要靠"别让 agent 够到"解决，
+不是靠跑批器。
 
 **已验证：** **无测试回归** —— `tests/fulilian_ctf/ + tests/run_agent/`
 在本分支 `9f1caf1` 为 13 failed / 2524 passed，在 HEAD `1b8a500` 为
