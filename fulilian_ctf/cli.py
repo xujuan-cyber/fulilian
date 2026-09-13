@@ -84,6 +84,66 @@ def _run_boomerang(args) -> "MultiAgentResult":
     )
 
 
+def _resolve_effective_solve_mode(args) -> str:
+    """本次 solve 实际使用的求解模式。
+
+    显式 flag（``--race`` / ``--multi-agent`` / ``--boomerang``）优先于
+    ``--solve-mode`` / ``FULILIAN_CTF_SOLVE_MODE`` / config ``ctf.solve_mode``；
+    三者都没有时是 ``single``。显式 flag 排在最前是为了保持既有语义与测试
+    不变：``solve <id> --race`` 永远走 race，不受环境变量影响。
+    """
+    from fulilian_ctf.solver import (
+        SOLVE_MODE_BOOMERANG,
+        SOLVE_MODE_MULTI_AGENT,
+        SOLVE_MODE_RACE,
+        resolve_solve_mode,
+    )
+
+    if getattr(args, "race", False):
+        return SOLVE_MODE_RACE
+    if getattr(args, "boomerang", False):
+        return SOLVE_MODE_BOOMERANG
+    if getattr(args, "multi_agent", False):
+        return SOLVE_MODE_MULTI_AGENT
+
+    return resolve_solve_mode(getattr(args, "solve_mode", "") or "")
+
+
+def _run_parallel_mode(args, solve_mode: str) -> None:
+    """非默认求解模式的统一分流（race / boomerang / multi-agent）。
+
+    三条分支共用 ``_resolve_project`` / ``_prepare_work_dir`` 与结束后的经验
+    落库 —— 此前 race 分支在 ``handle_solve_command`` 里直接 ``return``，
+    既没准备题目工作目录（AGENTS.md），也不落库，与单 agent 路径不同源。
+    """
+    from fulilian_ctf.solver import (
+        SOLVE_MODE_BOOMERANG,
+        SOLVE_MODE_MULTI_AGENT,
+        SOLVE_MODE_RACE,
+    )
+
+    runners = {
+        SOLVE_MODE_RACE: _run_race,
+        SOLVE_MODE_BOOMERANG: _run_boomerang,
+        SOLVE_MODE_MULTI_AGENT: _run_multi_agent,
+    }
+    runner = runners.get(solve_mode)
+    if runner is None:  # pragma: no cover — 取值已在 resolve_solve_mode 收窄
+        raise ValueError(f"unknown solve mode: {solve_mode!r}")
+
+    project = _resolve_project(args.id)
+    work_dir = _prepare_work_dir(project, args.id)
+    try:
+        result = runner(args)
+    finally:
+        # 经验落库 best-effort：失败只降级，绝不改变退出码（与单题路径同源）
+        try:
+            _record_single_solve_experience(project, work_dir)
+        except Exception:  # noqa: BLE001 — 落库失败不影响 solve 退出码
+            logging.debug("solve experience recording failed", exc_info=True)
+    sys.exit(0 if result.solved else 1)
+
+
 def _prepare_work_dir(project, challenge_id: str) -> Optional[Path]:
     """保证题目工作目录存在并自动生成 AGENTS.md（F4-001），返回工作目录。
 
@@ -331,17 +391,13 @@ def handle_solve_command(args: argparse.Namespace) -> None:
         _report_invalid_solve_target(challenge_id)
         sys.exit(2)
 
-    if getattr(args, "race", False):
-        result = _run_race(args)
-        sys.exit(0 if result.solved else 1)
+    # 并行模式分流：显式 flag > --solve-mode / env / config，默认单 agent。
+    # 非默认模式统一走 _run_parallel_mode（共用工作目录准备 + 经验落库）。
+    from fulilian_ctf.solver import SOLVE_MODE_SINGLE
 
-    if getattr(args, "boomerang", False):
-        result = _run_boomerang(args)
-        sys.exit(0 if result.solved else 1)
-
-    if getattr(args, "multi_agent", False):
-        result = _run_multi_agent(args)
-        sys.exit(0 if result.solved else 1)
+    solve_mode = _resolve_effective_solve_mode(args)
+    if solve_mode != SOLVE_MODE_SINGLE:
+        _run_parallel_mode(args, solve_mode)
 
     query = f"Solve the CTF challenge: {challenge_id}"
 

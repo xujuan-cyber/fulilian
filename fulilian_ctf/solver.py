@@ -72,6 +72,92 @@ def resolve_max_turns_from_env(default_when_unlimited: int = sys.maxsize) -> int
     return val
 
 
+# ── 求解模式（solve_mode）────────────────────────────────────────────────
+# 抢一血靠并行：race 多模型竞速 / multi-agent 多方向探索 / boomerang 折返。
+# 但三者都是 N 份并发的成本与时长，**不能悄悄成为默认**——默认仍是单
+# agent，需要时由 --solve-mode / FULILIAN_CTF_SOLVE_MODE / config ctf.solve_mode
+# 显式打开。
+
+SOLVE_MODE_ENV = "FULILIAN_CTF_SOLVE_MODE"
+SOLVE_MODE_SINGLE = "single"
+SOLVE_MODE_RACE = "race"
+SOLVE_MODE_MULTI_AGENT = "multi-agent"
+SOLVE_MODE_BOOMERANG = "boomerang"
+SOLVE_MODES = (
+    SOLVE_MODE_SINGLE,
+    SOLVE_MODE_RACE,
+    SOLVE_MODE_MULTI_AGENT,
+    SOLVE_MODE_BOOMERANG,
+)
+
+# 宽松别名：命令行/环境变量里写成 multi_agent / multiagent / 默认 都认
+_SOLVE_MODE_ALIASES = {
+    "multi_agent": SOLVE_MODE_MULTI_AGENT,
+    "multiagent": SOLVE_MODE_MULTI_AGENT,
+    "default": SOLVE_MODE_SINGLE,
+    "single-agent": SOLVE_MODE_SINGLE,
+    "single_agent": SOLVE_MODE_SINGLE,
+}
+
+
+def _normalize_solve_mode(raw) -> str:
+    """原始值 → 规范模式名；无法识别返回空串（由调用方决定降级还是告警）。"""
+    if not raw:
+        return ""
+    text = str(raw).strip().lower().replace(" ", "")
+    text = _SOLVE_MODE_ALIASES.get(text, text)
+    return text if text in SOLVE_MODES else ""
+
+
+def resolve_solve_mode(explicit: str = "", warn=None) -> str:
+    """解析 CTF 求解模式：显式 > env > config ``ctf.solve_mode`` > single。
+
+    Args:
+        explicit: CLI ``--solve-mode`` 的值（空串 = 未指定）
+        warn: 可选的告警回调 ``warn(str)``；用于把无法识别的取值报出去。
+            默认打到 stderr —— 拼错 ``FULILIAN_CTF_SOLVE_MODE=rac`` 而静默
+            退回单 agent，正是"以为在并行其实没有"的那类故障。
+
+    Returns:
+        str: ``single`` / ``race`` / ``multi-agent`` / ``boomerang`` 之一。
+        任何解析失败都降级为 ``single``（绝不抛异常——求解模式不该挡住解题）。
+    """
+    if warn is None:
+        def warn(msg: str) -> None:  # noqa: E306 — 局部默认实现
+            print(f"[solve] {msg}", file=sys.stderr)
+
+    sources = (
+        ("--solve-mode", explicit),
+        (SOLVE_MODE_ENV, os.environ.get(SOLVE_MODE_ENV, "")),
+    )
+    for label, raw in sources:
+        if not raw or not str(raw).strip():
+            continue
+        mode = _normalize_solve_mode(raw)
+        if mode:
+            return mode
+        warn(
+            f"ignoring unrecognized solve mode {raw!r} from {label} "
+            f"(expected one of: {', '.join(SOLVE_MODES)})"
+        )
+
+    try:
+        from fulilian_cli.config import load_config
+
+        raw = ((load_config() or {}).get("ctf") or {}).get("solve_mode")
+        mode = _normalize_solve_mode(raw)
+        if mode:
+            return mode
+        if raw and str(raw).strip():
+            warn(
+                f"ignoring unrecognized ctf.solve_mode {raw!r} in config "
+                f"(expected one of: {', '.join(SOLVE_MODES)})"
+            )
+    except Exception:  # noqa: BLE001 — 配置读取失败回退单 agent
+        pass
+    return SOLVE_MODE_SINGLE
+
+
 def _read_session_usage(agent) -> dict:
     """从 AIAgent 实例提取精确会话消耗（usage 计数器缺失时容错降级）。"""
     def _int(name: str) -> int:

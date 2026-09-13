@@ -20,6 +20,14 @@ def build_solve_parser(subparsers, *, cmd_solve: Callable, cmd_solve_all: Callab
     solve_parser.add_argument("--model", help="Override solver model")
     solve_parser.add_argument("--architect-model", help="Expensive model for planning (Architect mode)")
     solve_parser.add_argument("--executor-model", help="Cheap model for execution (Architect mode)")
+    # 求解模式开关：默认 single（单 agent）。等价于设置
+    # FULILIAN_CTF_SOLVE_MODE 或 config ctf.solve_mode；显式 --race /
+    # --multi-agent / --boomerang 优先级更高，不受本项影响。
+    solve_parser.add_argument(
+        "--solve-mode", dest="solve_mode", default="",
+        choices=("single", "race", "multi-agent", "boomerang"),
+        help="Solve mode: single (default) / race / multi-agent / boomerang. "
+             "Overrides FULILIAN_CTF_SOLVE_MODE and config ctf.solve_mode.")
     solve_parser.add_argument("--race", action="store_true", help="Multi-model race mode")
     solve_parser.add_argument("--race-models", default=None,
                               help="Comma-separated models for --race "
