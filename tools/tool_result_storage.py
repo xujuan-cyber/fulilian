@@ -299,14 +299,23 @@ _PERSISTED_PATH_RE = re.compile(r"^Full output saved to: (.+)$", re.MULTILINE)
 
 
 def extract_persisted_path(content: str) -> str | None:
-    """Return the file path from a <persisted-output> replacement block.
+    """Return the file path from a persisted-output pointer line.
+
+    Two producers write the load-bearing "Full output saved to: <path>" line:
+    ``_build_persisted_message`` (inside the <persisted-output> block) and the
+    compressor's prune-side persistence (``context_compressor
+    ._persist_pruned_tool_content``), which appends the same line to a prune
+    summary WITHOUT the surrounding tag block. Match the line in both shapes.
 
     Used by the result-reference stubbing guard (agent/tool_guardrails.py) so
     a stub referencing a persisted first occurrence can carry the spillover
     path instead of dangling. Returns None for non-persisted content.
     """
-    if not isinstance(content, str) or PERSISTED_OUTPUT_TAG not in content:
+    if not isinstance(content, str):
         return None
+    # Matches both the tagged <persisted-output> block (_build_persisted_message)
+    # and the tagless pointer line prune summaries carry
+    # (context_compressor._persist_pruned_tool_content) — same line, same regex.
     match = _PERSISTED_PATH_RE.search(content)
     return match.group(1).strip() if match else None
 

@@ -1137,6 +1137,12 @@ def _fallback_token_search(
     用途：FTS5 trigram 对短于 3 字符的 token 零命中（中文二字词题面几乎
     全是这种词），FTS 返回空时用它保证召回。长 token 区分度高，优先只用
     它们；全是短词时才退化为短词匹配（可能偏宽，仍由 LIMIT 兜住）。
+
+    排序：LIKE OR 本身无相关性序，裸 LIMIT 会按 rowid 顺序返回"任意
+    命中任一 token 的前 N 行"——题面高频词（注入/上传）命中几百行时，
+    那 N 行与题面的相关度约等于随机。这里多取一批候选，按「命中的
+    不同 token 数」降序后取前 limit 条，并给每条附 ``score``（命中
+    token 数）供调用方做相关性闸门。
     """
     clean = [t.strip() for t in tokens if t and t.strip()]
     if not clean:
@@ -1161,8 +1167,11 @@ def _fallback_token_search(
     sql, params = _append_meta_filters(
         sql, params, year=year, contest=contest, vuln_type=vuln_type
     )
+    # 候选池取 limit 的倍数 + 底值，排序后截断；排序键是 Python 侧算的
+    # token 命中数，SQL 侧无法表达。
+    fetch_n = max(limit * 20, 100)
     sql += " LIMIT ?"
-    params.append(limit)
+    params.append(fetch_n)
 
     try:
         conn = sqlite3.connect(str(DB_PATH))
@@ -1173,15 +1182,25 @@ def _fallback_token_search(
     except sqlite3.DatabaseError:
         return []
 
+    use_lower = [t.lower() for t in use]
+    scored = []
+    for r in rows:
+        hay = f"{r[0] or ''} {r[2] or ''}".lower()
+        score = sum(1 for t in use_lower if t in hay)
+        if score > 0:
+            scored.append((score, r))
+    scored.sort(key=lambda x: x[0], reverse=True)
+
     return [
         {
             "title": r[0],
             "category": r[1],
             "snippet": (r[2] or "")[:200] + ("..." if r[2] and len(r[2]) > 200 else ""),
             "source_path": r[3],
+            "score": score,
             **_meta_fields(r),
         }
-        for r in rows
+        for score, r in scored[:limit]
     ]
 
 

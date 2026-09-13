@@ -118,12 +118,45 @@ def _format_lessons_block(category: str) -> str:
     )
 
 
+def _wp_query_tokens(query_text: str) -> list[str]:
+    """从 sanitize 后的 FTS 查询串还原裸 token（去引号与 OR 操作符）。"""
+    return [t for t in re.findall(r'"([^"]+)"', query_text) if t]
+
+
+def _wp_refs_relevance_floor(token_count: int) -> int:
+    """相关性闸门的命中下限：题面 token 数 >=2 时要求命中 >=2 个。
+
+    检索查询是题面 token 的 OR 连接（``_sanitize_query``），任一弱 token
+    命中即可入选——「注入」这类高频二字词命中数百篇 WP，靠 bm25/LIMIT
+    兜出来的 3 条与题面相关度约等于随机（§3.E 实测为噪声）。要求至少
+    2 个不同 token 同时出现在结果的 title+snippet 里，把"沾一个词就
+    入选"的噪声挡在注入之外；单 token 查询（已过特异性闸门）仍按 1 判。
+    噪声比沉默更贵：全数不过线就注入空。
+    """
+    return min(2, max(1, token_count))
+
+
 def _format_wp_refs_block(query_text: str, category: str) -> str:
-    """构造「相似历史 WP 参考」块；无结果/检索异常返回空串。
+    """构造「相似历史 WP 参考」块；无结果/检索异常/不过相关性闸门返回空串。
 
     体积控制：每条 title+snippet 合计截断到 _MAX_REF_CHARS，
     路径单独一行；最多 _MAX_WP_REFS 条。
+
+    相关性闸门（两级，噪声比沉默更贵）：
+    1. 特异性：查询退化为裸分类词（题面缺失时 ``inject_ctf_context``
+       的回退形态，如 "web"）时直接不检索——它命中的是该分类下任意
+       N 篇，纯噪声。
+    2. 命中下限：结果的 title+snippet 须包含 >= _wp_refs_relevance_floor
+       个不同查询 token。
     """
+    tokens = _wp_query_tokens(query_text)
+    if not tokens:
+        return ""
+    cat = (category or "").strip().lower()
+    if cat and [t.lower() for t in tokens] == [cat]:
+        return ""
+    floor = _wp_refs_relevance_floor(len(tokens))
+
     try:
         from .knowledge_retriever import search
 
@@ -138,10 +171,16 @@ def _format_wp_refs_block(query_text: str, category: str) -> str:
     if not results:
         return ""
 
+    tokens_lower = [t.lower() for t in tokens]
     lines = []
     for r in results[:_MAX_WP_REFS]:
         title = str(r.get("title") or "").strip()
         snippet = " ".join(str(r.get("snippet") or "").split())
+        hits = sum(
+            1 for t in tokens_lower if t in title.lower() or t in snippet.lower()
+        )
+        if hits < floor:
+            continue
         combined = f"{title} — {snippet}" if snippet else title
         if len(combined) > _MAX_REF_CHARS:
             combined = combined[: _MAX_REF_CHARS - 1] + "…"

@@ -1,3 +1,11 @@
+---
+name: ctf-knowledge
+description: "CTF 解题知识卡与配套资产：web/crypto/reverse/pwn/forensics/misc 六分类知识卡、通用解题 playbook、按场景路由的现成脚本（scripts/ROUTE.md）与 web 模板（templates/）。分析 CTF 题目、选攻击思路、找 payload 模板或转换脚本时使用。"
+category: "ctf"
+version: 1.0.0
+author: fulilian
+---
+
 # CTF 知识卡（6 分类）
 
 > FuLiLian 内置 CTF 解题知识卡。solver 启动时根据题目分类自动注入对应知识卡

@@ -714,8 +714,11 @@ agent = AIAgent(
 - **去掉：** `KANBAN_GUIDANCE`(1,651 tok) / `TELEGRAM_RICH_MESSAGES_HINT`(215) / `MEMORY_GUIDANCE`(306) / platform hints。
 - **预期效果：** −2,500 tokens/次。
 
-**P3.3 · 给 `ctf-knowledge/SKILL.md` 加 frontmatter**
+**P3.3 · 给 `ctf-knowledge/SKILL.md` 加 frontmatter** ✅ **已完成（2026-09-13）**
 
+- **实做：** name/description/category/version/author 五键；仓库副本与已安装副本
+  （`~/.fulilian/skills/`）同步。`GitHubSource._parse_frontmatter_quick` 验证两份
+  均可解析。
 - **为什么：** §3.D —— 7.5 MB 卡片集因缺 frontmatter 在索引里等于不存在。
 
 **P3.4 · skills 索引开 `names_only` / `compact_categories`**
@@ -733,6 +736,9 @@ agent = AIAgent(
 **P4.2 sanitize 下沉**：把 sanitize 放进 `knowledge_retriever.search()` 内部。
 **P4.3 检索目标换成技术卡**：2583 篇中文赛后 wp 是给人看的；agent 需要紧凑的「技术 + payload」单元。那 20 篇专题（SQL 116K / PHP 反序列化 212K）配 `.idx.md` 分段索引才是对形状 —— **但目前没有任何代码读 `.idx.md`**。
 **P4.4 加相关性闸门**：top-3 分数不达标就注入空。**噪声比沉默更贵。**
+✅ **已完成（2026-09-13）**——特异性闸门（裸分类词不检索）+ 命中下限
+（title+snippet 须含 ≥2 个不同查询 token）+ LIKE 兜底按 token 命中数降序。
+真库验证与回归锁见 §9 ②。
 **P4.5 修或删 benchmark**：§3.E，自证的 `hit@5 = 1.0` 会带来虚假信心和错误的优化方向。
 
 ### P5 — 用能力替换仪式
@@ -1819,6 +1825,59 @@ preflight 报出来。
    是同一个病（旧答案留在新 agent 读得到的地方）的三次复发。定位复发点的方法是固定的：
    问"它会从哪儿找"，然后照着它的找法去搜。
 
+### 2026-09-13 · ②：P0.1 落盘接线（prune 侧）+ P3.3 frontmatter + P4.4 相关性闸门
+
+**P0.1 的两半，一半本来就有，一半这次补上。**
+
+1. **工具侧（截断 → 落盘 → 带路径）——核查发现已经在线。** 计划书 §2 末段写的
+   "terminal_tool.py 在工具内截断且不带路径、Layer 2 永远拿不到超限输入"是**过时描述**：
+   现行代码里 `_BoundedOutputCollector` 落盘全量流（5MB 上限、私有权限、独占创建），
+   `terminal_tool.py` 在结果组装时把 spill **原位改写为 strip_ansi + redact 后的净化版**
+   （lstat 检查 unlink + 独占重建，防符号链接转移），并在 JSON 结果里带
+   `output_total_chars` / `full_output_path` / `truncation_note`（含路径与
+   "用 search_files/read_file 找回，别重跑"的指引）。回归锁
+   `tests/tools/test_terminal_truncation_spill.py`（5 项）全绿。**教训：这条计划
+   项写于初版调研，实施前必须先 grep 现行代码——本次差点把已完成的事重做一遍。**
+2. **prune 侧（压缩时摘要里有东西可指）——本次补上。** §2 修正后的定义"输出先落盘，
+   摘要带上路径"的另一半：Phase-1 prune 把 >200 字符的旧工具结果换成一行摘要
+   （命令/退出码/行数），但内容**从未落盘**，摘要无路可指——模型拿回内容的唯一办法
+   是重跑，这正是重复调用循环的机制。salvage 路径（`salvage_grown_transcript`）
+   更狠：裸占位符，连摘要都没有。
+   **修复**：`agent/context_compressor.py` 新增 `_persist_pruned_tool_content()`——
+   经由既有的 Layer-2 原语 `maybe_persist_tool_result`（threshold=0 强制落盘，
+   env=None 即宿主侧）写入 `$FULILIAN_HOME/cache/spillover`，在 prune 摘要与
+   salvage 占位符后追加 `Full output saved to: <path>`。该行格式**必须**匹配
+   `tool_result_storage._PERSISTED_PATH_RE`（`extract_persisted_path` 相应放宽为
+   "有 tag 走 tag 路径，无 tag 直接匹配行"——tag 路径行为不变），这样
+   `tool_guardrails` 的 result-reference stubbing 也能从 prune 摘要里取回路径。
+   落盘内容是**工具结果层**的文本（terminal 侧已经过 strip_ansi + redact），
+   不引入新的泄漏面。
+   **回归锁** `tests/agent/test_prune_persist_pointer.py`（5 项）：prune 摘要带
+   存在的路径且 spill 含全文 / salvage 占位符带指针 / 小结果不 prune 也不落盘 /
+   落盘失败仍照常 prune（best-effort 契约）/ 指针行可被 storage 正则取回。
+   **已证伪**：在 HEAD worktree 上跑同一测试，3 项指针断言全红（无落盘、无指针）。
+
+**P3.3 完成：** `skills/ctf-knowledge/SKILL.md` 补 YAML frontmatter
+（name/description/category/version/author），仓库副本与已安装副本
+（`~/.fulilian/skills/`）同步；`GitHubSource._parse_frontmatter_quick` 对两份
+均能解析出 name 与 description——7.5 MB 卡片集从此在技能索引里有描述可渲染。
+
+**P4.4 完成：** 两级相关性闸门 + 兜底排序（"噪声比沉默更贵"）。
+- `knowledge.py`：① 特异性闸门——查询退化为裸分类词（题面缺失的回退形态，
+  如 `"web"`）直接不检索；② 命中下限——结果的 title+snippet 须包含
+  ≥ `_wp_refs_relevance_floor`（min(2, max(1, token 数))）个不同查询 token，
+  全数不过线注入空。
+- `knowledge_retriever.py` `_fallback_token_search`：LIKE OR 无相关性序、裸
+  LIMIT 按 rowid 返回的 3 条约等于随机——改为多取候选（max(limit×20, 100)），
+  Python 侧按"命中的不同 token 数"降序，附 `score`，title+snippet 零命中
+  （只在 content 深处命中）的行过滤。
+  **真库验证**（`~/.fulilian/knowledge.db`，2595 行）：`"web"` → 注入空（原先
+  返回 cve-2022-21371 等无关篇目）；`"sql注入" OR "union" OR "sqli"` → 命中
+  zentao-sqli 等真实相关 WP。**回归锁**
+  `tests/fulilian_ctf/test_wp_refs_relevance_gate.py`（12 项），已用 HEAD
+  worktree 证伪：HEAD 的 retriever 无评分无过滤，2 项排序/过滤断言全红；
+  HEAD 的 knowledge.py 连 `_wp_query_tokens` 都不存在（import 即红）。
+
 ## 10. 当前状态
 
 **分支 `ctf-opt`（未推送任何内容到 origin）。**
@@ -1848,6 +1907,13 @@ preflight 报出来。
 | 测试 | 镜像日志回归锁（8 项，含"agent 覆盖后镜像仍完整"与接线锁） | `tests/fulilian_ctf/test_solver_log_tee.py` |
 | 基准 | **对照模式 `--compare`**（把噪声地板真正用起来） | `benchmarks/ctf_path_baseline.py` `compare_archives()`；档案 `baselines/2026-09-12-ctf-a9-compare.json` |
 | 基准 | **A3+A9 对照跑（n=3，8ada9e6 + 两个 revert）** | `baselines/2026-09-12-ctf-ctl-a3a9-revert-n3.json` |
+| 代码 | **P0.1 prune 侧落盘 + 指针** | `agent/context_compressor.py` `_persist_pruned_tool_content`（prune + salvage 两处接线）、`tools/tool_result_storage.py` `extract_persisted_path` 放宽 |
+| 测试 | P0.1 prune 指针回归锁（5 项，已对 HEAD 证伪） | `tests/agent/test_prune_persist_pointer.py` |
+| 代码 | **P4.4 相关性闸门 + 兜底排序** | `fulilian_ctf/knowledge.py`（特异性闸门 + 命中下限）、`fulilian_ctf/knowledge_retriever.py`（`_fallback_token_search` 评分） |
+| 测试 | P4.4 闸门回归锁（12 项，已对 HEAD 证伪） | `tests/fulilian_ctf/test_wp_refs_relevance_gate.py` |
+| 文档 | **P3.3 ctf-knowledge frontmatter（仓库 + 已安装双副本）** | `skills/ctf-knowledge/SKILL.md`、`~/.fulilian/skills/ctf-knowledge/SKILL.md` |
+| 代码 | **① API 客户端默认读超时收口** | `agent/process_bootstrap.py` `_client_default_read_timeout`（`8f90789`） |
+| 测试 | 读超时回归锁（7 项，含 SDK 采纳端到端 pin） | `tests/agent/test_keepalive_client_read_timeout.py` |
 | 文档 | 本计划书 | `docs/ctf-agent-optimization-plan.md` |
 
 **已验证：** A5 —— 修复前 3/3 瞬间失败（HTTP 400，退出码 0）；修复后
@@ -1989,7 +2055,7 @@ flag 明文本来就在仓库里（`manifest-ctf-hard.yaml`）。这三条都要
 | 2d | ~~**`solver.log` 移出 work_dir**~~ | 已实施为**镜像日志**（只增不改）：`FULILIAN_SOLVER_LOG_MIRROR` + 采集器 `--mirror-dir`。移动会打断 dispatcher 按偏移追增长的消费者，故取镜像 | **✅ 完成** |
 | 3 | ~~**A3 对照跑**~~ | **已回答，且答案推翻了 A3 的收益主张**：`solve -p` 上 fork 被创建后**在发出任何 API 调用前**就随进程退出被销毁（日志证据成对缺失），省 0 不是 ~30K/次；且它的消耗本来就走 `session_model_usage`，进不了 `usage.json` —— **这条路径上 A3 既无效又可测不到**。A3 保留（对 TUI/gateway 无影响），撤回收益主张。n=3 对照跑（`b4f14cf` 撤销 A3）**另行证实**：撤掉 A3 无可分辨变化，与代码级结论一致。见 §9「A3 的账算错了」「A3+A9 对照跑结案」 | **✅ 完成** |
 | 4 | ~~**P3/P7** 砍固定开销（terminal schema 3,281 字符最肥）~~ | **降级**：静态前缀在缓存命中区间内，砍它省的是命中价不是面值 —— 实测 1,964 字符 ≈ 每次调用 12 tokens 量级，见 §9「静态前缀的 token 数被当成了花费」 | 降级 |
-| 5 | **P0.1** 工具输出落盘 | 只在难题上见效 —— 且需先解决 2b 的天花板效应 | 降级 |
+| 5 | ~~**P0.1** 工具输出落盘~~ | **代码已完成（2026-09-13）**：工具侧本就在线（截断→spill→带路径，5 项回归锁），prune 侧本次补上（`_persist_pruned_tool_content`，摘要带 `Full output saved to: <path>` 指针，5 项回归锁已证伪）。**效果未测** —— 机制只在难题（长扫描/转储）上触发，验收依赖加难后的 holdout | 代码 ✅ / 效果待测 |
 | 6 | ~~**重跑 P0.5.4 对照（n≥3）**~~ | **完成，A9 = −3,305 tok/调用**（配对量首屏前缀，12/12 全为正，跨度 35 即 1.1%）；一轮 4 题省 214,825–240,935。两侧均 12/12、flag 逐字全对 —— A9 没让 agent 变笨。**原判据选错了统计量**：合并 ×参考解 灵敏于**行为**差异，而 A9 的效应在**前缀**里，两者不在同一格，所以 4 题×3 批全部"分辨不了"（Δ +0.40× vs 地板 0.80×）。见 §9「A3+A9 对照跑结案」 | **✅ 完成** |
 
 > **顺序说明（A10 之后调整）：** 难题 holdout 从"P0.1 的前置"提升为**全局
@@ -2031,3 +2097,9 @@ flag 明文本来就在仓库里（`manifest-ctf-hard.yaml`）。这三条都要
 > Layer 2 因此永远拿不到超限的输入。所以 P0.1 不是"新建落盘"，而是
 > **让工具内截断改走已有的落盘原语**（或抬高工具内阈值让 Layer 2 接手）。
 > 但在 easy fixture 上这条路径**从不触发**（§1.4），所以先做上面三项。
+>
+> **实施时核查（2026-09-13）：上段的"不带路径"已是过时描述** —— 工具侧
+> （截断 → spill 落盘 → 净化改写 → truncation_note 带路径）**早已在线**且自带
+> 回归锁（5 项全绿，见 §9 ②）。真正缺的是 **prune 侧**：压缩时 >200 字符的
+> 旧工具结果被换成一行摘要，内容从未落盘、摘要无路可指 —— 已补
+> （`_persist_pruned_tool_content` + 指针行，5 项回归锁，已证伪）。

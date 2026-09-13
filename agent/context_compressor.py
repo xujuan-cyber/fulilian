@@ -554,7 +554,15 @@ def salvage_grown_transcript(
         if msg.get("role") == "tool" and index not in keep_tools:
             content = msg.get("content")
             if isinstance(content, str) and len(content) > _PRUNE_MIN_CHARS:
-                msg["content"] = _PRUNED_TOOL_PLACEHOLDER
+                # P0.1: salvage is the hard-delete path (no summary at all,
+                # bare placeholder) — persist before dropping so the model
+                # still has a way back to the content.
+                spill_pointer = _persist_pruned_tool_content(
+                    "unknown", msg.get("tool_call_id", ""), content
+                )
+                msg["content"] = _PRUNED_TOOL_PLACEHOLDER + (
+                    f"\n{spill_pointer}" if spill_pointer else ""
+                )
         content = msg.get("content")
         if (
             isinstance(content, str)
@@ -761,6 +769,49 @@ _SUMMARY_INPUT_MAX_CHARS = 160_000
 
 # Placeholder used when pruning old tool results
 _PRUNED_TOOL_PLACEHOLDER = "[Old tool output cleared to save context space]"
+
+# Pointer line appended to pruned tool-result summaries (P0.1). Format is
+# load-bearing: it MUST match tool_result_storage._PERSISTED_PATH_RE
+# ("^Full output saved to: (.+)$") so extract_persisted_path() — and the
+# result-reference stubbing guard — can recover the spill path from the
+# pruned content too. No brackets: the regex anchors at line start.
+_PRUNE_SPILL_POINTER_FMT = "Full output saved to: {path}"
+
+
+def _persist_pruned_tool_content(
+    tool_name: str, tool_use_id: str, content: str
+) -> str:
+    """Persist a tool result that is about to be pruned; return pointer line.
+
+    The prune summaries carry command / exit code / size, but before P0.1 the
+    content itself was unrecoverable — nothing was written to disk, so the
+    model's only way back was to re-run the command (the exact mechanism
+    behind the repeat-call loop in plan §2). Persist via the same Layer-2
+    spillover primitive the executor uses (threshold=0 forces the write,
+    env=None keeps it host-side) and surface the path in the summary.
+    Best-effort: on any failure return "" and prune as before.
+    """
+    if not content:
+        return ""
+    try:
+        from tools.tool_result_storage import (
+            extract_persisted_path,
+            maybe_persist_tool_result,
+        )
+
+        block = maybe_persist_tool_result(
+            content,
+            tool_name or "unknown",
+            tool_use_id or "pruned-tool-result",
+            env=None,
+            threshold=0,
+        )
+        path = extract_persisted_path(block)
+        if path:
+            return _PRUNE_SPILL_POINTER_FMT.format(path=path)
+    except Exception:  # noqa: BLE001 — persistence must never break pruning
+        logger.debug("prune-side persistence failed", exc_info=True)
+    return ""
 
 # Floor shared by _prune_old_tool_results' ``min_prune_chars`` default, the
 # constructor clamp on ``proactive_prune_min_result_chars``, and the clarify
@@ -4146,6 +4197,14 @@ class ContextCompressor(ContextEngine):
                 if isinstance(_skill, str) and _skill.lower() in protected_skills:
                     return False
             summary = _summarize_tool_result(tool_name, tool_args, content)
+            # P0.1: the summary alone leaves the content unrecoverable (no
+            # path to point at). Persist the full content first so the
+            # summary carries a pointer instead of a dead end.
+            spill_pointer = _persist_pruned_tool_content(
+                tool_name, call_id, content
+            )
+            if spill_pointer:
+                summary = f"{summary}\n{spill_pointer}"
             result[idx] = {**msg, "content": summary}
             pruned += 1
             return True

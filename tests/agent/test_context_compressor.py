@@ -149,7 +149,19 @@ class TestSummarizeToolResultClarify:
         summary = pruned_messages[1]["content"]
 
         assert pruned_count == 1
-        assert len(summary) <= _PRUNE_MIN_CHARS
+        # The summary body stays under _PRUNE_MIN_CHARS; the P0.1 spill
+        # pointer line ("Full output saved to: <path>") is a fixed-size
+        # appendage outside that budget.
+        pointer_line = next(
+            (
+                line
+                for line in summary.splitlines()
+                if line.startswith("Full output saved to: ")
+            ),
+            "",
+        )
+        assert pointer_line, "pruned result must carry a spill pointer"
+        assert len(summary) - len(pointer_line) <= _PRUNE_MIN_CHARS
         assert summary.encode("utf-8")
         assert "Привет 😀" in summary
         assert "\\ud83d" in summary
