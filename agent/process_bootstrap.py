@@ -375,6 +375,30 @@ def _get_proxy_for_base_url(base_url: Optional[str]) -> Optional[str]:
     return proxy
 
 
+def _client_default_read_timeout() -> Optional[float]:
+    """Client-level socket read budget for keepalive http clients.
+
+    The OpenAI SDK adopts ``http_client.timeout`` wholesale when a caller
+    passes an ``http_client`` without an explicit ``timeout``, so whatever
+    lands here becomes the default read budget for every request that does
+    not carry its own per-request timeout.  Finite by default (600 s — the
+    OpenAI SDK's own read budget) so a provider that accepts a request and
+    then goes silent surfaces as a retryable timeout instead of hanging the
+    agent forever.  ``FULILIAN_CLIENT_READ_TIMEOUT`` overrides; a value
+    ``<= 0`` restores the former unbounded read.
+    """
+    raw = os.getenv("FULILIAN_CLIENT_READ_TIMEOUT")
+    if raw is None or not raw.strip():
+        return 600.0
+    try:
+        value = float(raw)
+    except ValueError:
+        return 600.0
+    if value <= 0:
+        return None
+    return value
+
+
 def build_keepalive_http_client(
     base_url: str = "",
     *,
@@ -401,6 +425,19 @@ def build_keepalive_http_client(
     ``ssl_ca_cert`` / ``ssl_verify`` and ``FULILIAN_CA_BUNDLE`` settings the main
     client uses. It is passed on the client AND on the plain no-proxy mounts
     (a mounted transport owns the SSL context for its scheme).
+
+    Read timeout: finite by default (``FULILIAN_CLIENT_READ_TIMEOUT``,
+    default 600 s — the OpenAI SDK's own read budget).  This matters because
+    the OpenAI SDK *adopts* ``http_client.timeout`` when the caller passes an
+    ``http_client`` but no explicit ``timeout`` (openai ``SyncAPIClient
+    .__init__``), so a ``read=None`` here used to become an unbounded socket
+    read on every call site that doesn't pass a per-request timeout
+    (auxiliary calls, async compression clients, future call sites) — the
+    "CTF API 路径无读超时" hang (#incident 2026-09-11, stalled at API call #7
+    with an unacked Send-Q).  Paths that own their budget (main-loop
+    streaming's 120 s read + stale-stream watchdog, non-stream stale
+    watchdog) override per-request and are unaffected.  Set the env var to
+    ``0`` to restore the old unbounded-read behavior.
     """
     try:
         import httpx
@@ -412,8 +449,12 @@ def build_keepalive_http_client(
             max_connections=100,
             keepalive_expiry=20.0,
         )
-        # Generous read=None for SSE streaming endpoints.
-        timeout = httpx.Timeout(connect=15.0, read=None, write=15.0, pool=10.0)
+        timeout = httpx.Timeout(
+            connect=15.0,
+            read=_client_default_read_timeout(),
+            write=15.0,
+            pool=10.0,
+        )
 
         transport_cls = httpx.AsyncHTTPTransport if async_mode else httpx.HTTPTransport
         client_cls = httpx.AsyncClient if async_mode else httpx.Client

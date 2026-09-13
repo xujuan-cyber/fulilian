@@ -793,7 +793,7 @@ agent = AIAgent(
 | M1–M10 数字 | **直接查 `state.db` 实测，可复现** | 见 §8 |
 | C1–C11 数字 | **3 题，全 easy，样本极小** | 足以做前后对照，**不足以断言能力**；难题 holdout 仍缺 |
 | A3 的效果 | **未测** | 需 `skip_background_review=False` 对照跑（§10） |
-| CTF API 无读超时 | **实测会挂死** | 一次挂起样本；属 P0 邻域，未处理 |
+| CTF API 无读超时 | **已修复（2026-09-13）** | 客户端默认层 `read=None` → `FULILIAN_CLIENT_READ_TIMEOUT`（默认 600s）；见 §10 第 1 条 |
 | **P0.1 在本基线零效果** | **实测：机制 0 次触发** | §1.4 证据一；**不能用现有基线验收 P0.1** |
 | **C4 的归因** | **已重测修正** | 初判"重发历史"**错误**；实为每次重发固定开销（68–79%） |
 | schema 字符→token | **4 字符/token 为估算** | 字符数是实测，token 数是换算；provider 计数可能不同 |
@@ -1094,7 +1094,7 @@ P0.5.1 / P0.5.2 只作用于 `mode="ctf"`，而**该路径从未跑过** →
 `"w"` 覆盖 → 基线必须当次跑完立刻采集；**只看过程不看能力** —— 要回答
 "agent 变聪明了吗"需要 holdout 真题。
 
-**仍未解决（已记录，未处理）：** CTF API 路径**无读超时**（实测一次挂起：
+**~~仍未解决~~（2026-09-13 已修复，见 §10 第 1 条）：** CTF API 路径**无读超时**（实测一次挂起：
 CPU 冻结、`ESTAB ... Send-Q 4290`、最后活动 20:27:38 停在 API call #7）——
 长跑有静默卡死风险，属 P0 邻域。
 
@@ -1910,7 +1910,18 @@ flag 明文本来就在仓库里（`manifest-ctf-hard.yaml`）。这三条都要
 `solve -p` 都在无声地跑另一条路径并以退出码 0 结束。
 
 **已知未处理（按优先级）：**
-1. **CTF API 路径无读超时** —— 实测挂死一次（§9）。长跑静默卡死风险。
+1. ~~**CTF API 路径无读超时**~~ —— **已修复（2026-09-13）**。复查发现主循环流式路径
+   本就有三层防护（120s httpx 读超时 + 180–300s stale 看门狗 + 熔断，
+   `chat_completion_helpers.py` `_open_stream` / stale 轮询）；真正无界的层在
+   **客户端默认层**：`build_keepalive_http_client` 造的 httpx 客户端 `read=None`，
+   而 openai SDK 在调用方未显式传 `timeout` 时**整体采纳** `http_client.timeout`
+   （`SyncAPIClient.__init__`）→ 一切不带 per-request timeout 的调用点
+   （aux 调用、async 压缩客户端、未来新增点）都是无限读。
+   **修复**：`_client_default_read_timeout()` + `FULILIAN_CLIENT_READ_TIMEOUT`
+   （默认 600s = SDK 自身读预算；`<=0` 还原无限读）。
+   主循环 120s / aux 120s 等 per-request 预算逐请求覆盖，不受影响；
+   回归锁 `tests/agent/test_keepalive_client_read_timeout.py`（7 项，含 SDK 采纳
+   端到端 pin；已对改动前源码证伪：旧码 read=None 确实会红）。
 2. `test_json_mode_emits_start_and_result` **先存的失败**（HEAD 上同样失败）。
 3. **运行日志落在 agent 可写的地盘里，被 agent 自己覆盖** —— 原描述
    「跑完不立刻采集就丢数据」**低估了它**。真实形态在
