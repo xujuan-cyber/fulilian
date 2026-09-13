@@ -1878,6 +1878,60 @@ preflight 报出来。
   worktree 证伪：HEAD 的 retriever 无评分无过滤，2 项排序/过滤断言全红；
   HEAD 的 knowledge.py 连 `_wp_query_tokens` 都不存在（import 即红）。
 
+### 2026-09-13 · ③：加难 holdout —— 新增 crypto 维度题 crypto-keylayers-01
+
+**动机：** 4 题 holdout 首跑全部一次通过（天花板效应），解出率饱和，
+拿它验收任何优化都没有下降空间；且 4 题只覆盖 misc×2 / reverse / forensics，
+**crypto·多层推导·逐级依赖**这一维度空缺。
+
+**题面：** 出口网关截获 `vault.export`（341 KB，明文头 + 两份 material blob）与
+同主机 `keyserver.dump`（4.8 MB，25,000 条 record）。三层嵌套 + 一条平行诱饵链：
+真链 L1 钥 = 指纹命中 record 的 priv；L2 钥 = key2a + key2b 两半拼合（一半在
+L1 明文、一半在导出尾部标记之后）；flag 在两层 xor 之后 60% 深度。与既有各题
+的靶子不重复：
+
+- **入口不能靠任何关键字定位** —— keyref 指纹 sha256(pub)[:16] 不在盘上任何
+  地方，只能对 25,000 条 record 写脚本全量算（4.8 MB，整读必被截断）。
+- **同 owner 诱饵 + 平行假链（v2 核心加难）** —— 目标 owner 名下 4 条 record；
+  owner-grep 拿第一条会解开导出里**另一份 material blob**，那是一条完整的
+  平行链（同样的三层结构、同样以 '# layer 3' 开头的明文），直通一个形似
+  flag 的假 token——错误路径貌似成功。头部 `material-sha256-16` 是唯一
+  验真锚：sha256(真明文)[:16]。规则全在数据里，不靠猜。
+- **key2a 三选一** —— 文档给出可自验判据（与 key2b 组合解出来开头是
+  '# layer 3'），不靠猜；断言锁死两条诱饵与 key2b 组合后真的解不开。
+- **key2b 藏在导出尾部** —— 必须意识到看一个 341 KB 文件的尾巴；
+  拼接口诀写在 L1 明文里。
+- **语料无泄漏** —— 真 flag 的 "flag{" 字面在语料 0 次（诱饵 flag 也只在
+  密文里），明文区段连 "flag" 都不出现。
+
+诚实说明：xor-sha256 不是真实世界的强加密，考的是**多阶段纪律 + 验真纪律**
+（每层的钥匙只在上一步的产物里显形；错误路径产出貌似成功的答案）。scheme
+文档全部写在数据里，不靠猜格式——与 chunkconcat 固定 24 字节切块同一取舍：
+确定性可复现优先于拟真度，因为它要当前后对照的基准。
+
+**生成器自检含"假难度"防伪断言，且已变异体证伪：** ① flag 埋到 5% 浅处 →
+深度断言点火；② 诱饵 priv 换成目标真实 priv → "同 owner 诱饵竟能解开真
+blob"点火；③ 诱饵 blob 改用目标 priv 加密 → "目标 priv 竟能解开诱饵 blob"
+点火（陷阱是假的）；④ 摘要算成诱饵明文的 → 摘要一致性断言点火。
+**生成器字节级确定**（两次生成 sha256 一致）。参考解 9 步自证通过，flag 与
+manifest 逐字一致。开发中自检还逮住自己三处错：base64 密文随机含 "flag"
+三连字母（泄漏判据改为 flag{ 前缀 + 明文区段）、L1 判据与实际明文头不一致、
+改断言时把 `continue` 弄丢导致"诱饵能解真 blob"误报——自检不是摆设。
+
+**probe（真实 agent，各 1 次）：**
+- **v1（无平行链）：** 18 次工具调用、约 2 分钟、路径完全正确、一次通过。
+  结论：**确定性"诚难题"挡不住强模型**——每步都是自然路径，agent 顺流而下。
+- **v2（平行假链 + 摘要验真）：** 诱饵链完整咬合——agent 把**两条链都解开**
+  （"Both chains yield layer-3 plaintext"），拿到两个都可提交的 token，
+  最后靠头部摘要验真把假链判出去。**30 次 API 打满上限**、36 次工具调用、
+  1.04M tokens（prompt 侧 1.02M）、ref_multiple = 3.75×（30/8 步口径），
+  耗时 14m40s（v1 的 7 倍）。仍然解出——解出率天花板没顶开——但
+  **用满 30 步上限 + 1M token 的单题成本本身就是有效难度信号**：
+  在这个题上，任何减少上下文冗余的优化（P0.1 等）都有充足的测量空间。
+- 跑批注意：硬闸第 ③ 层会扫 `OUT` 父目录深度 ≤3 的 FLAG，/tmp 下历史一次性
+  测试目录（fulilian-trace-test-* 等）会把它顶火——OUT 放到干净父目录
+  （如 `~/bench-runs/`）即可；/tmp 的旧文件属其他会话/历史测试，不要去清。
+
 ## 10. 当前状态
 
 **分支 `ctf-opt`（未推送任何内容到 origin）。**
@@ -1902,6 +1956,7 @@ preflight 报出来。
 | 基准 | **路径经济性指标（C1b，消费 `solve_reference_steps`）** | `benchmarks/ctf_path_baseline.py` `analyze()` / `print_aggregate()` |
 | 基准 | **探针题 `misc-chunkconcat-01`**（4 题 holdout） | `benchmarks/fixtures-hard/misc-chunkconcat-01/` |
 | 基准 | **v2 跑批基线（4 题，含经济性）** | `benchmarks/baselines/2026-09-11-ctf-hard-holdout-v2.json` |
+| 基准 | **③ 加难题 crypto-keylayers-01（crypto·多层推导维度，4→5 题；生成器自检已变异体证伪）** | `benchmarks/fixtures-hard/crypto-keylayers-01/`、`manifest-ctf-hard.yaml` |
 | 基准 | **运行日志可信性检测（`log_issue`）** | `benchmarks/ctf_path_baseline.py` `analyze()` / `print_table()` |
 | 代码 | **运行日志镜像（根治 §10 第 3 条）** | `fulilian_ctf/solver.py` `solver_evidence_stream` / `_TeeStream`；接线于 `cli.py:_run_solve_once`、`solver.py:_default_solver_impl` |
 | 测试 | 镜像日志回归锁（8 项，含"agent 覆盖后镜像仍完整"与接线锁） | `tests/fulilian_ctf/test_solver_log_tee.py` |
@@ -2015,8 +2070,11 @@ flag 明文本来就在仓库里（`manifest-ctf-hard.yaml`）。这三条都要
    （`multi_agent.py:338` 等）未接镜像；环境变量不设时行为完全不变。
 4. ~~**没有难题 holdout**~~ —— **已解除**（`9f1caf1`），**2b 已实施**
    （`c0746cd` 经济性指标 + `ce3cb11` 第 4 题 + `5d55fe7` 日志可信性）。
-   当前 4 题，v2 跑批 4/4 一次通过 → **天花板效应仍在**，但可用信号已经落地：
+   当前 **5 题**（2026-09-13 新增 crypto·多层推导维度 `crypto-keylayers-01`，
+   `solve_reference_steps: 8`，生成器自检含假难度防伪断言且已变异体证伪），
+   旧 4 题 v2 跑批 4/4 一次通过 → **天花板效应仍在**，但可用信号已经落地：
    `ref_multiple = api_calls / solve_reference_steps`，v2 为 **2.9×**。
+   → 新题是否真的把天花板顶开，以 probe 结果为准（别推算）。
    → ~~**剩余待办是 n≥3 采样**~~ —— **已做（2c 的 n3 基线 + A3+A9 对照跑，
    两侧各 3 批）。** 得到两个结论：① 逐题 ×参考解 的地板 **1.40×**（最差题），
    合并指标地板 **0.07× 量级**；② **n≥3 也不够** —— 4 题 × 3 批仍分辨不了
