@@ -146,7 +146,7 @@ OUT="${1:-/tmp/ctf-hard}"
 # RUN_ROOT 装 logs/ mirror/ proof/，必须在 OUT 之外。默认 mktemp 保证
 # 唯一且不可预测；显式传入时下面的隔离断言会检查它与 OUT 不相交。
 RUN_ROOT="${2:-${CTF_RUN_ROOT:-}}"
-IDS=(misc-bigscan-01 misc-chunkconcat-01 reverse-obfchain-01 forensics-brutelog-01)
+IDS=(misc-bigscan-01 misc-chunkconcat-01 reverse-obfchain-01 forensics-brutelog-01 crypto-keylayers-01 web-tokenforge-01)
 # 子集跑批：CTF_IDS 覆盖题目列表（逗号分隔，如 CTF_IDS=reverse-obfchain-01）。
 # 硬闸白名单、采集命令都以 IDS 为准，所以单题批的 gate 与 manifest 交叉校验
 # 会自动跟着收窄 —— 加题只改这一处。自检模式（--gate/--seed-home）不受影响。

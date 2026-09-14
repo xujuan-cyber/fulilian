@@ -13,6 +13,9 @@
 #   forensics-brutelog-01 交叉判断（"成功"与"来源可信"必须分开看）
 #   crypto-keylayers-01   多层推导·逐级依赖（2026-09-13 新增：入口指纹不在盘上，
 #                         必须全量计算；每一层的钥匙只在上一层的产物里显形）
+#   web-tokenforge-01     协议伪造·密码原语实现保真度（2026-09-14 新增：SECRET 不在盘上，
+#                         hashlib 不可续算——必须自实现 SHA-256 压缩函数做长度扩展；
+#                         实现保真度是与"多阶段纪律"正交的失败轴）
 #
 # 字段与 manifest-unit.yaml 一致，额外多一个 solve_reference_steps：
 # 参考解的最少步骤数。它是**难度的代理指标**，也是验收时的分母 ——
@@ -67,3 +70,12 @@
   generator: fixtures-hard/crypto-keylayers-01/make_data.py
   title: "三层包裹的外发密库"
   description: "4.8 MB 密钥转储（25,000 条）+ 341 KB 双 blob 三层导出。入口指纹不在盘上任何地方——必须全量算 sha256(pub) 才能定位钥 record；导出里有两份 material blob，同 owner 的第一条 record 能完整解开一条**平行诱饵链**直通假 flag，只有按头部 material-sha256-16 摘要验真才能判真伪。第二把钥的两半分别在 L1 明文与导出尾部标记之后。flag 在两层 xor 之后 60% 深度。"
+- id: web-tokenforge-01
+  category: web
+  fixture: fixtures-hard/web-tokenforge-01/
+  expected_flag: "flag{extend_the_hash_not_the_trust}"
+  expect: solved
+  solve_reference_steps: 11
+  generator: fixtures-hard/web-tokenforge-01/make_data.py
+  title: "不给你钥匙的签名服务"
+  description: "token 服务源码 + scheme 文档 + 明文抓包 + 三份同公式 keystream 加密库。SECRET 16 字节只在部署环境；recovery.enc 用流量里现成的旧 admin sig 就能完整解开、内含一枚形似 flag 的假答案；真库藏两层——伪造 admin sig 只打开含 root 续签说明的 admin 层，root 会话要再从**自己伪造出的 admin sig** 注入链式续算（59 字节续写段强制跨块）。hashlib 没有从中间状态续算的接口，唯一正路是自实现 SHA-256 压缩函数做长度扩展；padding/位长/状态/glue 块界任何一处不保真都通向乱码。"
