@@ -129,6 +129,21 @@ class TestBuildIndex:
         c2 = kr.build_index(force=True)
         assert c2 == c1 == EXPECTED_DOC_COUNT  # 重建后应相同
 
+    def test_build_index_progress_goes_to_stderr(self, capsys, monkeypatch):
+        """stdout 是机器契约（solve --json 下每行必须是 JSON 事件）——
+        索引进度横幅只许走 stderr。
+
+        回归：`[knowledge] snippets: N indexed` 曾打在 stdout，solve --json
+        首次 auto_build 时混进事件流打断解析（test_solve_modes 的既有失败）。
+        打桩 snippets 计数让横幅路径确定性触发（合成 KB 的 snippets 为 0
+        时不打印，锁会空转）。
+        """
+        monkeypatch.setattr(kr, "_build_snippets_index", lambda conn, force=False: 7)
+        kr.build_index(force=True)
+        captured = capsys.readouterr()
+        assert captured.out == "", f"stdout 被索引横幅污染: {captured.out!r}"
+        assert "snippets: 7 indexed" in captured.err
+
     def test_db_has_fts5_table(self):
         kr.build_index()
         conn = sqlite3.connect(str(kr.DB_PATH))

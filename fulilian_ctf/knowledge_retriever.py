@@ -18,6 +18,7 @@ import json
 import os
 import re
 import sqlite3
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -821,10 +822,12 @@ def build_index(force: bool = False) -> int:
 
     conn.close()
 
+    # stderr：build 可能发生在 solve --json 途中（auto_build），stdout 是
+    # 机器契约（每行必须是 JSON 事件），进度横幅一律走 stderr。
     if errors:
-        print(f"[knowledge] build_index: {count} indexed, {errors} skipped (errors)")
+        print(f"[knowledge] build_index: {count} indexed, {errors} skipped (errors)", file=sys.stderr)
     if snippets:
-        print(f"[knowledge] snippets: {snippets} indexed")
+        print(f"[knowledge] snippets: {snippets} indexed", file=sys.stderr)
 
     return count
 

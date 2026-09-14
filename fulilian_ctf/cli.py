@@ -420,7 +420,9 @@ def handle_solve_command(args: argparse.Namespace) -> None:
     from fulilian_ctf.solver import resolve_solve_model
 
     model, model_source = resolve_solve_model(getattr(args, "model", "") or "")
-    print(f"[solve] model: {model or '<empty>'} (source: {model_source})")
+    # stderr：--json 模式下 stdout 是机器契约（每行必须是 JSON 事件），
+    # 人类可读的状态横幅一律走 stderr（与上方 knowledge injection 横幅同规）。
+    print(f"[solve] model: {model or '<empty>'} (source: {model_source})", file=sys.stderr)
 
     # F4-004：CTF 求解默认 workspace-write（环境变量可覆盖为 read-only/full）
     os.environ.setdefault(ENV_SANDBOX_MODE, "workspace-write")
