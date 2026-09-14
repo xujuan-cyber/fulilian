@@ -203,6 +203,40 @@ if [ "${1:-}" = "--gate" ]; then
   else echo "GATE-LEAK"; exit 1; fi
 fi
 
+# CTF_CONFIG_EXTRA：播种完隔离家后，把 config.yaml 符号链接实体化并追加
+# 这段 YAML（多行字符串）。用途：A/B 实验里把**两侧共有**的环境变量（如
+# 压缩阈值 compression.threshold_tokens）压到跑批可达范围 —— 两侧设同值
+# 才是配对；只在 exp 侧设的开关走 TOGGLE_ENV。只在 config.yaml 是符号链接
+# 时动手（播种产物），否则原样不动。
+_apply_config_extra() {  # _apply_config_extra <家目录>
+  local dst="$1"
+  local cfg="$dst/config.yaml"   # 别和 dst 挤同一行 local —— bash 会先用后赋
+  [ -n "${CTF_CONFIG_EXTRA:-}" ] || return 0
+  if [ -L "$cfg" ]; then
+    cp -L "$cfg" "$cfg.tmp" || return 1
+    # 深合并而不是文本追加：真配置已有 compression: 等段，YAML 顶层同名键
+    # 会整体覆盖，文本追加会把原有子键（proactive_prune_tokens 等）顶丢。
+    CTF_CONFIG_EXTRA="$CTF_CONFIG_EXTRA" python3 - "$cfg.tmp" <<'PYEOF' || { rm -f "$cfg.tmp"; return 1; }
+import os, sys, yaml
+cfg_path = sys.argv[1]
+extra = yaml.safe_load(os.environ["CTF_CONFIG_EXTRA"]) or {}
+cfg = yaml.safe_load(open(cfg_path)) or {}
+def merge(dst, src):
+    for k, v in src.items():
+        if isinstance(v, dict) and isinstance(dst.get(k), dict):
+            merge(dst[k], v)
+        else:
+            dst[k] = v
+merge(cfg, extra)
+with open(cfg_path, "w") as f:
+    yaml.safe_dump(cfg, f, allow_unicode=True, sort_keys=False)
+PYEOF
+    mv "$cfg.tmp" "$cfg" && echo "  [config-extra] 已合并覆盖到 $cfg: $CTF_CONFIG_EXTRA" | head -2
+  else
+    echo "  [config-extra] 警告: $cfg 不是符号链接，未修改" >&2
+  fi
+}
+
 # `ctf_hard_run.sh --seed-home <目录>` → 只布一个隔离家并打印结论。
 # 同样安排在**一切副作用之前**（`_seed_home` 已在上面定义好）。这不只是洁癖：
 # 此刻 `$1` 是 `--seed-home`，真让 `mkdir -p "$OUT"` 跑下去，OUT 就是
@@ -384,6 +418,7 @@ print(s.solve('.'))
   # 不必只依赖跑完再封存（封存是兜底，隔离在家目录这一层就成立了）。
   FHOME="$RUN_ROOT/home/$id"
   _seed_home "$FHOME"
+  _apply_config_extra "$FHOME"
 
   echo "=== [$id] $(date +%H:%M:%S) 开始 solve ==="
   ( cd "$d" && FULILIAN_HOME="$FHOME" \

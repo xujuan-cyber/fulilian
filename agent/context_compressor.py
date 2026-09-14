@@ -1128,6 +1128,12 @@ def _reinject_solve_state_section(summary: str, turns: List[Dict[str, Any]]) -> 
         "their outcomes, and files written. Do NOT re-run these to rediscover "
         "their output; ×N marks a command already repeated N times.)"
     )
+    # 响亮可见（实验纪律）：重注入真的发生必须留痕，否则 exp 侧静默退化
+    # 成对照是假对照。agent.log INFO 级可查。
+    logger.info(
+        "solve-state reinject: %d entries appended to compression summary",
+        len(entries),
+    )
     return summary + _redact_compaction_text(block)
 
 
