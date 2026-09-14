@@ -687,9 +687,10 @@ agent = AIAgent(
 - **为什么：** §1.2 —— 模型只做到 1.12 次/轮，说明 `PARALLEL_TOOL_CALL_GUIDANCE` 那句劝说**没有生效**。**得靠工具形态，不能靠劝说。**
 - **预期效果：** 348 次调用可压到 ~20 次。
 
-**P1.2 · 持久 shell + 持久 cwd**
+**P1.2 · 持久 shell + 持久 cwd** ✅ **探针结案（2026-09-14，见 §9 ⑥）—— cwd 机制早已工作；实测前缀开销可忽略（84 字符/8 条命令）；原假设被推翻；持久 shell 实现推迟**
 
 - **为什么：** `record_session_cwd` 已经存在，但模型不知道，每条命令都在重发 `cd X && T="http://..." &&` 前缀。
+- **探针结论：** 假设不成立 —— 宽日志实测 8 条 terminal 命令中 5 条自带绝对路径、3 条 cd 前缀全是多行 python -c、env 重导出 0 次。真正修掉的是**描述谎言**（旧描述无条件承诺 env 持久，local 后端静默违约）与死旋钮标记（`TERMINAL_LOCAL_PERSISTENT` 收集后丢弃）。
 
 ### P2 — 让委派自动发生
 
@@ -2066,6 +2067,63 @@ rolling-merge（每次压掉全部旧 turns，账本覆盖全部历史）。**se
 构造——但注意它改的是压缩行为本身，两侧必须同设，配对差分才干净；
 ③ `local a="$1" b="$a/..."` 一行多赋值是先用后赋（bash 踩坑记录）。
 
+### 2026-09-14 · ⑥：P1.2 探针结案 —— 开销可忽略，修的是描述谎言与死旋钮（`022c04c`、`81962eb`）
+
+**原假设（P1.2）：** 模型不知道 cwd/env 持久，每条命令都在重发
+`cd X && T="http://..." &&` 前缀 → 持久 shell 能省可观 token。
+
+**探针：** `FULILIAN_LOG_PREFIX_CHARS=600` 宽日志跑 1 题
+crypto-keylayers-01（宽日志开关即 ⑤ 期落地的 `08343e0`），提取全部
+terminal 命令逐条归类。
+
+**踩坑一（接线锁锁错了对象）：** 首跑镜像仍是 20 字符截断 ——
+`08343e0` 只把 `log_prefix_chars` 接进了 `fulilian_ctf/solver.py`
+（dispatcher/solve-all 分支），而跑批器用的 `fulilian solve` 走
+`fulilian_ctf/cli.py` 的**两处** `run_agent.main` 直调，参数从未传入。
+`022c04c` 补接两处。与 2d 镜像"测试绿 ≠ 接上了线"同源：**同一个 env
+开关有多条入口路径时，接线锁必须逐调用点锁，漏一条就是静默退化。**
+
+**踩坑二（跑批残留顶火硬闸）：** 重跑时忘了带 `CTF_IDS` → 默认题集
+起跑，且硬闸被**上一轮探针残留**在 `/tmp/.p12-out/b1/…/FLAG` 的明文
+答案顶火中止。教训与 §10 第 6 条互为镜像：跑批 OUT 下的历史答案对
+下一轮跑批是活泄漏，OUT 复用同前缀时必须先清场。
+
+**实测（b3，8 条 terminal / 25 次工具调用，本题解出）：**
+
+| 形态 | 条数 | 说明 |
+|---|---|---|
+| 自带绝对路径 | 5 | 对 cwd 不确定性天然免疫 |
+| `cd <dir> && python3 -c` | 3 | 全是多行内联脚本（相对路径方便），非 env 补偿 |
+| env 重导出（`T=… &&`） | **0** | 原假设的主要开销**没有发生** |
+| 与上一条同目录的重复 cd | 1（42 字符） | 模型不信 cwd 持久，买保险 |
+
+cd 前缀合计 84 字符 —— 比任何一项已测效应小三个量级，**无 A/B 价值**。
+（早前"10/12 条复合命令"的印象出自 20 字符截断期的错误提取，作废。）
+
+**顺带发现（比开销本身重要）：**
+1. **`TERMINAL_LOCAL_PERSISTENT` 是死旋钮**：`terminal_tool.py` 收集进
+   `local_config`，但 `_create_environment` 的 local 分支直接丢弃
+   （`LocalEnvironment(cwd, timeout)` 无持久 shell 实现）—— 设 true
+   什么都不改。
+2. **工具描述在撒谎**：旧描述无条件承诺"exported environment variables
+   persist between calls / activate a virtualenv once per session"，而
+   local 后端每次调用都是新 shell —— 模型照做会拿到**空变量**（静默
+   错误结果，正确性隐患，不只是开销）。环境说明段只报 OS/user/home/cwd，
+   不报持久性，谎言没有任何对冲信息。
+
+**改动（`81962eb`）：** ① 描述改为按后端如实区分：cwd 恒持久；env
+持久仅限 ssh/container 后端，local 内联传参（`VAR=… cmd`）；② 死旋钮
+与 local 分支各留注释标记诚实缺口；③ 描述回归锁从锁旧谎言改为锁新措辞
+（原测试锁的正是假话 —— 回归锁锁措辞时，锁之前先核措辞本身对不对）。
+
+**结案：** P1.2 不做持久 shell 实现 —— ⑤ 的 probe 先行纪律同样适用于
+此：没观察到需要状态的轨迹（source venv、跨调用 export 复用）之前，
+不建机制。重估条件 = 宽日志里出现状态依赖命令实锤。
+
+**附带归因说明：** 全量 terminal 选集测试 5 failed，经 stash 复跑定位：
+2 项分支预存、3 项与并发会话未提交改动/瞬时网络相关，与本提交无关
+（22/22 直接相关用例全绿）。
+
 ## 10. 当前状态
 
 **分支 `ctf-opt`（未推送任何内容到 origin）。**
@@ -2101,6 +2159,11 @@ rolling-merge（每次压掉全部旧 turns，账本覆盖全部历史）。**se
 | 基准 | **④ 协议 A/B 归档（ctl 2.7× / exp 3.0×，经济性为负，默认不启用）** | `~/bench-runs/protocol-ab-20260914/`、`baselines/2026-09-14-ctf-protocol-ab-ctl.json`、`baselines/2026-09-14-ctf-protocol-ab-exp.json` |
 | 代码 | **P0.2 solve-state 账本（压缩边界确定性抽取 + 重注入，env 门控默认关）** | `agent/context_compressor.py` `_extract_solve_state_entries` / `_reinject_solve_state_section`（两个 summary 生产点接线） |
 | 测试 | P0.2 回归锁（10 项，含双生产点接线锁） | `tests/agent/test_solve_state_reinject.py` |
+| 代码 | **P1.2 `FULILIAN_LOG_PREFIX_CHARS` 镜像日志参数预览宽度（全调用点接线）** | `fulilian_ctf/solver.py` `_log_prefix_chars_from_env` + `fulilian_ctf/cli.py` 两处 `run_agent.main` 直调补接（`08343e0`+`022c04c`） |
+| 测试 | log_prefix_chars 回归锁（4 项） | `tests/fulilian_ctf/test_log_prefix_chars.py` |
+| 代码 | **P1.2 terminal 描述按后端如实声明 env 持久性 + 死旋钮标记** | `tools/terminal_tool.py` `TERMINAL_TOOL_DESCRIPTION` + `local_persistent`/`_create_environment` local 分支注释（`81962eb`） |
+| 测试 | 描述回归锁（锁新措辞，原锁锁的正是旧谎言） | `tests/tools/test_terminal_tool.py` `test_terminal_schema_advertises_persistent_env_state` |
+| 代码 | **CTF_CONFIG_EXTRA 深合并钩子 + solve-state 重注入响亮日志（⑤ 基础设施）** | `benchmarks/ctf_hard_run.sh` `_apply_config_extra`、`agent/context_compressor.py` reinject INFO 日志（`0704f4b`） |
 | 基准 | **运行日志可信性检测（`log_issue`）** | `benchmarks/ctf_path_baseline.py` `analyze()` / `print_table()` |
 | 代码 | **运行日志镜像（根治 §10 第 3 条）** | `fulilian_ctf/solver.py` `solver_evidence_stream` / `_TeeStream`；接线于 `cli.py:_run_solve_once`、`solver.py:_default_solver_impl` |
 | 测试 | 镜像日志回归锁（8 项，含"agent 覆盖后镜像仍完整"与接线锁） | `tests/fulilian_ctf/test_solver_log_tee.py` |
@@ -2259,6 +2322,9 @@ flag 明文本来就在仓库里（`manifest-ctf-hard.yaml`）。这三条都要
 | 4 | ~~**P3/P7** 砍固定开销（terminal schema 3,281 字符最肥）~~ | **降级**：静态前缀在缓存命中区间内，砍它省的是命中价不是面值 —— 实测 1,964 字符 ≈ 每次调用 12 tokens 量级，见 §9「静态前缀的 token 数被当成了花费」 | 降级 |
 | 5 | ~~**P0.1** 工具输出落盘~~ | **代码已完成（2026-09-13）**：工具侧本就在线（截断→spill→带路径，5 项回归锁），prune 侧本次补上（`_persist_pruned_tool_content`，摘要带 `Full output saved to: <path>` 指针，5 项回归锁已证伪）。**效果未测** —— 机制只在难题（长扫描/转储）上触发，验收依赖加难后的 holdout | 代码 ✅ / 效果待测 |
 | 6 | ~~**重跑 P0.5.4 对照（n≥3）**~~ | **完成，A9 = −3,305 tok/调用**（配对量首屏前缀，12/12 全为正，跨度 35 即 1.1%）；一轮 4 题省 214,825–240,935。两侧均 12/12、flag 逐字全对 —— A9 没让 agent 变笨。**原判据选错了统计量**：合并 ×参考解 灵敏于**行为**差异，而 A9 的效应在**前缀**里，两者不在同一格，所以 4 题×3 批全部"分辨不了"（Δ +0.40× vs 地板 0.80×）。见 §9「A3+A9 对照跑结案」 | **✅ 完成** |
+| 7 | ~~**P1.2 持久 shell + 持久 cwd**~~ | **探针结案（2026-09-14）**：cwd 机制早已工作；宽日志实测 8 条 terminal 命令 5 条绝对路径、cd 前缀仅多行脚本用、env 重导出 0 次 —— 84 字符开销无 A/B 价值。顺带修掉**描述谎言**（旧描述承诺 env 持久，local 静默违约，正确性隐患）与死旋钮标记。持久 shell 推迟：没观察到状态依赖轨迹（source venv / 跨调用 export）之前不建机制。见 §9 ⑥ | **✅ 完成** |
+| 8 | ~~**④ hard-solve-protocol A/B**~~ | 送达已证明（exp 侧 5/5 轨迹出现协议段），经济性为负：ctl 2.7× / exp 3.0×（合并 4 题）→ **默认不启用**，env 门控保留 | **✅ 完成** |
+| 9 | ~~**⑤ P0.2 solve-state A/B**~~ | 两轮（segment / rolling-merge regime）共 6 对均无收益，点估计为负；probe 揭示跑批峰值 ~32K 远低于压缩线，机制靠 CTF_CONFIG_EXTRA 强制触发 → **默认不启用，机制保留**，重估需重复推导实锤 + 重复计数观测 | **✅ 完成** |
 
 > **顺序说明（A10 之后调整）：** 难题 holdout 从"P0.1 的前置"提升为**全局
 > 第二项**。原计划里它只是 P0.1 的门票；A10 之后可以看到，它同样是 A10
