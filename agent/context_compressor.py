@@ -988,6 +988,149 @@ def _reinject_pruned_skill_markers(summary: str, skill_names: list[str]) -> str:
     return summary + _redact_compaction_text(block)
 
 
+# ── P0.2 solve-state 账本（计划书：压缩后失忆 → 重复推导）───────────────────
+# 病：§3.B —— 压缩后模型重跑 robots.txt×3 这类已做过的推导。摘要是意译，
+# summarizer 会把「跑过什么命令、结果如何」逐字丢掉；靠提示词纪律（ctf-notes）
+# 模型经常不遵守。修法 = **runtime 在压缩边界上从被压缩的 transcript 确定性
+# 抽取事实**（terminal 命令 + 退出码 / 产物写入路径），作为 Solve State 块
+# 追加进 summary —— 不需要每轮 hook，被压缩的 turns 本身就是完整抽取源，
+# 与 _reinject_pruned_skill_markers 同一条确定性重注入先例。
+#
+# env 门控（默认关）：与 hard-solve-protocol 同一条实验纪律 —— 效果未在
+# 难题 holdout 上 A/B 之前不给默认行为；开了就大声可见（块自带标题）。
+SOLVE_STATE_ENV = "FULILIAN_SOLVE_STATE_INJECT"
+_SOLVE_STATE_MAX_ENTRIES = 40
+_SOLVE_STATE_TEXT_MAX_CHARS = 160
+_SOLVE_STATE_HEADING = "## Solve State (runtime-derived from compacted turns)"
+
+
+def _solve_state_call_name(tc: Any) -> str:
+    if isinstance(tc, dict):
+        fn = tc.get("function", {})
+        return fn.get("name", "") if isinstance(fn, dict) else ""
+    fn = getattr(tc, "function", None)
+    return getattr(fn, "name", "") if fn else ""
+
+
+def _solve_state_call_args(tc: Any) -> str:
+    if isinstance(tc, dict):
+        fn = tc.get("function", {})
+        return fn.get("arguments", "") if isinstance(fn, dict) else ""
+    fn = getattr(tc, "function", None)
+    return getattr(fn, "arguments", "") if fn else ""
+
+
+def _solve_state_result_summary(content: str, parsed: dict) -> str:
+    """从工具结果里取一行摘要：terminal JSON → exit_code + 首个有效输出行。"""
+    if "summary" in parsed:  # run_script 批量结果
+        s = parsed["summary"]
+        return (f"ran={s.get('ran')} ok={s.get('ok')} "
+                f"failed={s.get('failed')} stopped_at={s.get('stopped_at')}")
+    if "exit_code" in parsed:
+        code = parsed.get("exit_code")
+        out = str(parsed.get("output") or "")
+        first = next((ln.strip() for ln in out.splitlines() if ln.strip()), "")
+        first = first[:_SOLVE_STATE_TEXT_MAX_CHARS]
+        err = str(parsed.get("error") or "")[:_SOLVE_STATE_TEXT_MAX_CHARS]
+        bit = f"exit={code}"
+        if first:
+            bit += f" | {first}"
+        if err:
+            bit += f" | err: {err}"
+        return bit
+    # 非 JSON 结果：取首个非空行
+    first = next((ln.strip() for ln in str(content or "").splitlines()
+                  if ln.strip()), "")
+    return first[:_SOLVE_STATE_TEXT_MAX_CHARS]
+
+
+def _extract_solve_state_entries(turns: List[Dict[str, Any]]) -> list[str]:
+    """从被压缩的 turns 里确定性抽取「做过什么」一行式账本。
+
+    - terminal：命令 + exit_code + 首个有效输出行；
+    - run_script：批量 summary（ran/ok/failed）；
+    - write_file / edit_file：目标路径。
+    重复的同一命令**不丢**，记 ×N —— 重复本身就是 §3.B 要暴露的信号。
+    超上限保最新（最新的更接近当前状态）。
+    """
+    pending: dict[str, tuple[str, str]] = {}  # tool_call_id -> (name, display)
+    entries: list[str] = []
+    seen: dict[str, int] = {}  # display -> index into entries
+
+    for msg in turns:
+        role = msg.get("role")
+        if role == "assistant":
+            for tc in msg.get("tool_calls") or []:
+                name = _solve_state_call_name(tc)
+                if not name:
+                    continue
+                try:
+                    args = json.loads(_solve_state_call_args(tc) or "{}")
+                except (json.JSONDecodeError, TypeError):
+                    args = {}
+                if name in ("write_file", "edit_file"):
+                    display = f"{name}: {args.get('path', '?')}"
+                elif name == "run_script" and isinstance(args.get("commands"), list):
+                    joined = "; ".join(str(c) for c in args["commands"])
+                    display = joined[:_SOLVE_STATE_TEXT_MAX_CHARS]
+                elif isinstance(args.get("command"), str):
+                    display = args["command"][:_SOLVE_STATE_TEXT_MAX_CHARS]
+                else:
+                    display = name
+                pending[str(tc.get("id") or "")] = (name, display)
+        elif role == "tool":
+            call_id = str(msg.get("tool_call_id") or "")
+            if call_id not in pending:
+                continue
+            name, display = pending.pop(call_id)
+            if name in ("write_file", "edit_file"):
+                line = f"{display} → ok"
+            else:
+                content = msg.get("content")
+                content = content if isinstance(content, str) else str(content)
+                try:
+                    parsed = json.loads(content) if content else {}
+                except (json.JSONDecodeError, TypeError):
+                    parsed = {}
+                if not isinstance(parsed, dict):
+                    parsed = {}
+                line = f"{display} → {_solve_state_result_summary(content, parsed)}"
+            if line in seen:
+                idx = seen[line]
+                m = entries[idx]
+                if " ×" in m:
+                    base, _, cnt = m.rpartition(" ×")
+                    try:
+                        entries[idx] = f"{base} ×{int(cnt) + 1}"
+                        continue
+                    except ValueError:
+                        pass
+                entries[idx] = f"{line} ×2"
+                continue
+            seen[line] = len(entries)
+            entries.append(line)
+
+    return entries[-_SOLVE_STATE_MAX_ENTRIES:]
+
+
+def _reinject_solve_state_section(summary: str, turns: List[Dict[str, Any]]) -> str:
+    """把 Solve State 块追加进 summary（env 门控；无条目时原样返回）。"""
+    import os as _os
+    if _os.getenv(SOLVE_STATE_ENV) != "1":
+        return summary
+    entries = _extract_solve_state_entries(turns)
+    if not entries:
+        return summary
+    block = (
+        "\n\n" + _SOLVE_STATE_HEADING + "\n"
+        + "\n".join(f"- {e}" for e in entries)
+        + "\n(Runtime-derived from the compacted turns: commands already run, "
+        "their outcomes, and files written. Do NOT re-run these to rediscover "
+        "their output; ×N marks a command already repeated N times.)"
+    )
+    return summary + _redact_compaction_text(block)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Lean tail mode (#compaction-v2)
 #
@@ -4834,6 +4977,9 @@ Summary generation was unavailable, so this is a best-effort deterministic fallb
         # Re-inject AFTER the size cap: the markers live at the end of the
         # body, exactly where the truncation above cuts.
         summary = _reinject_pruned_skill_markers(summary, _pruned_names)
+        # P0.2 solve-state 账本：同样在 size cap 之后追加（块在尾部，
+        # 截断只截头部；且追加顺序在后保证不被 fallback 截断吃掉）。
+        summary = _reinject_solve_state_section(summary, turns_to_summarize)
         summary = self._augment_summary_lean(summary, turns_to_summarize)
         return summary
 
@@ -5481,6 +5627,8 @@ This compaction should PRIORITISE preserving all information related to the focu
             # P2 ghost-skill defense (#32106): deterministically restore any
             # [SKILL_PRUNED: ...] marker the summarizer paraphrased away.
             summary = _reinject_pruned_skill_markers(summary, _pruned_skill_names)
+            # P0.2 solve-state 账本：与 ghost-skill 同一条确定性重注入先例。
+            summary = _reinject_solve_state_section(summary, turns_to_summarize)
             summary = self._ground_historical_task_snapshot(summary, turns_to_summarize)
             summary = self._augment_summary_lean(summary, turns_to_summarize)
             self._validate_summary_user_provenance(summary, has_user_turn)

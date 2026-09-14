@@ -610,7 +610,7 @@ _PROACTIVE_COMPRESS_TURNS = 45   # 注释写 "(15)"
 - **为什么：** 这是 §2 的冒烟枪。当前是**物理删除**，导致模型只能重跑。落盘后信息仍可寻回。
 - **预期效果：** 直接打击 M1（62–79% 重复调用）。同时 token 增长曲线变平 → 更少触发压缩 → 连带缓解 §3.H 的缓存失效。
 
-**P0.2 · solve-state 由 runtime 维护，不由模型维护**
+**P0.2 · solve-state 由 runtime 维护，不由模型维护** ✅ **代码已完成（2026-09-14，见 §9 ⑤）——env 门控默认关，效果待 A/B**
 
 - **改哪里：** 新增 runtime 侧账本；挂到 `agent/turn_context.py` 的 prologue（压缩之后）与 tool 返回之后。
 - **改成什么：** 每次工具返回后抽取事实（命令 / 关键输出 / 产物路径）追加到结构化账本；**每次压缩后自动重注入**。
@@ -1976,6 +1976,39 @@ manifest 逐字一致。开发中自检还逮住自己三处错：base64 密文�
   它该被重新评估的时机：出现「聚合 3/3 → 反复解不出」的真难题批时，用同一
   驱动器重跑本 A/B。现在没有那样的题，别为它调协议。
 
+### 2026-09-14 · ⑤：P0.2 solve-state 账本 —— 压缩边界确定性抽取 + 重注入（代码完成，效果待 A/B）
+
+**实施形态与计划原文的偏差（有意的）：** 计划写的是「每次工具返回后抽取
+事实、每次压缩后重注入」——实施为**只在压缩边界上从被压缩的 turns 一次性
+确定性抽取**。理由：被压缩的 transcript 本身就是完整抽取源，省掉每轮 hook
+与跨回合状态；与 `_reinject_pruned_skill_markers`（#32106 ghost-skill 防御）
+同一条确定性重注入先例，两个 summary 生产点（`_build_static_fallback_summary`
+/ `_generate_summary`）都已接线并有接线锁。
+
+**抽取什么（`agent/context_compressor.py`）：**
+- terminal：命令 + `exit=` + 首个有效输出行（160 字符）；
+- run_script：批量 summary（ran/ok/failed/stopped_at）；
+- write_file / edit_file：目标路径 → ok；
+- **重复命令记 ×N 不丢** —— 重复本身就是 §3.B 要暴露的信号；
+- 上限 40 条保最新（最新的更接近当前状态）。
+
+**门控：** `FULILIAN_SOLVE_STATE_INJECT=1`，默认关 —— 与 hard-solve-protocol
+同一条纪律：效果未 A/B 之前不给默认行为。块自带标题与"Do NOT re-run"提示，
+走 `_redact_compaction_text`。
+
+**回归锁 `tests/agent/test_solve_state_reinject.py`（10 项）：** env 关 =
+summary 原样；命令/退出码/首行；重复 ×3；非零退出可见；上限保最新；
+write_file / run_script 形态；无工具调用不追加空块；非 JSON 结果取首行；
+**接线锁**（按函数体断言两个 summary 生产点都必须调用——镜像日志"测试绿
+≠ 接上了线"的教训）。压缩器相关套件 543 passed，5 个失败**全部先存**
+（stash 后同样失败：阈值 floor 3 项 + surrogate 1 项 + setter 一致性 1 项，
+与本改动无关）。
+
+**效果未测：** A/B 方法 = 难题 holdout 上 `FULILIAN_SOLVE_STATE_INJECT`
+配对开关。注意 §9 ④ 的教训先行：账本的收益只在「压缩真的发生过且摘要
+丢了事实」的题上出现——5 题基线里压缩发生过（crypto 题 1.2M tokens > 600K
+线），但"重复推导"是否可测，以 probe 结果为准，别推算。
+
 ## 10. 当前状态
 
 **分支 `ctf-opt`（未推送任何内容到 origin）。**
@@ -2009,6 +2042,8 @@ manifest 逐字一致。开发中自检还逮住自己三处错：base64 密文�
 | 文档 | **hard-solve-protocol SKILL.md（仓库 + `~/.fulilian` 双副本）** | `skills/hard-solve-protocol/SKILL.md`、`~/.fulilian/skills/hard-solve-protocol/SKILL.md` |
 | 基准 | **协议配对 A/B 驱动器 + `CTF_IDS` 子集跑批 + 硬闸双参修复** | `benchmarks/ctf_hard_protocol_ab.sh`、`benchmarks/ctf_hard_run.sh` |
 | 基准 | **④ 协议 A/B 归档（ctl 2.7× / exp 3.0×，经济性为负，默认不启用）** | `~/bench-runs/protocol-ab-20260914/`、`baselines/2026-09-14-ctf-protocol-ab-ctl.json`、`baselines/2026-09-14-ctf-protocol-ab-exp.json` |
+| 代码 | **P0.2 solve-state 账本（压缩边界确定性抽取 + 重注入，env 门控默认关）** | `agent/context_compressor.py` `_extract_solve_state_entries` / `_reinject_solve_state_section`（两个 summary 生产点接线） |
+| 测试 | P0.2 回归锁（10 项，含双生产点接线锁） | `tests/agent/test_solve_state_reinject.py` |
 | 基准 | **运行日志可信性检测（`log_issue`）** | `benchmarks/ctf_path_baseline.py` `analyze()` / `print_table()` |
 | 代码 | **运行日志镜像（根治 §10 第 3 条）** | `fulilian_ctf/solver.py` `solver_evidence_stream` / `_TeeStream`；接线于 `cli.py:_run_solve_once`、`solver.py:_default_solver_impl` |
 | 测试 | 镜像日志回归锁（8 项，含"agent 覆盖后镜像仍完整"与接线锁） | `tests/fulilian_ctf/test_solver_log_tee.py` |
