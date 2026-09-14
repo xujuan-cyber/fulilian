@@ -1130,10 +1130,9 @@ import sys
 
 
 # Tool description for LLM
-TERMINAL_TOOL_DESCRIPTION = """Execute shell commands. The host OS, shell, and terminal backend are stated in your environment section — write commands for THAT platform. Filesystem, current working directory, and exported environment variables persist between calls.
+TERMINAL_TOOL_DESCRIPTION = """Execute shell commands. The host OS, shell, and terminal backend are stated in your environment section — write commands for THAT platform. Filesystem and current working directory persist between calls. Exported environment variables persist only on persistent backends (ssh, containers); on the local backend each call runs in a fresh shell, so exports and virtualenv activation do NOT carry over — inline them per call (VAR=... cmd) instead of relying on a previous 'export'.
 
 Do NOT use cat/head/tail (use read_file), grep/rg/find/ls (use search_files), sed/awk (use patch), or echo/heredoc file creation (use write_file). Reserve terminal for: builds, installs, git, processes, scripts, network, package managers — anything that needs a shell. Output is auto-truncated with the full text saved to a file — never pipe through tail/head to shorten it.
-Environment state persists: activate a virtualenv or export variables once per session, not before every command.
 
 Foreground (default): returns INSTANTLY when the command finishes, even with a high timeout — set timeout generously for long builds.
 Background: set background=true (returns a session_id); add notify=true for bounded tasks, leave silent only for servers/daemons that never exit. After starting a server, verify readiness with a health check in a separate call (no blind sleep loops); manage with process(action="poll"/"wait").
@@ -1858,6 +1857,10 @@ def _get_env_config() -> Dict[str, Any]:
             "TERMINAL_SSH_PERSISTENT",
             os.getenv("TERMINAL_PERSISTENT_SHELL", "true"),
         ).lower() in {"true", "1", "yes"},
+        # 注意（P1.2 探针结论）：此开关目前是死旋钮 —— local_config 只在
+        # _create_environment 收集，LocalEnvironment(cwd, timeout) 不接收、
+        # 也不实现持久 shell，设 true 不会改变任何行为。local 后端每次
+        # 调用都是新 shell（cwd 靠 record_session_cwd 跟随，env 不跟随）。
         "local_persistent": os.getenv("TERMINAL_LOCAL_PERSISTENT", "false").lower() in {"true", "1", "yes"},
         # Container resource config (applies to docker, singularity, modal,
         # daytona, and vercel_sandbox -- ignored for local/ssh)
@@ -1979,6 +1982,11 @@ def _create_environment(env_type: str, image: str, cwd: str, timeout: int,
     docker_network = cc.get("docker_network", True)
 
     if env_type == "local":
+        # local_config（含 local_persistent）在此被丢弃：LocalEnvironment
+        # 没有持久 shell 实现。这是有意的诚实缺口标记 —— 工具描述已改为
+        # 按后端区分 env 持久性；要真正支持需给 LocalEnvironment 加常驻
+        # bash 进程（marker 同步），等出现需要状态的轨迹再做（P1.2 探针
+        # 实测开销可忽略：绝对路径 + cd 前缀补偿，无 env 重导出）。
         return _LocalEnvironment(cwd=cwd, timeout=timeout)
     
     elif env_type == "docker":

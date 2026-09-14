@@ -25,9 +25,11 @@ def test_searching_for_sudo_does_not_trigger_rewrite(monkeypatch):
 def test_terminal_schema_advertises_persistent_env_state():
     description = terminal_tool.TERMINAL_TOOL_DESCRIPTION
 
-    assert "exported environment variables persist between calls" in description
-    assert "activate a virtualenv" in description
-    assert "once per session" in description
+    # P1.2 探针修正：描述必须如实区分后端 —— cwd 恒持久；env 持久仅限
+    # persistent 后端（ssh/container），local 每次调用都是新 shell。
+    assert "current working directory persist between calls" in description
+    assert "only on persistent backends" in description
+    assert "do NOT carry over" in description
 
 
 def test_printf_literal_sudo_does_not_trigger_rewrite(monkeypatch):
