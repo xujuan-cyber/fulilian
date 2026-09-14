@@ -766,6 +766,7 @@ agent = AIAgent(
 
 **P5.1** 四阶段 RECON/PLAN/EXECUTE/REFLECT + ABANDON IF + `record_fact` 账本，是在给"不会规划的模型"打石膏，消耗轮次。对强模型换成 10 行操作规则。（`run_agent.py:9094 _build_ctf_system_prompt`）
 **P5.2** 补真有用的：并行假设扇出（racer 已有，先确认能不能用）；"同一攻击 3 次变体失败"交给 **runtime 计算**，而不是让模型回忆。
+✅ **结案（2026-09-14，见 §9 ⑧）——两个子项都不需要新建任何东西**：racer 已建成可用（14 项测试绿，`solve --race` 与 dispatcher `switch_model` 升级路由双接线）；"runtime 算重复攻击"机制也已在（`stopper.count_variant_failures` → `HYPOTHESIS_REPEATED` → 强制换攻击类，34 项测试绿）——该行写于机制盘点之前，已过时。探针另证：现有存档日志全为 20 字符截断期，重复攻击失效模式零观测，无追加机制的需求信号。
 
 ### P6 — 模型路由 ✅ **代码已完成（2026-09-14，见 §9 ④）—— 解析链 + `strong` 关键字，跑批方拨动；效果未测（需强模型配置 `ctf.strong_model` 才有可跑的实验组）**
 
@@ -2236,6 +2237,43 @@ sanitize 或运气不崩。下沉后：
 | `agent/context_engine.py:121` 基类默认值 | 0.75/3/6 被当成实际运行值 | 加注记：ContextCompressor 覆盖为 0.60/3/7 |
 | `fulilian_ctf/knowledge.py inject_ctf_context` | 参数名 `system_prompt`（调用方多传首个 user 消息） | 改名 `prompt` + docstring 如实说明两种实参形态；调用方全走位置传参，零破坏面 |
 
+### 2026-09-14 · ⑧：P5.2 探针 + 机制盘点结案 —— 两个子项都已在，零代码改动
+
+**计划书纪律的又一次兑现（⑤"跑批前先 probe 会不会触发"、④"先测经济性再建机制"）：
+P5.2 在动手前先盘点，结果两个子项都不需要新建任何东西。**
+
+**子项 1 · racer 并行假设扇出 —— 已建成、可用。**
+`fulilian_ctf/racer.py`（F3-005/006）完整实现：多模型并行竞速、首 flag 停其余
+（父进程哨兵轮询 + terminate）、败者死路并入黑板免疫集、Coordinator LLM 降级链
+（显式模型 > config `ctf.race_models` > 默认模型，单模型退化为普通求解）。
+接线两处：`fulilian solve <id> --race`（`fulilian_ctf/cli.py` 非默认模式统一分流
+`SOLVE_MODE_RACE`）与 dispatcher `switch_model` 升级路由（`dispatcher.py:653`
+`resolve_race_models()` 排除当前模型取备选，取不到退化为现状重试）。
+回归：`tests/fulilian_ctf/test_racer.py` **14 passed**（3.1s）。
+
+**子项 2 · "同一攻击 N 次变体失败交给 runtime 计算" —— 机制已在，计划书该行过时。**
+`fulilian_ctf/stopper.py`（F2-004/F2-011）`count_variant_failures(board)` 每轮从
+黑板统计同一攻击类变体失败次数（`dispatcher.py:1120` 喂给止损器 `:1136`），
+超 `max_variant_failures` 返回 `HYPOTHESIS_REPEATED`，dispatcher 映射为
+`switch_attack_class` 强制换攻击类并注入"禁止重复已证死路"块（`dispatcher.py:626`）。
+这正是计划书要的"runtime 计算、不让模型回忆"，且带"临门不弃"豁免（已有 flag 不止损）。
+回归：`test_stopper.py` + `test_stop_loss.py` **34 passed**（82s）。
+
+**探针 · 失效模式在现有数据中零观测（证据，非直觉）：**
+扫描 `~/bench-runs/` 四个存档（protocol-ab / solve-state-ab / solve-state-ab2 /
+ctf-hard-crypto）共 270 个日志（12 个不可读）：
+- 全部为 **20 字符截断期**日志（宽日志接线 2026-09-14 才落地，见 §9 ⑥）——
+  156 个日志出现"完全相同命令"，逐条核验全是 `cd /hom...` / `cd /tmp...` 类
+  **截断伪影**（18 条命令 max 长度 10 字符，唯一不同前缀 `find /h...` 1 条），
+  不是真实的重复攻击；
+- 唯一有数据的宽日志轨迹 = P1.2 探针那一次：8 条命令**全部互异**，无重复攻击。
+
+**结论：** 不建任何新机制。计划书该行写于机制盘点之前——"racer 已有先确认能不能用"
+的答案是能用，"交给 runtime 计算"的答案是早已交付。**重估条件**（与 ④⑤ 同款）：
+宽日志时代的难题 holdout 轨迹中，观测到 runtime 止损漏掉的重复攻击
+（同一攻击类 ≥3 次变体失败未被 `HYPOTHESIS_REPEATED` 拦截、最终时间盒耗尽），
+届时再评估是调阈值还是补检测维度；在那之前这是无需求信号的机制。
+
 ## 10. 当前状态
 
 **分支 `ctf-opt`（未推送任何内容到 origin）。**
@@ -2442,6 +2480,7 @@ flag 明文本来就在仓库里（`manifest-ctf-hard.yaml`）。这三条都要
 | 8 | ~~**④ hard-solve-protocol A/B**~~ | 送达已证明（exp 侧 5/5 轨迹出现协议段），经济性为负：ctl 2.7× / exp 3.0×（合并 4 题）→ **默认不启用**，env 门控保留 | **✅ 完成** |
 | 9 | ~~**⑤ P0.2 solve-state A/B**~~ | 两轮（segment / rolling-merge regime）共 6 对均无收益，点估计为负；probe 揭示跑批峰值 ~32K 远低于压缩线，机制靠 CTF_CONFIG_EXTRA 强制触发 → **默认不启用，机制保留**，重估需重复推导实锤 + 重复计数观测 | **✅ 完成** |
 | 10 | ~~**P4.5 修 benchmark + P0.5.3 重估压缩阈值**~~ | 金标重构为三档拆掉自证：smoke 100%（接线自检）/ **realistic 20%**（正文标注，检索真实水平，P4.1/P4.3 从此有判据）/ robustness 6/6 不崩（P4.2 回归锁）。P0.5.3 结案：cap 是 min 上限、跑批永远到不了 600K、强制 regime 被压平 —— **改了证伪不了，维持 0.60**，重估条件 = ≥600K 峰值轨迹。见 §9 ⑦ | **✅ 完成** |
+| 11 | ~~**P5.2 假设扇出 + runtime 重复攻击检测**~~ | **零代码改动结案**：racer 已建成可用（14 测试绿，`solve --race` + dispatcher `switch_model` 双接线）；runtime 重复检测机制已在（`stopper.count_variant_failures` → `HYPOTHESIS_REPEATED` → 强制换攻击类，34 测试绿）——计划书该行写于机制盘点前，已过时。探针另证：存档日志全为截断期，重复攻击失效模式零观测。重估条件 = 宽日志轨迹中出现止损漏掉的重复攻击。见 §9 ⑧ | **✅ 完成** |
 
 > **顺序说明（A10 之后调整）：** 难题 holdout 从"P0.1 的前置"提升为**全局
 > 第二项**。原计划里它只是 P0.1 的门票；A10 之后可以看到，它同样是 A10
