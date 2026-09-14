@@ -739,11 +739,9 @@ spillover 触发 0 次，峰值 ~32K tok/请求 vs 600K 压缩线，无上下文
 - **去掉：** `computer_use`(6.2KB) / `tts`(1.9KB) / `browser-use`(3KB) / `session_search`(3.2KB)。
 - **预期效果：** 45.9 KB → **~15 KB**。
 
-**P3.2 · 静态引导按模式门控**
-
-- **改哪里：** `agent/system_prompt.py:341 build_system_prompt_parts`（`stable` 层组装处，`:386-769`）。
-- **去掉：** `KANBAN_GUIDANCE`(1,651 tok) / `TELEGRAM_RICH_MESSAGES_HINT`(215) / `MEMORY_GUIDANCE`(306) / platform hints。
-- **预期效果：** −2,500 tokens/次。
+**P3.2 · 静态引导按模式门控** ✅ **已作为 A9 的副产品达成（2026-09-14 复核）**
+- **原方案：** `agent/system_prompt.py:341 build_system_prompt_parts`（`stable` 层组装处，`:386-769`）。去掉 `KANBAN_GUIDANCE` / `TELEGRAM_RICH_MESSAGES_HINT` / `MEMORY_GUIDANCE` / platform hints。
+- **实际：** A9 删除 memory/skill_manage 工具名时，`valid_tool_names` 门控连带使这些引导块（以及 skills 索引）在 CTF 路径**结构性缺席**——逐块复核 `build_system_prompt_parts`，所有 guidance 都以工具名在场为门，CTF 工具面不含它们。按模式门控的目标已达成，无需再动；chat 路径保留原样（那里引导是有效的）。
 
 **P3.3 · 给 `ctf-knowledge/SKILL.md` 加 frontmatter** ✅ **已完成（2026-09-13）**
 
@@ -752,9 +750,9 @@ spillover 触发 0 次，峰值 ~32K tok/请求 vs 600K 压缩线，无上下文
   均可解析。
 - **为什么：** §3.D —— 7.5 MB 卡片集因缺 frontmatter 在索引里等于不存在。
 
-**P3.4 · skills 索引开 `names_only` / `compact_categories`**
-
-- **为什么：** 189 条技能名占 20,239 字符（~5.1K tokens），代码里已有这两个开关。
+**P3.4 · skills 索引开 `names_only` / `compact_categories`** ✅ **已作为 A9 的副产品达成（2026-09-14 复核）**
+- **原方案：** 189 条技能名占 20,239 字符（~5.1K tokens），代码里已有这两个开关。
+- **实际：** A9 之后 CTF 工具面无 skills_list/skill_view/skill_manage，`has_skills_tools` 门控为假时 `skills_prompt = ""`——整个 skills 索引在 CTF 路径已结构性移除，比"开关压缩"更彻底。chat 路径的索引压缩开关仍可在需要时打开，不再单列任务。
 
 **P3.5 · AGENTS.md 注入加尺寸上限**
 
@@ -773,6 +771,15 @@ spillover 触发 0 次，峰值 ~32K tok/请求 vs 600K 压缩线，无上下文
 清洗后为空早退不建索引；`knowledge._sanitize_query` 变兼容壳。realistic 20% 持平
 （miss 是相关性问题，属 P4.1/P4.3），robustness 从"碰巧不崩"变成"结构上不崩"。
 **P4.3 检索目标换成技术卡**：2583 篇中文赛后 wp 是给人看的；agent 需要紧凑的「技术 + payload」单元。那 20 篇专题（SQL 116K / PHP 反序列化 212K）配 `.idx.md` 分段索引才是对形状 —— **但目前没有任何代码读 `.idx.md`**。
+✅ **已完成 v1（2026-09-14，见 §9 ⑩）**——但形状与设想不同：探针发现手工
+`.idx.md` 行号漂移 32%（108 段抽检 35 段不符，idx 内容与文档标题结构脱节），
+**代码不该读 `.idx.md`**。落地为 `topic_segments.py`：运行时从专题文档
+`#{1,3}` 标题自建段索引（13 文档 / 906 段，mtime 缓存），token 重叠匹配 +
+三重闸门（操作符剔除去重、≥2 token 或单个 ≥3 字具体词、ASCII 词边界防
+`ida`⊂`IDAT`），注入「专题速查」块给出行号直达指针（`Read offset=`）。
+同源金标评测：web 覆盖域 hit@2 = **75%**（3/4），域外正确沉默（pwn/crypto/
+reverse 无专题库）；全档 3/10 vs WP 检索基线 20%。mutation 测试 3/3 被抓，
+15 项新测试绿，既有 114 项知识层测试绿，golden 三档无回归。
 **P4.4 加相关性闸门**：top-3 分数不达标就注入空。**噪声比沉默更贵。**
 ✅ **已完成（2026-09-13）**——特异性闸门（裸分类词不检索）+ 命中下限
 （title+snippet 须含 ≥2 个不同查询 token）+ LIKE 兜底按 token 命中数降序。
@@ -2330,6 +2337,48 @@ spillover 反复触发，且体量可归因于"过程长结论短"类命令 —�
 "把 delegate_task 加进 ctf_solve（模型可选）"这一档，runtime 强制版仍需先
 解决任务上下文构造问题再评估。
 
+### 2026-09-14 · ⑩：P4.3 专题段索引落地 —— 探针改了形状，评测守住诚实（`topic_segments.py`）
+
+**探针先推翻了原设想的一半。** 计划书设想"代码去读 `.idx.md`"，动手前抽检
+108 个行段：**35 段（32%）行号与实际文档不符**（如「宽字节」实际在 SQL.md
+L928，idx 写 L450——读到的会是 sqlmap 配置）。idx 是与文档标题结构脱节的
+手工缓存，"没有任何代码读它"反而救了这个库。**落地形状改为：运行时从文档
+`#{1,3}` 标题自建索引**（13 专题文档 / 906 段，mtime 缓存自动失效），永不
+漂移。语料库本体不动（那是手工维护内容，idx 陈旧问题如实记录于此）。
+
+**实现要点（`fulilian_ctf/topic_segments.py` + `knowledge.py` 注入块）：**
+
+- 匹配：内存 token 子串重叠（906 条规模不值得上 FTS5，避开 trigram 的
+  2 字 CJK 坑——§3.E 教训直接沿用）；注入为「专题速查」块（lessons 之后、
+  WP refs 之前），`Read <path> offset=<行号>` 直达指针，复用语料库自身的
+  按需分段读取约定。
+- 三重闸门（调试中各抓出一个真实误报）：① sanitize 后查询串里的**字面
+  操作符**（`"or" OR "and"`）混进查询 token——首跑即复现（`过滤or and
+  xor not 绕过` 靠 or 攒命中数压过真正的宽字节段）；② 资格规则 = ≥2 个
+  不同 token 或单个 ≥3 字具体词，2 字泛词单独不入选；③ ASCII 词边界，
+  `ida` 不得命中 `IDAT`。
+- 特异性闸门与 `_format_wp_refs_block` 同形：裸分类词回退形态直接沉默。
+  域外分类（pwn/crypto/reverse 无专题库）正确沉默。
+
+**同源评测（P4.5 金标 realistic 档，判据不换库不换题）：** web 覆盖域
+hit@2 = **3/4 = 75%**（miss 的一条"java 反序列化"命中 PHP 反序列化专题，
+跨语言但思路相关）；域外 6 条全部沉默而非硬凑；全档 3/10 vs WP 检索基线
+hit@5 = 20%。正文派生的敌意评测（query 抽自正文代码行）doc-level top2 仅
+29% —— 如实记录：该索引匹配的是**技术名形态的查询**（题面/解题者视角），
+不是任意正文片段。
+
+**验证：** 15 项新测试绿（合成 KB，含缓存失效、闸门、指针格式、幂等）；
+mutation 测试 3/3 变异被抓（资格闸门 / 操作符剔除 / 词边界——其中操作符
+变异首测漏网，补了判别性 fixture 后复测抓获）；知识层既有 114 项测试绿；
+golden 三档无回归（smoke 100% / realistic 20% 持平 / robustness 6/6）；
+全量套件 814 passed + 1 failed，该失败（test_solve_modes JSON 解析）经
+stash 对照确认为**既有失败**，与本条目无关。
+
+**一般化教训：** 探针不仅验证"要不要做"，还会改"做成什么形状"——原设想
+消费手工索引，探针证明手工索引本身不可信，改为结构自证（从标题重建）。
+另外 idx 内容含文档里不存在的标题（凭空总结），提示人工索引与文档是
+两个会各自漂移的事实源，能从结构重建的索引不要手工维护。
+
 ## 10. 当前状态
 
 **分支 `ctf-opt`（未推送任何内容到 origin）。**
@@ -2386,6 +2435,8 @@ spillover 反复触发，且体量可归因于"过程长结论短"类命令 —�
 | 代码 | **P4.2 sanitize 下沉（search() 内不变量 + 空 query 不建索引）** | `fulilian_ctf/knowledge_retriever.py` `sanitize_match_query`、`fulilian_ctf/knowledge.py`（兼容壳） |
 | 测试 | P4.2 sanitize 回归锁（6 项） | `tests/fulilian_ctf/test_knowledge_retriever.py` `TestSanitizeSink` |
 | 文档 | **P8 文档谎言清理（迭代预算/压缩器注释/注入参数名）+ P4.1 结案** | `agent/iteration_budget.py`、`tools/delegate_tool.py`、`agent/agent_init.py`、`agent/context_compressor.py`、`agent/context_engine.py`、`fulilian_ctf/knowledge.py` |
+| 代码 | **P4.3 专题段索引（运行时标题自建，不消费手工 idx）** | `fulilian_ctf/topic_segments.py`、`fulilian_ctf/knowledge.py`（`_format_topic_segments_block`） |
+| 测试 | P4.3 回归锁（15 项；mutation 3/3 被抓，含操作符变异的判别 fixture） | `tests/fulilian_ctf/test_topic_segments.py` |
 | 文档 | 本计划书 | `docs/ctf-agent-optimization-plan.md` |
 
 **已验证：** A5 —— 修复前 3/3 瞬间失败（HTTP 400，退出码 0）；修复后
@@ -2538,6 +2589,7 @@ flag 明文本来就在仓库里（`manifest-ctf-hard.yaml`）。这三条都要
 | 10 | ~~**P4.5 修 benchmark + P0.5.3 重估压缩阈值**~~ | 金标重构为三档拆掉自证：smoke 100%（接线自检）/ **realistic 20%**（正文标注，检索真实水平，P4.1/P4.3 从此有判据）/ robustness 6/6 不崩（P4.2 回归锁）。P0.5.3 结案：cap 是 min 上限、跑批永远到不了 600K、强制 regime 被压平 —— **改了证伪不了，维持 0.60**，重估条件 = ≥600K 峰值轨迹。见 §9 ⑦ | **✅ 完成** |
 | 11 | ~~**P5.2 假设扇出 + runtime 重复攻击检测**~~ | **零代码改动结案**：racer 已建成可用（14 测试绿，`solve --race` + dispatcher `switch_model` 双接线）；runtime 重复检测机制已在（`stopper.count_variant_failures` → `HYPOTHESIS_REPEATED` → 强制换攻击类，34 测试绿）——计划书该行写于机制盘点前，已过时。探针另证：存档日志全为截断期，重复攻击失效模式零观测。重估条件 = 宽日志轨迹中出现止损漏掉的重复攻击。见 §9 ⑧ | **✅ 完成** |
 | 12 | ~~**P2.1 规则化自动委派**~~ | **零代码改动结案**：三重证据推翻"为什么"——① `delegate_task` 不在 `ctf_solve` 工具面，§3.F 的 15 次调用全是 chat 路径（没调用 ≠ 不自觉，先查原语在不在）；② P0.1 后失效体量已砍掉（spillover 全程 0 触发，峰值 32K vs 600K）；③ runtime 强制版经济性（④ 同构纯开销）与正确性（规则无法构造子代理任务上下文）双否决。附带发现：用户 config 纪律 3"嘈杂工作交给子代理"**送达但不可执行**（A2/A10 同族第三形态）。重估条件 = 压缩/spillover 真实触发且可归因。见 §9 ⑨ | **✅ 完成** |
+| 13 | ~~**P4.3 检索目标换成技术卡**~~ | **探针改形状后落地 v1**：手工 `.idx.md` 行号漂移 32% 且含文档不存在的标题——不可消费，改为运行时从专题文档标题自建段索引（13 文档/906 段，mtime 缓存）；「专题速查」注入块给 `Read offset=` 直达指针。三重闸门（操作符剔除/资格规则/ASCII 词边界，调试各抓一个真实误报）+ 裸分类词与域外沉默。同源金标：web 覆盖域 hit@2 = 75%，全档 3/10 vs WP 基线 20%。mutation 3/3 被抓（操作符变异首测漏网，补判别 fixture 后抓获），15 项新测试 + 114 项知识层测试绿，golden 三档无回归。见 §9 ⑩ | **✅ 完成** |
 
 > **顺序说明（A10 之后调整）：** 难题 holdout 从"P0.1 的前置"提升为**全局
 > 第二项**。原计划里它只是 P0.1 的门票；A10 之后可以看到，它同样是 A10

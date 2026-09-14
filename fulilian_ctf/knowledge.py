@@ -126,6 +126,42 @@ def _wp_refs_relevance_floor(token_count: int) -> int:
     return min(2, max(1, token_count))
 
 
+def _format_topic_segments_block(query_text: str, category: str) -> str:
+    """构造「专题速查」块：标题自建段索引的行号直达指针（P4.3）。
+
+    指针形态沿用语料库的按需分段读取约定（``Read offset=行号``），但行号
+    来自运行时标题扫描而非手工 ``*.idx.md``——后者行号已实测漂移 32%
+    （见计划书 §9 P4.3 探针条目）。相关性闸门在段匹配器内部（命中资格 =
+    >=2 个不同查询 token 出现在标题，或单个 len>=3 的具体 token），域外
+    查询（pwn/crypto/reverse 等无专题库覆盖）返回空——噪声比沉默更贵。
+    """
+    # 特异性闸门：查询退化为裸分类词（题面缺失时的回退形态）时直接不注入
+    from .knowledge_retriever import _MATCH_OPERATOR_WORDS
+    from .topic_segments import _TOKEN_RE, match_topic_segments
+
+    cat_l = (category or "").strip().lower()
+    qtokens = [
+        t
+        for t in _TOKEN_RE.findall(query_text.lower())
+        if len(t) >= 2 and t not in _MATCH_OPERATOR_WORDS
+    ]
+    if cat_l and [t.lower() for t in qtokens] == [cat_l]:
+        return ""
+    try:
+        from .topic_segments import match_topic_segments
+
+        segs = match_topic_segments(query_text, category=category, limit=2)
+    except Exception:  # noqa: BLE001 — 索引失败静默降级
+        return ""
+    if not segs:
+        return ""
+    lines = [
+        f"- {s.doc} · {s.title}（L{s.line} 起）\n  Read {s.doc_path} offset={s.line}"
+        for s in segs
+    ]
+    return "\n\n## 专题速查（技术专题文档，行号直达可分段读取）\n" + "\n".join(lines)
+
+
 def _format_wp_refs_block(query_text: str, category: str) -> str:
     """构造「相似历史 WP 参考」块；无结果/检索异常/不过相关性闸门返回空串。
 
@@ -189,7 +225,7 @@ def inject_ctf_context(
     prompt: str,
     query: Optional[str] = None,
 ) -> str:
-    """统一知识注入入口：playbook + 知识卡 + 历史教训 + 相似 WP 检索。
+    """统一知识注入入口：playbook + 知识卡 + 历史教训 + 专题速查 + 相似 WP 检索。
 
     Args:
         category: 题目分类（web/crypto/reverse/pwn/forensics/misc，可为空）
@@ -229,6 +265,9 @@ def inject_ctf_context(
 
     query_text = _sanitize_query(query or "") or (cat or "")
     if query_text:
+        quick = _format_topic_segments_block(query_text, cat)
+        if quick:
+            blocks.append(quick)
         refs = _format_wp_refs_block(query_text, cat)
         if refs:
             blocks.append(refs)
