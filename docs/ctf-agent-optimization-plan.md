@@ -732,12 +732,12 @@ spillover 触发 0 次，峰值 ~32K tok/请求 vs 600K 压缩线，无上下文
 
 ### P3 — 砍固定开销
 
-**P3.1 · 精简 `_FULILIAN_CORE_TOOLS`（改源码，不是改 tool_search）**
+**P3.1 · 精简 `_FULILIAN_CORE_TOOLS`（改源码，不是改 tool_search）** ✅ **结案（2026-09-14 探针）——前提从写下之日起就不成立，无需任何改动**
 
-- **改哪里：** `toolsets.py:31` 的 53 个名字字面量。
-- **CTF 档建议保留：** `terminal` / `file` / `code` / `web` / `vision` / `delegate` / `todo` / `verify_flag`。
-- **去掉：** `computer_use`(6.2KB) / `tts`(1.9KB) / `browser-use`(3KB) / `session_search`(3.2KB)。
-- **预期效果：** 45.9 KB → **~15 KB**。
+- **原方案：** `toolsets.py:31` 的 53 个名字字面量；CTF 档保留 8 组、去掉 computer_use/tts/browser-use/session_search，预期 45.9KB → ~15KB。
+- **探针推翻前提：** CTF 路径**从不消费 `_FULILIAN_CORE_TOOLS`**——`run_agent.py` CTF 分支 `enabled_toolsets_list = ["ctf_solve"]`，该窄工具集（5 个 CTF 专用工具 + includes terminal/file/web/vision）自基线提交 `5a932c8`（2026-08-30）就存在，早于本计划书。§1 测到 45.9KB/53 工具的是 fulilian-cli（chat）平台工具面，不是 CTF 面。
+- **实测 CTF 工具面（走真实 `get_tool_definitions` 解析路径）：** 服务面 12 个工具（terminal 3.4K / search_files 2.0K / patch 2.0K / read_file 1.7K / tool_search 桥 1.5K / vision_analyze 1.4K / process 1.4K / write_file 1.3K / web_extract 1.1K / web_search 0.8K / tool_call 0.5K / tool_describe 0.5K）= **17,424 字符**；registry 注册后并入 9 个 CTF 专用工具（http_session 1.9K / record_fact 0.9K / run_script 0.8K / compile_check 0.6K / git_auto_commit 0.6K / verify_flag 0.5K / submit_flag 0.5K 等）= **约 23KB ≈ 5.8K tokens**。
+- **原方案的四个删除目标（computer_use/tts/browser-use/session_search）一个都不在 CTF 面上**；面上剩余工具全部与解题直接相关。风险表"去掉的 toolset 可能有隐藏依赖"随之失效——没有要去掉的东西。A9/P1.1 期间对 ctf_solve 工具集的两次修剪（移除 memory/skill_manage、加入 run_script）已经在窄面上完成。
 
 **P3.2 · 静态引导按模式门控** ✅ **已作为 A9 的副产品达成（2026-09-14 复核）**
 - **原方案：** `agent/system_prompt.py:341 build_system_prompt_parts`（`stable` 层组装处，`:386-769`）。去掉 `KANBAN_GUIDANCE` / `TELEGRAM_RICH_MESSAGES_HINT` / `MEMORY_GUIDANCE` / platform hints。
@@ -754,10 +754,12 @@ spillover 触发 0 次，峰值 ~32K tok/请求 vs 600K 压缩线，无上下文
 - **原方案：** 189 条技能名占 20,239 字符（~5.1K tokens），代码里已有这两个开关。
 - **实际：** A9 之后 CTF 工具面无 skills_list/skill_view/skill_manage，`has_skills_tools` 门控为假时 `skills_prompt = ""`——整个 skills 索引在 CTF 路径已结构性移除，比"开关压缩"更彻底。chat 路径的索引压缩开关仍可在需要时打开，不再单列任务。
 
-**P3.5 · AGENTS.md 注入加尺寸上限**
+**P3.5 · AGENTS.md 注入加尺寸上限** ✅ **结案（2026-09-14）：一半被降级逻辑覆盖，一半已落地**
 
-- **建议：** 上限 4 KB；且 CTF 解题时**绝不注入**仓库自己的开发指南。
-- **为什么：** §3.D —— 仓库 cwd 下多出 96 KB。
+- **原方案：** 上限 4KB；CTF 解题时绝不注入仓库自己的开发指南（§3.D：仓库 cwd 下多出 96KB）。
+- **探针复核：** 本仓库 `AGENTS.md` = 96,318 字节（96KB 数字出处）。注入 cap 机制**早已存在**且是刻意设计：`_get_context_file_max_chars` 解析序 = config `context_file_max_chars` > 动态 cap（`context_length × 4 chars/token × 6% 窗口份额`，floor 20K / ceiling 500K）> 20K 兜底。对 1M 窗口模型动态 cap = 240K 字符 → 96KB **全文放行**——96KB 主张在大窗口模型上成立，但这就是设计意图（上下文文件与系统提示共享缓存前缀，成本是命中价不是面值，⑦ 已降级此类主张）。
+  - **4KB 硬上限 → 不做**：与 P3/P7 同一条降级逻辑（砍静态前缀省的是命中价）；且 flat 4KB 会截断大窗口下本有价值的正当项目文档。需要时用户可用既有 `context_file_max_chars` 配置，无需新代码。
+- **CTF 绝不注入 → 已落地（2026-09-14）**：批跑路径早已隔离（`batch_runner.py` `skip_context_files=True`）；交互 solve 路径漏了——本轮在 `run_agent.py _run_solver_turn` 的 CTF `AIAgent(...)` 补上 `skip_context_files=True, load_soul_identity=True`（保住 SOUL.md 身份，只隔离 cwd 链上的 `.fulilian.md`/AGENTS.md/CLAUDE.md/.cursorrules 项目文件）。回归锁 `test_ctf_solver_context_isolation.py` 经变异体验证（翻转 flag → 测试红 → 还原 → 绿）。
 
 ### P4 — 修知识层
 
@@ -846,7 +848,7 @@ reverse 无专题库）；全档 3/10 vs WP 检索基线 20%。mutation 测试 3
 | P0.5.3（提高压缩阈值） | **推断，非代码观点** | 先做 0.60 vs 0.75 小样本对照 |
 | P0.1 落盘 | 需设计 | 落盘目录、清理策略、指针格式待定 |
 | §3.G 死代码判定 | 子代理全树引用扫描 | 如 `kb_writeback.py` 的 repo 级 grep 只有定义与 `__all__` |
-| P3.1 精简工具面 | 需实测 | 去掉的 toolset 可能有隐藏依赖 |
+| P3.1 精简工具面 | **已结案（2026-09-14 探针）** | 前提不成立：CTF 路径从不用 `_FULILIAN_CORE_TOOLS`（窄面 `ctf_solve` 工具集自 `5a932c8` 就存在），实测面 ~23KB、四个删除目标一个都不在面上，见 §3 P3.1 |
 | M1–M10 数字 | **直接查 `state.db` 实测，可复现** | 见 §8 |
 | C1–C11 数字 | **3 题，全 easy，样本极小** | 足以做前后对照，**不足以断言能力**；难题 holdout 仍缺 |
 | A3 的效果 | **未测** | 需 `skip_background_review=False` 对照跑（§10） |
@@ -2478,6 +2480,7 @@ flag 正确率为主指标、路径经济性为辅。P7（降级项）若复启�
 ## 10. 当前状态
 
 **分支 `ctf-opt` 已推送 origin 至 `0fb3aed`（①-⑫ 全部落账）。**
+**2026-09-14 追加：P3.1/P3.5 探针双结案（§10 行 16）——P3.1 零改动（前提不成立），P3.5 交互 solve 路径补上下文隔离 + 回归锁。**
 
 | 类 | 项 | 位置 |
 |---|---|---|
@@ -2690,6 +2693,7 @@ flag 明文本来就在仓库里（`manifest-ctf-hard.yaml`）。这三条都要
 | 14 | ~~**P6 模型路由效果验证**~~ | **试水 A/B 定稿**：3 最难题 × 双臂 × n=1（用户选定规模）。GLM-5.3 三题全解、api 68 vs 64（噪声地板内持平）、token −46%、缓存 91–94% vs 70–81%——正向信号但 n=1 不足以改默认路由。中途 scnet GLM 额度 429 → 供应商全局切 ark（用户指示）。见 §9 ⑪ | **✅ 完成（试水级）** |
 | 15 | ~~**天花板效应：把题加难到会失败**~~ | **第六维 `web-tokenforge-01` 落地**（协议伪造/实现保真度，链式双层扩展+跨块）：n=3 全部贴 29–30/30 上限，**flag 正确率 2/3**——失败模式与设计对表（root 层链式续算块界语义没吃透→预算耗尽→诱饵假 flag）。离散量恢复，corpus 随 commit 冻结。见 §9 ⑫ | **✅ 完成** |
 | 5b | **P0.1 效果验证（唯一挂着的表格行）** | 机制触发依赖难题峰值——⑦ probe 实测 spillover 0 触发、峰值 ~32K tok vs 600K 压缩线，当前判据测不出效果。**重估条件与 P0.5.3/P2.1 同源：峰值 ≥600K 的真实轨迹**（届时机制自然触发，效果可测） | 挂起（有明确重估条件） |
+| 16 | ~~**P3.1 精简工具面 + P3.5 AGENTS.md 注入**~~ | **探针双结案**：P3.1 前提不成立——CTF 路径从不消费 `_FULILIAN_CORE_TOOLS`（窄面 `ctf_solve` 工具集自基线 `5a932c8` 就存在），实测走真实解析路径 12 工具/17.4KB + registry 9 个 CTF 专用工具 ≈ 23KB，四个原定删除目标一个都不在面上，零改动结案。P3.5 一半被 P3/P7 降级逻辑覆盖（4KB 硬上限不做，cap 机制与动态设计早已存在）；一半落地——`_run_solver_turn` 补 `skip_context_files=True, load_soul_identity=True`（批跑早已隔离，交互 solve 此前漏了），回归锁经变异体验证。见 §3 P3.1/P3.5 | **✅ 完成（P3.1 零改动 / P3.5 半落地半降级）** |
 
 > **顺序说明（A10 之后调整）：** 难题 holdout 从"P0.1 的前置"提升为**全局
 > 第二项**。原计划里它只是 P0.1 的门票；A10 之后可以看到，它同样是 A10

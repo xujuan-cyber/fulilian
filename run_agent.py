@@ -9333,6 +9333,14 @@ def _run_solver_turn(
             # 同出，详见 toolsets.py 的 "⚠️ 耦合" 注释。
             # 解法后的沉淀应在批后统一做一次，不是每题一次。
             skip_background_review=True,
+            # P3.5：CTF 解题绝不注入 cwd 的项目上下文（AGENTS.md/CLAUDE.md/
+            # .cursorrules —— 本仓库自己的 AGENTS.md 有 96KB，动态 cap 对
+            # 1M 窗口放行 240K，全文进前缀）。解题的 work_dir 与"仓库开发
+            # 指南"是错配场景；batch_runner.py 早已同款隔离
+            # （skip_context_files=True）。load_soul_identity=True 保住
+            # SOUL.md 身份，只隔离 cwd 链上的项目文件。
+            skip_context_files=True,
+            load_soul_identity=True,
         )
     except RuntimeError as e:
         print(f"❌{label} Failed to initialize agent: {e}")
