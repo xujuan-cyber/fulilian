@@ -1,0 +1,198 @@
+{
+  "suite": "retrieval",
+  "date": "2026-09-14",
+  "hit_at_5": 0.4667,
+  "hits": 7,
+  "total": 15,
+  "tier_hit_at_5": {
+    "realistic": 0.2,
+    "smoke": 1.0
+  },
+  "robustness_all_ok": true,
+  "db_path": "/home/xujuan/.fulilian/knowledge.db",
+  "cases": [
+    {
+      "id": "smoke-01",
+      "tier": "smoke",
+      "category": "web",
+      "query": "\"第三届黄河流域公安院校网络空间安全技能挑战赛官方Writeup\"",
+      "hit": true,
+      "error": null,
+      "rank": 1
+    },
+    {
+      "id": "smoke-02",
+      "tier": "smoke",
+      "category": "crypto",
+      "query": "\"HKCERT_CTF_2022_Postmortem_\" OR \"III\" OR \"_The_Remaining_Challenges\"",
+      "hit": true,
+      "error": null,
+      "rank": 1
+    },
+    {
+      "id": "smoke-03",
+      "tier": "smoke",
+      "category": "pwn",
+      "query": "\"Buckeye_CTF_\" OR \"_2024_WriteUp\"",
+      "hit": true,
+      "error": null,
+      "rank": 1
+    },
+    {
+      "id": "smoke-04",
+      "tier": "smoke",
+      "category": "reverse",
+      "query": "\"星盟安全RE系列\" OR \"恶意程序分析\"",
+      "hit": true,
+      "error": null,
+      "rank": 1
+    },
+    {
+      "id": "smoke-05",
+      "tier": "smoke",
+      "category": "forensics",
+      "query": "\"记一次某部内存取证比赛writeup\"",
+      "hit": true,
+      "error": null,
+      "rank": 1
+    },
+    {
+      "id": "real-01",
+      "tier": "realistic",
+      "category": "web",
+      "query": "ssti 模板注入 payload 绕过",
+      "hit": false,
+      "error": null,
+      "rank": null
+    },
+    {
+      "id": "real-02",
+      "tier": "realistic",
+      "category": "web",
+      "query": "文件上传 waf 绕过",
+      "hit": false,
+      "error": null,
+      "rank": null
+    },
+    {
+      "id": "real-03",
+      "tier": "realistic",
+      "category": "web",
+      "query": "sql注入 union 联合查询",
+      "hit": true,
+      "error": null,
+      "rank": 2
+    },
+    {
+      "id": "real-04",
+      "tier": "realistic",
+      "category": "pwn",
+      "query": "tcache poisoning 堆利用",
+      "hit": false,
+      "error": null,
+      "rank": null
+    },
+    {
+      "id": "real-05",
+      "tier": "realistic",
+      "category": "pwn",
+      "query": "格式化字符串漏洞 泄露 libc 基址",
+      "hit": false,
+      "error": null,
+      "rank": null
+    },
+    {
+      "id": "real-06",
+      "tier": "realistic",
+      "category": "web",
+      "query": "java 反序列化 利用链",
+      "hit": false,
+      "error": null,
+      "rank": null
+    },
+    {
+      "id": "real-07",
+      "tier": "realistic",
+      "category": "crypto",
+      "query": "维吉尼亚密码 频率分析",
+      "hit": false,
+      "error": null,
+      "rank": null
+    },
+    {
+      "id": "real-08",
+      "tier": "realistic",
+      "category": "crypto",
+      "query": "RSA 共模攻击",
+      "hit": true,
+      "error": null,
+      "rank": 4
+    },
+    {
+      "id": "real-09",
+      "tier": "realistic",
+      "category": "forensics",
+      "query": "volatility 内存镜像 取证",
+      "hit": false,
+      "error": null,
+      "rank": null
+    },
+    {
+      "id": "real-10",
+      "tier": "realistic",
+      "category": "reverse",
+      "query": "ida 逆向 upx 脱壳",
+      "hit": false,
+      "error": null,
+      "rank": null
+    },
+    {
+      "id": "robust-01",
+      "tier": "robustness",
+      "query": "2.31",
+      "hit": null,
+      "error": null,
+      "result_count": 5
+    },
+    {
+      "id": "robust-02",
+      "tier": "robustness",
+      "query": "\" OR \"1\"=\"1",
+      "hit": null,
+      "error": null,
+      "result_count": 5
+    },
+    {
+      "id": "robust-03",
+      "tier": "robustness",
+      "query": "AND OR NOT NEAR",
+      "hit": null,
+      "error": null,
+      "result_count": 0
+    },
+    {
+      "id": "robust-04",
+      "tier": "robustness",
+      "query": "注入",
+      "hit": null,
+      "error": null,
+      "result_count": 5
+    },
+    {
+      "id": "robust-05",
+      "tier": "robustness",
+      "query": "()",
+      "hit": null,
+      "error": null,
+      "result_count": 5
+    },
+    {
+      "id": "robust-06",
+      "tier": "robustness",
+      "query": "a",
+      "hit": null,
+      "error": null,
+      "result_count": 5
+    }
+  ]
+}

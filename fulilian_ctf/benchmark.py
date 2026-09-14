@@ -397,6 +397,12 @@ def unit_markdown(summary: dict) -> str:
 def run_retrieval_suite(golden_path: Path = GOLDEN_PATH) -> dict:
     """读 retrieval-golden.yaml → 对 knowledge.db FTS5 做 top-5 检索 → 命中@5。
 
+    P4.5 起金标分三档（tier）：
+      smoke / realistic —— 计 hit@5；但 smoke 高分仅证明管线通（query 由
+      目标文档标题构造，接线自检而非相关性），结论以 realistic 档为准。
+      robustness —— expected_source_path 为空，只要求 search() 不抛异常，
+      记录命中数供回归对比（P4.2 sanitize 下沉后此档即其回归）。
+
     只读：search(auto_build=False)，绝不触发索引重建/写库。
     """
     import yaml
@@ -405,26 +411,49 @@ def run_retrieval_suite(golden_path: Path = GOLDEN_PATH) -> dict:
         data = yaml.safe_load(f)
     golden = data["golden"] if isinstance(data, dict) else data
     cases = []
-    hits = 0
+    tier_hits: dict[str, int] = {}
+    tier_totals: dict[str, int] = {}
+    robustness_ok = True
     for item in golden:
         query = item["query"]
-        expected_path = item["expected_source_path"]
-        results = kb_search(query, limit=5, auto_build=False)
+        tier = item.get("tier") or "realistic"
+        expected_path = item.get("expected_source_path")
+        try:
+            results = kb_search(query, limit=5, auto_build=False)
+            error = None
+        except Exception as exc:  # noqa: BLE001 — robustness 档要捕获的就是这个
+            results, error = [], repr(exc)
         got_paths = [r.get("source_path") for r in results]
-        hit = expected_path in got_paths
-        hits += int(hit)
-        cases.append({
-            "id": item.get("id"), "category": item.get("category"),
-            "query": query, "hit": hit, "rank": (got_paths.index(expected_path) + 1) if hit else None,
-        })
-    total = len(golden)
-    hit_at_5 = round(hits / total, 4) if total else 0.0
+        if expected_path:
+            hit = expected_path in got_paths
+            cases.append({
+                "id": item.get("id"), "tier": tier, "category": item.get("category"),
+                "query": query, "hit": hit, "error": error,
+                "rank": (got_paths.index(expected_path) + 1) if hit else None,
+            })
+            tier_totals[tier] = tier_totals.get(tier, 0) + 1
+            tier_hits[tier] = tier_hits.get(tier, 0) + int(hit)
+        else:
+            if error:
+                robustness_ok = False
+            cases.append({
+                "id": item.get("id"), "tier": tier, "query": query,
+                "hit": None, "error": error, "result_count": len(got_paths),
+            })
+    tier_hit_at_5 = {
+        t: round(tier_hits[t] / tier_totals[t], 4) if tier_totals[t] else 0.0
+        for t in sorted(tier_totals)
+    }
+    graded_total = sum(tier_totals.values())
+    graded_hits = sum(tier_hits.values())
     return {
         "suite": "retrieval",
         "date": date.today().isoformat(),
-        "hit_at_5": hit_at_5,
-        "hits": hits,
-        "total": total,
+        "hit_at_5": round(graded_hits / graded_total, 4) if graded_total else 0.0,
+        "hits": graded_hits,
+        "total": graded_total,
+        "tier_hit_at_5": tier_hit_at_5,
+        "robustness_all_ok": robustness_ok,
         "db_path": str(REAL_KB_DB_PATH),
         "cases": cases,
     }

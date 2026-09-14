@@ -644,7 +644,19 @@ agent = AIAgent(
 - 已从 `~/.fulilian/config.yaml` 移除并原位留注释，备份
   `config.yaml.bak-20260911-200734`（仓库外改动）。
 
-**P0.5.3 · 重新评估 `_cap_ctf_compression_threshold` 的 0.60**
+**P0.5.3 · 重新评估 `_cap_ctf_compression_threshold` 的 0.60** ✅ **结案（2026-09-14）：本机制下不可测量，维持 0.60**
+
+- **为什么：** 它在用"**更频繁地压缩**"来应对"长解题轨迹"，而压缩恰恰是**丢数据 + 破缓存**的源头 —— **方向是反的**。
+- **注意：** 这一条是**推断，不是代码注释的观点**。建议先做小样本对照（0.60 vs 0.75）再定。
+- **前提：** 只有在 P0.1 落地后才应该提高阈值（否则删得更多）。
+- **已验证的前提：** 该 0.60 封顶**确实生效**（曾怀疑被 `_SMALL_CTX_THRESHOLD_PERCENT`
+  这条 floor 抬回 0.75 从而失效 —— 查证后 floor 就是 0.60，`max(0.60, 0.60) = 0.60`，
+  假设不成立，见 A2 条目）。
+- **结案（§9 ⑦）：** cap 是 `min(ratio, cap)` 的**绝对上限**语义；把 0.60 提到 0.75
+  只是把自然触发点 600K→700K 平移，而跑批峰值 ~32K、30 步上限下永远到不了 600K
+  —— 自然 regime 里 A/B 无可分辨项；CTF_CONFIG_EXTRA 强制 regime 里 `min()` 直接
+  把两者压成同一值。**0.60 vs 0.75 在现有机制与工作负载下测不出差异**，维持 0.60。
+  重估条件：出现 ≥600K 峰值请求的轨迹。
 
 - **问题：** 它在用"**更频繁地压缩**"来应对"长解题轨迹"，而压缩恰恰是**丢数据 + 破缓存**的源头 —— **方向是反的**。
 - **注意：** 这一条是**推断，不是代码注释的观点**。建议先做小样本对照（0.60 vs 0.75）再定。
@@ -741,6 +753,7 @@ agent = AIAgent(
 （title+snippet 须含 ≥2 个不同查询 token）+ LIKE 兜底按 token 命中数降序。
 真库验证与回归锁见 §9 ②。
 **P4.5 修或删 benchmark**：§3.E，自证的 `hit@5 = 1.0` 会带来虚假信心和错误的优化方向。
+✅ **已完成（2026-09-14，见 §9 ⑦）**——金标重构为三档，诚实基线 realistic hit@5 = **20%**。
 
 ### P5 — 用能力替换仪式
 
@@ -2124,6 +2137,55 @@ cd 前缀合计 84 字符 —— 比任何一项已测效应小三个量级，**
 2 项分支预存、3 项与并发会话未提交改动/瞬时网络相关，与本提交无关
 （22/22 直接相关用例全绿）。
 
+### 2026-09-14 · ⑦：P4.5 金标重构 + P0.5.3 结案 —— 自证基准拆掉后，检索真实水平 20%
+
+**P4.5（修 benchmark）：**
+
+旧金标的自证链条：`build_query(title)` 从目标文档**自己的标题**抽 token 构造
+query → 检索器只要不是全坏就必然 top-1 命中自己 → `hit@5 = 1.0（20/20，
+18 条 rank=1）`全是对着镜子打分；且 `min_len=3` 把 2 字中文 query（trigram
+分词器的真实短板，P4.1）结构性排除在样本外。
+
+**重构（三档，`benchmarks/sampling/build_retrieval_golden.py` 全量重写 +
+`benchmarks/eval_retrieval_golden.py` 新评估入口）：**
+
+| 档 | 条数 | 标注依据 | 判定 |
+|---|---|---|---|
+| smoke | 5 | 仍由标题构造（seed 20260905） | 接线自检：索引在、search() 通。meta 明示 NOT relevance |
+| realistic | 10 | **正文内容证据**：生成时逐条 `instr()` 核验期望文档正文确含标注词（如 tcache / 格式化字符串+libc / 维吉尼亚 / 共模 / volatility），核验失败大声退出拒绝生成 | hit@5 —— 标签来自语料，不来自被测系统 |
+| robustness | 6 | 敌意 query：`2.31` / 引号注入形态 / 裸操作符词 / 2 字中文"注入" / `()` / 单字符 | 只要求 search() 不抛异常；P4.2 sanitize 下沉后即其回归 |
+
+**诚实基线（`baselines/2026-09-14-retrieval.json`，旧 09-06 基线废弃）：**
+
+- smoke **100%**（全 rank=1）—— 管线是通的；
+- realistic **20%（2/10，rank 2 与 4）** —— 抽查证实返回的是同类文档
+  （如 tcache query 返回 heap-exploitation 系），但标注文档进不了 top-5：
+  这就是检索质量的真实水平，P4.1/P4.3 的改动从此有判据；
+- robustness **6/6 不抛异常**（`AND OR NOT NEAR` 返 0 是 sanitize 外空匹配，
+  非崩溃）。
+
+**顺带踩坑（FTS5 trigram 表的 LIKE 陷阱）：** `writeups` 是 FTS5 虚拟表，
+对 **UNINDEXED 列**（source_path）的裸 `LIKE` 依赖查询计划 —— 走
+`VIRTUAL TABLE INDEX 0:L3` 模式时**对存在的匹配错返 0 行**（`+col` 强制
+普通扫描或 `instr()` 才对）。生产代码的 LIKE 兜底全打在 `content`（有索引
+列）上不受影响；但任何人在这张表上做人工核对都会被它"忽有忽无"地骗。
+
+**P0.5.3（0.60 vs 0.75）结案 —— 本机制下不可测量，维持 0.60：**
+
+- cap 语义是 `threshold_tokens = min(ratio-based, cap)` 的**绝对上限**；
+  0.60→0.75 只把自然触发点 600K→700K 平移；
+- 跑批峰值 ~32K，30 步 API 上限下轨迹增长永远到不了 600K —— 自然 regime
+  里 A/B 没有可分辨项；
+- CTF_CONFIG_EXTRA 强制 regime 里，绝对阈值被 `min()` 压成同一值，两侧等价；
+- **结论：改了也证伪不了，维持 0.60**（无任何观测到的害处）。重估条件：
+  出现 ≥600K 峰值请求的真实轨迹。
+
+**涉及：** `benchmarks/sampling/build_retrieval_golden.py`（重写）、
+`benchmarks/eval_retrieval_golden.py`（新增）、`fulilian_ctf/benchmark.py`
+`run_retrieval_suite`（tier 感知）、`benchmarks/retrieval-golden.yaml`
+（21 条三档）、`baselines/2026-09-14-retrieval.json`、`benchmarks/README.md`。
+`tests/fulilian_ctf/test_benchmark.py` 14/14 绿。
+
 ## 10. 当前状态
 
 **分支 `ctf-opt`（未推送任何内容到 origin）。**
@@ -2176,6 +2238,7 @@ cd 前缀合计 84 字符 —— 比任何一项已测效应小三个量级，**
 | 文档 | **P3.3 ctf-knowledge frontmatter（仓库 + 已安装双副本）** | `skills/ctf-knowledge/SKILL.md`、`~/.fulilian/skills/ctf-knowledge/SKILL.md` |
 | 代码 | **① API 客户端默认读超时收口** | `agent/process_bootstrap.py` `_client_default_read_timeout`（`8f90789`） |
 | 测试 | 读超时回归锁（7 项，含 SDK 采纳端到端 pin） | `tests/agent/test_keepalive_client_read_timeout.py` |
+| 基准 | **P4.5 检索金标 v2（三档：smoke/realistic/robustness）+ 诚实基线（realistic 20%）** | `benchmarks/sampling/build_retrieval_golden.py`（重写）、`benchmarks/eval_retrieval_golden.py`、`retrieval-golden.yaml`、`baselines/2026-09-14-retrieval.json` |
 | 文档 | 本计划书 | `docs/ctf-agent-optimization-plan.md` |
 
 **已验证：** A5 —— 修复前 3/3 瞬间失败（HTTP 400，退出码 0）；修复后
@@ -2325,6 +2388,7 @@ flag 明文本来就在仓库里（`manifest-ctf-hard.yaml`）。这三条都要
 | 7 | ~~**P1.2 持久 shell + 持久 cwd**~~ | **探针结案（2026-09-14）**：cwd 机制早已工作；宽日志实测 8 条 terminal 命令 5 条绝对路径、cd 前缀仅多行脚本用、env 重导出 0 次 —— 84 字符开销无 A/B 价值。顺带修掉**描述谎言**（旧描述承诺 env 持久，local 静默违约，正确性隐患）与死旋钮标记。持久 shell 推迟：没观察到状态依赖轨迹（source venv / 跨调用 export）之前不建机制。见 §9 ⑥ | **✅ 完成** |
 | 8 | ~~**④ hard-solve-protocol A/B**~~ | 送达已证明（exp 侧 5/5 轨迹出现协议段），经济性为负：ctl 2.7× / exp 3.0×（合并 4 题）→ **默认不启用**，env 门控保留 | **✅ 完成** |
 | 9 | ~~**⑤ P0.2 solve-state A/B**~~ | 两轮（segment / rolling-merge regime）共 6 对均无收益，点估计为负；probe 揭示跑批峰值 ~32K 远低于压缩线，机制靠 CTF_CONFIG_EXTRA 强制触发 → **默认不启用，机制保留**，重估需重复推导实锤 + 重复计数观测 | **✅ 完成** |
+| 10 | ~~**P4.5 修 benchmark + P0.5.3 重估压缩阈值**~~ | 金标重构为三档拆掉自证：smoke 100%（接线自检）/ **realistic 20%**（正文标注，检索真实水平，P4.1/P4.3 从此有判据）/ robustness 6/6 不崩（P4.2 回归锁）。P0.5.3 结案：cap 是 min 上限、跑批永远到不了 600K、强制 regime 被压平 —— **改了证伪不了，维持 0.60**，重估条件 = ≥600K 峰值轨迹。见 §9 ⑦ | **✅ 完成** |
 
 > **顺序说明（A10 之后调整）：** 难题 holdout 从"P0.1 的前置"提升为**全局
 > 第二项**。原计划里它只是 P0.1 的门票；A10 之后可以看到，它同样是 A10

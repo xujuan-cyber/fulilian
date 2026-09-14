@@ -14,7 +14,7 @@ benchmarks/
   fixtures/               # 本地构造题面与附件（每题含 solve_reference.py 参考解）
   fault-injection/        # 4 个故障注入场景说明（场景实现在 fulilian_ctf/benchmark.py）
   sampling/               # 检索金标抽样脚本（种子固定，可复现）
-  retrieval-golden.yaml   # 20 条 query → 期望文档（分层抽样，种子 20260905）
+  retrieval-golden.yaml   # 21 条三档金标（P4.5）：smoke 5 / realistic 10 / robustness 6
   baselines/              # 首跑与历次基线 JSON
 fulilian_ctf/benchmark.py # runner
 ```
@@ -24,7 +24,7 @@ fulilian_ctf/benchmark.py # runner
 | suite / 命令 | 内容 | 开销 | 网络/API |
 |---|---|---|---|
 | `--suite unit` | 25 个 fixture 走完整 solver_worker → verify 三重校验门 → FLAG 文件声明式提交链路（mock solver = 参考解脚本化；flag 提取/三门/落盘全是真实代码） | 秒级 | 无 |
-| `--suite retrieval` | 20 条金标 query 对 `~/.fulilian/knowledge.db` 做 FTS5 top-5 检索（只读，`auto_build=False`，绝不写库） | 秒级 | 无 |
+| `--suite retrieval` | 21 条三档金标 query 对 `~/.fulilian/knowledge.db` 做 FTS5 top-5 检索（只读，`auto_build=False`，绝不写库）；结论看 realistic 档 | 秒级 | 无 |
 | `--fault <scenario>` | empty-model / corrupt-blackboard / missing-fts5 / remote-down | 秒级 | 无（remote-down 只连本机保留端口 127.0.0.1:1） |
 | `--all-faults` | 上面 4 个全跑 | 秒级 | 无 |
 | `--suite smoke` | 真题真 API 冒烟（3 题） | — | **默认拒绝（exit 2）**，见 manifest-smoke.yaml 头部说明 |
@@ -61,8 +61,18 @@ python3 -m fulilian_ctf.benchmark --all-faults
 | reverse | 5/5 | 100% | 0.0331 | None (mock) | 3.2 |
 | misc    | 5/5 | 100% | 0.0254 | None (mock) | 3.0 |
 
-**retrieval**：hit@5 = **1.0（20/20，18 条 rank=1）**，基线文件
-`baselines/2026-09-06-retrieval.json`。
+**retrieval（P4.5 重构后的诚实基线，2026-09-14）**：基线文件
+`baselines/2026-09-14-retrieval.json`。三档结果：
+
+| 档 | 条数 | 结果 | 含义 |
+|---|---|---|---|
+| smoke | 5 | hit@5 = 100%（全 rank=1） | 接线自检：索引在、search() 通。**高分≠检索好**（query 由目标文档标题构造） |
+| realistic | 10 | hit@5 = **20%**（2/10，rank 2 与 4） | 人工标注的解题者视角 query（标签经正文证据词 instr 核验）——这才是检索质量的真实水平 |
+| robustness | 6 | 全部不抛异常 | 敌意 query（FTS 语法字符 / 操作符词 / 2 字中文"注入" / 单字符）；P4.2 sanitize 下沉后此档即其回归 |
+
+旧基线 `2026-09-06-retrieval.json` 的 hit@5=1.0 是**自证**（P4.5 结论）：
+query 由目标文档自己的标题构造，且 min_len=3 把 2 字中文结构性排除，
+测不出检索质量，已废弃；对照数据见计划书 §9⑦。
 
 **fault-injection**：4/4 passed（empty-model / corrupt-blackboard /
 missing-fts5 / remote-down 均降级不崩 + 告警可见 + 后续题继续跑），基线文件
@@ -75,8 +85,8 @@ missing-fts5 / remote-down 均降级不崩 + 告警可见 + 后续题继续跑�
 ```bash
 python3 -m fulilian_ctf.benchmark --suite unit \
     --baseline benchmarks/baselines/2026-09-06-unit.json
-python3 -m fulilian_ctf.benchmark --suite retrieval \
-    --baseline benchmarks/baselines/2026-09-06-retrieval.json
+python3 benchmarks/eval_retrieval_golden.py \
+    --baseline benchmarks/baselines/2026-09-14-retrieval.json
 python3 -m fulilian_ctf.benchmark --all-faults \
     --baseline benchmarks/baselines/2026-09-06-faults.json
 ```
@@ -117,14 +127,21 @@ python3 -m fulilian_ctf.benchmark --all-faults \
 ## 检索金标再生成
 
 ```bash
-python3 benchmarks/sampling/build_retrieval_golden.py            # 种子 20260905
+python3 benchmarks/sampling/build_retrieval_golden.py            # smoke 种子 20260905
 python3 benchmarks/sampling/build_retrieval_golden.py --seed N --out ...
+python3 benchmarks/eval_retrieval_golden.py --save-baseline      # 跑分并落新基线
 ```
 
-同一种子 + 同一 knowledge.db → 同一份金标（分层配额固定：web6/crypto4/
-pwn3/reverse3/forensics2/misc2）。重新生成会覆盖 `retrieval-golden.yaml`，
-须同步重跑 `--suite retrieval --save-baseline` 并在本文档记录变更原因。
-抽样脚本对 knowledge.db 以 URI 只读模式连接，绝不写库。
+P4.5 起金标三档：**smoke**（标题构造，接线自检）/ **realistic**（人工标注，
+标注词经正文证据核验，语料与标注脱节会大声报错拒生成）/ **robustness**
+（敌意 query，只测 search() 不抛异常）。换语料/换库后 realistic 档的
+`REALISTIC_PAIRS` 标注要在 `build_retrieval_golden.py` 里人工维护。
+重新生成会覆盖 `retrieval-golden.yaml`，须同步落新基线并在本文档记录
+变更原因。脚本对 knowledge.db 以 URI 只读模式连接，绝不写库。
+
+踩坑提醒：`writeups` 是 FTS5 trigram 虚拟表，其 **UNINDEXED 列**（如
+source_path）上的 `LIKE` 依赖查询计划（L3 模式会错返 0 行）——库内过滤
+用 `instr()` 或 `+col` 强制普通扫描，别信裸 LIKE。
 
 ## 已知边界 / 如实声明
 
