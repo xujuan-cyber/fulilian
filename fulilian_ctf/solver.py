@@ -72,6 +72,20 @@ def resolve_max_turns_from_env(default_when_unlimited: int = sys.maxsize) -> int
     return val
 
 
+def _log_prefix_chars_from_env(default: int = 20) -> int:
+    """解析 FULILIAN_LOG_PREFIX_CHARS（镜像日志工具参数预览宽度）。
+
+    未设/非法 → 20（run_agent_main 原默认，交互体验零变化）。跑批方设宽
+    （如 400）是为了拿到完整 terminal 命令——20 字符下所有
+    ``cd <workdir> && …`` 复合命令都截成同一前缀，重复命令计数不可用。
+    """
+    try:
+        val = int(os.environ.get("FULILIAN_LOG_PREFIX_CHARS", "") or 0)
+    except ValueError:
+        val = 0
+    return val if val > 0 else default
+
+
 # ── 求解模式（solve_mode）────────────────────────────────────────────────
 # 抢一血靠并行：race 多模型竞速 / multi-agent 多方向探索 / boomerang 折返。
 # 但三者都是 N 份并发的成本与时长，**不能悄悄成为默认**——默认仍是单
@@ -708,6 +722,12 @@ def _default_solver_impl(project, work_dir: Path, query: str) -> int:
                 mode="ctf",
                 model=project.model or "",
                 max_turns=max_turns,
+                # 镜像日志里工具调用参数的预览宽度。run_agent_main 默认 20
+                # 字符，terminal 命令全被截成 "cd /tmp..."（前缀碰撞）——
+                # ⑤ A/B 的教训：重复命令计数因此不可用。跑批方设
+                # FULILIAN_LOG_PREFIX_CHARS=400 即可拿到完整命令做 P1.2
+                # 前缀开销量化；不设则维持原行为，交互体验零变化。
+                log_prefix_chars=_log_prefix_chars_from_env(),
             )
     finally:
         sys.stdout, sys.stderr = old_out, old_err
