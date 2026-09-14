@@ -192,6 +192,7 @@ def _run_solve_once(project, work_dir: Optional[Path], query: str, model: str,
         }, ensure_ascii=False), flush=True)
 
     from run_agent import main as solver_main
+    from fulilian_ctf.solver import _log_prefix_chars_from_env
 
     base_dir = work_dir or Path.cwd()
     log_path = base_dir / SOLVER_LOG
@@ -211,6 +212,7 @@ def _run_solve_once(project, work_dir: Optional[Path], query: str, model: str,
                 model=model,
                 architect_model=architect_model or "",
                 executor_model=executor_model or "",
+                log_prefix_chars=_log_prefix_chars_from_env(),
             )
     finally:
         sys.stdout, sys.stderr = old_out, old_err
@@ -468,7 +470,10 @@ def handle_solve_command(args: argparse.Namespace) -> None:
         sys.exit(code)
 
     from run_agent import main as solver_main
-    from fulilian_ctf.solver import resolve_max_turns_from_env
+    from fulilian_ctf.solver import (
+        _log_prefix_chars_from_env,
+        resolve_max_turns_from_env,
+    )
 
     old_cwd = os.getcwd()
     try:
@@ -483,6 +488,10 @@ def handle_solve_command(args: argparse.Namespace) -> None:
             max_turns=resolve_max_turns_from_env(),
             architect_model=str(getattr(args, "architect_model", "") or ""),
             executor_model=str(getattr(args, "executor_model", "") or ""),
+            # 镜像日志参数预览宽度：fulilian solve 走的是本路径而非
+            # solver.py，之前漏接线导致跑批设 FULILIAN_LOG_PREFIX_CHARS
+            # 不生效（P1.2 探针踩坑：命令全被截成 "cd /tmp..."）。
+            log_prefix_chars=_log_prefix_chars_from_env(),
         )
     finally:
         os.chdir(old_cwd)
@@ -1168,7 +1177,7 @@ _CARDS_SYNC_HEADER = (
     "\n"
     "    fulilian knowledge cards-sync --apply\n"
     "\n"
-    "即可把保留的候选回灌进 skills/ctf-knowledge/ 对应知识卡的\n"
+    "即可把保留的候选回灌进 skills/ctf-cards/ 对应知识卡的\n"
     "「实战经验沉淀」小节。apply 成功后本文件会被重置为仅含本说明。\n"
 )
 
@@ -1297,7 +1306,7 @@ def _cards_sync_generate(out_path: Path) -> None:
         blocks.append(
             f"<!-- candidate {attrs} -->\n"
             f"### [{c['category']}] {technique_line}\n"
-            f"- 目标卡: skills/ctf-knowledge/{card_file}\n"
+            f"- 目标卡: skills/ctf-cards/{card_file}\n"
             f"- 证据: {evidence}；来源: {sources}\n"
             f"- 拟写入:\n"
             f"  - {bullet}\n"
