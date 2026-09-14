@@ -186,14 +186,17 @@ def _format_wp_refs_block(query_text: str, category: str) -> str:
 
 def inject_ctf_context(
     category: str,
-    system_prompt: str,
+    prompt: str,
     query: Optional[str] = None,
 ) -> str:
     """统一知识注入入口：playbook + 知识卡 + 历史教训 + 相似 WP 检索。
 
     Args:
         category: 题目分类（web/crypto/reverse/pwn/forensics/misc，可为空）
-        system_prompt: 原始系统提示（或 solver 查询文本）
+        prompt: 要 enrich 的提示文本。P8 修正：旧参数名 ``system_prompt``
+            是谎言 —— 实际调用方传的多是**首个 user 消息**（solver.py/cli.py
+            的 "Solve the CTF challenge..."），specialist/base.py 传的才是
+            拼好的 specialist prompt 块。注入统一追加到这段文本之后。
         query: 可选题面关键词（标题/描述等）。检索优先使用它构造查询，
                缺失时回退到纯 category 词。
 
@@ -202,8 +205,8 @@ def inject_ctf_context(
     """
     # 幂等守卫：specialist prompt 经 dispatcher 拼进 description 后，
     # solver 侧会再调一次注入。已含注入 sentinel 时跳过，避免双份。
-    if _CONTEXT_MARKER in system_prompt:
-        return system_prompt
+    if _CONTEXT_MARKER in prompt:
+        return prompt
 
     blocks: list[str] = []
 
@@ -231,10 +234,10 @@ def inject_ctf_context(
             blocks.append(refs)
 
     if not blocks:
-        return system_prompt
+        return prompt
     # sentinel 打头，供幂等守卫识别（见 _CONTEXT_MARKER）
     return (
-        system_prompt.rstrip()
+        prompt.rstrip()
         + "\n\n---\n\n"
         + _CONTEXT_MARKER
         + "\n\n"

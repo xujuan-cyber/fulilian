@@ -1559,7 +1559,7 @@ _FORCE_COMPRESS_TURNS = 50
 # compress exceeds this value AND the token threshold hasn't been reached yet.
 # This fires earlier than _FORCE_COMPRESS_TURNS to proactively shrink context
 # before it grows large, saving 50-100K tokens per call in long conversations.
-# 15 turns ≈ 30+ messages (1 user + 1 assistant per round).
+# 45 turns ≈ 90+ messages (1 user + 1 assistant per round).
 _PROACTIVE_COMPRESS_TURNS = 45
 
 # Turn-based triggers (proactive/force) additionally require the context to
@@ -3973,9 +3973,9 @@ class ContextCompressor(ContextEngine):
         basis = self._trigger_basis(tokens)
         # Compression triggers (OR logic — any one can fire):
         #   1. Token threshold: context exceeds the configured token threshold
-        #   2. Proactive turn-based: >_PROACTIVE_COMPRESS_TURNS (15) turns since
+        #   2. Proactive turn-based: >_PROACTIVE_COMPRESS_TURNS (45) turns since
         #      last compress, even when tokens are below the threshold
-        #   3. Force turn-based: >=_FORCE_COMPRESS_TURNS (20) turns since last
+        #   3. Force turn-based: >=_FORCE_COMPRESS_TURNS (50) turns since last
         #      compress (hard floor).
         # Only fire turn-based triggers when the context has meaningful content
         # (tokens > MINIMUM_CONTEXT_LENGTH).

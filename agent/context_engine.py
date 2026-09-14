@@ -118,6 +118,9 @@ class ContextEngine(ABC):
     # which is always implicitly protected.  Default 3 keeps the
     # historical "system + first 3 non-system messages" head shape.
 
+    # NOTE: these base defaults are NOT the values a CTF agent runs with —
+    # ContextCompressor.__init__ overrides them (0.60 / 3 / 7).  Read the
+    # subclass, not this block, before quoting "the" threshold (§3.N / P8).
     threshold_percent: float = 0.75
     protect_first_n: int = 3
     protect_last_n: int = 6

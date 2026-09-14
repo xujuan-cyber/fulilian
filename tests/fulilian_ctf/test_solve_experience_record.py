@@ -155,7 +155,7 @@ def _patch_solve_commons(monkeypatch, tmp_path, recorder):
                         lambda p, cid: work_dir)
     monkeypatch.setattr(cli, "_record_single_solve_experience", recorder)
     # 知识注入 mock 掉，避免读真实知识库 / learning.json
-    # （真实签名：inject_ctf_context(category, system_prompt, query=None)）
+    # （真实签名：inject_ctf_context(category, prompt, query=None)）
     import fulilian_ctf.knowledge as knowledge
 
     monkeypatch.setattr(knowledge, "inject_ctf_context",

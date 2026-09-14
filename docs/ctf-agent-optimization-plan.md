@@ -746,6 +746,10 @@ agent = AIAgent(
 ### P4 — 修知识层
 
 **P4.1 分词器**：换 `unicode61` + 分词，或保留 trigram 但让 2 字 CJK 查询直接走 fallback。
+✅ **失效模式已消除（2026-09-14，随 P4.2/P4.4 顺势结案）**——2 字中文不再毒化多词 FTS
+查询（sanitize 后 OR 连接，短词项空命中不拖垮其他项），纯短词 query 由 `_fallback_token_search`
+兜住（金标 robust-04"注入"n=5 证实）。**换分词器/重排检索目标的增量收益并入 P4.3** ——
+那是相关性问题的真正领地（realistic 20% 的 miss 全是 bm25 排序，不是短词崩溃）。
 **P4.2 sanitize 下沉**：把 sanitize 放进 `knowledge_retriever.search()` 内部。
 ✅ **已完成（2026-09-14，见 §9 ⑦ 附记）**——`sanitize_match_query` 进 `search()` 首行，
 清洗后为空早退不建索引；`knowledge._sanitize_query` 变兼容壳。realistic 20% 持平
@@ -771,11 +775,14 @@ agent = AIAgent(
 
 68 个顶层 CLI 子命令，CTF 相关 6 个。启动不是瓶颈（`fulilian --version` = 0.166 秒），所以问题不是速度，是 **prompt 面与工具面的冗余**。一个 CTF 专用 profile 能同时减掉认知面与 token 面。
 
-### P8 — 修文档（低风险，累积成本高）
+### P8 — 修文档（低风险，累积成本高）✅ **已完成（2026-09-14，见 §9 ⑦ 附记二）**
 
 §3.M 的迭代预算三方矛盾（500 / 50 / 90 ↔ 实际 `sys.maxsize` / 250）。
+✅ `iteration_budget.py` docstring、`delegate_tool.py:1762` 注释、`agent_init.py:627` docstring 全部改为与代码一致。
 §3.N 的压缩器注释与实际值不符（"(15)"/"(20)" ↔ 45/50；基类 0.75/3/6 ↔ 实际 0.60/3/7）。
+✅ 触发点注释改为 (45)/(50)；基类默认值块加"实际以 ContextCompressor 覆盖为准"注记。
 `fulilian_ctf/knowledge.py:158 inject_ctf_context()` docstring 把参数命名为 `system_prompt`，但**所有调用者传入的是首个 user 消息**。
+✅ 参数改名 `prompt`（全部调用方本就走位置传参，无关键字破坏面），docstring 如实说明两种实参形态。
 
 ---
 
@@ -2209,6 +2216,26 @@ sanitize 或运气不崩。下沉后：
 的领地。P4.2 的价值在 robustness 档：敌意 query 从"碰巧不崩"变成"结构上
 不崩"，且垃圾 query 不再有机会触发索引重建。
 
+**⑦ 附记二 · P4.1 顺势结案 + P8 文档修复（2026-09-14）：**
+
+**P4.1** —— P4.2 落地后其可动半边已自动完成：sanitize 用 OR 连接，
+2 字中文 token 在 FTS 层空命中**不再毒化**同查询里的其他项（旧裸文本
+隐式 AND 时一个 2 字词能把整条查询打成 0）；纯短词 query 由 P4.4 的
+`_fallback_token_search` 兜住（金标 robust-04"注入"返回 5 条实证）。
+换分词器（unicode61+分词）是重索引级工程，其增量收益全在 bm25 排序 ——
+与 P4.3（检索目标重构）合并看待，单独做无判据意义。**P4.1 就此关闭。**
+
+**P8**（全部四处，逐条对过现行代码）：
+
+| 处 | 旧谎言 | 修正 |
+|---|---|---|
+| `agent/iteration_budget.py` docstring | 父 "default 500" / 子 "default 50" | 父 `sys.maxsize`（调用方不传即无限）/ 子 250（`DEFAULT_MAX_ITERATIONS`） |
+| `tools/delegate_tool.py:1762` 注释 | "default 50" | "default 250" |
+| `agent/agent_init.py:627` docstring | "default: 90" | `sys.maxsize`（子代理 250） |
+| `agent/context_compressor.py:3976,3978,1562` | "(15)"/"(20)"/"15 turns" | (45)/(50)/"45 turns"，与常量一致 |
+| `agent/context_engine.py:121` 基类默认值 | 0.75/3/6 被当成实际运行值 | 加注记：ContextCompressor 覆盖为 0.60/3/7 |
+| `fulilian_ctf/knowledge.py inject_ctf_context` | 参数名 `system_prompt`（调用方多传首个 user 消息） | 改名 `prompt` + docstring 如实说明两种实参形态；调用方全走位置传参，零破坏面 |
+
 ## 10. 当前状态
 
 **分支 `ctf-opt`（未推送任何内容到 origin）。**
@@ -2264,6 +2291,7 @@ sanitize 或运气不崩。下沉后：
 | 基准 | **P4.5 检索金标 v2（三档：smoke/realistic/robustness）+ 诚实基线（realistic 20%）** | `benchmarks/sampling/build_retrieval_golden.py`（重写）、`benchmarks/eval_retrieval_golden.py`、`retrieval-golden.yaml`、`baselines/2026-09-14-retrieval.json` |
 | 代码 | **P4.2 sanitize 下沉（search() 内不变量 + 空 query 不建索引）** | `fulilian_ctf/knowledge_retriever.py` `sanitize_match_query`、`fulilian_ctf/knowledge.py`（兼容壳） |
 | 测试 | P4.2 sanitize 回归锁（6 项） | `tests/fulilian_ctf/test_knowledge_retriever.py` `TestSanitizeSink` |
+| 文档 | **P8 文档谎言清理（迭代预算/压缩器注释/注入参数名）+ P4.1 结案** | `agent/iteration_budget.py`、`tools/delegate_tool.py`、`agent/agent_init.py`、`agent/context_compressor.py`、`agent/context_engine.py`、`fulilian_ctf/knowledge.py` |
 | 文档 | 本计划书 | `docs/ctf-agent-optimization-plan.md` |
 
 **已验证：** A5 —— 修复前 3/3 瞬间失败（HTTP 400，退出码 0）；修复后
