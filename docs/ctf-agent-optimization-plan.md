@@ -747,6 +747,9 @@ agent = AIAgent(
 
 **P4.1 分词器**：换 `unicode61` + 分词，或保留 trigram 但让 2 字 CJK 查询直接走 fallback。
 **P4.2 sanitize 下沉**：把 sanitize 放进 `knowledge_retriever.search()` 内部。
+✅ **已完成（2026-09-14，见 §9 ⑦ 附记）**——`sanitize_match_query` 进 `search()` 首行，
+清洗后为空早退不建索引；`knowledge._sanitize_query` 变兼容壳。realistic 20% 持平
+（miss 是相关性问题，属 P4.1/P4.3），robustness 从"碰巧不崩"变成"结构上不崩"。
 **P4.3 检索目标换成技术卡**：2583 篇中文赛后 wp 是给人看的；agent 需要紧凑的「技术 + payload」单元。那 20 篇专题（SQL 116K / PHP 反序列化 212K）配 `.idx.md` 分段索引才是对形状 —— **但目前没有任何代码读 `.idx.md`**。
 **P4.4 加相关性闸门**：top-3 分数不达标就注入空。**噪声比沉默更贵。**
 ✅ **已完成（2026-09-13）**——特异性闸门（裸分类词不检索）+ 命中下限
@@ -2186,6 +2189,26 @@ query → 检索器只要不是全坏就必然 top-1 命中自己 → `hit@5 = 1
 （21 条三档）、`baselines/2026-09-14-retrieval.json`、`benchmarks/README.md`。
 `tests/fulilian_ctf/test_benchmark.py` 14/14 绿。
 
+**⑦ 附记 · P4.2 sanitize 下沉（2026-09-14 同日落地）：**
+
+`search()` 曾把"传进来的 query 是干净的 MATCH 语法"当调用方契约 ——
+docstring 甚至声称支持"短语和布尔操作符"，而实际上**所有**调用方
+（knowledge.py 注入、cli 交互查询、benchmark）传的都是裸文本，靠各自的
+sanitize 或运气不崩。下沉后：
+
+- `knowledge_retriever.sanitize_match_query()` 在 `search()` 首行生效；
+  清洗后为空（纯标点如 `()`）直接返回 `[]`，**不触发索引构建**；
+- 对已清洗形态（`"tok1" OR "tok2"`）幂等 —— 先洗后传的调用方不受影响；
+- `knowledge.py._sanitize_query` 变兼容壳（单点实现，消灭双份口径漂移）；
+- 回归锁 `tests/fulilian_ctf/test_knowledge_retriever.py::TestSanitizeSink`
+  6 项（payload 形态不抛 / 垃圾 query 不建索引 / 幂等 / 操作符词丢弃 /
+  2 字中文走兜底 / 壳与实现同口径）。
+
+**效果如实报：** realistic 档 20% 持平 —— 现有 miss 是 bm25 相关性问题
+（返回同类文档但标注文档进不了 top-5），sanitize 救不了，那是 P4.1/P4.3
+的领地。P4.2 的价值在 robustness 档：敌意 query 从"碰巧不崩"变成"结构上
+不崩"，且垃圾 query 不再有机会触发索引重建。
+
 ## 10. 当前状态
 
 **分支 `ctf-opt`（未推送任何内容到 origin）。**
@@ -2239,6 +2262,8 @@ query → 检索器只要不是全坏就必然 top-1 命中自己 → `hit@5 = 1
 | 代码 | **① API 客户端默认读超时收口** | `agent/process_bootstrap.py` `_client_default_read_timeout`（`8f90789`） |
 | 测试 | 读超时回归锁（7 项，含 SDK 采纳端到端 pin） | `tests/agent/test_keepalive_client_read_timeout.py` |
 | 基准 | **P4.5 检索金标 v2（三档：smoke/realistic/robustness）+ 诚实基线（realistic 20%）** | `benchmarks/sampling/build_retrieval_golden.py`（重写）、`benchmarks/eval_retrieval_golden.py`、`retrieval-golden.yaml`、`baselines/2026-09-14-retrieval.json` |
+| 代码 | **P4.2 sanitize 下沉（search() 内不变量 + 空 query 不建索引）** | `fulilian_ctf/knowledge_retriever.py` `sanitize_match_query`、`fulilian_ctf/knowledge.py`（兼容壳） |
+| 测试 | P4.2 sanitize 回归锁（6 项） | `tests/fulilian_ctf/test_knowledge_retriever.py` `TestSanitizeSink` |
 | 文档 | 本计划书 | `docs/ctf-agent-optimization-plan.md` |
 
 **已验证：** A5 —— 修复前 3/3 瞬间失败（HTTP 400，退出码 0）；修复后

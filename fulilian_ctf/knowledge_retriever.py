@@ -25,7 +25,7 @@ from fulilian_constants import FULILIAN_HOME
 
 # ── 路径常量 ─────────────────────────────────────────────────────────────
 
-# 随源码树分发的 KB 快照：<repo>/ctf-knowledge/。与 skills/ctf-knowledge/
+# 随源码树分发的 KB 快照：<repo>/ctf-knowledge/。与 skills/ctf-cards/
 # （技能卡）同名但不同物——这里是 WP 语料本体。
 BUNDLED_KB_PATH = Path(__file__).resolve().parent.parent / "ctf-knowledge"
 
@@ -33,6 +33,37 @@ _KB_FALLBACK_PATHS = (
     # 上游 Des-CTF-Knowledge 的克隆目录（历史位置，仅作最后兜底）
     Path.home() / "Des-CTF-Knowledge" / "Des-CTF-Knowledge-main",
 )
+
+
+# ── P4.2: sanitize 下沉 —— search() 是所有调用方共用的唯一收口 ──────────
+# 与 knowledge._sanitize_query 同口径（后者现为兼容壳，委托到这里）：
+# 题面/payload 里随手就有的引号、括号、裸操作符词（admin' OR 1=1）进
+# MATCH 是语法错误或语义错乱。sanitize 放在 search() 内部而不是让每个
+# 调用方自己记得洗，"不洗就崩"从调用方契约变成检索器不变量。
+# 对已清洗形态（"tok1" OR "tok2"）幂等：token 再提取结果不变。
+_MAX_QUERY_TOKENS = 8     # 查询最多取前 N 个 token
+_SANITIZE_TOKEN_RE = re.compile(r"[\w一-鿿]+", re.UNICODE)
+_MATCH_OPERATOR_WORDS = {"and", "or", "not", "near"}
+
+
+def sanitize_match_query(text: str) -> str:
+    """把任意文本清洗成 FTS5 MATCH 友好的查询串。
+
+    只保留字母数字/下划线/中文字符 token（去掉标点、引号等会触发 FTS5
+    语法错误的字符），丢 FTS 保留操作符词，取前 _MAX_QUERY_TOKENS 个，
+    用 " OR " 连接 —— 多词隐式 AND 太严格（任一词不命中即空结果），OR
+    提高召回，排序仍由 BM25 兜底。清洗后为空返回空串。
+    """
+    if not text:
+        return ""
+    tokens = _SANITIZE_TOKEN_RE.findall(text)
+    tokens = [t for t in tokens if t.lower() not in _MATCH_OPERATOR_WORDS]
+    tokens = tokens[:_MAX_QUERY_TOKENS]
+    if not tokens:
+        return ""
+    # 每个 token 加双引号短语包裹，token 本身已无引号字符（正则只留
+    # 字母数字/下划线/中文），杜绝其余边界字符触发 MATCH 语法错误。
+    return " OR ".join(f'"{t}"' for t in tokens)
 
 
 def _resolve_kb_path() -> Path:
@@ -81,8 +112,8 @@ def _kb_roots():
 
 DB_PATH = FULILIAN_HOME / "knowledge.db"
 
-# skills/ctf-knowledge/snippets/ — 可复用攻击片段（.py，头部注释元数据）
-SNIPPETS_DIR = Path(__file__).resolve().parent.parent / "skills" / "ctf-knowledge" / "snippets"
+# skills/ctf-cards/snippets/ — 可复用攻击片段（.py，头部注释元数据）
+SNIPPETS_DIR = Path(__file__).resolve().parent.parent / "skills" / "ctf-cards" / "snippets"
 
 # 技术标签索引（WP → tags），存在时供 similar_by_technique 使用
 TECHNIQUE_INDEX_RELPATH = Path("CTF大赛WP集合") / "wp_technique_index.json"
@@ -1002,7 +1033,10 @@ def search(
     """FTS5 全文搜索。
 
     Args:
-        query: 搜索关键词（FTS5 MATCH 语法，支持短语和布尔操作符）。
+        query: 自由文本关键词。**内部先过 sanitize_match_query**（P4.2
+            下沉）：引号/括号/payload 片段/裸操作符词一律清洗成
+            `"tok1" OR "tok2"` 形态，调用方无需也不应自己构造 MATCH 语法；
+            清洗后为空（纯标点等）直接返回 []，不触发索引构建。
         category: 可选分类过滤（web/crypto/reverse/pwn/forensics/misc）。
         limit: 返回结果数（默认 5）。
         auto_build: 索引不存在时自动构建（默认 True）。
@@ -1014,6 +1048,11 @@ def search(
         list[dict]: [{"title", "category", "snippet", "source_path",
                       "year", "contest", "vuln_type"}, ...]
     """
+    # P4.2：先洗再查。放在 DB 检查之前 —— 垃圾 query 不值得为它建索引。
+    query = sanitize_match_query(query)
+    if not query:
+        return []
+
     want_meta = year is not None or bool(contest) or bool(vuln_type)
     if not DB_PATH.exists() or _is_empty_index():
         if auto_build:

@@ -718,3 +718,48 @@ class TestResolveKbPath:
         """BUNDLED_KB_PATH 必须指向源码树内的 ctf-knowledge/。"""
         assert kr.BUNDLED_KB_PATH.name == "ctf-knowledge"
         assert (kr.BUNDLED_KB_PATH.parent / "fulilian_ctf").is_dir()
+
+
+# ── 6. P4.2: sanitize 下沉 —— search() 是唯一收口 ────────────────────────
+
+
+class TestSanitizeSink:
+    """sanitize 必须在 search() 内部生效才是不变量：任何调用方传进来的
+    自由文本（题面、payload 片段、纯标点）都不该让 search() 崩或误建索引。
+    实现见 kr.sanitize_match_query；knowledge._sanitize_query 是兼容壳。"""
+
+    def test_payload_shaped_query_does_not_raise(self):
+        """题面贴 payload（引号/括号/裸操作符）不得抛 FTS5 语法错误。"""
+        kr.build_index()
+        for q in ("admin' OR 1=1", 'FTS" OR (', "AND OR NOT NEAR", "2.31", "()"):
+            results = kr.search(q, limit=5)  # 旧码裸 MATCH 会 OperationalError
+            assert isinstance(results, list)
+
+    def test_pure_punctuation_returns_empty_without_building(self, monkeypatch):
+        """清洗后为空的 query 直接返回 []，且不触发索引构建。"""
+        monkeypatch.setattr(kr, "build_index",
+                            lambda *a, **kw: (_ for _ in ()).throw(
+                                AssertionError("垃圾 query 不值得为它建索引")))
+        assert kr.search("()", limit=5) == []
+
+    def test_sanitize_idempotent_for_sanitized_shape(self):
+        """对已清洗形态（"a" OR "b"）幂等 —— 生产存在先洗后传的调用方。"""
+        once = kr.sanitize_match_query("tcache poisoning 堆利用")
+        assert kr.sanitize_match_query(once) == once
+
+    def test_operator_words_dropped_case_insensitive(self):
+        assert kr.sanitize_match_query("AND OR NOT NEAR sqli") == '"sqli"'
+
+    def test_short_cjk_query_reaches_fallback(self):
+        """2 字中文（trigram 最小 token 之下）走 sanitize 后仍经 FTS 空 →
+        LIKE 兜底命中，而不是静默空结果。"""
+        kr.build_index()
+        results = kr.search("注入", limit=5)
+        assert any("sql-injection" in r["source_path"] for r in results)
+
+    def test_knowledge_shell_delegates_to_sink(self):
+        """knowledge._sanitize_query 兼容壳必须与下沉实现同口径。"""
+        from fulilian_ctf.knowledge import _sanitize_query
+
+        assert _sanitize_query("ssti 模板注入 payload 绕过") == \
+            kr.sanitize_match_query("ssti 模板注入 payload 绕过")

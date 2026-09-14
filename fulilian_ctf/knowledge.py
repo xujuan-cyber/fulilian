@@ -20,8 +20,8 @@ import re
 from pathlib import Path
 from typing import Optional
 
-# skills/ctf-knowledge/ 目录路径（相对于项目根）
-SKILLS_DIR = Path(__file__).resolve().parent.parent / "skills" / "ctf-knowledge"
+# skills/ctf-cards/ 目录路径（相对于项目根）
+SKILLS_DIR = Path(__file__).resolve().parent.parent / "skills" / "ctf-cards"
 
 # 通用解题 playbook（注入在知识卡之前）
 PLAYBOOK_PATH = SKILLS_DIR / "playbook.md"
@@ -39,7 +39,7 @@ CATEGORIES = {
 _MAX_WP_REFS = 3          # 最多 3 条 WP 参考
 _MAX_REF_CHARS = 300      # 每条 title+snippet 合计上限（路径另计）
 _MAX_AVOID_ITEMS = 10     # 历史教训最多条数
-_MAX_QUERY_TOKENS = 8     # 题面关键词最多取前 N 个 token
+_MAX_QUERY_TOKENS = 8     # （P4.2 起口径以 knowledge_retriever.sanitize_match_query 为准）
 
 _CJK_WORD_RE = re.compile(r"[\w\u4e00-\u9fff]+", re.UNICODE)
 
@@ -82,23 +82,13 @@ def get_playbook() -> str:
 def _sanitize_query(text: str) -> str:
     """把题面文本清洗成 FTS5 MATCH 友好的查询串。
 
-    只保留字母数字/下划线/中文字符 token（去掉标点、引号等会触发
-    FTS5 语法错误的字符），取前 _MAX_QUERY_TOKENS 个，用 " OR " 连接
-    ——题面多词做隐式 AND 太严格（任一词不命中即空结果），OR 提高召回，
-    排序仍由 BM25 兜底。清洗后为空返回空串。
+    P4.2 起实现下沉到 ``knowledge_retriever.sanitize_match_query``（sanitize
+    必须在 ``search()`` 内部生效才是不变量，任何入口进来都不该崩）；
+    本函数保留为兼容壳，口径/常量（_MAX_QUERY_TOKENS 等）以那边为准。
     """
-    if not text:
-        return ""
-    tokens = _CJK_WORD_RE.findall(text)
-    # FTS5 保留操作符词（or/and/not/near）裸出现在 MATCH 里是语法错误，
-    # 题面贴 SQL payload 时极易命中（如 admin' OR 1=1）——直接丢弃。
-    tokens = [t for t in tokens if t.lower() not in _FTS_OPERATOR_WORDS]
-    tokens = tokens[:_MAX_QUERY_TOKENS]
-    if not tokens:
-        return ""
-    # 每个 token 加双引号短语包裹，token 本身已无引号字符（正则只留
-    # 字母数字/下划线/中文），杜绝其余边界字符触发 MATCH 语法错误。
-    return " OR ".join(f'"{t}"' for t in tokens)
+    from .knowledge_retriever import sanitize_match_query
+
+    return sanitize_match_query(text)
 
 
 def _format_lessons_block(category: str) -> str:
