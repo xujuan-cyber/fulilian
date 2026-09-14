@@ -793,7 +793,7 @@ reverse 无专题库）；全档 3/10 vs WP 检索基线 20%。mutation 测试 3
 **P5.2** 补真有用的：并行假设扇出（racer 已有，先确认能不能用）；"同一攻击 3 次变体失败"交给 **runtime 计算**，而不是让模型回忆。
 ✅ **结案（2026-09-14，见 §9 ⑧）——两个子项都不需要新建任何东西**：racer 已建成可用（14 项测试绿，`solve --race` 与 dispatcher `switch_model` 升级路由双接线）；"runtime 算重复攻击"机制也已在（`stopper.count_variant_failures` → `HYPOTHESIS_REPEATED` → 强制换攻击类，34 项测试绿）——该行写于机制盘点之前，已过时。探针另证：现有存档日志全为 20 字符截断期，重复攻击失效模式零观测，无追加机制的需求信号。
 
-### P6 — 模型路由 ✅ **代码完成 + 试水 A/B 已跑（2026-09-14，见 §9 ⑪）—— GLM-5.3 有效题持平解出、token −55%、api 持平；不足以改默认路由。运营硬发现：token plan 额度撑不满一个 3 题批，扩量前先解决额度；第三数据点待补**
+### P6 — 模型路由 ✅ **代码完成 + 试水 A/B 已跑（2026-09-14，见 §9 ⑪）—— GLM-5.3 三题全解、token −46%、api 持平（噪声地板内）；正向信号但 n=1 不足以改默认路由。运营发现：scnet GLM 额度撑不满 3 题批，供应商已按用户指示全局切 ark**
 
 硬题走最强模型。现在默认 `DeepSeek-V4-Flash@128K` + 大量石膏 = 弱模型 + 重脚手架。**脚手架补不了模型的差距，模型能省掉脚手架。**
 
@@ -2379,7 +2379,7 @@ stash 对照确认为**既有失败**，与本条目无关。
 另外 idx 内容含文档里不存在的标题（凭空总结），提示人工索引与文档是
 两个会各自漂移的事实源，能从结构重建的索引不要手工维护。
 
-### 2026-09-14 · ⑪：P6 试水 A/B —— GLM-5.3 持平解出、token 减半，但配额撑不满一个 3 题批（试水级，n=1）
+### 2026-09-14 · ⑪：P6 试水 A/B —— GLM-5.3 三题全解、token 减半，api 持平（试水级，n=1）
 
 **规模（用户选定）：** 最难题 3 道（按 api_mean：crypto-keylayers-01 24.3 /
 misc-chunkconcat-01 21.3 / reverse-obfchain-01 21.3）× 双臂 × n=1。
@@ -2387,26 +2387,33 @@ misc-chunkconcat-01 21.3 / reverse-obfchain-01 21.3）× 双臂 × n=1。
 实验臂 `FULILIAN_CTF_MODEL=strong` → GLM-5.3。双臂解析横幅均已验证
 （ctl → DeepSeek-V4-Flash / exp → GLM-5.3），跑批器 env 自然传播。
 
-**结果（baselines/2026-09-14-ctf-p6-ab-{ctl,strong}.json）：**
+**结果（baselines/2026-09-14-ctf-p6-ab-{ctl,strong}.json +
+2026-09-14-ctf-p6-ab-strong-ark-obfchain.json）：**
 
 | | ctl（DeepSeek-V4-Flash） | exp（GLM-5.3） |
 |---|---|---|
-| 解出 | 3/3 | **2/2 有效**（第三题作废，见下） |
-| api_calls | 28/21/15 = 64 | 30/16 = 46（−6%，噪声地板 1.40× 内，持平） |
-| 总 token | 2,284,176 | 771,169（**同两题 −55%**） |
-| 缓存命中 | 70–81% | 91–93% |
-| 路径经济性 | 3.2× | 3.3×（同两题 3.29× vs 3.50×，持平略优） |
+| 解出 | 3/3 | **3/3** |
+| api_calls | 28/21/15 = 64 | 30/16/22 = 68（+6%，噪声地板 1.40× 内，持平） |
+| 总 token | 2,284,176 | 1,241,448（**−46%**） |
+| 缓存命中 | 70–81% | 91–94% |
+| 路径经济性 | 3.2× | 3.4×（持平） |
 
-**第三题作废是基础设施不是能力：** reverse-obfchain-01 在第 5 次 API 调用时
-被 `HTTP 429: Token Plan quota has been exceeded`（scnet.cn GLM-5.3 账户
-额度）直接终止——前两题已烧 ~77 万 token，额度见底。当天补跑复测仍 429
-（7 秒即失败），与能力无关。
+**中途的供应商切换（用户指示）：** scnet.cn 首跑 GLM-5.3 撑到第三题时
+`Token Plan quota has been exceeded`（429，前两题烧 ~77 万 token 后额度
+见底），当天补跑复测仍 429。用户改指 **ark（火山引擎
+`ark.cn-beijing.volces.com/api/plan/v3`）**：probe 证实 ark 同时供
+`GLM-5.3`（原名直通）与 `DeepSeek-V4-Flash`（服务端实际
+`deepseek-v4-flash-ga-260731`），故顶层 `model:` 块全局切到 ark
+（备份 `config.yaml.bak-provider-switch-20260914`；fulilian 供应商是全局
+配置，无按模型路由机制），双臂模型名解析均不变。**可比性注记：** exp 的
+crypto/chunkconcat 读数来自 scnet 供栈、obfchain 来自 ark 供栈——模型名
+同、供栈不同，逐题对比时把这个混杂因素带上；ctl 将来若重跑，其 DeepSeek
+服务端快照也已变成 ark 的 ga-260731，与 9-11 基线（scnet）跨供栈。
 
-**试水结论：** 信号偏正向（同题持平解出 + token 减半 + 缓存命中更高），
-但 n=1 且少一个数据点，不足以支撑改默认路由。**运营发现比结论本身更硬：
-GLM-5.3 的 token plan 额度撑不满一个 3 题 hard 批**——n≥3 扩量前必须先
-解决额度（充值/换套餐/等重置），否则实验臂永远只有部分数据。第三数据点
-待额度恢复后补跑（`CTF_IDS=reverse-obfchain-01`，新 OUT/RUN_ROOT）。
+**试水结论：** GLM-5.3 三题全解、api_calls 持平（噪声地板内）、总 token
+约省一半、缓存命中高 10–20 个百分点——**正向信号，但仍不足以支撑改默认
+路由**（n=1 试水）。运营发现同样成立：scnet GLM-5.3 token plan 额度撑不满
+一个 3 题 hard 批，扩量前要么解决额度要么就用 ark。
 
 **方法注记：** 裸 curl 探配额会 401（鉴权构造与 fulilian 内部不同），探测
 配额状态最可靠的方式就是直接补跑——429 会在自证通过后几秒内复现，代价
