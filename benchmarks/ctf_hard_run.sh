@@ -147,6 +147,12 @@ OUT="${1:-/tmp/ctf-hard}"
 # 唯一且不可预测；显式传入时下面的隔离断言会检查它与 OUT 不相交。
 RUN_ROOT="${2:-${CTF_RUN_ROOT:-}}"
 IDS=(misc-bigscan-01 misc-chunkconcat-01 reverse-obfchain-01 forensics-brutelog-01)
+# 子集跑批：CTF_IDS 覆盖题目列表（逗号分隔，如 CTF_IDS=reverse-obfchain-01）。
+# 硬闸白名单、采集命令都以 IDS 为准，所以单题批的 gate 与 manifest 交叉校验
+# 会自动跟着收窄 —— 加题只改这一处。自检模式（--gate/--seed-home）不受影响。
+if [ -n "${CTF_IDS:-}" ]; then
+  IFS=',' read -r -a IDS <<< "$CTF_IDS"
+fi
 
 # ── 硬闸：work_dir 的整条祖先链上不许有答案 ────────────────────────────
 # 老版只 `find "$d"` —— 而泄漏物从来不在 `$d` 里，全在它隔壁。现在从
@@ -361,8 +367,10 @@ print(s.solve('.'))
   rm -f "$_pf"; rm -rf "$p"
   echo "=== [$id] $(date +%H:%M:%S) SELFPROOF-OK 输出 ${_pn}B sha256:${_ph}（输出与参考解源码已删除）==="
 
-  # solve 前硬闸。
-  if ! leak="$(_gate "$d")"; then
+  # solve 前硬闸。边界传 $OUT（往上溯到 OUT 为止）；老版只传一个参数，
+  # 而 _gate 在 --gate 自检改造后是双参签名，set -u 下直接崩 —— 隔离测试
+  # 只走 --gate 双参路径，抓不住主循环这个调用点（"测试全绿 ≠ 接上了线"）。
+  if ! leak="$(_gate "$d" "$OUT")"; then
     echo "!!! [$id] work_dir 或其祖先链上混进了答案，会污染基线 —— 中止"
     echo "$leak"
     exit 1

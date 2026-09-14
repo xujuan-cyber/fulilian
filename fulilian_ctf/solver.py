@@ -320,6 +320,84 @@ def resolve_default_model() -> str:
         return ""
 
 
+# ── P6 模型路由 ─────────────────────────────────────────────────────────
+# 计划书 P6：「硬题走最强模型」。路由不做任何难度猜测（解之前没有可靠的
+# 硬度信号），只提供**可由跑批方拨动的解析链**：跑 holdout 难题子集时设
+# FULILIAN_CTF_MODEL=strong（config ctf.strong_model 指名最强模型），
+# 平时走默认。每级解析结果必须大声可见——「以为在用强模型其实在用默认」
+# 与「实验组静默变对照组」是同一类假对照故障。
+
+CTF_MODEL_ENV = "FULILIAN_CTF_MODEL"
+STRONG_MODEL_KEYWORD = "strong"
+
+
+def _resolve_strong_model(cfg: dict) -> str:
+    return str(((cfg.get("ctf") or {}).get("strong_model") or "")).strip()
+
+
+def resolve_solve_model(explicit: str = "", warn=None) -> tuple:
+    """解析 solve 路径使用的模型（P6 模型路由）。
+
+    优先级：显式 ``--model`` > 环境变量 ``FULILIAN_CTF_MODEL`` >
+    config ``ctf.solve_model`` > config ``model.default``（resolve_default_model）。
+
+    环境变量与 config 值均接受特殊关键字 ``strong``：解析为 config
+    ``ctf.strong_model``——跑批方用这一个词即可把难题子集拨到最强模型，
+    不必在脚本里写具体模型名。``strong`` 被请求但 ``ctf.strong_model``
+    未配置时**大声降级**（warn 回调 / stderr），绝不静默。
+
+    Returns:
+        (model, source) 二元组；model 为解析出的模型名（可能为空串，与
+        resolve_default_model 的空串语义一致），source 是给日志看的出处
+        标签。解析失败不抛异常——路由不该挡住解题。
+    """
+    if warn is None:
+        def warn(msg: str) -> None:  # noqa: E306 — 局部默认实现
+            print(f"[solve] {msg}", file=sys.stderr)
+
+    def _from_raw(raw: str, label: str) -> tuple | None:
+        text = str(raw).strip()
+        if not text:
+            return None
+        if text.lower() != STRONG_MODEL_KEYWORD:
+            return (text, label)
+        try:
+            from fulilian_cli.config import load_config
+
+            strong = _resolve_strong_model(load_config() or {})
+        except Exception:  # noqa: BLE001 — 配置读取失败按未配置处理
+            strong = ""
+        if not strong:
+            warn(
+                f"{label} requested {STRONG_MODEL_KEYWORD!r} but config "
+                f"ctf.strong_model is not set — falling back to the default "
+                f"model. 这是一次静默降级风险：实验组会变成对照组，必须看得见。"
+            )
+            return None
+        return (strong, f"{label} ({STRONG_MODEL_KEYWORD} -> ctf.strong_model)")
+
+    sources = (
+        ("--model", explicit),
+        (CTF_MODEL_ENV, os.environ.get(CTF_MODEL_ENV, "")),
+    )
+    for label, raw in sources:
+        got = _from_raw(raw, label)
+        if got:
+            return got
+
+    try:
+        from fulilian_cli.config import load_config
+
+        got = _from_raw(((load_config() or {}).get("ctf") or {}).get("solve_model") or "",
+                        "config ctf.solve_model")
+        if got:
+            return got
+    except Exception:  # noqa: BLE001 — 配置读取失败继续走默认
+        pass
+
+    return (resolve_default_model(), "config model.default")
+
+
 def scan_log_for_flag(work_dir: str | Path) -> str:
     """扫描 solver.log 中的 flag（走三重校验门），供调度器兜底检测。"""
     log_file = Path(work_dir) / SOLVER_LOG

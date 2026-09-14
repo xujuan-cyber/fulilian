@@ -638,6 +638,8 @@ TOOLSETS = {
         "description": "CTF mode solver tools — verify_flag, checkpoint, writeup generation, compile_check",
         "tools": [
             "verify_flag", "checkpoint", "generate_writeup", "compile_check",
+            # P1.1：批量命令工具 —— 工具形态压往返（劝说没用，§1.2）
+            "run_script",
         ],
         "includes": ["terminal", "file", "web", "vision"],
     }

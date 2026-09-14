@@ -9122,6 +9122,53 @@ def _resolve_ctf_user_overlay() -> str:
         return ""
 
 
+def _strip_skill_frontmatter(text: str) -> str:
+    """剥掉 SKILL.md 的 frontmatter（首尾两个 ``---`` 之间的 YAML），返回正文。
+
+    找不到第二个分隔符时返回原文（解析失败比吞掉内容安全，至少可读）。
+    """
+    parts = text.split("---", 2)
+    if len(parts) >= 3:
+        return parts[2]
+    return text
+
+
+def _resolve_hard_solve_protocol() -> str:
+    """Env-gated 的难题解题协议（hard-solve-protocol），注入 CTF system prompt。
+
+    正文唯一来源是技能库里的 ``hard-solve-protocol/SKILL.md``：solve 路径在
+    A9 后既无 ``skill_view``/``skills_list`` 工具、技能索引也被从工具集裁掉，
+    库文件本身到不了 solver —— 这里是唯一能把协议送进 solve 时上下文的通道。
+    所以正文以文件为单一来源，不在代码里再写一份副本（防漂移）。
+
+    判据：``FULILIAN_CTF_HARD_SOLVE_PROTOCOL=1`` 时读取并返回正文，其余返回
+    空串。用 ``FULILIAN_HOME`` 解析路径以尊重跑批隔离（隔离家把 ``skills``
+    symlink 回真身，读到的是同一份）。
+
+    读不到文件/正文为空时**大声报错**：A/B 里"实验组静默变对照组"是假对照，
+    必须让它在日志里看得见，而不是让结果冒充协议的效果。返回空串只代表
+    "协议没送达"，不代表"协议没效果"。
+    """
+    if os.getenv("FULILIAN_CTF_HARD_SOLVE_PROTOCOL") != "1":
+        return ""
+    root = os.getenv("FULILIAN_HOME") or os.path.expanduser("~/.fulilian")
+    path = Path(root) / "skills" / "hard-solve-protocol" / "SKILL.md"
+    try:
+        text = path.read_text(encoding="utf-8")
+    except Exception as exc:  # noqa: BLE001 — 读文件失败降级为空串，但要喊出声
+        logging.error(
+            "FULILIAN_CTF_HARD_SOLVE_PROTOCOL=1 但协议文件读不到 %s (%s) —— "
+            "协议未注入，本次 solve 等价于对照组，结果不可归因于协议", path, exc)
+        return ""
+    body = _strip_skill_frontmatter(text).strip()
+    if not body:
+        logging.error(
+            "FULILIAN_CTF_HARD_SOLVE_PROTOCOL=1 但 %s 正文为空 —— 协议未注入",
+            path)
+        return ""
+    return body
+
+
 def _build_ctf_system_prompt() -> str:
     """Build CTF mode system prompt with cognitive architecture.
 
@@ -9132,6 +9179,10 @@ def _build_ctf_system_prompt() -> str:
 
     Also appends the user's config overlay (see ``_resolve_ctf_user_overlay``)
     so ``agent.system_prompt`` discipline applies to solving, not just chat.
+
+    Injects the hard-solve protocol (see ``_resolve_hard_solve_protocol``,
+    gated by ``FULILIAN_CTF_HARD_SOLVE_PROTOCOL=1``) between the architecture
+    and the user overlay, when enabled.
     """
     _arch = (
         "## CTF 解题认知架构（4 阶段循环）\n"
@@ -9180,18 +9231,23 @@ def _build_ctf_system_prompt() -> str:
         "- 黑板是止损与跨 solver 协同的数据源：长期不发布进展会被判定为无产出而终止\n"
     )
 
+    parts = [_arch]
+
+    protocol = _resolve_hard_solve_protocol()
+    if protocol:
+        parts.append(protocol)
+
     overlay = _resolve_ctf_user_overlay()
-    if not overlay:
-        return _arch
-    # 放在末尾：用户显式写的纪律优先于上面的通用架构，冲突时以本节为准。
-    return (
-        _arch
-        + "\n## 用户配置的工作纪律（config.yaml → agent.system_prompt）\n"
-        + "以下为本机为该用户显式设定的解题纪律，与上面的认知架构同等生效；"
-        + "两者冲突时以本节为准。\n\n"
-        + overlay
-        + "\n"
-    )
+    if overlay:
+        # 放在末尾：用户显式写的纪律优先于上面的通用架构，冲突时以本节为准。
+        parts.append(
+            "## 用户配置的工作纪律（config.yaml → agent.system_prompt）\n"
+            "以下为本机为该用户显式设定的解题纪律，与上面的认知架构同等生效；"
+            "两者冲突时以本节为准。\n\n"
+            + overlay.strip()
+        )
+
+    return "\n\n".join(p.strip() for p in parts if p and p.strip()) + "\n"
 
 
 def _cap_ctf_compression_threshold(agent) -> None:

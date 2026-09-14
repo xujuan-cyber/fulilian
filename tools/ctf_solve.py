@@ -16,7 +16,7 @@ import subprocess
 import threading
 from pathlib import Path
 
-from tools.registry import registry
+from tools.registry import registry, tool_error
 
 FLAG_FILENAME = "FLAG"
 
@@ -727,4 +727,132 @@ registry.register(
     },
     handler=_unpack(_http_session_impl),
     description="Persistent HTTP session for web challenges",
+)
+
+# ── run_script：一次调用串行跑 N 条命令（P1.1）──────────────────────────
+# §1.2 的测量：模型只做到 1.12 次工具调用/轮，PARALLEL_TOOL_CALL_GUIDANCE
+# 的劝说没有生效。**得靠工具形态，不能靠劝说** —— 本工具把「N 条侦察命令、
+# N 轮 API 往返」压成一次调用，返回收敛后的结果。
+#
+# 复用 terminal_tool 而不是自己起子进程：沙箱后端、cwd 解析、危险命令拦截、
+# FULILIAN_CTF hooks 全部与模型直接调 terminal 时同一条路径，批量化不等于
+# 绕过防线。cd 不跨命令持久（每次调用都是新 shell）——与模型逐条调 terminal
+# 的现状一致，批内靠 workdir 参数或 "cd X && cmd" 表达。
+
+RUN_SCRIPT_MAX_COMMANDS = 12
+RUN_SCRIPT_PER_OUTPUT_CHARS = 6_000
+RUN_SCRIPT_TOTAL_BUDGET_CHARS = 30_000
+
+
+def _trim_output(text: str, budget: int) -> str:
+    text = text or ""
+    if len(text) <= budget:
+        return text
+    head = budget * 2 // 3
+    tail = budget - head
+    return (text[:head] + f"\n… [trimmed {len(text) - budget} chars] …\n"
+            + text[-tail:])
+
+
+def _run_script_impl(commands, stop_on_error: bool = True,
+                     timeout=None, workdir: str = "") -> str:
+    from tools.terminal_tool import terminal_tool
+
+    if isinstance(commands, str):
+        commands = [commands]
+    if not isinstance(commands, list) or not commands:
+        return tool_error("run_script requires a non-empty 'commands' array")
+    commands = [c for c in commands if isinstance(c, str) and c.strip()]
+    if not commands:
+        return tool_error("run_script: 'commands' contains no usable command")
+    if len(commands) > RUN_SCRIPT_MAX_COMMANDS:
+        return tool_error(
+            f"run_script: at most {RUN_SCRIPT_MAX_COMMANDS} commands per call "
+            f"(got {len(commands)}). Split into multiple calls."
+        )
+
+    results = []
+    stopped_at = None
+    for i, cmd in enumerate(commands):
+        raw = terminal_tool(command=cmd, timeout=timeout, workdir=workdir or None)
+        try:
+            parsed = json.loads(raw)
+            if not isinstance(parsed, dict):
+                raise ValueError("non-dict result")
+        except (ValueError, TypeError):
+            parsed = {"output": str(raw), "exit_code": -1, "error": ""}
+        ok = parsed.get("exit_code") == 0
+        results.append({
+            "command": cmd,
+            "exit_code": parsed.get("exit_code"),
+            "status": parsed.get("status", ""),
+            "output": _trim_output(str(parsed.get("output") or ""),
+                                   RUN_SCRIPT_PER_OUTPUT_CHARS),
+            **({"error": parsed["error"]} if parsed.get("error") else {}),
+        })
+        if not ok and stop_on_error:
+            stopped_at = i
+            break
+
+    total = sum(len(r["output"]) + len(r.get("error", "")) for r in results)
+    # 总预算超限时从最老的结果开始丢弃（后面的命令通常更接近答案）。
+    while total > RUN_SCRIPT_TOTAL_BUDGET_CHARS and len(results) > 1:
+        dropped = results.pop(0)
+        total -= len(dropped["output"]) + len(dropped.get("error", ""))
+        dropped_note = {"command": dropped["command"],
+                        "dropped": "total budget exceeded; re-run this one alone"}
+        results.insert(0, dropped_note)
+
+    failed = [r["command"] for r in results
+              if r.get("exit_code") not in (0, None, "0")]
+    summary = {
+        "ran": len(results),
+        "ok": len(results) - len(failed),
+        "failed": len(failed),
+        "stopped_at": stopped_at,
+    }
+    return json.dumps({"summary": summary, "results": results},
+                      ensure_ascii=False)
+
+
+registry.register(
+    name="run_script",
+    toolset="ctf_solve",
+    schema={
+        "type": "function",
+        "function": {
+            "name": "run_script",
+            "description":
+                "Run several shell commands in ONE call, sequentially, and get all "
+                "outputs back together. Prefer this over repeated terminal calls for "
+                "recon/batch steps. Note: cd does not persist between commands — "
+                "use workdir or 'cd X && cmd'.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "commands": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "maxItems": RUN_SCRIPT_MAX_COMMANDS,
+                        "description": "Shell commands to run in order",
+                    },
+                    "stop_on_error": {
+                        "type": "boolean",
+                        "description": "Stop at the first failing command (default true)",
+                    },
+                    "timeout": {
+                        "type": "integer",
+                        "description": "Per-command timeout in seconds",
+                    },
+                    "workdir": {
+                        "type": "string",
+                        "description": "Working directory for every command",
+                    },
+                },
+                "required": ["commands"],
+            },
+        },
+    },
+    handler=_unpack(_run_script_impl),
+    description="Run several shell commands in one call",
 )

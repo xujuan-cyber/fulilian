@@ -125,6 +125,7 @@ from .solver import (
     SolverResult,
     build_solve_query,
     resolve_default_model,
+    resolve_solve_model,
     solver_worker,
     switch_solver_model,
 )
@@ -228,6 +229,7 @@ __all__ = [
     "build_solve_query",
     "solver_worker",
     "resolve_default_model",
+    "resolve_solve_model",
     # stopper (F2-004 / F2-011，步骤 07)
     "STOP_REASONS",
     "DEFAULT_MAX_TOKENS",

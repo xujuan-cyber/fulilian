@@ -412,10 +412,13 @@ def handle_solve_command(args: argparse.Namespace) -> None:
     except Exception as exc:  # noqa: BLE001 — 知识注入失败不阻断解题
         print(f"[solve] knowledge injection skipped: {exc}", file=sys.stderr)
 
-    # Phase 1 模型解析：显式 --model 优先，否则配置默认（run_agent 不自动回退）
-    from fulilian_ctf.solver import resolve_default_model
+    # Phase 1 模型解析（P6 模型路由）：显式 --model > FULILIAN_CTF_MODEL >
+    # config ctf.solve_model > model.default。run_agent 不自动回退，所以这里
+    # 必须解析到底；解析结果大声打印——「以为在用强模型其实在用默认」要看得见。
+    from fulilian_ctf.solver import resolve_solve_model
 
-    model = args.model or resolve_default_model()
+    model, model_source = resolve_solve_model(getattr(args, "model", "") or "")
+    print(f"[solve] model: {model or '<empty>'} (source: {model_source})")
 
     # F4-004：CTF 求解默认 workspace-write（环境变量可覆盖为 read-only/full）
     os.environ.setdefault(ENV_SANDBOX_MODE, "workspace-write")

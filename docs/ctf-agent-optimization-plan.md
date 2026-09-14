@@ -681,7 +681,7 @@ agent = AIAgent(
 
 ### P1 — 减少往返
 
-**P1.1 · 提供 `run_script` / `batch` 工具**
+**P1.1 · 提供 `run_script` / `batch` 工具** ✅ **已完成（2026-09-14，见 §9 ④）**
 
 - **改成什么：** 一次跑 N 条命令或一个 Python 脚本，返回收敛后的结果。
 - **为什么：** §1.2 —— 模型只做到 1.12 次/轮，说明 `PARALLEL_TOOL_CALL_GUIDANCE` 那句劝说**没有生效**。**得靠工具形态，不能靠劝说。**
@@ -746,7 +746,7 @@ agent = AIAgent(
 **P5.1** 四阶段 RECON/PLAN/EXECUTE/REFLECT + ABANDON IF + `record_fact` 账本，是在给"不会规划的模型"打石膏，消耗轮次。对强模型换成 10 行操作规则。（`run_agent.py:9094 _build_ctf_system_prompt`）
 **P5.2** 补真有用的：并行假设扇出（racer 已有，先确认能不能用）；"同一攻击 3 次变体失败"交给 **runtime 计算**，而不是让模型回忆。
 
-### P6 — 模型路由
+### P6 — 模型路由 ✅ **代码已完成（2026-09-14，见 §9 ④）—— 解析链 + `strong` 关键字，跑批方拨动；效果未测（需强模型配置 `ctf.strong_model` 才有可跑的实验组）**
 
 硬题走最强模型。现在默认 `DeepSeek-V4-Flash@128K` + 大量石膏 = 弱模型 + 重脚手架。**脚手架补不了模型的差距，模型能省掉脚手架。**
 
@@ -1932,6 +1932,50 @@ manifest 逐字一致。开发中自检还逮住自己三处错：base64 密文�
   测试目录（fulilian-trace-test-* 等）会把它顶火——OUT 放到干净父目录
   （如 `~/bench-runs/`）即可；/tmp 的旧文件属其他会话/历史测试，不要去清。
 
+### 2026-09-14 · ④：hard-solve-protocol 配对 A/B —— 送达已证明，经济性为负（结论：默认不启用）
+
+**改了什么（本次提交）：**
+- **P6 模型路由**：`resolve_solve_model()` 解析链（显式 `--model` >
+  `FULILIAN_CTF_MODEL` > config `ctf.solve_model` > `model.default`），关键字
+  `strong` → config `ctf.strong_model`；`strong` 被请求但未配置时**大声降级**。
+  路由不做难度猜测（解之前没有可靠的硬度信号），只提供跑批方可拨动的解析链。
+  回归锁 `tests/fulilian_ctf/test_resolve_solve_model.py`（8 项）。
+- **P1.1 `run_script`**：一次调用串行跑 ≤12 条命令，复用 `terminal_tool`
+  （沙箱/拦截/钩子与直调同一条路径），单命令 6K 字符截断、总预算 30K
+  超限丢最老。回归锁 `tests/fulilian_ctf/test_run_script.py`（11 项）。
+- **hard-solve-protocol 注入机制**：`run_agent._resolve_hard_solve_protocol()`，
+  `FULILIAN_CTF_HARD_SOLVE_PROTOCOL=1` 门控，正文唯一来源
+  `skills/hard-solve-protocol/SKILL.md`（仓库 + `~/.fulilian` 双副本），
+  读不到时**大声报错**——「实验组静默变对照组」必须看得见。回归锁
+  `tests/fulilian_ctf/test_ctf_hard_solve_protocol.py`（6 项）。
+- **配对 A/B 驱动器** `benchmarks/ctf_hard_protocol_ab.sh` + `ctf_hard_run.sh`
+  子集开关 `CTF_IDS` + solve 前硬闸双参调用修复。
+
+**A/B 读数（`crypto-keylayers-01`，两侧各 3 批，归档
+`~/bench-runs/protocol-ab-20260914/`）：**
+
+| 量 | ctl | exp | 配对差 |
+|---|---|---|---|
+| 解出 | 3/3 | 3/3 | 无差 |
+| api_calls | 27 / 26 / 20 | 29 / 30 / 23 | **+2 / +4 / +3（3/3 全正）** |
+| 合并 ×参考解 | 2.7×（73/27） | 3.0×（82/27） | +0.3×（地板 0.77×，聚合不可归因） |
+| 首屏 token | 4,727 / 4,675 / 4,727 | 5,384 / 5,384 / 5,336 | **+657 / +709 / +609（3/3 全正，均值 +658）** |
+| 总 token | 956K / 632K / 602K | 1,200K / 998K / 714K | **+244K / +366K / +112K（3/3 全正）** |
+
+**读法（与 A3/A9 结案同一套方法论）：**
+- **送达已证明**：配对首屏 +658 tok/调用、3/3 全正、跨度 15% —— 2,777 字符
+  正文 ÷ 4 字符/token ≈ 694，量级吻合；loud-error 路径零触发（隔离家 skills
+  symlink 链路成立）。
+- **经济性为负**：配对 api_calls 3/3 全正（+2~4），总 token 3/3 全正
+  （均值 +24 万/solve）。首屏那 +658×~25 次调用只解释 ~1.6 万，**大头是轨迹
+  变长** —— 协议让 agent 花了更多步数，没有换来解出率（两侧都 3/3，这道题
+  本来就在能力圈内）。「证伪前置/收尾证伪」这类多一步的纪律，在**已经解得出**
+  的题上是纯开销；它的目标场景应该是「直觉方向是错的」的题，而本基线
+  5 题里 agent 尚未在这些题上反复失败过 —— **判据够不着协议的目标场景**。
+- **结论：机制保留（env 默认关 = 零成本），协议正文保留待用，默认不启用。**
+  它该被重新评估的时机：出现「聚合 3/3 → 反复解不出」的真难题批时，用同一
+  驱动器重跑本 A/B。现在没有那样的题，别为它调协议。
+
 ## 10. 当前状态
 
 **分支 `ctf-opt`（未推送任何内容到 origin）。**
@@ -1957,6 +2001,14 @@ manifest 逐字一致。开发中自检还逮住自己三处错：base64 密文�
 | 基准 | **探针题 `misc-chunkconcat-01`**（4 题 holdout） | `benchmarks/fixtures-hard/misc-chunkconcat-01/` |
 | 基准 | **v2 跑批基线（4 题，含经济性）** | `benchmarks/baselines/2026-09-11-ctf-hard-holdout-v2.json` |
 | 基准 | **③ 加难题 crypto-keylayers-01（crypto·多层推导维度，4→5 题；生成器自检已变异体证伪）** | `benchmarks/fixtures-hard/crypto-keylayers-01/`、`manifest-ctf-hard.yaml` |
+| 代码 | **P6 模型路由 `resolve_solve_model`（解析链 + `strong` 关键字 + 大声降级）** | `fulilian_ctf/solver.py`、`fulilian_ctf/cli.py`、`fulilian_ctf/__init__.py` |
+| 测试 | P6 路由回归锁（8 项） | `tests/fulilian_ctf/test_resolve_solve_model.py` |
+| 代码 | **P1.1 `run_script` 批量命令工具（复用 terminal_tool 同一路径）** | `tools/ctf_solve.py`、`toolsets.py` |
+| 测试 | run_script 回归锁（11 项） | `tests/fulilian_ctf/test_run_script.py` |
+| 代码 | **hard-solve-protocol env 门控注入（读不到大声报错）** | `run_agent.py` `_resolve_hard_solve_protocol()` |
+| 文档 | **hard-solve-protocol SKILL.md（仓库 + `~/.fulilian` 双副本）** | `skills/hard-solve-protocol/SKILL.md`、`~/.fulilian/skills/hard-solve-protocol/SKILL.md` |
+| 基准 | **协议配对 A/B 驱动器 + `CTF_IDS` 子集跑批 + 硬闸双参修复** | `benchmarks/ctf_hard_protocol_ab.sh`、`benchmarks/ctf_hard_run.sh` |
+| 基准 | **④ 协议 A/B 归档（ctl 2.7× / exp 3.0×，经济性为负，默认不启用）** | `~/bench-runs/protocol-ab-20260914/`、`baselines/2026-09-14-ctf-protocol-ab-ctl.json`、`baselines/2026-09-14-ctf-protocol-ab-exp.json` |
 | 基准 | **运行日志可信性检测（`log_issue`）** | `benchmarks/ctf_path_baseline.py` `analyze()` / `print_table()` |
 | 代码 | **运行日志镜像（根治 §10 第 3 条）** | `fulilian_ctf/solver.py` `solver_evidence_stream` / `_TeeStream`；接线于 `cli.py:_run_solve_once`、`solver.py:_default_solver_impl` |
 | 测试 | 镜像日志回归锁（8 项，含"agent 覆盖后镜像仍完整"与接线锁） | `tests/fulilian_ctf/test_solver_log_tee.py` |
