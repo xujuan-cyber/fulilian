@@ -388,7 +388,7 @@ Cómo confirma el agente que funcionó.
 
 Todo skill nuevo o modernizado — incluido, opcional o contribuido — debe cumplir estos estándares antes del merge:
 
-1. **`description` ≤ 60 caracteres, una oración, termina con punto.** Las descripciones largas saturan la UI de listado de habilidades. Indica la capacidad, no la implementación. Sin palabras de marketing ("potente", "completo", "fluido", "avanzado").
+1. **`description` ≤ 1024 caracteres, una oración, termina con punto.** Las descripciones largas saturan la UI de listado de habilidades, así que evita el relleno — pero no recortes el trigger para alcanzar un límite más corto y arbitrario. Indica la capacidad, no la implementación. Sin palabras de marketing ("potente", "completo", "fluido", "avanzado").
 
 2. **Las herramientas referenciadas en el cuerpo de SKILL.md deben ser herramientas nativas de Fulilian o servidores MCP que la habilidad espere explícitamente.** Usa los nombres de herramientas en comillas invertidas: `` `terminal` ``, `` `web_extract` ``, `` `web_search` ``, `` `read_file` ``, `` `write_file` ``, etc.
 

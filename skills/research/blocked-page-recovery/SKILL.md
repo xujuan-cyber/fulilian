@@ -23,10 +23,19 @@ ladder, cheapest first.
 ```
 1. Wayback Machine  — archive.org "available" API  (snapshot + timestamp)
 2. archive.today    — domain rotation: archive.ph → .md → .li → .is
-3. Jina Reader      — only if JINA_API_KEY is set  (live server-side render)
+3. Relay services   — markdown.new / r.jina.ai / defuddle.md  (markdown.new verified
+                      working from this env; the other two are egress-blocked here)
 4. API-first pivot  — look for /api/, /graphql, .json, or RSS on the same host
-5. Real browser     — browser tool as the last, most expensive resort
+5. Local stealth    — Scrapling get → fetch → stealthy-fetch (--solve-cloudflare);
+                      plain Playwright stealth as the fallback
+6. Real browser     — browser tool as the last, most expensive resort
 ```
+
+Rungs 3 and 5 are detailed in
+[references/fetch-relays-and-stealth.md](references/fetch-relays-and-stealth.md)
+— including which relay is actually reachable, the fact that **no relay solves
+a Cloudflare challenge**, and the `--ai-targeted` flag that sanitizes
+page content before it reaches an agent's context.
 
 Run it in one shot with the bundled script:
 
@@ -100,6 +109,12 @@ curl -s -H "Authorization: Bearer $JINA_API_KEY" "https://r.jina.ai/{URL}"
 Handles JS SPAs that archives can't. Skip this route entirely when the env
 var is unset.
 
+**Status check 2026-09-14:** from this environment `r.jina.ai` did not resolve
+to a usable service at all — every attempt was reset at the TCP layer
+(`HTTP 000`), key or no key. `markdown.new` was the only relay that worked.
+See [references/fetch-relays-and-stealth.md](references/fetch-relays-and-stealth.md)
+before spending time on this rung.
+
 ### 4. API-first pivot
 
 WAFs protect the HTML surface far more aggressively than the data endpoints
@@ -124,6 +139,9 @@ rejects them automatically; reject them manually too:
   original (blocked) URL. Treating that as success creates a fetch loop.
 - **Rate-limit bodies**: archive.today 429 pages are multi-KB HTML. Check for
   the target's actual content (title words, expected strings), not just size.
+- **Relay interstitials**: a relay service returns `200` with the Cloudflare
+  challenge stub (`Just a moment...`, ~125 bytes) when it cannot get past the
+  challenge. It is not a solver — treat the stub as a failure and go to rung 5.
 
 Detection heuristics the script applies: body under a per-route byte floor;
 meta-refresh/JS-redirect stubs whose target is the original host; interstitial
@@ -135,3 +153,17 @@ Generic "web proxy" relays are man-in-the-middle by construction. Never send
 cookies or Authorization headers through one, and don't use them for anything
 the user will rely on — provenance is unverifiable. Prefer archives, which at
 least timestamp their copies.
+
+The same rule applies to the **relay services** in rung 3: they are
+unauthenticated, public-page-only routes. For anything session-gated, go to
+rung 5 (local stealth) and drive the browser/HTTP client yourself.
+
+## References
+
+- [references/fetch-relays-and-stealth.md](references/fetch-relays-and-stealth.md)
+  — relay services (`markdown.new` / `r.jina.ai` / `defuddle.md`) with local
+  reachability test results; the Scrapling CLI ladder (`get` → `fetch` →
+  `stealthy-fetch`) and its options; `--ai-targeted` prompt-injection
+  sanitization; Playwright stealth baseline; Playwright MCP hardening flags.
+  Absorbed 2026-09-14 from the CocoLoop store skills *Web Content Fetcher*
+  and *Scrapling Official*, then locally re-tested.

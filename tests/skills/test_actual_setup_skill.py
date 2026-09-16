@@ -2,7 +2,7 @@
 Smoke tests for the actual-setup optional skill.
 
 Validates:
-  - SKILL.md frontmatter conforms to the ≤60-char description standard
+  - SKILL.md frontmatter conforms to the ≤1024-char description ceiling
   - Frontmatter has required fields
   - The skill references the first-class ``actual`` provider (not the
     legacy custom-provider config path that conflicts with it)
@@ -40,9 +40,9 @@ def test_skill_dir_exists() -> None:
     assert SKILL_DIR.is_dir(), f"missing skill dir: {SKILL_DIR}"
 
 
-def test_description_under_60_chars(frontmatter) -> None:
+def test_description_within_ceiling(frontmatter) -> None:
     desc = frontmatter["description"]
-    assert len(desc) <= 60, f"description is {len(desc)} chars (limit ≤60): {desc!r}"
+    assert len(desc) <= 1024, f"description is {len(desc)} chars (ceiling 1024): {desc!r}"
 
 
 def test_has_required_frontmatter_fields(frontmatter) -> None:

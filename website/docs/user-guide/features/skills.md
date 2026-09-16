@@ -97,7 +97,7 @@ fulilian chat --toolsets skills -q "Show me the axolotl skill"
 reference material — into a reusable skill, without hand-writing the
 `SKILL.md`. It is open-ended: point it at *anything you can describe* and the
 agent gathers the material with the tools it already has, then authors a skill
-that follows the [house authoring standards](#skillmd-format) (≤60-char
+that follows the [house authoring standards](#skillmd-format) (≤1024-char
 description, the standard section order, Fulilian-tool framing, no invented
 commands).
 

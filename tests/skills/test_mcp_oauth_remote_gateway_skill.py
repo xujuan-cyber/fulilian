@@ -149,7 +149,7 @@ def test_skill_md_frontmatter_invariants():
     content = SKILL_MD.read_text()
     assert content.startswith("---\n")
     fm = yaml.safe_load(re.search(r"^---\n(.*?)\n---", content, re.DOTALL).group(1))
-    assert len(fm["description"]) <= 60
+    assert len(fm["description"]) <= 1024
     assert fm["description"].endswith(".")
     assert "platforms" in fm and len(fm["platforms"]) >= 1
     assert fm["author"].split(",")[0].strip() != "FuLiLian"  # human credited first

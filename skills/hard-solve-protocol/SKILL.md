@@ -5,13 +5,17 @@ category: ctf
 version: 0.1.0
 author: xujuan
 license: MIT
+platforms: [linux, macos, windows]
 # 维护注记：本文件正文（frontmatter 之后）就是 solve 路径注入 CTF system
 # prompt 的那一节 —— run_agent._resolve_hard_solve_protocol() 在
 # FULILIAN_CTF_HARD_SOLVE_PROTOCOL=1 时读取它。改正文 = 改运行时行为，
 # 所以正文里不要写仅供人类阅读的长篇说明。
+# 同族技能（仅在运行时库，不在本仓库，故不列入 related_skills）：
+# fulilian-ctf-rules、ctf-dispatcher。
 metadata:
-  tags: [ctf, methodology, hard-problems, falsification, state-card, probes]
-  related_skills: [fulilian-ctf-rules, ctf-dispatcher]
+  fulilian:
+    tags: [ctf, methodology, hard-problems, falsification, state-card, probes]
+    related_skills: []
 ---
 
 # 难题解题协议（hard-solve-protocol）

@@ -57,7 +57,7 @@ def test_skill_files_present() -> None:
 
 def test_description_within_limit(frontmatter: dict) -> None:
     desc = frontmatter["description"]
-    assert len(desc) <= 60, f"description is {len(desc)} chars (limit 60): {desc!r}"
+    assert len(desc) <= 1024, f"description is {len(desc)} chars (ceiling 1024): {desc!r}"
     assert desc.endswith(".")
 
 

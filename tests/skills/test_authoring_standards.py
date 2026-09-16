@@ -109,8 +109,10 @@ def test_description_hardline(p):
     desc = str(fm.get("description") or "")
     if _grandfathered(p, "description"):
         return
-    assert len(desc) <= 60, f"{_rel(p)}: description {len(desc)} chars (hardline 60)"
-    assert desc.rstrip().endswith("."), f"{_rel(p)}: description must end with a period"
+    assert len(desc) <= 1024, f"{_rel(p)}: description {len(desc)} chars (ceiling 1024)"
+    assert desc.rstrip().endswith((".", "。", "!", "?", "！", "？")), (
+        f"{_rel(p)}: description must end with a sentence-ending punctuation mark"
+    )
     m = MARKETING.search(desc)
     assert not m, f"{_rel(p)}: marketing word in description: {m.group(0)!r}"
 

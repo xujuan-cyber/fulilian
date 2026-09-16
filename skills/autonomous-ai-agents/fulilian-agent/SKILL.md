@@ -36,7 +36,7 @@ This skill is a concise operating guide, not the complete source of truth for ev
 
 Good verification targets, cheapest first:
 
-- **Every shipped feature, one line each: https://github.com/xujuan-cyber/fulilian Start here for any "can Fulilian do X?" or "how do I do X?" — it indexes the entire documentation set with a link to the page that answers. It is generated from the docs tree on every build, so it is never behind the product. Fetch it with `web_extract`, or `curl -s https://github.com/xujuan-cyber/fulilian when web tools are off. The whole documentation set in one file is at `/docs/llms-full.txt`.
+- **Every shipped feature, one line each: https://github.com/xujuan-cyber/fulilian/llms.txt Start here for any "can Fulilian do X?" or "how do I do X?" — it indexes the entire documentation set with a link to the page that answers. It is generated from the docs tree on every build, so it is never behind the product. Fetch it with `web_extract`, or `curl -s https://github.com/xujuan-cyber/fulilian/llms.txt` when web tools are off. The same file is served at `/docs/llms.txt`; the whole documentation set in one file is at `/docs/llms-full.txt`.
 - CLI commands: `fulilian --help`, `fulilian <command> --help`, and `fulilian_cli/main.py`
 - Source tree: https://github.com/xujuan-cyber/fulilian
 

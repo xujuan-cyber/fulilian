@@ -33,9 +33,9 @@ def test_skill_dir_exists() -> None:
 
 
 
-def test_description_under_60_chars(frontmatter) -> None:
+def test_description_within_ceiling(frontmatter) -> None:
     desc = frontmatter["description"]
-    assert len(desc) <= 60, f"description is {len(desc)} chars (hardline ≤60): {desc!r}"
+    assert len(desc) <= 1024, f"description is {len(desc)} chars (ceiling 1024): {desc!r}"
 
 
 

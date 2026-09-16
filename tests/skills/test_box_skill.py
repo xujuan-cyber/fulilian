@@ -44,7 +44,7 @@ def test_skill_frontmatter_is_valid_and_discoverable(frontmatter: dict):
     assert frontmatter.get("name") == "box"
     description = frontmatter.get("description")
     assert isinstance(description, str) and description.strip()
-    assert len(description) <= 60
+    assert len(description) <= 1024
     assert description.endswith(".")
     assert frontmatter.get("license") == "MIT"
     assert "Chris Kim" in str(frontmatter.get("author"))

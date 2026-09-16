@@ -12,7 +12,7 @@ that instructs the live agent to:
      current conversation for "what I just did", the user's text for pasted
      material).
   2. Author a skill via ``skill_manage`` that follows the Fulilian
-     skill-authoring standards (description <=60 chars, the modern section
+     skill-authoring standards (description <=1024 chars, the modern section
      order, Fulilian-tool framing, no invented commands). Small sources get one
      tight SKILL.md; large prose sources (books, paper stacks, specs, doc
      corpora) get the knowledge-base layout — a lean SKILL.md index plus
@@ -37,18 +37,15 @@ HARDLINE rules a maintainer enforces in review:
 
 Frontmatter:
 - name: lowercase-hyphenated, <=64 chars, no spaces.
-- description: ONE sentence, **<=60 characters**, ends with a period. State the
-  capability, not the implementation. No marketing words (powerful,
-  comprehensive, seamless, advanced, robust). Do NOT repeat the skill name. If
-  the description contains a colon, wrap the whole value in double quotes.
-  This is the most-violated rule and it is NOT cosmetic: the system-prompt
-  skill index truncates the description to 60 chars and loads it every
-  session, so anything past char 60 is silently cut and never routes. After
-  you write the description, COUNT the characters; if it is over 60, cut it
-  down before saving — do not ship a sentence and hope.
-    Good (<=60): `Search arXiv papers by keyword, author, or ID.`
-    Bad (123):   `A comprehensive skill that lets the agent search arXiv for
-                  academic papers using keywords, authors, and categories.`
+- description: ONE sentence, **<=1024 characters**, ends with a period. State the
+  capability, not the implementation, and include the trigger so the skill can
+  actually route. No marketing words (powerful, comprehensive, seamless,
+  advanced, robust). Do NOT repeat the skill name. If the description contains a
+  colon, wrap the whole value in double quotes. Avoid bloat, but do not compress
+  away the trigger to hit some arbitrary shorter limit.
+    Good: `Search arXiv papers by keyword, author, or ID.`
+    Bad:  `A comprehensive skill that lets the agent search arXiv for
+           academic papers using keywords, authors, and categories.`
 - version: 0.1.0
 - author: always the literal value `Fulilian`. NEVER fill it from the host
   environment — the OS/login username (e.g. the `user=` line in your

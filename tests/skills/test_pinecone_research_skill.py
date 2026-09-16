@@ -2,7 +2,7 @@
 Smoke tests for the pinecone-research optional skill.
 
 Validates:
-  - SKILL.md frontmatter conforms to the ≤60-char description standard
+  - SKILL.md frontmatter conforms to the ≤1024-char description ceiling
   - The skill name is distinct from the existing mlops/pinecone skill
   - Frontmatter has required fields
 """
@@ -43,9 +43,9 @@ def test_skill_dir_exists() -> None:
 
 
 
-def test_description_under_60_chars(frontmatter) -> None:
+def test_description_within_ceiling(frontmatter) -> None:
     desc = frontmatter["description"]
-    assert len(desc) <= 60, f"description is {len(desc)} chars (limit ≤60): {desc!r}"
+    assert len(desc) <= 1024, f"description is {len(desc)} chars (ceiling 1024): {desc!r}"
 
 
 

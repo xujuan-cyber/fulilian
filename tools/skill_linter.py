@@ -34,9 +34,12 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from agent.skill_utils import (
-    SKILL_PROMPT_DESC_LIMIT,
     parse_frontmatter,
 )
+
+# Mirrors tools/skill_manager_tool.MAX_DESCRIPTION_LENGTH (importing it here
+# would be circular — the manager tool imports the linter lazily).
+MAX_DESCRIPTION_LENGTH = 1024
 
 # ── Rule data ────────────────────────────────────────────────────────────────
 
@@ -154,20 +157,16 @@ def _check_name_format(frontmatter: Dict[str, Any]) -> List[LintFinding]:
 
 def _check_description(frontmatter: Dict[str, Any]) -> List[LintFinding]:
     findings: List[LintFinding] = []
-    # Raw description as authored — extract_skill_description() applies the
-    # 60-char prompt truncation, so it can never exceed the limit; measure the
-    # raw frontmatter value for the length check.
     desc = str(frontmatter.get("description", "")).strip().strip("'\"")
     if not desc:
         return findings
-    if len(desc) > SKILL_PROMPT_DESC_LIMIT:
+    if len(desc) > MAX_DESCRIPTION_LENGTH:
         findings.append(
             LintFinding(
                 WARNING,
                 "description-length",
-                f"description is {len(desc)} chars; the skill index truncates "
-                f"past {SKILL_PROMPT_DESC_LIMIT} chars + '...', losing routing "
-                f"signal. Keep it to one sentence.",
+                f"description is {len(desc)} chars; the validator ceiling is "
+                f"{MAX_DESCRIPTION_LENGTH}. Move detail into the skill body.",
             )
         )
     lower = desc.lower()

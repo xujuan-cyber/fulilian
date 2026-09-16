@@ -24,7 +24,6 @@ from tools.skill_manager_tool import (
 from agent.skill_utils import (
     extract_skill_description,
     parse_frontmatter,
-    SKILL_PROMPT_DESC_LIMIT,
 )
 
 
@@ -177,17 +176,21 @@ class TestCreateSkill:
         assert not (tmp_path / "escape").exists()
 
 
-    def test_edit_long_desc_still_allowed_with_preview(self, tmp_path):
-        """Edit/patch paths stay permissive so existing over-limit skills
-        remain maintainable — they warn via system_prompt_preview instead."""
+    def test_create_accepts_long_description(self, tmp_path):
+        """The former 60-char system-prompt budget is gone: descriptions are
+        bounded only by MAX_DESCRIPTION_LENGTH (1024) on every path."""
+        with _skill_dir(tmp_path):
+            result = _create_skill("long-desc", LONG_DESC_CONTENT)
+        assert result["success"] is True
+
+    def test_edit_long_desc_still_allowed(self, tmp_path):
         with _skill_dir(tmp_path):
             _create_skill("my-skill", VALID_SKILL_CONTENT)
             result = _edit_skill("my-skill", LONG_DESC_CONTENT)
         assert result["success"] is True
-        assert "system_prompt_preview" in result
-        assert "System prompt will show" in result["system_prompt_preview"]
+        assert "system_prompt_preview" not in result
         fm, _ = parse_frontmatter(LONG_DESC_CONTENT)
-        assert extract_skill_description(fm) in result["system_prompt_preview"]
+        assert extract_skill_description(fm).startswith("Use when deploying")
 
 
 class TestEditSkill:

@@ -45,10 +45,7 @@ from fulilian_constants import get_fulilian_home, display_fulilian_home
 from utils import atomic_write_text, is_truthy_value
 from fulilian_cli.config import cfg_get
 from agent.skill_utils import (
-    extract_skill_description,
-    is_skill_description_truncated_for_prompt,
     parse_frontmatter as _parse_frontmatter,
-    SKILL_PROMPT_DESC_LIMIT,
 )
 
 logger = logging.getLogger(__name__)
@@ -602,11 +599,10 @@ def _validate_frontmatter(content: str, *, new_skill: bool = False) -> Optional[
     Validate that SKILL.md content has proper frontmatter with required fields.
     Returns error message or None if valid.
 
-    When ``new_skill`` is True (create path only), the description must also
-    fit the 60-char system-prompt budget (SKILL_PROMPT_DESC_LIMIT) so newly
-    authored skills never lose routing signal to index truncation. Edit and
-    patch paths deliberately skip this so existing over-limit skills remain
-    maintainable while their descriptions are cleaned up.
+    ``new_skill`` is retained for call-site compatibility; description length
+    is bounded only by MAX_DESCRIPTION_LENGTH (1024) on every path — the
+    former 60-char system-prompt budget was removed along with the skill-index
+    truncation it guarded.
     """
     if not content.strip():
         return "Content cannot be empty."
@@ -638,14 +634,6 @@ def _validate_frontmatter(content: str, *, new_skill: bool = False) -> Optional[
     desc = str(parsed["description"])
     if len(desc) > MAX_DESCRIPTION_LENGTH:
         return f"Description exceeds {MAX_DESCRIPTION_LENGTH} characters."
-    if new_skill and len(desc.strip().strip("'\"")) > SKILL_PROMPT_DESC_LIMIT:
-        return (
-            f"Description is {len(desc.strip())} chars — new skills must fit the "
-            f"{SKILL_PROMPT_DESC_LIMIT}-char system-prompt budget (one sentence, "
-            f"trigger first, ends with a period). The skill index truncates "
-            f"longer descriptions to {SKILL_PROMPT_DESC_LIMIT - 3} chars + '...', "
-            f"destroying the routing signal. Move detail into the skill body."
-        )
 
     body = content[end_match.end() + 3:].strip()
     if not body:
@@ -928,17 +916,6 @@ def _resolve_skill_target(skill_dir: Path, file_path: str) -> Tuple[Optional[Pat
 # =============================================================================
 
 
-def _add_description_prompt_preview(result: Dict[str, Any], content: str) -> None:
-    """Append a system_prompt_preview field when the description will be truncated."""
-    fm, _ = _parse_frontmatter(content)
-    if is_skill_description_truncated_for_prompt(fm):
-        result["system_prompt_preview"] = (
-            f"System prompt will show: \"{extract_skill_description(fm)}\" — "
-            f"keep the trigger self-contained in the first "
-            f"{SKILL_PROMPT_DESC_LIMIT - 3} chars."
-        )
-
-
 def _create_skill(name: str, content: str, category: str = None) -> Dict[str, Any]:
     """Create a new user skill with SKILL.md content."""
     # Validate name
@@ -1005,7 +982,6 @@ def _create_skill(name: str, content: str, category: str = None) -> Dict[str, An
         "To add reference files, templates, or scripts, use "
         "skill_manage(action='write_file', name='{}', file_path='references/example.md', file_content='...')".format(name)
     )
-    _add_description_prompt_preview(result, content)
     _attach_lint_findings(result, skill_md)
     return result
 
@@ -1096,7 +1072,6 @@ def _edit_skill(name: str, content: str) -> Dict[str, Any]:
     if org_note:
         result["org_sharing"] = org_note
         result["message"] = f"{result['message']} {org_note}"
-    _add_description_prompt_preview(result, content)
     return result
 
 
@@ -1768,8 +1743,8 @@ SKILL_MANAGE_SCHEMA = {
         "(old_string/new_string for a targeted fix — preferred; OR content "
         "alone for a full SKILL.md rewrite), delete, write_file/remove_file "
         "(supporting files). Existing skills are modified wherever they "
-        "live. Good skills: a self-contained trigger in the description's "
-        "first 57 chars ('Use when <trigger>. <one-line behavior>.'), "
+        "live. Good skills: a self-contained trigger in the description "
+        "('Use when <trigger>. <one-line behavior>.'), "
         "numbered steps with exact commands, pitfalls, verification (see "
         "skill_view() for format). Confirm with the user before "
         "create/delete."

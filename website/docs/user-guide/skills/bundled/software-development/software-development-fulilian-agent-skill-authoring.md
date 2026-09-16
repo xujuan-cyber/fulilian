@@ -86,16 +86,16 @@ metadata:
 ---
 ```
 
-### `description` rules (HARDLINE — the validator's 1024 is NOT the standard)
+### `description` rules
 
-- **≤ 60 characters.** One sentence. Ends with a period.
+- **The description is the only always-loaded trigger surface.** The body's `When to Use` runs only after the skill has already been selected, so the trigger must survive in the description alone. Include BOTH what the skill does AND when to use it.
+- **≤ 1024 characters (`MAX_DESCRIPTION_LENGTH`), no angle brackets.** Don't pad toward the ceiling — but don't compress away the trigger to hit some arbitrary shorter limit either.
 - State the capability, not the implementation, and don't repeat the skill name.
 - No marketing words ("powerful", "comprehensive", "seamless", "advanced").
-- The system prompt skill index truncates at 57 chars + "..." — the trigger/capability must be self-contained in that window.
-- If the description contains a `:`, wrap it in double quotes or YAML parses it as a mapping and the docs generator crashes. Quotes don't count toward the 60.
+- If the description contains a `:`, wrap the whole thing in double quotes or YAML parses it as a mapping.
 
 Good: `Track named companies for material news with cited digests.`
-Bad: `Use when a user asks to monitor named competitors or companies for product launches, pricing changes, funding, ...` (240 chars — rejected in review)
+Bad: `Helps with companies.` (no trigger — routes nothing)
 
 ### `author` rules
 
@@ -182,7 +182,7 @@ A skill exists to make the agent's process more predictable — the agent reliab
    m = re.search(r'\n---\s*\n', content[3:])
    fm = yaml.safe_load(content[3:m.start()+3])
    assert "name" in fm and "description" in fm
-   assert len(fm["description"]) <= 60, f"description {len(fm['description'])} chars — hardline is 60"
+   assert len(fm["description"]) <= 1024, f"description {len(fm['description'])} chars — ceiling is 1024"
    assert fm["description"].endswith(".")
    assert "platforms" in fm
    assert len(content) <= 100_000
@@ -202,7 +202,7 @@ A skill exists to make the agent's process more predictable — the agent reliab
 ## Common Pitfalls
 
 1. **Using `skill_manage(action='create')` for an in-repo skill.** It writes to `~/.fulilian/skills/`, not the repo tree. Use `write_file`.
-2. **Trusting the validator's limits as the standard.** The validator allows 1024-char descriptions; review rejects anything over 60. The validator doesn't check `platforms:`, author format, tests, or docs — review does.
+2. **Trusting the validator's limits as the standard.** The validator bounds descriptions at 1024 chars but checks nothing else — not `platforms:`, author format, tests, or docs. Review does. Stay well under the ceiling, but never trade the trigger away for brevity.
 3. **`author: FuLiLian` on a contributed skill.** Credit the human first.
 4. **Leading whitespace before `---`.** Validation fails on any leading blank line or BOM.
 5. **Description too generic or trigger buried past char 57.**
@@ -218,7 +218,7 @@ A skill exists to make the agent's process more predictable — the agent reliab
 - [ ] File at `skills/<category>/<name>/SKILL.md` or `optional-skills/<category>/<name>/SKILL.md`
 - [ ] Frontmatter starts at byte 0 with `---`, closes with `\n---\n`
 - [ ] `name`, `description`, `version`, `author`, `license`, `platforms`, `metadata.fulilian.{tags, related_skills}` all present
-- [ ] Description ≤ 60 chars, one sentence, ends with a period, no marketing words
+- [ ] Description ≤ 1024 chars, one sentence, ends with a period, carries the trigger, no marketing words
 - [ ] `author` credits the human contributor first
 - [ ] `platforms:` audited against actual prose/scripts, not copied from a sibling
 - [ ] Every `related_skills` entry resolves in-repo

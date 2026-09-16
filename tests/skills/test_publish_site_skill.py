@@ -48,7 +48,7 @@ def test_frontmatter_parses(frontmatter: dict):
 def test_description_length_and_period(frontmatter: dict):
     desc = frontmatter.get("description", "").strip().strip('"')
     assert desc, "no description field"
-    assert len(desc) <= 60, f"description is {len(desc)} chars (>60): {desc!r}"
+    assert len(desc) <= 1024, f"description is {len(desc)} chars (>1024): {desc!r}"
     assert desc.endswith("."), "description must end with a period"
 
 

@@ -49,7 +49,7 @@ def test_frontmatter_meets_hardline_standard(skill_text: str) -> None:
     assert _frontmatter_value(skill_text, "name") == "sdlc-review"
 
     description = _frontmatter_value(skill_text, "description")
-    assert len(description) <= 60
+    assert len(description) <= 1024
     assert description.endswith(".")
 
     for field in ("version", "author", "license", "platforms"):

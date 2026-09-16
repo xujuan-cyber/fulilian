@@ -59,7 +59,7 @@ def test_description_under_sixty_chars(skill_text: str):
     m = re.search(r"^description: (.*)$", skill_text, re.MULTILINE)
     assert m, "no description field"
     desc = m.group(1).strip()
-    assert len(desc) <= 60, f"description is {len(desc)} chars (>60): {desc!r}"
+    assert len(desc) <= 1024, f"description is {len(desc)} chars (>1024): {desc!r}"
     assert desc.endswith("."), "description should end with a period"
 
 

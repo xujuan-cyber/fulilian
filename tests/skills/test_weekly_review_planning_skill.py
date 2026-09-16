@@ -34,7 +34,7 @@ def test_frontmatter_required_fields():
 def test_description_hardline():
     fm, _ = _frontmatter_and_body()
     desc = fm["description"]
-    assert len(desc) <= 60, f"description is {len(desc)} chars; hardline is 60"
+    assert len(desc) <= 1024, f"description is {len(desc)} chars; ceiling is 1024"
     assert desc.endswith(".")
 
 

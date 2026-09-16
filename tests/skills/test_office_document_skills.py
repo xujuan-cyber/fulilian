@@ -38,8 +38,8 @@ def test_skill_exists_with_frontmatter(name):
     fm = _frontmatter(skill_md)
     assert fm["name"] == name
     assert fm["description"].strip()
-    assert len(fm["description"]) <= 60, (
-        f"{name}: description is {len(fm['description'])} chars (max 60)"
+    assert len(fm["description"]) <= 1024, (
+        f"{name}: description is {len(fm['description'])} chars (max 1024)"
     )
     assert fm["description"].rstrip('"').endswith(".")
     platforms = fm.get("platforms")
