@@ -736,12 +736,14 @@ def _resolve_writeup_inputs(challenge_id: str):
     work_dir = Path(challenge_id)
     if not work_dir.is_dir():
         try:
-            from fulilian_constants import FULILIAN_HOME
+            from fulilian_constants import get_fulilian_home
 
             from fulilian_ctf.fsutil import safe_filename_stem
 
             trace_file = (
-                FULILIAN_HOME / "traces" / f"{safe_filename_stem(challenge_id)}.json"
+                get_fulilian_home()
+                / "traces"
+                / f"{safe_filename_stem(challenge_id)}.json"
             )
         except Exception:  # noqa: BLE001
             trace_file = None
@@ -756,12 +758,12 @@ def _load_historical_trace(challenge_id: str) -> Optional[dict]:
     文件名净化口径与写入方一致；目录在调用时解析，不固化模块常量。
     """
     try:
-        from fulilian_constants import FULILIAN_HOME
+        from fulilian_constants import get_fulilian_home
 
         from fulilian_ctf.fsutil import safe_filename_stem
 
         trace_file = (
-            FULILIAN_HOME / "traces" / f"{safe_filename_stem(challenge_id)}.json"
+            get_fulilian_home() / "traces" / f"{safe_filename_stem(challenge_id)}.json"
         )
         if trace_file.is_file():
             return json.loads(trace_file.read_text(encoding="utf-8"))

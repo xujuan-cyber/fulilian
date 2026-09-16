@@ -17,7 +17,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional
 
-from fulilian_constants import FULILIAN_HOME
+from fulilian_constants import get_fulilian_home
 
 from fulilian_ctf.fsutil import (
     atomic_write_text,
@@ -26,8 +26,20 @@ from fulilian_ctf.fsutil import (
     update_json,
 )
 
-LEARNING_FILE = FULILIAN_HOME / "learning.json"
-TRACES_DIR = FULILIAN_HOME / "traces"
+
+def _learning_file() -> Path:
+    """learning.json 路径——调用时动态解析（C0-1）。
+
+    不再固化模块级 ``FULILIAN_HOME / "learning.json"``：import 期快照会与
+    ``get_fulilian_home()`` 的 ContextVar override / 运行期 env 变更分叉。
+    全部读写都经本函数在调用点解析。
+    """
+    return get_fulilian_home() / "learning.json"
+
+
+def _traces_dir() -> Path:
+    """traces 目录——调用时动态解析（C0-1，口径同 ``_learning_file``）。"""
+    return get_fulilian_home() / "traces"
 
 # 噪音模式（F3-004 质量门）：提取 technique 时跳过的进程日志 / 调度输出 /
 # 空白行，避免把 "solver attempt 0 started (pid 10249)" 这类运行时噪音
@@ -55,22 +67,23 @@ def _empty_learnings() -> dict:
 
 def load_learnings() -> dict:
     """加载学习记录（缺失/损坏时返回空结构）。"""
-    return load_json_or(LEARNING_FILE, _empty_learnings())
+    return load_json_or(_learning_file(), _empty_learnings())
 
 
 def save_learnings(data: dict) -> None:
     """持久化学习记录（原子写 + 锁，见 ``fsutil``）。"""
-    LEARNING_FILE.parent.mkdir(parents=True, exist_ok=True)
-    update_json(LEARNING_FILE, lambda _cur: data, _empty_learnings())
+    learning_file = _learning_file()
+    learning_file.parent.mkdir(parents=True, exist_ok=True)
+    update_json(learning_file, lambda _cur: data, _empty_learnings())
 
 
 def trace_file_for(challenge_id: str) -> Path:
-    """``TRACES_DIR`` 下该题轨迹文件路径。
+    """traces 目录下该题轨迹文件路径。
 
     文件名经净化（``/``、``..`` 等替换），避免清单来源的 challenge_id 把轨迹
     写到子目录之外或读时路径穿越。写入方与全部读取方共用本函数以保持口径一致。
     """
-    return TRACES_DIR / f"{safe_filename_stem(challenge_id)}.json"
+    return _traces_dir() / f"{safe_filename_stem(challenge_id)}.json"
 
 
 def _append_entries(learnings: dict, new_entries: list[dict]) -> None:
@@ -131,7 +144,7 @@ def record_lesson(
     # 锁内读—改—写：并发记录的多个进程不会互相覆盖（原来各自 load 后整体
     # save，后写者会抹掉先写者的条目与 index 计数）
     update_json(
-        LEARNING_FILE,
+        _learning_file(),
         lambda data: (_append_entries(data, [entry]), data)[1],
         _empty_learnings(),
     )
@@ -313,7 +326,7 @@ def self_evolve(challenge_id: str, verified: bool = False) -> Optional[dict]:
 
     # 落库（锁内读—改—写，避免并发覆盖）
     update_json(
-        LEARNING_FILE,
+        _learning_file(),
         lambda data: (_append_entries(data, knowledge_points), data)[1],
         _empty_learnings(),
     )
@@ -330,7 +343,7 @@ def record_solve_outcome(challenge_id: str, category: str, success: bool,
                          verified: bool = False) -> Optional[dict]:
     """一次解题尝试的结果落库（F3-003/F3-004 集成入口）。
 
-    写 trace 文件（TRACES_DIR/{challenge_id}.json：challenge_id/category/
+    写 trace 文件（traces/{challenge_id}.json：challenge_id/category/
     key_commands/flag/verified/timestamp），然后调用 self_evolve(challenge_id)
     做 提取→去重→落库。返回 self_evolve 的结果；IO 失败返回 None（不抛异常，
     方便调度器 best-effort 裸调）。key_commands 为空列表时也写 trace
@@ -340,7 +353,7 @@ def record_solve_outcome(challenge_id: str, category: str, success: bool,
         verified: flag 是否经校验确认（单题路径 = flag 检测链命中；默认 False）
     """
     try:
-        TRACES_DIR.mkdir(parents=True, exist_ok=True)
+        _traces_dir().mkdir(parents=True, exist_ok=True)
         trace = {
             "challenge_id": challenge_id,
             "category": category,
@@ -406,7 +419,7 @@ def get_learning_stats() -> dict:
         "negative": negative,
         "techniques": techniques,
         "by_category": by_category,
-        "file_path": str(LEARNING_FILE),
+        "file_path": str(_learning_file()),
     }
 
 

@@ -61,16 +61,15 @@ def solve_work_dir_for(project, challenge_id: str) -> str:
 def load_historical_trace(challenge_id: str) -> Optional[dict]:
     """读取 FULILIAN_HOME/traces/{id}.json（record_solve_outcome 的历史轨迹）。"""
     try:
-        from fulilian_constants import FULILIAN_HOME
+        from fulilian_constants import get_fulilian_home
 
         # 文件名净化口径必须与写入方（experiential_learning.trace_file_for）
         # 一致，否则含 "/" 的 challenge_id 写入与读取会指向不同文件。
-        # 目录仍在调用时从 FULILIAN_HOME 解析（不 import 模块常量——那会在
-        # import 时固化路径，运行期替换 FULILIAN_HOME 的调用方读不到）。
+        # 目录在调用时从 get_fulilian_home() 动态解析（C0-1）。
         from fulilian_ctf.fsutil import safe_filename_stem
 
         trace_file = (
-            FULILIAN_HOME / "traces" / f"{safe_filename_stem(challenge_id)}.json"
+            get_fulilian_home() / "traces" / f"{safe_filename_stem(challenge_id)}.json"
         )
         if trace_file.is_file():
             return json.loads(trace_file.read_text(encoding="utf-8"))

@@ -140,16 +140,29 @@ def get_fulilian_home() -> Path:
 
 
 # ── FuLiLian home ─────────────────────────────────────────────────────
-# Challenge data, knowledge base, solve state, etc. live under
-# FULILIAN_HOME.  Defaults to a fixed ~/.fulilian (NOT <fulilian home>/fulilian):
-# knowledge.db / learning.json must resolve to the same location regardless of
-# FULILIAN_HOME profile, otherwise the index silently forks per profile
-# (subprocess spawners don't pass FULILIAN_HOME — see issue #18594).  Still
-# isolated from upstream Fulilian data.  Overridable via FULILIAN_HOME env.
-FULILIAN_HOME: Path = Path(
-    os.environ.get("FULILIAN_HOME", "").strip()
-    or os.path.join(str(Path.home()), ".fulilian")
-)
+# Challenge data, knowledge base, solve state, etc. live under FULILIAN_HOME.
+# The single source of truth is :func:`get_fulilian_home` above
+# (ContextVar override → env → platform default).  ``FULILIAN_HOME`` is no
+# longer an import-time constant (C0-1): the old ``Path(os.environ.get(...))``
+# snapshot diverged from ``get_fulilian_home()`` whenever a ContextVar
+# override was active or the env changed after import, forking data paths.
+# It remains readable as a module attribute via the PEP 562 ``__getattr__``
+# shim below purely for backward compatibility — new call sites must call
+# ``get_fulilian_home()``.
+
+
+def __getattr__(name: str):
+    """PEP 562 module attribute hook (C0-1 backward-compat shim).
+
+    Importing ``FULILIAN_HOME`` by name (``from-import`` or attribute
+    access) still works, but the value is resolved dynamically through
+    :func:`get_fulilian_home` at each access instead of being snapshotted
+    at import time.  Any other name raises ``AttributeError`` exactly as a
+    normal module would.
+    """
+    if name == "FULILIAN_HOME":
+        return get_fulilian_home()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def fulilian_home_key(path: str | Path | None = None) -> str:
@@ -183,13 +196,17 @@ def get_process_fulilian_home() -> Path:
     return _fulilian_home_from_env()
 
 
-# Process-level memo for get_default_fulilian_root(). The function resolves
-# FULILIAN_HOME against the native home on every call (~80us of path
-# resolution), and it is called at 31+ sites — every _load_global_auth_store()
-# (per provider row in the /model picker), kanban, backup, gateway, update.
-# Its result depends only on (FULILIAN_HOME, platform native home), which are
-# compared for free on each call, so the memo is freshness-correct even if a
-# test or plugin mutates FULILIAN_HOME mid-process.
+# Process-level memo for get_default_fulilian_root(). The function re-reads
+# the process ``FULILIAN_HOME`` env var and the platform-native home on every
+# call (~80us of path resolution), and it is called at 31+ sites — every
+# _load_global_auth_store() (per provider row in the /model picker), kanban,
+# backup, gateway, update.  The memo key is (platform native home, env value),
+# compared for free on each call, so it is freshness-correct even if a test
+# or plugin mutates the ``FULILIAN_HOME`` env var mid-process.  Like
+# get_process_fulilian_home(), it deliberately tracks the process env only
+# and never follows the ContextVar override — that env-only scope is what
+# profile-level root resolution wants (C0-1: the ``FULILIAN_HOME`` module
+# attribute is now dynamic, but this memo never depended on it).
 _default_fulilian_root_memo: "tuple[str, str, Path] | None" = None
 
 
@@ -509,6 +526,73 @@ def _print_managed_node_in_use_notice() -> None:
     )
 
 
+# Hard cap on the streamed Node zip download (C0-3): aborts instead of
+# buffering an unbounded response.  Upstream win-x64/arm64 zips are well
+# under 100 MB, so 200 MB leaves generous headroom for future releases
+# while still bounding a hijacked/looping response.
+_NODE_ZIP_MAX_BYTES = 200 * 1024 * 1024
+
+
+def _stream_download_capped(url: str, dest: Path, max_bytes: int) -> str:
+    """Stream ``url`` to ``dest`` with a hard cumulative byte cap (C0-3).
+
+    The response is written to ``dest`` in 1 MiB chunks — the whole package
+    never sits in memory.  Returns the SHA-256 hex digest of the downloaded
+    bytes.  Raises ``OSError`` on network errors and ``ValueError`` when the
+    response exceeds ``max_bytes``; the partial file is removed before
+    raising in both cases.
+    """
+    import hashlib
+    import urllib.request
+
+    digest = hashlib.sha256()
+    try:
+        with urllib.request.urlopen(url, timeout=300) as response, open(
+            dest, "wb"
+        ) as out:
+            total = 0
+            while True:
+                chunk = response.read(1024 * 1024)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > max_bytes:
+                    raise ValueError(
+                        f"download exceeds cap ({total} > {max_bytes} bytes): {url}"
+                    )
+                digest.update(chunk)
+                out.write(chunk)
+    except BaseException:
+        try:
+            dest.unlink()
+        except OSError:
+            pass
+        raise
+    return digest.hexdigest()
+
+
+def _verify_node_zip_sha256(shasums_text: str, zip_name: str, actual_hex: str) -> bool:
+    """Verify a downloaded zip digest against SHASUMS256.txt content (C0-3).
+
+    ``shasums_text`` is the raw SHASUMS256.txt body (``<digest>␣␣<filename>``
+    per sha256sum(1)).  The entry is matched by the EXACT downloaded filename
+    — no prefix or glob leniency — and the digest must equal ``actual_hex``.
+    Returns ``False`` (fail-closed) when the entry is missing, malformed, or
+    the digest differs.
+    """
+    actual = actual_hex.strip().lower()
+    if len(actual) != 64:
+        return False
+    for line in shasums_text.splitlines():
+        parts = line.split(maxsplit=1)
+        if len(parts) != 2:
+            continue
+        expected, filename = parts[0].strip().lower(), parts[1].strip()
+        if filename == zip_name:
+            return len(expected) == 64 and expected == actual
+    return False
+
+
 def _heal_managed_node_windows(home: Path | None = None) -> bool | None:
     """Redownload the portable Node zip into ``%FULILIAN_HOME%\\node`` on Windows.
 
@@ -520,7 +604,10 @@ def _heal_managed_node_windows(home: Path | None = None) -> bool | None:
     The replacement is staging-first: the new tree is fully downloaded and
     extracted to a sibling ``node.new-*`` directory, then the live tree is
     renamed aside (``node.old-*``) and the staged tree renamed into place.
-    The live tree is never deleted before its replacement is ready, so an
+    The zip is streamed to disk under a hard byte cap and its SHA-256 is
+    verified against the release's SHASUMS256.txt before extraction; a
+    verification failure is fail-closed (no staging, no swap).  The live
+    tree is never deleted before its replacement is ready, so an
     interrupted heal cannot gut the running installation. Windows allows
     renaming a tree whose executables are running (images are mapped with
     ``FILE_SHARE_DELETE`` — the same mechanism as the fulilian.exe quarantine);
@@ -590,9 +677,18 @@ def _heal_managed_node_windows(home: Path | None = None) -> bool | None:
 
     zip_name = match.group(0)
     download_url = f"{index_url}{zip_name}"
+
+    # C0-3: verify the download against SHASUMS256.txt from the same release
+    # directory before anything touches the running tree.  Trust boundary
+    # (honest scope, same as the C3-80 bws-install note): the checksum file
+    # rides the SAME channel as the zip, so this protects against corrupted
+    # or truncated downloads, NOT against an attacker who controls that
+    # channel — they can swap zip + checksums as one self-consistent set.
+    # Tamper resistance would need an out-of-band trust anchor (pinned
+    # fingerprint / GPG); until then this is an integrity check only.
     try:
-        with urllib.request.urlopen(download_url, timeout=300) as response:
-            zip_bytes = response.read()
+        with urllib.request.urlopen(f"{index_url}SHASUMS256.txt", timeout=60) as response:
+            shasums_text = response.read().decode("utf-8", errors="replace")
     except OSError:
         return False
 
@@ -603,7 +699,17 @@ def _heal_managed_node_windows(home: Path | None = None) -> bool | None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
             zip_path = tmp_path / zip_name
-            zip_path.write_bytes(zip_bytes)
+            # Streamed to disk with a cumulative cap; never buffered whole.
+            try:
+                zip_sha256 = _stream_download_capped(
+                    download_url, zip_path, _NODE_ZIP_MAX_BYTES
+                )
+            except (OSError, ValueError):
+                return False
+            if not _verify_node_zip_sha256(shasums_text, zip_name, zip_sha256):
+                # Fail-closed: digest mismatch or missing SHASUMS entry —
+                # nothing lands in FULILIAN_HOME, nothing is swapped.
+                return False
             extract_dir = tmp_path / "extract"
             extract_dir.mkdir()
             with zipfile.ZipFile(zip_path) as archive:

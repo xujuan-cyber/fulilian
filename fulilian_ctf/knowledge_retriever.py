@@ -22,7 +22,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from fulilian_constants import FULILIAN_HOME
+from fulilian_constants import get_fulilian_home
 
 # ── 路径常量 ─────────────────────────────────────────────────────────────
 
@@ -82,7 +82,7 @@ def _resolve_kb_path() -> Path:
     env = os.environ.get("FULILIAN_CTF_KB_PATH", "").strip()
     if env:
         return Path(env)
-    default = FULILIAN_HOME / "ctf-knowledge"
+    default = get_fulilian_home() / "ctf-knowledge"
     if default.exists():
         return default
     for cand in (BUNDLED_KB_PATH, *_KB_FALLBACK_PATHS):
@@ -111,7 +111,16 @@ def _kb_roots():
         roots.append(OBSIDIAN_VAULT)
     return roots
 
-DB_PATH = FULILIAN_HOME / "knowledge.db"
+# C0-1: 求值时点结论——DB_PATH 保留在模块 import 期求值（现经
+# get_fulilian_home() 解析，override 在 import 前生效则跟随），而非推迟到
+# 使用点。理由：① 本文件内 DB_PATH 有 20+ 处调用点，推迟需全部改写且
+# 要与 4 个批外消费方（benchmark.py 的 from-import 快照、kb_writeback.py /
+# scripts/verify_wp_index.py 的 kr.DB_PATH 属性访问、fulilian_ctf/__init__.py
+# 再导出）同步，否则制造"内部动态 vs 导出快照"的新分叉，比现状更糟；
+# ② KB_PATH/DB_PATH 是既有测试 monkeypatch 面（见 kb_writeback.py 头注释），
+# 改动态会破坏该契约。推迟求值属跨文件重构，留给后续批次；
+# 运行期 env 变更不传播到 DB_PATH 是已知残留（与改前行为一致，非回归）。
+DB_PATH = get_fulilian_home() / "knowledge.db"
 
 # skills/ctf-cards/snippets/ — 可复用攻击片段（.py，头部注释元数据）
 SNIPPETS_DIR = Path(__file__).resolve().parent.parent / "skills" / "ctf-cards" / "snippets"
