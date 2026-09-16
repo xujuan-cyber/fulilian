@@ -376,7 +376,21 @@ def _candidate_node_command_names(command: str) -> list[str]:
     return [f"{base}.cmd", f"{base}.exe", base]
 
 
-_FULILIAN_NODE_TARGET_MAJOR = int(os.environ.get("FULILIAN_NODE_TARGET_MAJOR", "22"))
+# C0-2: a non-numeric FULILIAN_NODE_TARGET_MAJOR must not crash module
+# import — warn and fall back to the default (mirrors the reasoning_effort
+# unknown-value handling below).
+try:
+    _FULILIAN_NODE_TARGET_MAJOR = int(
+        os.environ.get("FULILIAN_NODE_TARGET_MAJOR", "22")
+    )
+except (TypeError, ValueError):
+    import logging
+
+    logging.getLogger(__name__).warning(
+        "Invalid FULILIAN_NODE_TARGET_MAJOR %r, using default (22)",
+        os.environ.get("FULILIAN_NODE_TARGET_MAJOR"),
+    )
+    _FULILIAN_NODE_TARGET_MAJOR = 22
 _managed_node_heal_attempted = False
 _NODE_BOOTSTRAP_SCRIPT = Path(__file__).resolve().parent / "scripts" / "lib" / "node-bootstrap.sh"
 
@@ -713,6 +727,14 @@ def _heal_managed_node_windows(home: Path | None = None) -> bool | None:
             extract_dir = tmp_path / "extract"
             extract_dir.mkdir()
             with zipfile.ZipFile(zip_path) as archive:
+                # C0-4: cumulative decompressed-size cap — the same budget
+                # as the download cap (C0-3) above.  Extraction stops before
+                # it starts on an oversized (zip-bomb-style) archive;
+                # TemporaryDirectory cleanup then discards the staged zip
+                # and any partially extracted bytes.  zip-slip is already
+                # handled by zipfile itself.
+                if sum(info.file_size for info in archive.infolist()) > _NODE_ZIP_MAX_BYTES:
+                    return False
                 archive.extractall(extract_dir)
             extracted = next(extract_dir.glob("node-v*"), None)
             if extracted is None or not extracted.is_dir():
@@ -864,10 +886,12 @@ def heal_fulilian_managed_node() -> bool:
         _managed_node_heal_attempted = True
         return bool(result)
 
-    _managed_node_heal_attempted = True
-
     if not _NODE_BOOTSTRAP_SCRIPT.is_file():
+        # C0-5: a missing bootstrap script must not burn the process's
+        # single heal attempt — set the flag only once real work begins
+        # (mirrors the Windows branch's deferred-set pattern above).
         return False
+    _managed_node_heal_attempted = True
 
     import subprocess
 
