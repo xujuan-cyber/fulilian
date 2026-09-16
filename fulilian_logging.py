@@ -217,7 +217,8 @@ _install_session_record_factory()
 # ---------------------------------------------------------------------------
 
 class _ComponentFilter(logging.Filter):
-    """Only pass records whose logger name starts with one of *prefixes*.
+    """Only pass records whose logger name is one of *prefixes* or a child of
+    one of them (``cli`` and ``cli.foo`` pass; ``click`` does not).
 
     Used to route gateway-specific records to ``gateway.log`` while
     keeping ``agent.log`` as the catch-all.
@@ -225,10 +226,16 @@ class _ComponentFilter(logging.Filter):
 
     def __init__(self, prefixes: Sequence[str]) -> None:
         super().__init__()
-        self._prefixes = tuple(prefixes)
+        # Longest first so overlapping prefixes resolve to the intended
+        # component unambiguously.
+        self._prefixes = tuple(sorted(prefixes, key=len, reverse=True))
 
     def filter(self, record: logging.LogRecord) -> bool:
-        return record.name.startswith(self._prefixes)
+        name = record.name
+        for prefix in self._prefixes:
+            if name == prefix or name.startswith(prefix + "."):
+                return True
+        return False
 
 
 # Logger name prefixes that belong to each component.
@@ -304,11 +311,27 @@ def setup_logging(
     log_dir = home / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
 
+    if _logging_initialized and not force:
+        return log_dir
+
     # Read config defaults (best-effort — config may not be loaded yet).
     cfg_level, cfg_max_size, cfg_backup = _read_logging_config()
 
-    level_name = (log_level or cfg_level or "INFO").upper()
-    level = getattr(logging, level_name, logging.INFO)
+    raw_level = log_level or cfg_level or "INFO"
+    level_name = str(raw_level).upper()
+    level = getattr(logging, level_name, None)
+    if not isinstance(level, int):
+        # Standard level names (any case) resolve via ``getattr`` above.
+        # Numeric levels (int, or a numeric string like "25") are also legal.
+        if isinstance(raw_level, int) and not isinstance(raw_level, bool):
+            level = raw_level
+        elif isinstance(raw_level, str) and raw_level.isdigit():
+            level = int(raw_level)
+        else:
+            logging.getLogger(__name__).warning(
+                "Unknown log level '%s', using default (INFO)", raw_level
+            )
+            level = logging.INFO
     max_bytes = (max_size_mb or cfg_max_size or 5) * 1024 * 1024
     backups = backup_count or cfg_backup or 3
 
@@ -325,6 +348,7 @@ def setup_logging(
         max_bytes=max_bytes,
         backup_count=backups,
         formatter=RedactingFormatter(_LOG_FORMAT),
+        force=force,
     )
 
     # --- errors.log (WARNING+) — quick triage log --------------------------
@@ -335,6 +359,7 @@ def setup_logging(
         max_bytes=2 * 1024 * 1024,
         backup_count=2,
         formatter=RedactingFormatter(_LOG_FORMAT),
+        force=force,
     )
 
     # --- gateway.log (INFO+, gateway component only) ------------------------
@@ -347,6 +372,7 @@ def setup_logging(
             backup_count=3,
             formatter=RedactingFormatter(_LOG_FORMAT),
             log_filter=_ComponentFilter(COMPONENT_PREFIXES["gateway"]),
+            force=force,
         )
 
     # --- gui.log (INFO+, dashboard/tui-gateway components) -----------------
@@ -359,10 +385,8 @@ def setup_logging(
             backup_count=5,
             formatter=RedactingFormatter(_LOG_FORMAT),
             log_filter=_ComponentFilter(COMPONENT_PREFIXES["gui"]),
+            force=force,
         )
-
-    if _logging_initialized and not force:
-        return log_dir
 
     # Ensure root logger level is low enough for the handlers to fire.
     if root.level == logging.NOTSET or root.level > level:
@@ -676,7 +700,10 @@ def drain_log_queue(timeout: float = 1.0) -> None:
     proceed. Availability beats the last log line when the disk is already
     wedged.
     """
-    listener = _queue_listener
+    with _queue_state_lock:
+        # Lock only guards taking the reference; the (possibly blocking)
+        # drain itself runs outside the lock.
+        listener = _queue_listener
     if listener is None:
         return
 
@@ -727,15 +754,22 @@ def _add_rotating_handler(
     backup_count: int,
     formatter: logging.Formatter,
     log_filter: Optional[logging.Filter] = None,
+    force: bool = False,
 ) -> None:
     """Add a ``RotatingFileHandler`` to *logger*, skipping if one already
     exists for the same resolved file path (idempotent).
+
+    With ``force=True`` an existing handler for the same resolved path is
+    closed, detached from the queue listener, and replaced by a freshly
+    built one instead of being skipped.
 
     Parameters
     ----------
     log_filter
         Optional filter to attach to the handler (e.g. ``_ComponentFilter``
         for gateway.log).
+    force
+        Rebuild an existing same-path handler rather than skipping it.
     """
     resolved = path.resolve()
     for existing in _queued_file_handlers:
@@ -743,7 +777,23 @@ def _add_rotating_handler(
             isinstance(existing, RotatingFileHandler)
             and Path(getattr(existing, "baseFilename", "")).resolve() == resolved
         ):
-            return  # already attached
+            if not force:
+                return  # already attached
+            # Rebuild: detach the old handler first.  The lock guards the
+            # listener teardown only; the new handler is built (file I/O)
+            # outside the lock and re-registered via _register_queued_handler,
+            # which rebuilds the listener from the pruned target list.
+            with _queue_state_lock:
+                _stop_queue_listener_locked()
+                try:
+                    _queued_file_handlers.remove(existing)
+                except ValueError:
+                    pass
+                try:
+                    existing.close()
+                except Exception:
+                    pass
+            break
 
     path.parent.mkdir(parents=True, exist_ok=True)
     handler = _ManagedRotatingFileHandler(
