@@ -7,7 +7,7 @@
   删块 = 放弃、残缺块容错（不配对 / 缺元数据）、知识卡缺失 skipped
 - 消费语义：apply 后候选文件重置为仅含标题与说明
 
-所有测试通过 tmp_path + monkeypatch 覆盖 el.LEARNING_FILE / el.TRACES_DIR
+所有测试通过 tmp_path + monkeypatch patch el._learning_file / el._traces_dir（C0-1）
 与 knowledge.SKILLS_DIR，绝不读写真实的 ~/.fulilian/learning.json 与
 skills/ctf-knowledge 卡。
 """
@@ -31,8 +31,8 @@ import fulilian_ctf.knowledge as knowledge
 @pytest.fixture(autouse=True)
 def _isolated_env(tmp_path, monkeypatch):
     """学习文件 / 轨迹目录 / 知识卡目录全部指向 tmp，绝不触碰真实数据。"""
-    monkeypatch.setattr(el, "LEARNING_FILE", tmp_path / "learning.json")
-    monkeypatch.setattr(el, "TRACES_DIR", tmp_path / "traces")
+    monkeypatch.setattr(el, "_learning_file", lambda: tmp_path / "learning.json")
+    monkeypatch.setattr(el, "_traces_dir", lambda: tmp_path / "traces")
     skills_dir = tmp_path / "skills" / "ctf-knowledge"
     skills_dir.mkdir(parents=True)
     monkeypatch.setattr(knowledge, "SKILLS_DIR", skills_dir)
@@ -87,7 +87,7 @@ class TestGenerateMode:
         m = _CAND_OPEN_RE.search(text)
         assert m, "应有 id=日期-序号 形式的候选块开标记"
         assert "### [web] SQL注入绕过WAF" in text
-        assert "- 目标卡: skills/ctf-knowledge/web.md" in text
+        assert "- 目标卡: skills/ctf-cards/web.md" in text  # 09-14 卡目录更名 ctf-knowledge→ctf-cards,断言同步
         assert "成功 2 / 失败 0（含 verified 通过）" in text
         assert "来源: web-01, web-02" in text
         assert "SQL注入绕过WAF（关键命令: sqlmap" in text

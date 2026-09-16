@@ -715,7 +715,7 @@ class TestResolveKbPath:
         live.mkdir()
         bundled = tmp_path / "bundled"
         bundled.mkdir()
-        monkeypatch.setattr(kr, "FULILIAN_HOME", tmp_path)
+        monkeypatch.setattr(kr, "get_fulilian_home", lambda: tmp_path)  # C0-1
         monkeypatch.setattr(kr, "BUNDLED_KB_PATH", bundled)
         assert kr._resolve_kb_path() == live
 
@@ -725,7 +725,7 @@ class TestResolveKbPath:
         self._isolate(monkeypatch)
         bundled = tmp_path / "bundled"
         bundled.mkdir()
-        monkeypatch.setattr(kr, "FULILIAN_HOME", tmp_path / "nope")
+        monkeypatch.setattr(kr, "get_fulilian_home", lambda: tmp_path / "nope")  # C0-1
         monkeypatch.setattr(kr, "BUNDLED_KB_PATH", bundled)
         assert kr._resolve_kb_path() == bundled
 

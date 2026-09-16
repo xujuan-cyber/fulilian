@@ -1,8 +1,8 @@
 """跨题运行学习 + 自进化 (F3-003 / F3-004) 单元测试 — 对应实施指南 08 验证方式清单。
 
-所有测试通过 tmp_path + monkeypatch 覆盖模块常量 el.LEARNING_FILE / el.TRACES_DIR，
+所有测试通过 tmp_path + monkeypatch patch el._learning_file / el._traces_dir（C0-1 后路径经 get_fulilian_home() 调用点解析），
 不读写真实的 ~/.fulilian/learning.json 与 traces 目录。
-注意：常量必须通过模块属性（el.LEARNING_FILE）引用，不能按值 import，
+注意：测试内直接引用路径时须调 el._learning_file() / el._traces_dir()，不要按值缓存，
 否则 monkeypatch 后测试内引用的仍是旧绑定。
 """
 
@@ -21,15 +21,15 @@ import fulilian_ctf.experiential_learning as el
 @pytest.fixture(autouse=True)
 def _isolated_learning_env(tmp_path, monkeypatch):
     """每个测试使用独立 tmp 学习文件与轨迹目录，绝不触碰真实数据。"""
-    monkeypatch.setattr(el, "LEARNING_FILE", tmp_path / "learning.json")
-    monkeypatch.setattr(el, "TRACES_DIR", tmp_path / "traces")
+    monkeypatch.setattr(el, "_learning_file", lambda: tmp_path / "learning.json")
+    monkeypatch.setattr(el, "_traces_dir", lambda: tmp_path / "traces")
     yield
 
 
 def _write_trace(challenge_id: str, trace_data: dict) -> None:
     """把轨迹文件写入 monkeypatch 后的 tmp TRACES_DIR。"""
-    el.TRACES_DIR.mkdir(parents=True, exist_ok=True)
-    trace_file = el.TRACES_DIR / f"{challenge_id}.json"
+    el._traces_dir().mkdir(parents=True, exist_ok=True)
+    trace_file = el._traces_dir() / f"{challenge_id}.json"
     trace_file.write_text(
         json.dumps(trace_data, ensure_ascii=False), encoding="utf-8"
     )
@@ -77,8 +77,8 @@ class TestRecordLesson:
     def test_persistence(self):
         """save_learnings 后文件应存在且可读。"""
         el.record_lesson("web-01", "web", "SQL注入", success=True)
-        assert el.LEARNING_FILE.exists()
-        data = json.loads(el.LEARNING_FILE.read_text(encoding="utf-8"))
+        assert el._learning_file().exists()
+        data = json.loads(el._learning_file().read_text(encoding="utf-8"))
         assert len(data["entries"]) == 1
 
 
@@ -319,7 +319,7 @@ class TestVerifiedField:
         assert entries
         assert all(e["verified"] is True for e in entries)
         # trace 文件也带 verified 字段
-        trace = json.loads((el.TRACES_DIR / "sv-challenge.json").read_text(
+        trace = json.loads((el._traces_dir() / "sv-challenge.json").read_text(
             encoding="utf-8"))
         assert trace["verified"] is True
 

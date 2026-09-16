@@ -8,7 +8,7 @@
 - _knowledge_cards_sync：基于「成功」入选的 technique 须有 verified=True
   的 entry 支撑；旧数据（无 verified 字段）按 False；纯失败不受限
 
-所有测试通过 tmp_path + monkeypatch 覆盖 el.LEARNING_FILE / el.TRACES_DIR，
+所有测试通过 tmp_path + monkeypatch patch el._learning_file / el._traces_dir（C0-1），
 不读写真实的 ~/.fulilian/learning.json 与 traces 目录。
 """
 
@@ -35,8 +35,8 @@ from fulilian_ctf.blackboard import (
 @pytest.fixture(autouse=True)
 def _isolated_learning_env(tmp_path, monkeypatch):
     """每个测试使用独立 tmp 学习文件与轨迹目录，绝不触碰真实数据。"""
-    monkeypatch.setattr(el, "LEARNING_FILE", tmp_path / "learning.json")
-    monkeypatch.setattr(el, "TRACES_DIR", tmp_path / "traces")
+    monkeypatch.setattr(el, "_learning_file", lambda: tmp_path / "learning.json")
+    monkeypatch.setattr(el, "_traces_dir", lambda: tmp_path / "traces")
     yield
 
 

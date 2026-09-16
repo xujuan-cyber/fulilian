@@ -36,8 +36,8 @@ def _isolate_learning_paths(tmp_path, monkeypatch):
     所有走 Dispatcher 的测试统一隔离到 tmp_path，避免污染真实经验库。"""
     import fulilian_ctf.experiential_learning as _el
 
-    monkeypatch.setattr(_el, "LEARNING_FILE", tmp_path / "learning.json")
-    monkeypatch.setattr(_el, "TRACES_DIR", tmp_path / "traces")
+    monkeypatch.setattr(_el, "_learning_file", lambda: tmp_path / "learning.json")
+    monkeypatch.setattr(_el, "_traces_dir", lambda: tmp_path / "traces")
 
 
 # ── 模块级 fake solver（multiprocessing fork 直接继承）────────────────────

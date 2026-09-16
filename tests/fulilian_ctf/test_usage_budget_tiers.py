@@ -41,8 +41,8 @@ def _isolate_learning_paths(tmp_path, monkeypatch):
     """_reap 落库隔离到 tmp_path，避免污染真实经验库。"""
     import fulilian_ctf.experiential_learning as _el
 
-    monkeypatch.setattr(_el, "LEARNING_FILE", tmp_path / "learning.json")
-    monkeypatch.setattr(_el, "TRACES_DIR", tmp_path / "traces")
+    monkeypatch.setattr(_el, "_learning_file", lambda: tmp_path / "learning.json")
+    monkeypatch.setattr(_el, "_traces_dir", lambda: tmp_path / "traces")
 
 
 def _project(cid: str, tmp_path: Path, **kw) -> Project:

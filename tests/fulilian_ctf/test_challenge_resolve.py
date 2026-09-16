@@ -24,12 +24,13 @@ from fulilian_ctf.challenge_resolve import (
 def _isolate_fulilian_home(tmp_path, monkeypatch):
     """历史轨迹读取走 FULILIAN_HOME——统一隔离到 tmp_path，绝不碰真实数据。
 
-    load_historical_trace 在调用时才从 fulilian_constants 取 FULILIAN_HOME，
-    patch 模块属性即可生效（与 test_solve_validation.py 同一手法）。
+    load_historical_trace 在调用时经 fulilian_constants.get_fulilian_home() 动态解析（C0-1），
+    patch 该函数即可生效（与 test_solve_validation.py 同一手法）。
     """
     import fulilian_constants
 
-    monkeypatch.setattr(fulilian_constants, "FULILIAN_HOME", tmp_path / "home")
+    monkeypatch.setattr(fulilian_constants, "get_fulilian_home",
+                        lambda: tmp_path / "home")  # C0-1: 调用点动态解析
 
 
 # ── 可定位：返回将要使用的 work_dir ─────────────────────────────────────────

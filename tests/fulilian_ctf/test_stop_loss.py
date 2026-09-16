@@ -36,8 +36,8 @@ def _isolate_learning_paths(tmp_path, monkeypatch):
     所有走 Dispatcher 的测试统一隔离到 tmp_path，避免污染真实经验库。"""
     import fulilian_ctf.experiential_learning as _el
 
-    monkeypatch.setattr(_el, "LEARNING_FILE", tmp_path / "learning.json")
-    monkeypatch.setattr(_el, "TRACES_DIR", tmp_path / "traces")
+    monkeypatch.setattr(_el, "_learning_file", lambda: tmp_path / "learning.json")
+    monkeypatch.setattr(_el, "_traces_dir", lambda: tmp_path / "traces")
 
 
 # ── 模块级 fake solver（multiprocessing fork 直接继承）────────────────────
@@ -413,8 +413,8 @@ def test_reap_records_solve_outcome(tmp_path, monkeypatch):
 
     import fulilian_ctf.experiential_learning as el
 
-    monkeypatch.setattr(el, "LEARNING_FILE", tmp_path / "learning.json")
-    monkeypatch.setattr(el, "TRACES_DIR", tmp_path / "traces")
+    monkeypatch.setattr(el, "_learning_file", lambda: tmp_path / "learning.json")
+    monkeypatch.setattr(el, "_traces_dir", lambda: tmp_path / "traces")
     d = Dispatcher(max_workers=1, solver_fn=fake_solver_solved_with_facts, quiet=True)
     d.add_project(_project("p1", tmp_path, category="web"))
     d.run()
@@ -436,8 +436,8 @@ def test_reap_records_abandoned_outcome(tmp_path, monkeypatch):
 
     import fulilian_ctf.experiential_learning as el
 
-    monkeypatch.setattr(el, "LEARNING_FILE", tmp_path / "learning.json")
-    monkeypatch.setattr(el, "TRACES_DIR", tmp_path / "traces")
+    monkeypatch.setattr(el, "_learning_file", lambda: tmp_path / "learning.json")
+    monkeypatch.setattr(el, "_traces_dir", lambda: tmp_path / "traces")
     work = tmp_path / "p1"
     board = Blackboard(challenge_id="p1")
     board.add_fact(Fact(content="bruteforce with RockYou wordlist", source="solver"))
@@ -462,7 +462,7 @@ def test_build_solve_query_injects_avoid_list(tmp_path, monkeypatch):
     """知识卡之后注入历史教训；无失败记录时不注入。"""
     import fulilian_ctf.experiential_learning as el
 
-    monkeypatch.setattr(el, "LEARNING_FILE", tmp_path / "learning.json")
+    monkeypatch.setattr(el, "_learning_file", lambda: tmp_path / "learning.json")
     el.record_lesson("old-1", "web", "sqlmap --batch 被封 IP", success=False)
     el.record_lesson("old-2", "web", "无过滤直接 union 注入", success=False)
     p = Project(challenge_id="web-02", category="web", difficulty="easy")
@@ -470,9 +470,9 @@ def test_build_solve_query_injects_avoid_list(tmp_path, monkeypatch):
     assert "## 历史失败教训" in q
     assert "sqlmap --batch 被封 IP" in q
     # 无失败记录 → 不注入
-    monkeypatch.setattr(el, "LEARNING_FILE", tmp_path / "empty.json")
+    monkeypatch.setattr(el, "_learning_file", lambda: tmp_path / "empty.json")
     assert "历史失败教训" not in build_solve_query(p)
     # 无分类 → 不查询不注入
     p2 = Project(challenge_id="misc-01", difficulty="easy")
-    monkeypatch.setattr(el, "LEARNING_FILE", tmp_path / "learning.json")
+    monkeypatch.setattr(el, "_learning_file", lambda: tmp_path / "learning.json")
     assert "历史失败教训" not in build_solve_query(p2)

@@ -213,10 +213,10 @@ def test_bare_id_with_historical_trace_passes(stub_run_agent, tmp_path, monkeypa
         json.dumps({"challenge_id": "chal-01", "key_commands": []}),
         encoding="utf-8",
     )
-    # _load_historical_trace 在调用时从 fulilian_constants 取 FULILIAN_HOME
+    # _load_historical_trace 在调用时经 fulilian_constants.get_fulilian_home() 解析（C0-1）
     import fulilian_constants
 
-    monkeypatch.setattr(fulilian_constants, "FULILIAN_HOME", home)
+    monkeypatch.setattr(fulilian_constants, "get_fulilian_home", lambda: home)
 
     work_dir = cli._validate_solve_target("chal-01")
     assert work_dir is not None
