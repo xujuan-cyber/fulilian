@@ -868,6 +868,11 @@ def fts_rebuild_admission(db_path):
     this lock exists to prevent (fail closed). The deferred/stale breadcrumb
     machinery already guarantees a skipped rebuild is retried later.
 
+    Failing to OPEN the lock file (read-only dir, exhausted fds, exotic
+    filesystem) yields False as well: without the lock file there is no
+    cross-process serialisation at all, so the same fail-closed rule applies
+    (see the OSError branch below).
+
     ``db_path`` may be a str or Path; None (in-memory DB / tests without a
     file path) yields True — a private in-memory DB has no cross-process
     surface.
@@ -879,13 +884,19 @@ def fts_rebuild_admission(db_path):
     try:
         handle = open(lock_path, "a+b")
     except OSError as exc:
-        # Read-only dir, exhausted fds, exotic filesystem: fall back to the
-        # pre-lock behaviour rather than refusing a rebuild we could run.
+        # Read-only dir, exhausted fds, exotic filesystem. Without a lock file
+        # there is NO cross-process serialisation, and two processes rebuilding
+        # the same indexes in parallel structurally corrupts state.db (two
+        # documented production incidents, 2026-08-15 and 2026-08-23). Refuse
+        # rather than race: the stale-FTS breadcrumb keeps the rebuild
+        # retryable, so deferring degrades search without risking corruption.
         logger.warning(
-            "Could not open FTS rebuild lock %s (%s) — proceeding with "
-            "in-process serialisation only.", lock_path, exc,
+            "Could not open FTS rebuild lock %s (%s) — deferring this rebuild "
+            "instead of running it unserialised (the stale-FTS breadcrumb "
+            "keeps it retryable).",
+            lock_path, exc,
         )
-        yield True
+        yield False
         return
 
     acquired = False

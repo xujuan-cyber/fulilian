@@ -294,17 +294,29 @@ class SessionPortabilityMixin:
         base["messages"] = [msg for seg in segments for msg in (seg.get("messages") or [])]
         return base
 
+    def iter_export_all(self, source: str = None):
+        """Stream sessions (with messages) one at a time.
+
+        Same payload as :meth:`export_all` — the session row plus its
+        ``messages`` — but never materialises the whole export: peak memory
+        stays at one session instead of the entire corpus. JSONL writers
+        should prefer this; callers that need the list keep using
+        :meth:`export_all`, which now delegates here.
+        """
+        for session in self.search_sessions(source=source, limit=100000):
+            messages = self.get_messages(session["id"])
+            yield {**session, "messages": messages}
+
     def export_all(self, source: str = None) -> List[Dict[str, Any]]:
         """
         Export all sessions (with messages) as a list of dicts.
         Suitable for writing to a JSONL file for backup/analysis.
+
+        Materialises the entire export in memory — on a large state.db that
+        is the whole message corpus. Use :meth:`iter_export_all` to stream
+        it instead.
         """
-        sessions = self.search_sessions(source=source, limit=100000)
-        results = []
-        for session in sessions:
-            messages = self.get_messages(session["id"])
-            results.append({**session, "messages": messages})
-        return results
+        return list(self.iter_export_all(source=source))
 
     def adopt_session_lineage_from(
         self,

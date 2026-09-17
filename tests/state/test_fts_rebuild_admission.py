@@ -147,6 +147,29 @@ class TestRebuildFtsAdmission:
         with fulilian_state_common.fts_rebuild_admission(None) as admitted:
             assert admitted is True
 
+    def test_admission_fails_closed_when_lock_file_cannot_be_opened(
+        self, tmp_path
+    ):
+        """An unopenable lock file yields False, not True.
+
+        Without the lock file there is no cross-process serialisation at all,
+        so admitting the rebuild would reintroduce the very parallel-rebuild
+        interleaving that corrupted state.db on 2026-08-15 / 2026-08-23.
+        A directory at the lock path makes ``open(..., "a+b")`` raise
+        IsADirectoryError (an OSError) without any monkeypatching.
+        """
+        db_path = tmp_path / "state.db"
+        _lock_file(db_path).mkdir()
+        with fulilian_state_common.fts_rebuild_admission(db_path) as admitted:
+            assert admitted is False
+
+    def test_rebuild_defers_when_lock_file_cannot_be_opened(self, db):
+        """The entry point must DEFER, not race, when the lock is unopenable."""
+        lock = _lock_file(db.db_path)
+        lock.unlink(missing_ok=True)
+        lock.mkdir()
+        assert db.rebuild_fts() == 0
+
 
 class TestSchemaPathAdmission:
     def test_startup_trigger_repair_defers_and_fails_closed(
