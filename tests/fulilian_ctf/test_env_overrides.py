@@ -1,8 +1,8 @@
 """env_overrides 通用解析器测试。
 
 覆盖矩阵：未设 / 空串 / 空白 / 非数字 / 负数 / 0 / 越界 / 边界 / 畸形条目 / 部分覆盖。
-接线级测试（timebox / stopper / loop_guard / submit_state / probe / dispatcher /
-cli）在各模块落地时追加到本文件末尾。
+接线级测试（timebox / stopper / loop_guard / probe / dispatcher / cli）在各模块
+落地时追加到本文件末尾。
 
 注意：本文件的 autouse fixture 会把登记表里的**全部** env 名清掉，因此本文件可以
 独立运行，不依赖 ``tests/conftest.py`` 的清理名单。
@@ -20,8 +20,6 @@ from fulilian_ctf import env_overrides as eo
 from fulilian_ctf import loop_guard as lg
 from fulilian_ctf import probe as pr
 from fulilian_ctf import stopper as st
-from fulilian_ctf import submit_guard as sg_submit
-from fulilian_ctf import submit_state as sub
 from fulilian_ctf import timebox as tb
 
 
@@ -233,9 +231,8 @@ def test_env_int_map_adds_new_key(monkeypatch):
 
 
 # ── env_cooldowns 已随递增冷却机制一同移除（2026-09-17）────────────────────
-# 它依赖"平台判错"能正确记账，而该判定的极性是错的（读 CTFd 信封顶层
-# success，答错时同样为 True）→ 冷却从未真正生效。防滥用改由
-# submit_state 的"区分未受理 vs 答错 + 有界退避重试"承担。
+# 它依赖"平台判错"能正确记账，而该判定的极性是错的 → 冷却从未真正生效。
+# 平台提交已整体移除（2026-09-17），本文件不再有提交相关的旋钮。
 
 
 # ── 登记表完整性 ─────────────────────────────────────────────────────────────
@@ -489,40 +486,6 @@ def test_loop_guard_kill_switch_still_opt_out(monkeypatch):
     assert lg.LoopDetector().check("terminal", {"cmd": "ls"}) is None
 
 
-# ── 接线：提交重试策略（submit_state）────────────────────────────────────────
-# 递增冷却与 env_cooldowns 已随冷却机制移除；这里的旋钮换成提交重试策略三项，
-# 且 submit_guard 不再有任何 env 数值（只剩 FULILIAN_SUBMIT_GUARD 开关）。
-
-
-def test_submit_policy_regression_no_env_matches_defaults():
-    assert sub.DEFAULT_SUBMIT_ATTEMPTS == 4
-    assert sub.DEFAULT_SUBMIT_BASE_DELAY == 1.5
-    assert sub.DEFAULT_SUBMIT_RETRY_AFTER_CAP == 300
-    pol = sub.default_submit_policy()
-    assert (pol.attempts, pol.base_delay, pol.retry_after_cap) == (4, 1.5, 300)
-
-
-def test_submit_policy_env(monkeypatch):
-    monkeypatch.setenv(eo.ENV_SUBMIT_ATTEMPTS, "6")
-    monkeypatch.setenv(eo.ENV_SUBMIT_BASE_DELAY, "0.5")
-    monkeypatch.setenv(eo.ENV_SUBMIT_RETRY_AFTER_CAP, "60")
-    pol = sub.default_submit_policy()
-    assert (pol.attempts, pol.base_delay, pol.retry_after_cap) == (6, 0.5, 60)
-
-
-def test_submit_policy_env_invalid_falls_back(monkeypatch):
-    monkeypatch.setenv(eo.ENV_SUBMIT_ATTEMPTS, "0")
-    monkeypatch.setenv(eo.ENV_SUBMIT_BASE_DELAY, "-3")
-    pol = sub.default_submit_policy()
-    assert (pol.attempts, pol.base_delay) == (4, 1.5)
-
-
-def test_submit_guard_has_no_numeric_env_knobs():
-    """闸门已无任何数值旋钮——只剩开关，防将来又往它身上挂冷却类参数。"""
-    guard = sg_submit.SubmitGuard()
-    assert guard.check("k", "flag{a}") == (True, "")
-    guard.mark_confirmed("k", "flag{a}")
-    assert guard.check("k", "flag{a}")[0] is False
 
 
 # ── 接线：probe ──────────────────────────────────────────────────────────────

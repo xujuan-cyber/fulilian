@@ -2,7 +2,6 @@
 
 覆盖：
 - ``SubmitGuard`` 纯逻辑：只防「已确认 flag 重提」、key 隔离、开关
-- ``submit_state`` 三态判定与重试策略（见 ``test_submit_state.py``）
 - 声明式接线：``tools.ctf_solve._submit_flag_impl``（monkeypatch verify_flag）
 
 平台（CTFd）MCP 接线相关测试已随平台对接整体移除（2026-09-17）。
