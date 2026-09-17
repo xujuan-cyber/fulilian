@@ -14471,9 +14471,18 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
           v1 — initial shape (no ON DELETE CASCADE on session_id FK)
           v2 — session_id FK gets ON DELETE CASCADE so session pruning
                automatically clears bindings.
+
+        Atomicity: every statement runs through ``conn.execute`` inside the
+        ``BEGIN IMMEDIATE`` transaction ``_execute_write`` opened. This used to
+        use ``conn.executescript``, which implicitly COMMITs any pending
+        transaction first — so the whole migration actually ran OUTSIDE that
+        transaction, and the v1→v2 rebuild could be interrupted between its
+        DROP TABLE and its RENAME (leaving no bindings table at all) while the
+        caller believed it was atomic. DDL is transactional in SQLite, so the
+        individual-execute form restores the all-or-nothing guarantee.
         """
         def _do(conn):
-            conn.executescript(
+            for statement in (
                 """
                 CREATE TABLE IF NOT EXISTS telegram_dm_topic_mode (
                     chat_id TEXT PRIMARY KEY,
@@ -14486,8 +14495,9 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
                     capability_checked_at REAL,
                     intro_message_id TEXT,
                     pinned_message_id TEXT
-                );
-
+                )
+                """,
+                """
                 CREATE TABLE IF NOT EXISTS telegram_dm_topic_bindings (
                     chat_id TEXT NOT NULL,
                     thread_id TEXT NOT NULL,
@@ -14498,15 +14508,18 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
                     linked_at REAL NOT NULL,
                     updated_at REAL NOT NULL,
                     PRIMARY KEY (chat_id, thread_id)
-                );
-
-                CREATE UNIQUE INDEX IF NOT EXISTS idx_telegram_dm_topic_bindings_session
-                ON telegram_dm_topic_bindings(session_id);
-
-                CREATE INDEX IF NOT EXISTS idx_telegram_dm_topic_bindings_user
-                ON telegram_dm_topic_bindings(user_id, chat_id);
+                )
+                """,
                 """
-            )
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_telegram_dm_topic_bindings_session
+                ON telegram_dm_topic_bindings(session_id)
+                """,
+                """
+                CREATE INDEX IF NOT EXISTS idx_telegram_dm_topic_bindings_user
+                ON telegram_dm_topic_bindings(user_id, chat_id)
+                """,
+            ):
+                conn.execute(statement)
 
             # v1 → v2: rebuild telegram_dm_topic_bindings if its session_id FK
             # lacks ON DELETE CASCADE. SQLite can't ALTER a foreign key, so we
@@ -14525,7 +14538,7 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
                     for row in fk_rows
                 )
                 if needs_rebuild:
-                    conn.executescript(
+                    for statement in (
                         """
                         CREATE TABLE telegram_dm_topic_bindings_new (
                             chat_id TEXT NOT NULL,
@@ -14537,20 +14550,29 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
                             linked_at REAL NOT NULL,
                             updated_at REAL NOT NULL,
                             PRIMARY KEY (chat_id, thread_id)
-                        );
+                        )
+                        """,
+                        """
                         INSERT INTO telegram_dm_topic_bindings_new
                             SELECT chat_id, thread_id, user_id, session_key,
                                    session_id, managed_mode, linked_at, updated_at
-                            FROM telegram_dm_topic_bindings;
-                        DROP TABLE telegram_dm_topic_bindings;
-                        ALTER TABLE telegram_dm_topic_bindings_new
-                            RENAME TO telegram_dm_topic_bindings;
-                        CREATE UNIQUE INDEX idx_telegram_dm_topic_bindings_session
-                            ON telegram_dm_topic_bindings(session_id);
-                        CREATE INDEX idx_telegram_dm_topic_bindings_user
-                            ON telegram_dm_topic_bindings(user_id, chat_id);
+                            FROM telegram_dm_topic_bindings
+                        """,
+                        "DROP TABLE telegram_dm_topic_bindings",
                         """
-                    )
+                        ALTER TABLE telegram_dm_topic_bindings_new
+                            RENAME TO telegram_dm_topic_bindings
+                        """,
+                        """
+                        CREATE UNIQUE INDEX idx_telegram_dm_topic_bindings_session
+                            ON telegram_dm_topic_bindings(session_id)
+                        """,
+                        """
+                        CREATE INDEX idx_telegram_dm_topic_bindings_user
+                            ON telegram_dm_topic_bindings(user_id, chat_id)
+                        """,
+                    ):
+                        conn.execute(statement)
 
             conn.execute(
                 "INSERT INTO state_meta (key, value) VALUES (?, ?) "
