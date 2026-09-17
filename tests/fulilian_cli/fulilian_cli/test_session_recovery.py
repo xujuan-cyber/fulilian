@@ -537,7 +537,12 @@ def test_cli_allow_partial_salvages_rows_across_a_corrupt_leaf(
             "8",
             "--allow-partial",
         ],
-        cwd=Path(__file__).resolve().parents[2],
+        # Repo root, i.e. parents[3] — NOT parents[2], which is <repo>/tests.
+        # That directory holds a shadowing ``fulilian_cli/`` (no
+        # ``__init__.py``), so ``python -m fulilian_cli.main`` from there
+        # resolves the package as a namespace package and
+        # ``from fulilian_cli import __version__`` fails ("unknown location").
+        cwd=Path(__file__).resolve().parents[3],
         env=env,
         capture_output=True,
         text=True,
