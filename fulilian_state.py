@@ -2024,6 +2024,10 @@ def _cross_process_repair_lock(db_path: Path):
     redundant work — proceeding here would be exactly the unsafe interleaving
     we are trying to prevent, so a caller that gets False must NOT do surgery.
 
+    Failing to OPEN the lock file yields False too (see the OSError branch):
+    without the lock file there is no cross-process serialisation at all, so
+    the same rule applies.
+
     ``flock`` is the right primitive for this: the kernel drops the lock when
     the holding process dies, so a crashed repairer cannot leave a stale lock
     that wedges every future repair (a pidfile would).  The acquire is still
@@ -2036,14 +2040,23 @@ def _cross_process_repair_lock(db_path: Path):
         lock_path.parent.mkdir(parents=True, exist_ok=True)
         handle = lock_path.open("a+b")
     except OSError as exc:
-        # Read-only dir, exhausted fds, exotic filesystem: fall back to the
-        # in-process behaviour that shipped before this lock existed rather
-        # than refusing to repair a DB we could otherwise heal.
+        # Read-only dir, exhausted fds, exotic filesystem. Without the lock
+        # file there is NO cross-process serialisation of the writable_schema
+        # surgery + VACUUM — the exact interleaving this lock exists to
+        # prevent (see the module comment above the timeout constants: two
+        # hosts each ran the full surgery on their own private connection with
+        # nothing serialising them). Refuse rather than race: the caller
+        # re-probes, reports a deferral, and a later open retries (fail
+        # closed). The warning below carries the true reason, so the caller's
+        # generic "another process holds the repair lock" text is not the only
+        # trace an operator gets.
         logger.warning(
-            "Could not open state.db repair lock %s (%s) — proceeding with "
-            "in-process serialisation only.", lock_path, exc,
+            "Could not open state.db repair lock %s (%s) — skipping schema "
+            "surgery in this process instead of running it unserialised "
+            "(a later open retries).",
+            lock_path, exc,
         )
-        yield True
+        yield False
         return
 
     acquired = False
@@ -5570,6 +5583,13 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
         """
         if not sys.platform.startswith("linux") or psutil is None:
             return []
+        # Deliberate lazy reverse import (state → fulilian_cli.dashboard_procs).
+        # Every fulilian_cli import in this module is function-local by
+        # convention: the CLI layer imports the state layer, so a module-level
+        # import here would invert the dependency at load time. Called out
+        # explicitly because the reaper depends on this one: if it is
+        # unavailable (partial install, older CLI) reaping is skipped entirely
+        # rather than mis-classifying a live backend as an orphan.
         try:
             from fulilian_cli.dashboard_procs import _is_ephemeral_port_zero_backend
         except Exception:
@@ -9882,8 +9902,8 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
 
     def get_session_title(self, session_id: str) -> Optional[str]:
         """Get the title for a session, or None."""
-        with self._lock:
-            cursor = self._conn.execute(
+        with self._read_ctx() as conn:
+            cursor = conn.execute(
                 "SELECT title FROM sessions WHERE id = ?", (session_id,)
             )
             row = cursor.fetchone()
@@ -9891,8 +9911,8 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
 
     def get_session_title_source(self, session_id: str) -> Optional[str]:
         """Get the provenance of a session's title, or None when untitled."""
-        with self._lock:
-            cursor = self._conn.execute(
+        with self._read_ctx() as conn:
+            cursor = conn.execute(
                 "SELECT title, title_source FROM sessions WHERE id = ?",
                 (session_id,),
             )
@@ -10316,8 +10336,8 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
         # Find all existing numbered variants
         # Escape SQL LIKE wildcards (%, _) in the base to prevent false matches
         escaped = _escape_like(base)
-        with self._lock:
-            cursor = self._conn.execute(
+        with self._read_ctx() as conn:
+            cursor = conn.execute(
                 "SELECT title FROM sessions WHERE title = ? OR title LIKE ? ESCAPE '\\'",
                 (base, f"{escaped} #%"),
             )
@@ -10361,8 +10381,8 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
         # Bound the walk defensively — compression chains this deep are
         # pathological and shouldn't happen in practice. 100 = plenty.
         for _ in range(100):
-            with self._lock:
-                cursor = self._conn.execute(
+            with self._read_ctx() as conn:
+                cursor = conn.execute(
                     f"""
                     SELECT child.id
                     FROM sessions parent
@@ -11443,8 +11463,8 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
         if not session_id or message_row_id is None:
             return []
 
-        with self._lock:
-            row = self._conn.execute(
+        with self._read_ctx() as conn:
+            row = conn.execute(
                 "SELECT display_metadata FROM messages WHERE id = ? AND session_id = ?",
                 (message_row_id, session_id),
             ).fetchone()
@@ -11541,8 +11561,8 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
             "AND content IS NOT NULL AND TRIM(content) != '' " if require_text else ""
         )
 
-        with self._lock:
-            row = self._conn.execute(
+        with self._read_ctx() as conn:
+            row = conn.execute(
                 "SELECT id FROM messages WHERE session_id = ? AND role = ? "
                 f"AND active = 1 {text_filter}ORDER BY id DESC LIMIT 1 OFFSET ?",
                 (session_id, role, int(offset)),
@@ -13233,8 +13253,8 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
             params.extend(ws_params)
         where_sql = f" WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
         params.extend([limit, offset])
-        with self._lock:
-            cursor = self._conn.execute(
+        with self._read_ctx() as conn:
+            cursor = conn.execute(
                 f"{select_with_last_active}"
                 f"{where_sql} "
                 "ORDER BY last_active DESC, s.started_at DESC, s.id DESC LIMIT ? OFFSET ?",
@@ -13303,8 +13323,8 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
 
         where_sql = f" WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
 
-        with self._lock:
-            cursor = self._conn.execute(f"SELECT COUNT(*) FROM sessions s{where_sql}", params)
+        with self._read_ctx() as conn:
+            cursor = conn.execute(f"SELECT COUNT(*) FROM sessions s{where_sql}", params)
             return cursor.fetchone()[0]
 
     def session_count_ge(self, n: int = 1) -> bool:
@@ -13370,13 +13390,13 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
 
     def message_count(self, session_id: str = None) -> int:
         """Count messages, optionally for a specific session."""
-        with self._lock:
+        with self._read_ctx() as conn:
             if session_id:
-                cursor = self._conn.execute(
+                cursor = conn.execute(
                     "SELECT COUNT(*) FROM messages WHERE session_id = ?", (session_id,)
                 )
             else:
-                cursor = self._conn.execute("SELECT COUNT(*) FROM messages")
+                cursor = conn.execute("SELECT COUNT(*) FROM messages")
             return cursor.fetchone()[0]
 
     def has_platform_message_id(
@@ -13389,8 +13409,8 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
         to skip re-persisting a user message that was already saved on a
         prior retry of the same inbound platform message.
         """
-        with self._lock:
-            cursor = self._conn.execute(
+        with self._read_ctx() as conn:
+            cursor = conn.execute(
                 "SELECT 1 FROM messages "
                 "WHERE session_id = ? AND platform_message_id = ? LIMIT 1",
                 (session_id, platform_message_id),
@@ -14972,12 +14992,17 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
         Returns None if the pragmas cannot be read.
         """
         try:
+            # Deliberately NOT routed through _read_ctx() (unlike the other
+            # read-only helpers in this class): the ``self._conn is None``
+            # closed-DB guard just below has no meaning against a pooled read
+            # connection, and two PRAGMAs are cheap enough that splitting the
+            # guard in two is not worth the risk of a closed-store read.
             with self._lock:
                 if self._conn is None:
                     return None
                 page_count = self._conn.execute("PRAGMA page_count").fetchone()[0]
                 page_size = self._conn.execute("PRAGMA page_size").fetchone()[0]
-            return int(page_count) * int(page_size)
+                return int(page_count) * int(page_size)
         except Exception as exc:
             logger.debug("Could not read logical DB size: %s", exc)
             return None
@@ -14991,10 +15016,22 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
         explicitly VACUUM.
 
         VACUUM rewrites the entire DB, so it's expensive (seconds per
-        100MB) and cannot run inside a transaction. It also acquires an
-        exclusive lock, so callers must ensure no other writers are
-        active. Safe to call at startup before the gateway/CLI starts
-        serving traffic.
+        100MB) and cannot run inside a transaction.
+
+        HARD PRECONDITION — no other writer may touch this DB. VACUUM itself
+        takes an exclusive lock, but the TRUNCATE checkpoint below does NOT
+        inherit that protection: resetting the WAL out from under a live
+        writer tears B-tree pages (#45383). That makes this method safe only
+        for a process that owns the file outright — the transient
+        ``fulilian sessions vacuum`` / ``sessions optimize`` CLI, or startup
+        before the gateway/CLI starts serving traffic. A long-lived process
+        (gateway, Desktop ``fulilian serve`` backend, TUI slash worker) shares
+        state.db with other writers and must NOT call this directly; it goes
+        through the repair-lock-guarded prune path
+        (:meth:`maybe_auto_prune_and_vacuum`) instead.
+
+        This is a caller contract and is deliberately not enforced here: only
+        the caller knows whether it is the sole writer.
 
         FTS5 segments are merged first via :meth:`optimize_fts` so the
         subsequent VACUUM reclaims the pages freed by the merge. This is a
