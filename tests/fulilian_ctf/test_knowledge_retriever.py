@@ -65,9 +65,10 @@ def _isolated_knowledge_env(tmp_path, monkeypatch):
     _make_synthetic_kb(kb_root)
     monkeypatch.setattr(kr, "KB_PATH", kb_root)
     monkeypatch.setattr(kr, "DB_PATH", db_path)
-    # _kb_roots() 会追加 Obsidian vault、build_index 会顺带扫 SNIPPETS_DIR，
-    # 二者都指向真实数据，必须一并隔离，否则合成 KB 的精确计数断言被污染。
-    monkeypatch.setattr(kr, "OBSIDIAN_VAULT", tmp_path / "no-vault")
+    # build_index 会顺带扫 SNIPPETS_DIR，它指向真实数据，必须隔离，
+    # 否则合成 KB 的精确计数断言被污染。
+    # （2026-09-16 起 _kb_roots() 只剩 KB_PATH 单根，原 OBSIDIAN_VAULT
+    #   隔离项已随 vault 迁移移除。）
     monkeypatch.setattr(kr, "SNIPPETS_DIR", tmp_path / "no-snippets")
     yield
 
@@ -385,8 +386,9 @@ class TestAuthoritativeCategory:
     ):
         """绝对路径对不上时，按文件名兜底仍能认领权威分类。
 
-        这是双键匹配存在的理由：_kb_roots() 有两个根（KB_PATH + OBSIDIAN_VAULT），
-        vault 侧文档天然没有 KB_PATH 前缀，且 KB_PATH 一迁移所有前缀同时失效。
+        这是双键匹配存在的理由：文档的 source_path 天然可能对不上本轮
+        KB_PATH 前缀（历史上 _kb_roots() 有第二个根 Obsidian vault，其文档
+        一律没有 KB_PATH 前缀；且 KB_PATH 一迁移所有前缀同时失效）。
         """
         kr.build_index(force=True)
         assert _category_of("stack-overflow-notes.md") == "misc"

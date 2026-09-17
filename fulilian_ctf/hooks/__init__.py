@@ -61,31 +61,64 @@ def check_command(command: str, work_dir: str = ".") -> tuple:
 
 # ── 进程内回调 ───────────────────────────────────────────────────────────────
 
-def _ctf_pre_tool_hook(*, tool_name=None, args=None, **_kw):
-    """pre_tool_call 回调：terminal 命令危险检查 + 沙箱（F4-003/F4-004）。"""
-    if tool_name != "terminal":
-        return None
-    command = ""
-    if isinstance(args, str):
-        command = args
-    elif isinstance(args, dict):
-        command = str(args.get("command", "") or "")
-    if not command:
-        return None
+# P0-2 loop-guard：warn 级提示经 post_tool_call 注入（pre 只能 block），
+# 这里暂存待注入消息（进程内单条即可，重复 warn 以最新为准）
+_LOOP_WARN_PENDING: dict = {}
+
+
+def _check_loop(tool_name, args):
+    """P0-2 loop-guard（所有工具）。返回 None | ("block", msg) | ("warn", msg)。
+
+    fail-open：检查自身异常时放行，避免断题。
+    FULILIAN_LOOP_GUARD=0 时 LoopDetector.check 恒返回 None。
+    """
     try:
-        blocked, message = check_command(command, os.getcwd())
-    except Exception:  # noqa: BLE001 — 检查失败不阻断工具调用（fail-open）
+        from fulilian_ctf.loop_guard import BREAK, WARN, default_detector
+
+        verdict = default_detector().check(tool_name, args)
+        if verdict == BREAK:
+            return ("block", default_detector().describe(tool_name, args))
+        if verdict == WARN:
+            return (
+                "warn",
+                "[loop-guard] This exact call has repeated 3+ times recently; "
+                "the next identical call will be BLOCKED. Change approach now: "
+                "different tool or materially different arguments.",
+            )
+    except Exception:  # noqa: BLE001 — fail-open
         return None
-    if blocked:
-        return {"action": "block", "message": message}
+    return None
+
+
+def _ctf_pre_tool_hook(*, tool_name=None, args=None, **_kw):
+    """pre_tool_call 回调：loop-guard（所有工具）+ terminal 危险命令检查 + 沙箱。"""
+    loop = _check_loop(tool_name, args)
+    if loop is not None and loop[0] == "block":
+        _LOOP_WARN_PENDING.pop("msg", None)
+        return {"action": "block", "message": loop[1]}
+    if tool_name == "terminal":
+        command = ""
+        if isinstance(args, str):
+            command = args
+        elif isinstance(args, dict):
+            command = str(args.get("command", "") or "")
+        if not command:
+            return None
+        try:
+            blocked, message = check_command(command, os.getcwd())
+        except Exception:  # noqa: BLE001 — 检查失败不阻断工具调用（fail-open）
+            return None
+        if blocked:
+            return {"action": "block", "message": message}
+    if loop is not None and loop[0] == "warn":
+        _LOOP_WARN_PENDING["msg"] = loop[1]
     return None
 
 
 def _ctf_post_tool_hook(*, tool_name=None, result=None, **_kw):
-    """post_tool_call 回调：工具输出中的 flag 候选检测（声明式提交提示）。"""
+    """post_tool_call 回调：loop-guard warn 提示 + 工具输出 flag 候选检测。"""
     if tool_name != "terminal":
         return None
-    text = _extract_result_text(result)
     # F1-007: checkpoint every successful terminal step. The helper is bound
     # to the solver's current cwd and never accepts a model-supplied path.
     try:
@@ -99,23 +132,28 @@ def _ctf_post_tool_hook(*, tool_name=None, result=None, **_kw):
             _git_auto_commit_impl(os.getcwd(), "ctf: auto checkpoint after terminal step")
     except Exception:  # noqa: BLE001 — checkpoint failure must not stop solving
         pass
-    if not text:
-        return None
-    try:
-        from fulilian_ctf.verify import extract_flag_candidates
+    parts = []
+    # P0-2：pre 阶段判为 warn 的提示在这里注入（post 支持 context 注入）
+    loop_msg = _LOOP_WARN_PENDING.pop("msg", None)
+    if loop_msg:
+        parts.append(loop_msg)
+    text = _extract_result_text(result)
+    if text:
+        try:
+            from fulilian_ctf.verify import extract_flag_candidates
 
-        candidates = extract_flag_candidates(text)[:3]
-    except Exception:  # noqa: BLE001 — 检测失败不出声
-        return None
-    if candidates:
-        listed = ", ".join(c[:80] for c in candidates)
-        return {
-            "context": (
+            candidates = extract_flag_candidates(text)[:3]
+        except Exception:  # noqa: BLE001 — 检测失败不出声
+            candidates = []
+        if candidates:
+            listed = ", ".join(c[:80] for c in candidates)
+            parts.append(
                 f"[flag-candidate] Detected flag-shaped token(s): {listed}. "
                 "If this is the flag, write it to the FLAG file in the challenge "
                 "directory (declarative submission) and verify it with verify_flag."
             )
-        }
+    if parts:
+        return {"context": "\n".join(parts)}
     return None
 
 

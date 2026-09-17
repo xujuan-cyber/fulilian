@@ -1,7 +1,7 @@
 """``fulilian solve`` / ``solve-all`` command parsers.
 
-CTF first-class commands — solve a single challenge, or batch-solve a
-platform.  Registered into the FuLiLian command tree from ``main()``.
+CTF first-class commands — solve a single challenge, or batch-solve a local
+set of challenges.  Registered into the FuLiLian command tree from ``main()``.
 """
 
 from __future__ import annotations
@@ -52,16 +52,14 @@ def build_solve_parser(subparsers, *, cmd_solve: Callable, cmd_solve_all: Callab
                               help="Non-interactive mode (print result)")
     solve_parser.add_argument("--json", action="store_true",
                               help="Output structured JSON progress")
-    solve_parser.add_argument("--rpc", action="store_true",
-                              help="Serve newline-delimited JSON-RPC requests")
     solve_parser.set_defaults(func=cmd_solve)
 
     solve_all_parser = subparsers.add_parser(
         "solve-all",
-        help="Batch-solve challenges on a platform",
+        help="Batch-solve a local set of challenges",
         description="Batch-solve multiple CTF challenges with automatic scheduling.",
     )
-    solve_all_parser.add_argument("platform", help="Platform name (e.g. ctfd instance URL or ID)")
+    solve_all_parser.add_argument("platform", help="Directory (or manifest file) holding the challenges")
     solve_all_parser.add_argument("--model", help="Override solver model")
     solve_all_parser.add_argument("--limit", type=int, help="Max challenges to attempt")
     solve_all_parser.add_argument("--workers", type=int,

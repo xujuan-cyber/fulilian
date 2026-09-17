@@ -54,7 +54,7 @@ def test_existing_directory_with_challenge_json_resolves(tmp_path):
 
 
 def test_manifest_file_resolves_to_entry_dir(tmp_path, monkeypatch):
-    """平台清单文件（ctfd sync 产物的单题用法）→ 按条目 dir 解析 work_dir。
+    """平台清单文件（本地清单的单题用法）→ 按条目 dir 解析 work_dir。
 
     单题解析（_resolve_project）不传 base_dir：条目的相对 dir 按进程 cwd
     展开，故这里先 chdir 到 tmp_path 对齐实际求解语义。

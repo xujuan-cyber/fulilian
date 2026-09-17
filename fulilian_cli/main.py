@@ -459,7 +459,6 @@ from fulilian_cli.subcommands.solve import build_solve_parser
 from fulilian_cli.subcommands.writeup import build_writeup_parser
 from fulilian_cli.subcommands.replay import build_replay_parser
 from fulilian_cli.subcommands.knowledge import build_knowledge_parser
-from fulilian_cli.subcommands.ctfd import build_ctfd_parser
 from fulilian_cli.subcommands.pause import build_pause_parser
 from fulilian_cli.subcommands.webhook import build_webhook_parser
 from fulilian_cli.subcommands.hooks import build_hooks_parser
@@ -5588,7 +5587,7 @@ def cmd_solve(args):
 
 
 def cmd_solve_all(args):
-    """Batch-solve challenges on a platform."""
+    """Batch-solve a local set of challenges."""
     from fulilian_ctf.cli import handle_solve_all_command
 
     handle_solve_all_command(args)
@@ -5613,13 +5612,6 @@ def cmd_knowledge(args):
     from fulilian_ctf.cli import handle_knowledge_command
 
     handle_knowledge_command(args)
-
-
-def cmd_ctfd(args):
-    """CTFd platform integration."""
-    from fulilian_ctf.cli import handle_ctfd_command
-
-    handle_ctfd_command(args)
 
 
 def cmd_cron(args):
@@ -14698,7 +14690,6 @@ def main():
     build_writeup_parser(subparsers, cmd_writeup=cmd_writeup)
     build_replay_parser(subparsers, cmd_replay=cmd_replay)
     build_knowledge_parser(subparsers, cmd_knowledge=cmd_knowledge)
-    build_ctfd_parser(subparsers, cmd_ctfd=cmd_ctfd)
 
     # =========================================================================
     # Parse and execute

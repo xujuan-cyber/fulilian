@@ -8,7 +8,9 @@
   + experiential_learning（跨题学习 + 自进化）
 - Phase 3（高级功能，步骤 09）：racer（多模型竞速 + Coordinator）+ multi_agent
   （多 Agent 协作 + 共享记忆 + 幻觉检测）+ writeup（自动 Writeup）+ trace
-  （追踪回放）+ ctfd_adapter（CTFd 对接 + 轮询 + MCP）+ monitor（对手监控）
+  （追踪回放）+ monitor（对手监控）
+
+平台对接已移除（2026-09-17）：本层只做纯 CLI 解题，不连接任何比赛平台。
 - Phase 4（通用增强，步骤 10）：agents_md（F4-001）+ sandbox（F4-004 三档沙箱）
   + hooks（F4-003 危险命令/flag 检测）+ lsp_bridge（F4-008 编译诊断）
 """
@@ -27,15 +29,6 @@ from .blackboard import (
     save_blackboard,
 )
 from .budget import BudgetConfig, BudgetTracker, ChallengeUsage, Difficulty
-from .ctfd_adapter import (
-    CTFdAdapter,
-    CTFdError,
-    create_poll_job,
-    mcp_call_tool,
-    poll_new_challenges,
-    serve_mcp,
-    sync_challenges,
-)
 from .monitor import Alert, OpponentMonitor, analyze_tool_call, scan_log_for_anomalies
 from .multi_agent import (
     MultiAgentResult,
@@ -305,14 +298,6 @@ __all__ = [
     "load_trace",
     "replay_trace",
     "save_trace",
-    # ctfd_adapter (Phase 3, F3-011/F3-012)
-    "CTFdAdapter",
-    "CTFdError",
-    "create_poll_job",
-    "mcp_call_tool",
-    "poll_new_challenges",
-    "serve_mcp",
-    "sync_challenges",
     # monitor (Phase 3, F3-013)
     "Alert",
     "OpponentMonitor",
