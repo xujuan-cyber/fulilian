@@ -814,18 +814,34 @@ class TestFTS5Search:
         assert all("context" in row and row["context"] for row in default)
 
     def test_search_projection_skips_context_enrichment_queries(self, db):
+        import contextlib
+
         db.create_session(session_id="s1", source="cli")
         db.append_message("s1", role="user", content="before")
         db.append_message("s1", role="assistant", content="projectionneedle")
         db.append_message("s1", role="user", content="after")
 
         statements = []
-        read_conn = db._get_read_conn() or db._conn
-        traced_connections = [db._conn]
-        if read_conn is not db._conn:
-            traced_connections.append(read_conn)
-        for conn in traced_connections:
-            conn.set_trace_callback(statements.append)
+
+        # Trace every statement the read path executes by wrapping the
+        # instance's _read_ctx: the search path borrows connections from a
+        # POOL (_read_ctx → _checkout_read_conn), so pinning a trace
+        # callback to db._conn plus one pre-fetched connection misses the
+        # statements entirely (the traced objects may never be handed out).
+        # Wrapping the ctx covers both the pooled connections and the
+        # non-WAL writer fallback, whichever this env uses.
+        original_read_ctx = db._read_ctx
+
+        @contextlib.contextmanager
+        def tracing_read_ctx():
+            with original_read_ctx() as conn:
+                conn.set_trace_callback(statements.append)
+                try:
+                    yield conn
+                finally:
+                    conn.set_trace_callback(None)
+
+        db._read_ctx = tracing_read_ctx
 
         def context_query_count():
             normalized = (" ".join(sql.upper().split()) for sql in statements)
@@ -850,8 +866,7 @@ class TestFTS5Search:
             assert default[0]["context"]
             assert context_query_count() == 2
         finally:
-            for conn in traced_connections:
-                conn.set_trace_callback(None)
+            db._read_ctx = original_read_ctx
 
     def test_sanitize_fts5_query_strips_dangerous_chars(self):
         """Unit test for _sanitize_fts5_query static method."""

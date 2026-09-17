@@ -1141,7 +1141,10 @@ def init_agent(
 
     # Cache anthropic image-to-text fallbacks per image payload/URL so a
     # single tool loop does not repeatedly re-run auxiliary vision on the
-    # same image history.
+    # same image history. Bounded by run_agent's
+    # _ANTHROPIC_IMAGE_FALLBACK_CACHE_MAX eviction (C2-13): unbounded growth
+    # was reachable in image-heavy sessions since values are full
+    # descriptions.
     agent._anthropic_image_fallback_cache: Dict[str, str] = {}
 
     # Initialize LLM client via centralized provider router.

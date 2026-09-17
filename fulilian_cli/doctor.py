@@ -461,6 +461,16 @@ def _render_state_db_stats(stats: dict, holders=None) -> list:
             "",
         ))
 
+    pk_failures = stats.get("pk_rebuild_failures")
+    if pk_failures:
+        lines.append((
+            "warn",
+            f"session_model_usage PK rebuild failed {pk_failures} time(s) — "
+            "token/cost accounting for this state.db may be silently zeroed "
+            "(#73823); see agent.log for the heal warning",
+            "",
+        ))
+
     deferral = stats.get("fts_rebuild_deferral")
     if isinstance(deferral, dict):
         attempts = deferral.get("attempts")

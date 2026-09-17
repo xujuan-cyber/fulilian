@@ -4152,6 +4152,9 @@ def collect_state_db_stats(db_path: Path) -> Dict[str, Any]:
       finished (high_water present and progress < high_water)
     - ``fts_rebuild_high_water`` / ``fts_rebuild_progress`` — raw ints
     - ``fts_rebuild_deferral`` — durable blocked-repair diagnostic, when present
+    - ``pk_rebuild_failures`` — durable count of failed session_model_usage
+      PK heal / v22 rebuild attempts (C1-1); None when the key is absent
+      (i.e. no failure ever recorded)
     """
     stats: Dict[str, Any] = {
         "page_count": None,
@@ -4250,6 +4253,7 @@ def collect_state_db_stats(db_path: Path) -> Dict[str, Any]:
                 return None
 
         stats["fts_storage_version"] = _meta_int("fts_storage_version")
+        stats["pk_rebuild_failures"] = _meta_int("pk_rebuild_failures")
         high_water = _meta_int("fts_rebuild_high_water")
         progress = _meta_int("fts_rebuild_progress")
         stats["fts_rebuild_high_water"] = high_water
