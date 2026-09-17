@@ -107,6 +107,36 @@ logger = logging.getLogger(__name__)
 MAX_SAFE_RESUME_MESSAGES = 20_000
 MAX_SAFE_EXPORT_MESSAGES = 20_000
 
+#: Characters that must never appear in a session id used to build a path or a
+#: glob pattern. Legitimate ids are colon-delimited multi-segment values
+#: (``agent:main:<platform>:...``) and contain none of these.
+_GLOB_METACHARS = frozenset("*?[]")
+
+
+def _session_file_component_unsafe(session_id: object) -> bool:
+    """Return True when *session_id* must NOT be used to build a file path.
+
+    Mirrors the entry-boundary guard in ``gateway/session.py::_is_path_unsafe``
+    — parent traversal (``..``), a path separator anywhere (``/`` or ``\\``),
+    and a leading Windows drive letter (``C:``) — and additionally rejects
+    ``glob`` metacharacters, because :meth:`SessionDB._remove_session_files`
+    deletes through ``sessions_dir.glob(f"request_dump_{session_id}_*.json")``
+    and an id containing ``*``/``?``/``[`` would over-match unrelated dumps.
+
+    Empty / falsy ids are unsafe too: they would build a bare ``.json`` path
+    and a ``request_dump__*.json`` glob. Keep the traversal checks in lockstep
+    with the gateway guard — this module cannot import ``gateway`` (layering),
+    so the duplication is deliberate and commented at both ends.
+    """
+    if not session_id:
+        return True
+    s = str(session_id)
+    if ".." in s or "/" in s or "\\" in s:
+        return True
+    if any(ch in s for ch in _GLOB_METACHARS):
+        return True
+    return len(s) >= 2 and s[0].isalpha() and s[1] == ":"
+
 
 def _configured_transcript_limit(key: str, fallback: int) -> int:
     """Resolve a transcript safety limit from config at call time.
@@ -7865,8 +7895,12 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
                 "try_acquire_compression_lock(%s) failed: %s",
                 session_id, exc,
             )
-            # Fail open: returning False makes the caller skip compression,
-            # which is the safe behaviour when the lock subsystem is broken.
+            # Fail SAFE — the earlier wording ("fail open") described the
+            # opposite of what happens. Returning False makes the caller skip
+            # compression, i.e. the guarded action is DENIED when the lock
+            # subsystem is broken. That is the safe direction: a skipped
+            # compression costs one missed optimisation, whereas proceeding
+            # without the lock lets two compressors fork the same session.
             return False
 
     def release_compression_lock(self, session_id: str, holder: str) -> None:
@@ -8114,15 +8148,20 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
         """Return the current (non-expired) holder for ``session_id``, or None.
 
         Diagnostic helper — not used by the locking protocol itself.
+
+        Reads through the shared read path (``_read_ctx``) like every other
+        diagnostic read: the bare ``self._conn`` read this used to do bypassed
+        the lock/pool discipline the rest of the class follows.
         """
         if not session_id:
             return None
         now = time.time()
-        row = self._conn.execute(
-            "SELECT holder FROM compression_locks "
-            "WHERE session_id = ? AND expires_at >= ?",
-            (session_id, now),
-        ).fetchone()
+        with self._read_ctx() as conn:
+            row = conn.execute(
+                "SELECT holder FROM compression_locks "
+                "WHERE session_id = ? AND expires_at >= ?",
+                (session_id, now),
+            ).fetchone()
         if row is None:
             return None
         return row["holder"] if isinstance(row, sqlite3.Row) else row[0]
@@ -10007,7 +10046,17 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
             tip_id = self.resolve_resume_session_id(session_id) or session_id
             if tip_id != session_id:
                 tip = self.get_session(tip_id) or row
-        except Exception:
+        except (sqlite3.Error, KeyError, TypeError) as exc:
+            # Best effort: judge recoverability at the row itself rather than
+            # aborting the unarchive. Narrowed from a bare ``except Exception``
+            # so a genuine programming error can't masquerade as a DB fault,
+            # and logged so an actual DB failure leaves a trace instead of
+            # silently degrading the tip walk.
+            logger.debug(
+                "unarchive_session: resume-tip resolution failed for %s (%s); "
+                "judging recoverability at the row itself",
+                session_id, exc,
+            )
             tip_id = session_id
         if (tip.get("end_reason") or "") not in self.RECOVERABLE_END_REASONS:
             return False
@@ -12240,7 +12289,14 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
         # and the reply isn't there" report on large sessions.
         try:
             tip = self.get_compression_tip(session_id)
-        except Exception:
+        except (sqlite3.Error, KeyError, TypeError) as exc:
+            # Same narrowing as unarchive_session: a lineage-walk failure must
+            # not abort the resume, but it must not be invisible either.
+            logger.debug(
+                "resolve_resume_session_id: compression-tip walk failed for "
+                "%s (%s); resuming the id as given",
+                session_id, exc,
+            )
             tip = session_id
         if tip and tip != session_id:
             session_id = tip
@@ -13447,8 +13503,20 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
         ``request_dump_{session_id}_*.json`` files left by the gateway.
         Silently skips files that don't exist and swallows OSError so a
         filesystem hiccup never blocks a DB operation.
+
+        Unsafe ids (parent traversal, path separators, leading drive letter,
+        glob metacharacters) are refused outright rather than sanitised: this
+        helper DELETES, and a mangled name would either miss the real
+        transcript or take out an unrelated file. Legitimate ids never trip
+        the guard.
         """
         if sessions_dir is None:
+            return
+        if _session_file_component_unsafe(session_id):
+            logger.warning(
+                "Refusing to remove transcript files: unsafe session id %r",
+                session_id,
+            )
             return
         for suffix in (".json", ".jsonl"):
             p = sessions_dir / f"{session_id}{suffix}"
@@ -15148,12 +15216,13 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
         no handoff record.
         """
         try:
-            cur = self._conn.execute(
-                "SELECT handoff_state, handoff_platform, handoff_error "
-                "FROM sessions WHERE id = ?",
-                (session_id,),
-            )
-            row = cur.fetchone()
+            with self._read_ctx() as conn:
+                cur = conn.execute(
+                    "SELECT handoff_state, handoff_platform, handoff_error "
+                    "FROM sessions WHERE id = ?",
+                    (session_id,),
+                )
+                row = cur.fetchone()
             if not row:
                 return None
             return {
@@ -15170,15 +15239,17 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
         Used by the gateway's handoff watcher.
         """
         try:
-            cur = self._conn.execute(
-                "SELECT s.*, "
-                "COALESCE(sp.prompt, s.system_prompt) AS _system_prompt_resolved "
-                "FROM sessions s "
-                "LEFT JOIN system_prompts sp ON sp.hash = s.system_prompt_hash "
-                "WHERE s.handoff_state = 'pending' "
-                "ORDER BY s.started_at ASC"
-            )
-            return [self._session_row_dict(r) for r in cur.fetchall()]
+            with self._read_ctx() as conn:
+                cur = conn.execute(
+                    "SELECT s.*, "
+                    "COALESCE(sp.prompt, s.system_prompt) AS _system_prompt_resolved "
+                    "FROM sessions s "
+                    "LEFT JOIN system_prompts sp ON sp.hash = s.system_prompt_hash "
+                    "WHERE s.handoff_state = 'pending' "
+                    "ORDER BY s.started_at ASC"
+                )
+                rows = cur.fetchall()
+            return [self._session_row_dict(r) for r in rows]
         except Exception:
             return []
 
