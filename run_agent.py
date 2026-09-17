@@ -2806,10 +2806,17 @@ class AIAgent:
                         return redact_sensitive_text(f"{prefix}{str(payload['message'])[:300]}")
                 return redact_sensitive_text(f"{prefix}{snippet[:300]}")
 
-        # Fallback: truncate the raw string but give more room than 200 chars
+        # Fallback: truncate the raw string but give more room than 200 chars.
+        # Redact here too — every branch above routes through
+        # redact_sensitive_text, and this last resort is the one that still
+        # holds the *raw* body (it runs precisely when JSON parsing failed),
+        # so an unparsed credential is exactly what it would otherwise leak
+        # into the status line and gateway messages.
         status_code = getattr(error, "status_code", None)
         prefix = f"HTTP {status_code}: " if status_code else ""
-        return AIAgent._decorate_xai_entitlement_error(f"{prefix}{raw[:500]}")
+        return AIAgent._decorate_xai_entitlement_error(
+            redact_sensitive_text(f"{prefix}{raw[:500]}")
+        )
 
     def _mask_api_key_for_logs(self, key: Any) -> Optional[str]:
         # Azure Foundry Entra ID bearer providers are callables — never
@@ -3428,7 +3435,17 @@ class AIAgent:
             except Exception as e:
                 logger.debug("Failed to propagate interrupt to child agent: %s", e)
         if not self.quiet_mode:
-            print("\n⚡ Interrupt requested" + (f": '{message[:40]}...'" if message and len(message) > 40 else f": '{message}'" if message else ""))
+            # _safe_print, not print: in headless runs (systemd/Docker/nohup)
+            # a raw print on a closed stdout raises OSError *inside the
+            # interrupt path*, turning a user interrupt into a crash.
+            self._safe_print(
+                "\n⚡ Interrupt requested"
+                + (
+                    f": '{message[:40]}...'"
+                    if message and len(message) > 40
+                    else f": '{message}'" if message else ""
+                )
+            )
 
     def hard_interrupt(
         self,
@@ -7157,11 +7174,17 @@ class AIAgent:
 
         vision_source = str(image_url or "")
         cleanup_path: Optional[Path] = None
-        if vision_source.startswith("data:"):
-            vision_source, cleanup_path = self._materialize_data_url_for_vision(vision_source)
 
         description = ""
         try:
+            # Materialisation can raise on a malformed data: URL (bad base64
+            # padding -> binascii.Error). It used to sit OUTSIDE this try, so
+            # one bad URL failed the entire turn instead of degrading to a
+            # note like every other vision failure on this path.
+            if vision_source.startswith("data:"):
+                vision_source, cleanup_path = self._materialize_data_url_for_vision(
+                    vision_source
+                )
             from tools.vision_tools import vision_analyze_tool
 
             result_json = asyncio.run(
@@ -9127,6 +9150,12 @@ def _strip_skill_frontmatter(text: str) -> str:
 
     找不到第二个分隔符时返回原文（解析失败比吞掉内容安全，至少可读）。
     """
+    # Require the document to actually OPEN with the delimiter. Without this,
+    # a body that merely contains two ``---`` lines (a Markdown horizontal
+    # rule, a diff, a yaml block further down) had its opening content sliced
+    # off and the middle of the file returned as "the body".
+    if not text.lstrip().startswith("---"):
+        return text
     parts = text.split("---", 2)
     if len(parts) >= 3:
         return parts[2]
@@ -9416,7 +9445,8 @@ def main(
 
     Args:
         query (str): Natural language query for the agent. Defaults to Python 3.13 example.
-        model (str): Model name to use (OpenRouter format: provider/model). Defaults to anthropic/claude-sonnet-4.6.
+        model (str): Model name to use (OpenRouter format: provider/model). Empty by default — the
+            agent then resolves the model from config / environment.
         api_key (str): API key for authentication. Uses OPENROUTER_API_KEY env var if not provided.
         base_url (str): Base URL for the model API. Defaults to https://openrouter.ai/api/v1
         max_turns (int): Maximum number of API call iterations. 10 for normal mode, 30 for CTF mode.
@@ -9586,9 +9616,24 @@ def main(
         plan_result = plan_out["result"]
         plan_agent = plan_out["agent"]
 
+        # A planner that failed, was interrupted, or returned nothing
+        # leaves no plan. Injecting the plan header regardless made the
+        # executor run blind while its prompt claimed a plan existed.
+        plan_text = (plan_result.get("final_response") or "").strip()
+        if plan_text:
+            exec_query = (
+                user_query + f"\n\n已规划：{plan_text}\n\n执行规划。"
+            )
+        else:
+            print(
+                "\n⚠️  Architect planning produced no plan; executing the "
+                "raw query without one."
+            )
+            exec_query = user_query
+
         exec_model = executor_model or model
         exec_out = _run_solver_turn(
-            query=user_query + f"\n\n已规划：{plan_result.get('final_response', '')}\n\n执行规划。",
+            query=exec_query,
             model=exec_model,
             max_turns=max_turns,
             base_url=base_url, api_key=api_key,
