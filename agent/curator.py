@@ -2048,9 +2048,18 @@ def _run_llm_review(prompt: str) -> Dict[str, Any]:
         # terminal. The background-thread runner also hides it; this
         # belt-and-suspenders path matters when a caller invokes
         # run_curator_review(synchronous=True) from the CLI.
-        with open(os.devnull, "w", encoding="utf-8") as _devnull, \
-             contextlib.redirect_stdout(_devnull), \
-             contextlib.redirect_stderr(_devnull):
+        # C3-27: redirect_stdout is PROCESS-GLOBAL, not thread-local. The
+        # background-thread runner (gateway heartbeat) already hides its own
+        # output; wrapping the pass there additionally swallowed EVERY other
+        # session's stdout (display.py's capture contradicts the
+        # thread-isolation assumption). Suppress only on the synchronous CLI
+        # path, where this thread IS the foreground.
+        if synchronous:
+            with open(os.devnull, "w", encoding="utf-8") as _devnull, \
+                 contextlib.redirect_stdout(_devnull), \
+                 contextlib.redirect_stderr(_devnull):
+                conv_result = review_agent.run_conversation(user_message=prompt)
+        else:
             conv_result = review_agent.run_conversation(user_message=prompt)
 
         final = ""
