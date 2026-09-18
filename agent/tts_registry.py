@@ -138,6 +138,11 @@ def get_provider(name: str, *, scope: Optional[str] = None) -> Optional[TTSProvi
 def snapshot_registration(
     name: str, *, scope: Optional[str] = None
 ) -> Optional[TTSProvider]:
+    if not isinstance(name, str):
+        # C3-63: mirror get_provider's isinstance guard — a non-str name
+        # (config drift, plugin bug) crashed snapshot instead of degrading
+        # to a lookup miss.
+        return None
     key = name.strip().lower()
     with _lock:
         target = _providers if scope is None else _scoped_providers.get(scope, {})
@@ -152,6 +157,9 @@ def restore_registration(
     scope: Optional[str] = None,
 ) -> bool:
     """Restore a plugin registration only when *current* is still installed."""
+    if not isinstance(name, str):
+        # C3-63: same isinstance guard as snapshot/get_provider.
+        return False
     key = name.strip().lower()
     with _lock:
         target = _providers if scope is None else _scoped_providers.setdefault(scope, {})

@@ -415,9 +415,13 @@ class OpenAICompatibleVideoGenProvider(VideoGenProvider):
     _poll_deadline_s: float = 900.0
 
     def _api_key(self) -> str:
-        import os
+        # C3-69: raw os.environ read — in a multiplexed gateway serving
+        # several profiles this leaked the HOST profile's key into whichever
+        # session's video call; route through secret_scope (profile-aware,
+        # with os.environ as the non-multiplexed fallback).
+        from agent.secret_scope import get_secret
 
-        return os.environ.get(self._env_key, "").strip()
+        return (get_secret(self._env_key) or "").strip()
 
     def is_available(self) -> bool:
         return bool(self._api_key())
@@ -447,9 +451,13 @@ class OpenAICompatibleVideoGenProvider(VideoGenProvider):
         return video
 
     def _base_url(self) -> str:
-        import os
+        from agent.secret_scope import get_secret
 
-        override = os.environ.get(f"{self.name.upper()}_BASE_URL", "").strip()
+        # C3-69: same scope-awareness as _api_key — a per-profile base-url
+        # override must not bleed across profiles.
+        override = (
+            get_secret(f"{self.name.upper()}_BASE_URL") or ""
+        ).strip()
         return override or self._default_base_url
 
     def generate(

@@ -123,8 +123,15 @@ class WebSearchProvider(abc.ABC):
         """
 
     def supports_search(self) -> bool:
-        """Return True if this provider implements :meth:`search`."""
-        return True
+        """Return True if this provider implements :meth:`search`.
+
+        C3-71: the default was True while the default :meth:`search` raises
+        NotImplementedError — a subclass implementing neither advertised a
+        capability it could not deliver. Default False now, mirroring
+        :meth:`supports_extract`'s asymmetry-free shape. All in-repo
+        subclasses override both, so nothing regresses.
+        """
+        return False
 
     def is_keyless_available(self) -> bool:
         """Return True when this provider can serve calls WITHOUT credentials.

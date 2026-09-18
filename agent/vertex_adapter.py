@@ -89,7 +89,17 @@ def _resolve_project_override() -> Optional[str]:
 
 
 def _resolve_credentials_path(explicit: Optional[str]) -> Optional[str]:
-    if explicit and os.path.exists(explicit):
+    if explicit:
+        # C3-68: an EXPLICIT credentials_path that does not exist must fail
+        # loudly — the old `explicit and os.path.exists(explicit)` guard
+        # silently fell through to the env-scan/ADC fallback, authenticating
+        # (and billing) under a different identity than the caller pinned.
+        if not os.path.exists(explicit):
+            raise FileNotFoundError(
+                f"Explicit Vertex credentials_path does not exist: {explicit!r} "
+                "(no ADC/env fallback — refusing to authenticate under a "
+                "different identity)"
+            )
         return explicit
     # Routed through get_secret (not a raw os.environ read): in a multiplex
     # gateway serving several profiles from one process, os.environ reflects
