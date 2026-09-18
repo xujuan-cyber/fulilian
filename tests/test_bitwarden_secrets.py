@@ -139,6 +139,13 @@ def test_install_bws_happy_path(fulilian_home, monkeypatch):
     fake_binary = b"#!/bin/sh\necho 'bws fake 2.0.0'\n"
     zip_bytes = _make_fake_zip(fake_binary)
     asset_name = bw._platform_asset_name()
+    # C3-80: installs verify against the vendored pin table; point it at
+    # this fake zip's digest so the happy path exercises the pin check.
+    monkeypatch.setattr(
+        bw,
+        "_BWS_PINNED_SHA256",
+        {asset_name: hashlib.sha256(zip_bytes).hexdigest()},
+    )
     checksum_text = (
         f"{hashlib.sha256(zip_bytes).hexdigest()}  {asset_name}\n"
         "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff  other-file\n"
@@ -159,6 +166,53 @@ def test_install_bws_happy_path(fulilian_home, monkeypatch):
     assert path.read_bytes() == fake_binary
     # Executable bit set
     assert path.stat().st_mode & stat.S_IXUSR
+
+
+def test_install_bws_rejects_unpinned_asset(fulilian_home, monkeypatch):
+    """C3-80: an asset with no vendored pin fails closed with an
+    instructive error instead of silently trusting the in-channel
+    checksums file."""
+    fake_binary = b"#!/bin/sh\necho 'bws fake 2.0.0'\n"
+    zip_bytes = _make_fake_zip(fake_binary)
+    asset_name = bw._platform_asset_name()
+    checksum_text = f"{hashlib.sha256(zip_bytes).hexdigest()}  {asset_name}\n"
+
+    def fake_download(url, dest):
+        if url.endswith(".zip"):
+            Path(dest).write_bytes(zip_bytes)
+        elif url.endswith(".txt"):
+            Path(dest).write_text(checksum_text)
+        else:
+            raise AssertionError(f"unexpected download url: {url}")
+
+    monkeypatch.setattr(bw, "_http_download", fake_download)
+    monkeypatch.setattr(bw, "_BWS_PINNED_SHA256", {})
+    with pytest.raises(RuntimeError, match="No vendored SHA-256 pin"):
+        bw.install_bws()
+
+
+def test_install_bws_rejects_pin_mismatch(fulilian_home, monkeypatch):
+    """C3-80: a binary that disagrees with the vendored pin is refused even
+    when the in-channel checksums.txt is internally consistent with it —
+    i.e. the whole release channel was rewritten."""
+    fake_binary = b"#!/bin/sh\necho 'evil'\n"
+    zip_bytes = _make_fake_zip(fake_binary)
+    asset_name = bw._platform_asset_name()
+    evil_digest = hashlib.sha256(zip_bytes).hexdigest()
+    checksum_text = f"{evil_digest}  {asset_name}\n"
+
+    def fake_download(url, dest):
+        if url.endswith(".zip"):
+            Path(dest).write_bytes(zip_bytes)
+        elif url.endswith(".txt"):
+            Path(dest).write_text(checksum_text)
+        else:
+            raise AssertionError(f"unexpected download url: {url}")
+
+    monkeypatch.setattr(bw, "_http_download", fake_download)
+    monkeypatch.setattr(bw, "_BWS_PINNED_SHA256", {asset_name: "0" * 64})
+    with pytest.raises(RuntimeError, match="vendored"):
+        bw.install_bws()
 
 
 

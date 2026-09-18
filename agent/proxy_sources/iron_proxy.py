@@ -93,12 +93,80 @@ _IRON_PROXY_RELEASE_BASE = (
     f"https://github.com/ironsh/iron-proxy/releases/download/v{_IRON_PROXY_VERSION}"
 )
 _IRON_PROXY_CHECKSUM_NAME = "checksums.txt"
-# Detached signature for checksums.txt + the signing public key, both shipped on
-# the release. Used for optional GPG verification of the release channel
-# (maxpetrusenko P1): SHA-256 only protects the archive if checksums.txt itself
-# came from an uncompromised channel; verifying its signature closes that gap.
+# Detached signature for checksums.txt. Used for GPG verification of the
+# release channel (maxpetrusenko P1): SHA-256 only protects the archive if
+# checksums.txt itself came from an uncompromised channel; verifying its
+# signature closes that gap.
+#
+# C3-43/C3-79: the signing key is VENDORED below and pinned by fingerprint —
+# the original code downloaded public-key.asc from the very release channel
+# it authenticates, which is inert against full channel compromise (and the
+# v0.39.0 release never actually shipped that asset). The pin was extracted
+# out-of-band on 2026-09-18 from the v0.39.0 signature packet itself
+# (`gpg --list-packets`: issuer fpr v4) and cross-checked against the
+# upstream repo's public-key.asc (Matthew Slipper <matt@iron.sh>); an
+# end-to-end verify of the released checksums.txt under this key was run at
+# fix time.
 _IRON_PROXY_CHECKSUM_SIG_NAME = "checksums.txt.asc"
-_IRON_PROXY_PUBKEY_NAME = "public-key.asc"
+_IRON_PROXY_SIGNING_FPR = "7969C7E131F29652C601752C64D88022DBC645D1"
+
+# Vendored signing public key (ASCII armor). Source of truth: upstream repo
+# public-key.asc @ main, fetched 2026-09-18 (sha256
+# ce685e36e7e7d184ffa82b35bd5cbe83db010ac38bc504a0e225333453992c56). Must
+# match _IRON_PROXY_SIGNING_FPR; an upstream key rotation has to land here
+# as a deliberate code change, never a channel fetch.
+_IRON_PROXY_VENDOR_PUBKEY = """-----BEGIN PGP PUBLIC KEY BLOCK-----
+
+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
+m6R570al
+=BDYk
+-----END PGP PUBLIC KEY BLOCK-----"""
 
 # How long to wait for HTTP downloads and subprocess interactions, in seconds.
 _DOWNLOAD_TIMEOUT = 120  # binary is ~16MB
@@ -557,22 +625,27 @@ def _http_download(url: str, dest: Path) -> None:
 
 
 def _verify_checksums_signature(tmp: Path, checksum_path: Path) -> bool:
-    """Best-effort GPG verification of ``checksums.txt`` (maxpetrusenko P1).
+    """GPG-verify ``checksums.txt`` against the vendored signing key.
 
-    Downloads the detached signature (``checksums.txt.asc``) and the release
-    signing key (``public-key.asc``), imports the key into an ephemeral
-    keyring, and verifies the signature over ``checksum_path``.
+    The detached signature (``checksums.txt.asc``) is downloaded from the
+    release; the signing key is NOT — it is vendored as
+    ``_IRON_PROXY_VENDOR_PUBKEY`` so a compromised release channel cannot
+    substitute its own key (C3-43/C3-79: the old code fetched the key from
+    the very channel it authenticates, which made the check inert).
+    Verification additionally REQUIRES the ``VALIDSIG`` status fingerprint
+    to equal ``_IRON_PROXY_SIGNING_FPR`` — a signature made by any other
+    key fails closed even though gpg itself might exit 0 against some other
+    keyring resident.
 
-    Returns True when the signature is verified. Returns False (with a warning)
-    when verification is unavailable — ``gpg`` not installed, or the signature /
-    public-key assets are missing from the release. Raises RuntimeError ONLY
-    when verification actively FAILS (a present-but-bad signature), which is a
-    tamper signal we must not ignore.
+    Returns True when the signature verifies under the pinned key. Returns
+    False (with a warning) when verification is unavailable — ``gpg`` not
+    installed, or the signature asset missing from the release. Raises
+    RuntimeError when verification actively FAILS (a present-but-bad
+    signature, or a signature from a non-pinned key): tamper signals we
+    must not ignore.
 
-    Rationale for graceful degradation on "unavailable": the SHA-256 check
-    against ``checksums.txt`` remains in force regardless, and many install
-    hosts (CI, minimal containers) won't have gpg. We harden when we can and
-    never make gpg a hard dependency for a working install.
+    The SHA-256 check against ``checksums.txt`` remains in force regardless,
+    so the "unavailable" degradation never weakens the integrity floor.
     """
     gpg = shutil.which("gpg")
     if not gpg:
@@ -583,49 +656,64 @@ def _verify_checksums_signature(tmp: Path, checksum_path: Path) -> bool:
         return False
 
     sig_url = f"{_IRON_PROXY_RELEASE_BASE}/{_IRON_PROXY_CHECKSUM_SIG_NAME}"
-    pubkey_url = f"{_IRON_PROXY_RELEASE_BASE}/{_IRON_PROXY_PUBKEY_NAME}"
     sig_path = tmp / _IRON_PROXY_CHECKSUM_SIG_NAME
-    pubkey_path = tmp / _IRON_PROXY_PUBKEY_NAME
 
     try:
         _http_download(sig_url, sig_path)
-        _http_download(pubkey_url, pubkey_path)
     except RuntimeError as exc:
         logger.warning(
-            "iron-proxy release signature assets unavailable (%s) — skipping "
+            "iron-proxy release signature asset unavailable (%s) — skipping "
             "GPG verification (SHA-256 checksum check still enforced).", exc,
         )
         return False
 
-    # Ephemeral keyring so we never touch the user's real GPG home.
+    # Ephemeral keyring seeded ONLY with the vendored key — nothing fetched
+    # at verify time can influence which keys the verify trusts.
     gnupg_home = tmp / "gnupg"
     gnupg_home.mkdir(mode=0o700, exist_ok=True)
     base_cmd = [gpg, "--homedir", str(gnupg_home), "--batch", "--no-tty"]
 
+    key_path = tmp / "vendored_signing_key.asc"
+    key_path.write_text(_IRON_PROXY_VENDOR_PUBKEY, encoding="utf-8")
     imp = subprocess.run(  # noqa: S603 — gpg path from trusted PATH lookup
-        [*base_cmd, "--import", str(pubkey_path)],
+        [*base_cmd, "--import", str(key_path)],
         capture_output=True, timeout=60,
     )
     if imp.returncode != 0:
+        # The key is vendored, so this is an environment/gpg-compat problem,
+        # not a channel signal — degrade like "unavailable".
         logger.warning(
-            "Could not import iron-proxy signing key — skipping GPG "
-            "verification (SHA-256 still enforced): %s",
+            "Could not import the vendored iron-proxy signing key — skipping "
+            "GPG verification (SHA-256 still enforced): %s",
             imp.stderr.decode("utf-8", "replace")[:200],
         )
         return False
 
     verify = subprocess.run(  # noqa: S603
-        [*base_cmd, "--verify", str(sig_path), str(checksum_path)],
+        [*base_cmd, "--status-fd", "1", "--verify", str(sig_path), str(checksum_path)],
         capture_output=True, timeout=60,
     )
-    if verify.returncode != 0:
-        # A present signature that does NOT verify is a tamper signal — fail hard.
+    status = verify.stdout.decode("utf-8", "replace")
+    validsig_fprs = [
+        line.split()[2]
+        for line in status.splitlines()
+        if line.startswith("[GNUPG:] VALIDSIG ")
+    ]
+    if verify.returncode != 0 or not validsig_fprs:
+        # A present signature that does NOT verify (or carries no VALIDSIG
+        # status) is a tamper signal — fail hard.
         raise RuntimeError(
             "iron-proxy checksums.txt failed GPG signature verification — "
             "refusing to install (possible release-channel tampering). "
             f"gpg: {verify.stderr.decode('utf-8', 'replace')[:300]}"
         )
-    logger.info("Verified iron-proxy checksums.txt GPG signature.")
+    if _IRON_PROXY_SIGNING_FPR not in {f.upper() for f in validsig_fprs}:
+        raise RuntimeError(
+            "iron-proxy checksums.txt was signed by an UNPINNED key "
+            f"(validsig={validsig_fprs}, expected {_IRON_PROXY_SIGNING_FPR}) "
+            "— refusing to install (possible release-channel tampering)."
+        )
+    logger.info("Verified iron-proxy checksums.txt GPG signature (pinned key).")
     return True
 
 
@@ -1914,7 +2002,10 @@ def start_proxy(
     # Linux the daemon binds the docker bridge gateway, where a loopback
     # connect never succeeds and we'd kill a healthy daemon as "never
     # came up".
-    listen_hp = _read_http_listen_from_config()
+    # C3-44: probe the config that will actually be launched — this
+    # function used to read the default proxy.yaml even when start_proxy
+    # was given an explicit config_path.
+    listen_hp = _read_http_listen_from_config(cfg)
     if listen_hp is not None:
         probe_host, tunnel_port = listen_hp
     else:
@@ -2383,8 +2474,15 @@ def _read_tunnel_port_from_config() -> Optional[int]:
     return listen[1]
 
 
-def _read_http_listen_from_config() -> Optional[Tuple[str, int]]:
+def _read_http_listen_from_config(
+    config_path: Optional[Path] = None,
+) -> Optional[Tuple[str, int]]:
     """Return ``(host, port)`` of the configured sandbox-facing listener.
+
+    ``config_path`` lets callers that were handed an explicit config (e.g.
+    ``start_proxy(config_path=...)``) probe the config that will ACTUALLY be
+    launched — the C3-44 default-path fallthrough made the liveness probe
+    read the default ``proxy.yaml`` while the daemon ran a different file.
 
     Reads ``proxy.tunnel_listen`` — the CONNECT/MITM listener sandboxes
     hit via ``HTTPS_PROXY`` — falling back to ``proxy.http_listen`` for
@@ -2395,7 +2493,7 @@ def _read_http_listen_from_config() -> Optional[Tuple[str, int]]:
     connect would report "not listening" for a perfectly healthy daemon.
     """
 
-    cfg = _proxy_state_dir_ro() / "proxy.yaml"
+    cfg = config_path or (_proxy_state_dir_ro() / "proxy.yaml")
     if not cfg.exists():
         return None
     try:
