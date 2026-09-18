@@ -272,6 +272,9 @@ def _ensure_path_within_cwd(path_text: str, cwd: str) -> Path:
     return resolved
 
 
+_READ_TEXT_FILE_MAX_LINES = 2000  # C3-20: default whole-file window cap
+
+
 class _ACPChatCompletions:
     def __init__(self, client: "CopilotACPClient"):
         self._client = client
@@ -627,11 +630,23 @@ class CopilotACPClient:
                     content = ""
                 line = params.get("line")
                 limit = params.get("limit")
-                if isinstance(line, int) and line > 1:
-                    lines = content.splitlines(keepends=True)
-                    start = line - 1
-                    end = start + limit if isinstance(limit, int) and limit > 0 else None
-                    content = "".join(lines[start:end])
+                # C3-20: limit was ignored when line was 1/absent (the WHOLE
+                # file was returned), and there was no size cap at all — a
+                # huge file blew up the context. Apply the window in every
+                # shape and cap the default window.
+                _start = (line - 1) if isinstance(line, int) and line > 1 else 0
+                _end = (
+                    _start + limit
+                    if isinstance(limit, int) and limit > 0
+                    else _start + _READ_TEXT_FILE_MAX_LINES
+                )
+                lines = content.splitlines(keepends=True)
+                content = "".join(lines[_start:_end])
+                if _end < len(lines):
+                    content += (
+                        f"\n[truncated: showing lines {_start + 1}-{_end} of "
+                        f"{len(lines)} — pass line/limit to page through]"
+                    )
                 if content:
                     content = redact_sensitive_text(content, force=True)
                 response = {

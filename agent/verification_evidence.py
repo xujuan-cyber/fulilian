@@ -338,7 +338,14 @@ def _kind_for_command(canonical: str) -> str:
     lowered = canonical.lower()
     if any(word in lowered for word in ("lint", "eslint", "ruff")):
         return "lint"
-    if any(word in lowered for word in ("typecheck", "tsc", "mypy", "pyright", "ty")):
+    # C3-65: the two-letter checker name "ty" matched as a raw SUBSTRING
+    # ("entity", "security", ...) pulling unrelated commands into the
+    # typecheck kind. Word-boundary match for that one token.
+    import re as _re
+
+    if any(word in lowered for word in ("typecheck", "tsc", "mypy", "pyright")) or _re.search(
+        r"\bty\b", lowered
+    ):
         return "typecheck"
     if "build" in lowered:
         return "build"

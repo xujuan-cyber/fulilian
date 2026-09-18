@@ -253,6 +253,16 @@ class SubagentLifecycleService:
         )
         record = _Record(handle, SubagentState.PENDING, created, agent=child)
         with _REGISTRY.lock:
+            # C3-58: the dedup check ran under the lock, but child
+            # construction happened OUTSIDE it — two concurrent spawns with
+            # the same correlation_id both passed the check and the second
+            # silently overwrote the first's registration. Re-check under
+            # the insertion lock; the losing (discarded) child is simply
+            # garbage-collected.
+            if request.correlation_id and correlation_key in _REGISTRY.correlations:
+                raise SubagentLifecycleError(
+                    "Duplicate correlation_id for this parent session."
+                )
             _REGISTRY.records[subagent_id] = record
             if request.correlation_id:
                 _REGISTRY.correlations[correlation_key] = subagent_id

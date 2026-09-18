@@ -2007,13 +2007,18 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
                     _pairing_tool_call_id(skipped_tc),
                     effect_disposition="none",
                 ))
+                # C3-61: this emit used the raw attribute id while the
+                # durable pairing above used _pairing_tool_call_id — the
+                # terminal event could carry a different id than the
+                # message it belongs to. Single canonical pairing id.
+                _skipped_pairing_id = _pairing_tool_call_id(skipped_tc)
                 _emit_terminal_post_tool_call(
                     agent,
                     function_name=skipped_name,
                     function_args={},
                     result=cancelled_result,
                     effective_task_id=effective_task_id,
-                    tool_call_id=getattr(skipped_tc, "id", "") or "",
+                    tool_call_id=_skipped_pairing_id,
                     status="cancelled",
                     error_type="user_interrupt",
                     error_message="Tool execution skipped due to user interrupt",
