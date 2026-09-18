@@ -263,14 +263,18 @@ def nous_credits_lines(*, markdown: bool = False, timeout: float = 10.0) -> list
     except Exception:
         return []
     try:
-        import concurrent.futures
-
         from fulilian_cli.nous_account import get_nous_portal_account_info
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            account = pool.submit(
-                get_nous_portal_account_info, force_fresh=True
-            ).result(timeout=timeout)
+        # C3-1: .result(timeout=...) did not bound wall-clock — the
+        # with-exit shutdown(wait=True) still joined the worker, so a hung
+        # portal blocked /usage forever. Hard deadline + daemon abandon.
+        from agent.hard_deadline import call_with_deadline
+
+        account = call_with_deadline(
+            get_nous_portal_account_info,
+            force_fresh=True,
+            timeout_s=timeout,
+        )
         snapshot = build_nous_credits_snapshot(account)
         return render_account_usage_lines(snapshot, markdown=markdown)
     except Exception:
@@ -374,17 +378,19 @@ def build_credits_view(*, markdown: bool = False, timeout: float = 10.0) -> Cred
         return not_logged_in
 
     try:
-        import concurrent.futures
-
         from fulilian_cli.nous_account import (
             get_nous_portal_account_info,
             nous_portal_topup_url,
         )
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            account = pool.submit(get_nous_portal_account_info, force_fresh=True).result(
-                timeout=timeout
-            )
+        # C3-1: same hard-deadline replacement as the /usage path above.
+        from agent.hard_deadline import call_with_deadline
+
+        account = call_with_deadline(
+            get_nous_portal_account_info,
+            force_fresh=True,
+            timeout_s=timeout,
+        )
     except Exception:
         logger.debug("credits ▸ /topup portal fetch failed (fail-open)", exc_info=True)
         return not_logged_in

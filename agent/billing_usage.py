@@ -244,12 +244,18 @@ def build_usage_model(*, timeout: float = 10.0) -> UsageModel:
         return UsageModel(available=False)
 
     try:
-        import concurrent.futures
-
         from fulilian_cli.nous_account import get_nous_portal_account_info
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            account = pool.submit(get_nous_portal_account_info, force_fresh=True).result(timeout=timeout)
+        # C3-4: third instance of the C3-1 family — the executor shape
+        # never actually bounded wall-clock. Hard deadline + daemon abandon
+        # (shared helper).
+        from agent.hard_deadline import call_with_deadline
+
+        account = call_with_deadline(
+            get_nous_portal_account_info,
+            force_fresh=True,
+            timeout_s=timeout,
+        )
         return usage_model_from_account(account)
     except Exception:
         logger.debug("usage ▸ portal fetch failed (fail-open)", exc_info=True)
