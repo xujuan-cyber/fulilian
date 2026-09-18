@@ -3485,6 +3485,31 @@ def _get_approval_timeout() -> int:
     return raw
 
 
+def _dangerous_command_fail_closed() -> bool:
+    """C4-4: opt-in fail-closed for the dangerous-command gate in bare
+    non-interactive contexts.
+
+    The historical fail-open (auto-approve with a warning) is documented as
+    intentional at the gate, so the DEFAULT here stays False — but cron and
+    single-query got explicit modes and the plugin path opted in, leaving
+    this the one unpaired door with no way to close it. Operators who run
+    batch scripts can now set approvals.dangerous_command_fail_closed: true
+    in config.yaml; deny rules and the hardline floor are unaffected (they
+    run before this gate either way).
+    """
+    try:
+        from fulilian_cli.config import load_config_readonly
+
+        config = load_config_readonly()
+        return bool(
+            cfg_get(
+                config, "approvals", "dangerous_command_fail_closed", default=False
+            )
+        )
+    except Exception:
+        return False
+
+
 def _get_cron_approval_mode() -> str:
     """Read the cron approval mode from config. Returns 'deny' or 'approve'."""
     try:
@@ -4053,6 +4078,10 @@ def check_dangerous_command(command: str, env_type: str,
         return {"approved": True, "message": None}
 
     return _run_approval_gate(
+        # C4-4: the door can now be closed deliberately. Default stays the
+        # documented fail-open; approvals.dangerous_command_fail_closed:
+        # true in config.yaml opts batch scripts into hard denial.
+        fail_closed_when_no_human=_dangerous_command_fail_closed(),
         pattern_key=pattern_key,
         description=description,
         display_target=command,

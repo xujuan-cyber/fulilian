@@ -188,6 +188,47 @@ _CFG_VALUE = r"(['\"]?)([^\s&]+?)\2(?=[\s&]|$)"
 # redact_sensitive_text().
 _CFG_SECRET_WORD_RE = re.compile(_SECRET_CFG_NAMES, re.IGNORECASE)
 
+# C3-46: quoted secret-keyed assignment with a value that spans spaces.
+# Key shape is deliberately broad (any config-ish key); the repl callback
+# gates on _key_has_secret_keyword, so prose stays untouched.
+_QUOTED_SECRET_ASSIGN_RE = re.compile(
+    r"(?P<name>[A-Za-z0-9_.\-]{0,80})\s*=\s*(?P<q>[\"'])(?P<qval>.*?)(?P=q)"
+)
+
+# C3-45: a URL span — scheme://rest-of-token. Everything inside is left to
+# the URL-specific (opt-in) credential handling, never the env/config passes.
+_URL_SPAN_RE = re.compile(r"[A-Za-z][A-Za-z0-9+.\-]*://\S+")
+
+
+def _sub_outside_urls(text: str, patterns, repl):
+    """Apply ``pattern.sub(repl, ...)`` only OUTSIDE URL spans.
+
+    The old whole-text ``"://" not in text`` gates turned a single URL
+    anywhere into a blanket exemption for the lowercase env/config passes,
+    leaking non-URL assignments in mixed payloads (curl command + dotenv
+    block, issue family C3-45). Segments are substituted independently and
+    the URL spans are re-inserted untouched.
+    """
+    spans = [m.span() for m in _URL_SPAN_RE.finditer(text)]
+    if not spans:
+        for pat in patterns:
+            text = pat.sub(repl, text)
+        return text
+
+    def _apply(seg: str) -> str:
+        for pat in patterns:
+            seg = pat.sub(repl, seg)
+        return seg
+
+    out = []
+    cursor = 0
+    for s, e in spans:
+        out.append(_apply(text[cursor:s]))
+        out.append(text[s:e])
+        cursor = e
+    out.append(_apply(text[cursor:]))
+    return "".join(out)
+
 # Programmatic env lookups (``os.getenv(...)``, ``os.environ[...]``,
 # ``os.environ.get(...)``, ``process.env.X``, ``$ENV{X}``) reference variable
 # *names*, not secret values. When one appears as the VALUE of a KEY=... match
@@ -845,6 +886,23 @@ def redact_sensitive_text(
     # ENV assignments: OPENAI_API_KEY=***  (skip for code files — false positives)
     if not code_file:
         if "=" in text:
+            # C3-46: quoted values spanning spaces ("my secret pass") — the
+            # \S+ / [^\s&]+ value shapes stop at the first space, masking
+            # only the first token and leaking the rest. Dedicated pre-pass
+            # consumes quoted secret-keyed assignments whole; the existing
+            # passes below keep handling bare values (and now see the
+            # already-masked text for quoted ones).
+            if '"' in text or "'" in text:
+                def _redact_quoted_env(m):
+                    name = m.group("name")
+                    if not _key_has_secret_keyword(name):
+                        return m.group(0)
+                    return (
+                        f"{name}={m.group('q')}"
+                        f"{_mask_token(m.group('qval'))}{m.group('q')}"
+                    )
+                text = _QUOTED_SECRET_ASSIGN_RE.sub(_redact_quoted_env, text)
+
             def _redact_env(m):
                 name, quote, value = m.group(1), m.group(2), m.group(3)
                 # Programmatic env lookups reference variable *names*, not
@@ -867,8 +925,12 @@ def redact_sensitive_text(
             # function; _redact_strict_url_credentials handles the opt-in
             # case). The uppercase regex above is all-caps-only, so it never
             # matches URL params; the lowercase one would (issue #77484).
-            if "://" not in text:
-                text = _ENV_ASSIGN_LOWER_RE.sub(_redact_env, text)
+            # C3-45: the whole-text "://" gate disabled the lowercase pass
+            # for the ENTIRE text when ONE URL was present anywhere (mixed
+            # curl + dotenv payloads leaked the non-URL assignments). Apply
+            # it to the URL-free segments only — URL query params keep their
+            # documented passthrough.
+            text = _sub_outside_urls(text, (_ENV_ASSIGN_LOWER_RE,), _redact_env)
             # Lowercase/dotted config keys (issue #16413). Skip URLs entirely —
             # web-URL query params are intentionally passed through (see note
             # near the bottom of this function); _DB_CONNSTR_RE still guards
@@ -881,9 +943,12 @@ def redact_sensitive_text(
             # (e.g. base64/hex blobs in compaction payloads); the linear
             # keyword scan prevents that pathological path on secret-free
             # text.
-            if "://" not in text and _CFG_SECRET_WORD_RE.search(text):
-                text = _CFG_DOTTED_RE.sub(_redact_env, text)
-                text = _CFG_ANCHORED_RE.sub(_redact_env, text)
+            # C3-45: same per-segment application for the config passes
+            # (the keyword pre-gate stays whole-text for perf).
+            if _CFG_SECRET_WORD_RE.search(text):
+                text = _sub_outside_urls(
+                    text, (_CFG_DOTTED_RE, _CFG_ANCHORED_RE), _redact_env
+                )
 
         # JSON fields: "apiKey": "***"  (skip for code files — false positives)
         if ":" in text and '"' in text:

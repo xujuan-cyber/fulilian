@@ -3245,7 +3245,7 @@ def handle_max_iterations(agent, messages: list, api_call_count: int) -> str:
         # hostnames, occasionally key fragments). Full detail stays in the
         # log; the user gets a generic line.
         final_response = (
-            f"I reached the maximum iterations ({agent.max_iterations}) "
+            f"Error: I reached the maximum iterations ({agent.max_iterations}) "
             "but couldn't summarize. See agent.log for details."
         )
     finally:
