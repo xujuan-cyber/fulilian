@@ -3486,15 +3486,17 @@ def _get_approval_timeout() -> int:
 
 
 def _dangerous_command_fail_closed() -> bool:
-    """C4-4: opt-in fail-closed for the dangerous-command gate in bare
-    non-interactive contexts.
+    """C4-4: fail-closed by default for the dangerous-command gate in bare
+    non-interactive contexts (user decision 2026-09-19: "可以" to closing
+    the unpaired door).
 
-    The historical fail-open (auto-approve with a warning) is documented as
-    intentional at the gate, so the DEFAULT here stays False — but cron and
-    single-query got explicit modes and the plugin path opted in, leaving
-    this the one unpaired door with no way to close it. Operators who run
-    batch scripts can now set approvals.dangerous_command_fail_closed: true
-    in config.yaml; deny rules and the hardline floor are unaffected (they
+    Cron and single-query already had explicit modes and the plugin path
+    opted in — this was the last auto-approve door with no way to close
+    it. Default is now True: a bare script (FULILIAN_INTERACTIVE unset,
+    no gateway) that trips a dangerous-command pattern is BLOCKED instead
+    of silently auto-approved. Operators who intentionally want the old
+    fail-open behavior set approvals.dangerous_command_fail_closed: false
+    in config.yaml. Deny rules and the hardline floor are unaffected (they
     run before this gate either way).
     """
     try:
@@ -3503,11 +3505,12 @@ def _dangerous_command_fail_closed() -> bool:
         config = load_config_readonly()
         return bool(
             cfg_get(
-                config, "approvals", "dangerous_command_fail_closed", default=False
+                config, "approvals", "dangerous_command_fail_closed", default=True
             )
         )
     except Exception:
-        return False
+        # Fail-closed: if the config cannot be read, keep the door shut.
+        return True
 
 
 def _get_cron_approval_mode() -> str:
