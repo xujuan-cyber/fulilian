@@ -1204,7 +1204,9 @@ def _consume_codex_event_stream(
                     }
             continue
 
-        if "output_text.delta" in event_type or event_type == "response.output_text.delta":
+        # C3-9: the `== "response.output_text.delta"` arm was dead — any
+        # event it matched already satisfies the substring check above it.
+        if "output_text.delta" in event_type:
             delta_text = _event_field(event, "delta", "")
             if delta_text and active_message_phase == "commentary":
                 commentary_text_deltas.append(delta_text)

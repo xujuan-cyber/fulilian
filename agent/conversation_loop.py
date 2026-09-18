@@ -8536,11 +8536,17 @@ def run_conversation(
                     }
                     for tc in msg["tool_calls"]:
                         if not tc or not isinstance(tc, dict): continue
-                        if tc["id"] not in answered_ids:
+                        # C3-19: tc["id"] KeyError'd inside the outer-error
+                        # handler for a malformed id-less tool_call, masking
+                        # the original error. Skip what cannot be answered.
+                        tc_id = tc.get("id")
+                        if not tc_id:
+                            continue
+                        if tc_id not in answered_ids:
                             err_msg = {
                                 "role": "tool",
                                 "name": _ra().AIAgent._get_tool_call_name_static(tc),
-                                "tool_call_id": tc["id"],
+                                "tool_call_id": tc_id,
                                 "content": f"Error executing tool: {error_msg}",
                             }
                             append_message(messages, err_msg)

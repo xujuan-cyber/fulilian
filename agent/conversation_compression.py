@@ -2704,6 +2704,11 @@ def compress_context(
     # Set True once the in-place DB write actually completes (the DB block can
     # raise and skip it). Surfaced to the gateway via agent._last_compaction_in_place.
     compacted_in_place = False
+    # C3-18: function-level pre-initialization. The commit/rollback handlers
+    # below read this binding directly; the old ``locals().get("old_session_id")``
+    # probe was fragile and static-analyzer-hostile. In-place (and every
+    # early-exit path) leaves it None.
+    old_session_id: Optional[str] = None
     logger.info(
         "context compression started: session=%s messages=%d tokens=~%s model=%s focus=%r",
         agent.session_id or "none", _pre_msg_count,
@@ -4225,7 +4230,7 @@ def compress_context(
                             agent._session_db.set_session_title(
                                 agent.session_id, old_title
                             )
-                        except (ValueError, Exception) as e:
+                        except Exception as e:  # C3-17: (ValueError, Exception) was redundant — ValueError is an Exception
                             logger.debug("Could not propagate title on compression: %s", e)
                         else:
                             # set_session_title() records "user"; restore the
@@ -4256,7 +4261,7 @@ def compress_context(
             except Exception as e:
                 if (
                     not in_place
-                    and locals().get("old_session_id")
+                    and old_session_id
                     and agent.session_id == old_session_id
                 ):
                     # Atomic publication failed (including lease loss): keep the
@@ -4293,7 +4298,7 @@ def compress_context(
                         )
                 split_status = (
                     "aborted"
-                    if locals().get("old_session_id") is None and not in_place
+                    if old_session_id is None and not in_place
                     else "failed_not_indexed"
                 )
                 # If the rotation rolled back to the parent (orphan-avoidance
@@ -4301,7 +4306,7 @@ def compress_context(
                 # old_session_id was cleared — so this is recovery, not an
                 # un-indexed orphan. Otherwise an earlier step failed before the
                 # child was created and the warning's original meaning holds.
-                if locals().get("old_session_id") is None and not in_place:
+                if old_session_id is None and not in_place:
                     logger.warning(
                         "Compression rotation aborted and rolled back to the "
                         "parent session (%s): %s", agent.session_id or "?", e,
@@ -4313,7 +4318,7 @@ def compress_context(
         # bound in the rotation branch; in-place leaves it unset. `_boundary_parent`
         # is the id the boundary notifications attribute the prior state to: the old
         # id on rotation, the (unchanged) current id in-place.
-        _old_sid = locals().get("old_session_id")
+        _old_sid = old_session_id
         _is_boundary = bool(_old_sid) or in_place
         _context_engine_boundary_committed = _session_commit_succeeded and (
             bool(_old_sid) or compacted_in_place

@@ -143,6 +143,17 @@ def finalize_turn(
     """
     from agent.conversation_loop import logger
 
+    # C3-64: sanitize EARLY. The class-level chokepoint below this function
+    # runs only at the very end — by then final_response has already been
+    # (a) written into the durable transcript (transcript fill +
+    # _persist_session) and (b) handed to the transform_llm_output plugin
+    # hook, so a lone UTF-16 surrogate crashed persistence before the late
+    # scrub ever ran. Clean at entry; the tail chokepoint stays as the
+    # re-check for hook-introduced text (plugin transforms run after
+    # persist and can reintroduce surrogates).
+    if isinstance(final_response, str):
+        final_response = _sanitize_surrogates(final_response)
+
     budget_exhausted = (
         api_call_count >= agent.max_iterations
         or agent.iteration_budget.remaining <= 0
@@ -695,7 +706,10 @@ def finalize_turn(
     # writes, Telegram's ``utf16_len`` length check, Signal formatting,
     # JSON envelope encodes — on every provider (Ollama, NVIDIA NIM, …).
     # Scrub once here, where model text leaves the conversation loop, so
-    # every delivery surface receives valid Unicode.
+    # every delivery surface receives valid Unicode. (C3-64: entry-point
+    # scrubbing was added above for the transcript/plugin consumers that run
+    # BEFORE this line; this pass remains as the re-check for text a
+    # transform_llm_output plugin hook introduced after persistence.)
     if isinstance(final_response, str):
         final_response = _sanitize_surrogates(final_response)
 
