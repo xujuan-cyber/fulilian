@@ -839,7 +839,9 @@ def resolve_toolset(name: str, visited: Set[str] = None, *, include_registry: bo
                         )
                     except Exception:
                         pass
-                    return list(plugin_tools)
+                    # C4-1: every other return path yields sorted(tool);
+                    # this one returned the raw set iteration order.
+                    return sorted(plugin_tools)
             except Exception:
                 pass
 

@@ -2182,8 +2182,16 @@ def _deobfuscate_shell_word_for_detection(word: str) -> str:
 
 def _iter_shell_command_starts(command: str):
     starts = [0]
+    # C4-6: the recursive descent over nested $()/backticks had no depth
+    # bound — a crafted command with hundreds of nestings blew the Python
+    # stack inside the approval path itself. 32 levels covers any real
+    # command; beyond it we simply stop descending (outer-command starts
+    # are still yielded — approval stays fail-closed).
+    _MAX_SCAN_DEPTH = 32
 
-    def scan(start: int, end: int) -> None:
+    def scan(start: int, end: int, depth: int = 0) -> None:
+        if depth > _MAX_SCAN_DEPTH:
+            return
         quote: str | None = None
         i = start
         while i < end:
@@ -2204,13 +2212,13 @@ def _iter_shell_command_starts(command: str):
                 if command.startswith("$(", i):
                     nested_end = _scan_dollar_paren_end(command, i)
                     starts.append(i + 2)
-                    scan(i + 2, nested_end - 1 if nested_end is not None else end)
+                    scan(i + 2, nested_end - 1 if nested_end is not None else end, depth + 1)
                     i = nested_end if nested_end is not None else end
                     continue
                 if ch == "`":
                     nested_end = _scan_backtick_end(command, i)
                     starts.append(i + 1)
-                    scan(i + 1, nested_end - 1 if nested_end is not None else end)
+                    scan(i + 1, nested_end - 1 if nested_end is not None else end, depth + 1)
                     i = nested_end if nested_end is not None else end
                     continue
                 i += 1
