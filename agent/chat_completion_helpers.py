@@ -3520,7 +3520,8 @@ def interruptible_streaming_api_call(agent, api_kwargs: dict, *, on_first_delta=
 
                 def _finalize_bedrock_stream():
                     return stream_converse_with_callbacks(
-                        {"stream": list(intercepted_events)}
+                        {"stream": list(intercepted_events)},
+                        model=str(getattr(agent, "model", "") or ""),
                     )
 
                 def _bedrock_stream_created(_stream: Any) -> None:
@@ -3569,6 +3570,7 @@ def interruptible_streaming_api_call(agent, api_kwargs: dict, *, on_first_delta=
                 )
                 streamed_response = stream_converse_with_callbacks(
                     {"stream": stream},
+                    model=str(getattr(agent, "model", "") or ""),
                     on_text_delta=_on_text if agent._has_stream_consumers() else None,
                     on_tool_start=_on_tool,
                     on_reasoning_delta=_on_reasoning

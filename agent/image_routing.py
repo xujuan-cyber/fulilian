@@ -409,7 +409,12 @@ def _should_probe_ollama_vision(
     """
     p = (provider or "").strip().lower()
     if p == "ollama":
-        return True
+        # C3-37: the bare provider check bypassed the is_local_endpoint gate
+        # — an "ollama"-labeled provider pointed at a REMOTE base_url was
+        # fingerprint-probed (401 spray, #89863). Only a missing base_url
+        # (default loopback Ollama) keeps the unconditional True.
+        if not base_url:
+            return True
     if not base_url:
         return False
     # Remote endpoints must never be fingerprinted: the probe waterfall is
@@ -603,8 +608,8 @@ def decide_image_input_mode(
         supports = _lookup_supports_vision(provider, model, cfg)
     if supports is True:
         return "native"
-    if _explicit_aux_vision_override(cfg):
-        return "text"
+    # C3-38: the explicit-aux-override branch returned "text" — identical to
+    # the fall-through — so it was dead. Both shapes degrade to "text".
     return "text"
 
 

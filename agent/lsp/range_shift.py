@@ -30,6 +30,20 @@ import difflib
 from typing import Any, Callable, Dict, List, Optional
 
 
+def _lsp_splitlines(text: str) -> list:
+    """Split on \n ONLY.
+
+    C3-73: ``str.splitlines()`` also breaks on \v, \f, \x1c-\x1e,
+    \x85 and U+2028/2029, but LSP positions count ONLY \n — any file
+    containing those characters desynced every shifted line number. A
+    trailing \n yields a final empty element, matching LSP's position
+    model (the text after the last newline is its own line).
+    """
+    if not text:
+        return []
+    return text.split("\n")
+
+
 def build_line_shift(pre_text: str, post_text: str) -> Callable[[int], Optional[int]]:
     """Build a function mapping pre-edit line numbers to post-edit line numbers.
 
@@ -46,8 +60,8 @@ def build_line_shift(pre_text: str, post_text: str) -> Callable[[int], Optional[
     regions).  Cheap enough to call once per write/patch and apply to
     every baseline diagnostic.
     """
-    pre_lines = pre_text.splitlines() if pre_text else []
-    post_lines = post_text.splitlines() if post_text else []
+    pre_lines = _lsp_splitlines(pre_text)
+    post_lines = _lsp_splitlines(post_text)
 
     # Trivial case: identical content or no content — identity map.
     if pre_lines == post_lines:

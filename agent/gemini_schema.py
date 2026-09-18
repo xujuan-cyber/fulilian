@@ -75,6 +75,18 @@ def sanitize_gemini_schema(schema: Any) -> Dict[str, Any]:
             continue
         cleaned[key] = value
 
+    # C3-36: "format" passed through unfiltered. OpenAI-style format values
+    # ("uri", "email", "date-time" on non-string types) hit Google's Schema
+    # validator, which only defines format for STRING-typed fields — strict
+    # validation 400s the whole tool declaration. Keep it only alongside
+    # type STRING; drop it elsewhere (low-risk: the schema still validates,
+    # just without the unenforceable hint).
+    if "format" in cleaned:
+        ftype = cleaned.get("type")
+        ftype_norm = str(ftype).upper() if isinstance(ftype, str) else ""
+        if ftype_norm != "STRING":
+            cleaned.pop("format", None)
+
     # Gemini's Schema validator requires every ``enum`` entry to be a string,
     # even when the parent ``type`` is ``integer`` / ``number`` / ``boolean``.
     # Preserve those constraints by stringifying scalar values while keeping

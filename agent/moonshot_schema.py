@@ -32,13 +32,20 @@ from typing import Any, Dict, List
 # Keys whose values are maps of name → schema (not schemas themselves).
 # When we recurse, we walk the values of these maps as schemas, but we do
 # NOT apply the missing-type repair to the map itself.
-_SCHEMA_MAP_KEYS = frozenset({"properties", "patternProperties", "$defs", "definitions"})
+# C3-40: dependentSchemas added — its values are name → schema maps, and it
+# used to fall into the scalar-passthrough branch, leaving whole subtrees
+# un-repaired (missing-type repairs skipped).
+_SCHEMA_MAP_KEYS = frozenset({"properties", "patternProperties", "$defs", "definitions", "dependentSchemas"})
 
 # Keys whose values are lists of schemas.
 _SCHEMA_LIST_KEYS = frozenset({"anyOf", "oneOf", "allOf", "prefixItems"})
 
-# Keys whose values are a single nested schema.
-_SCHEMA_NODE_KEYS = frozenset({"items", "contains", "not", "additionalProperties", "propertyNames"})
+# C3-40: draft-07 conditionals (if/then/else) and the 2019+ unevaluated*
+# keywords are schema-valued too — they used to pass through as scalars.
+_SCHEMA_NODE_KEYS = frozenset({
+    "items", "contains", "not", "additionalProperties", "propertyNames",
+    "if", "then", "else", "unevaluatedProperties", "unevaluatedItems",
+})
 
 
 def _repair_schema(node: Any, is_schema: bool = True) -> Any:
@@ -68,6 +75,11 @@ def _repair_schema(node: Any, is_schema: bool = True) -> Any:
                 for sub_key, sub_val in value.items()
             }
         elif key in _SCHEMA_LIST_KEYS and isinstance(value, list):
+            repaired[key] = [_repair_schema(v, is_schema=True) for v in value]
+        elif key == "items" and isinstance(value, list):
+            # C3-40: draft-07 tuple validation — list-form items is a list
+            # of SCHEMAS, but only the dict form was repaired; the list
+            # passed through verbatim.
             repaired[key] = [_repair_schema(v, is_schema=True) for v in value]
         elif key in _SCHEMA_NODE_KEYS:
             # items / not / additionalProperties: single nested schema.

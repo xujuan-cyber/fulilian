@@ -484,32 +484,12 @@ def resolve_aws_auth_env_var(env: Optional[Dict[str, str]] = None) -> Optional[s
 def has_aws_credentials(env: Optional[Dict[str, str]] = None) -> bool:
     """Return True if any AWS credential source is detected.
 
-    Checks environment variables first (fast, no I/O), then falls back to
-    boto3's credential chain which covers EC2 instance roles, ECS task roles,
-    Lambda execution roles, and other IMDS-based sources that don't set
-    environment variables.
-
-    This two-tier approach mirrors the pattern from OpenClaw PR #62673:
-    cloud environments (EC2, ECS, Lambda) provide credentials via instance
-    metadata, not environment variables. The env-var check is a fast path
-    for local development; the boto3 fallback covers all cloud deployments.
+    C3-3: this used to re-run boto3's credential chain itself — but
+    resolve_aws_auth_env_var() ALREADY covers the same two tiers (env vars,
+    then the boto3 default chain for IMDS/ECS/Lambda sources), so the second
+    chain walk was dead redundancy. Delegate to it.
     """
-    if resolve_aws_auth_env_var(env) is not None:
-        return True
-    # Fall back to boto3's credential resolver — this covers EC2 instance
-    # metadata (IMDS), ECS container credentials, and other implicit sources
-    # that don't set environment variables.
-    try:
-        import botocore.session
-        session = botocore.session.get_session()
-        credentials = session.get_credentials()
-        if credentials is not None:
-            resolved = credentials.get_frozen_credentials()
-            if resolved and resolved.access_key:
-                return True
-    except Exception:
-        pass
-    return False
+    return resolve_aws_auth_env_var(env) is not None
 
 
 def resolve_bedrock_region(env: Optional[Dict[str, str]] = None) -> str:
@@ -1038,6 +1018,7 @@ def stream_converse_with_callbacks(
     on_reasoning_delta=None,
     on_interrupt_check=None,
     on_event=None,
+    model: str = "",
 ) -> SimpleNamespace:
     """Process a Bedrock ConverseStream event stream with real-time callbacks.
 
@@ -1134,15 +1115,26 @@ def stream_converse_with_callbacks(
                 try:
                     input_dict = json.loads(current_tool["input_json"]) if current_tool["input_json"] else {}
                 except (json.JSONDecodeError, TypeError):
-                    input_dict = {}
-                tool_calls.append(SimpleNamespace(
-                    id=current_tool["toolUseId"],
-                    type="function",
-                    function=SimpleNamespace(
-                        name=current_tool["name"],
-                        arguments=json.dumps(input_dict),
-                    ),
-                ))
+                    # C3-3: partial/truncated toolUse JSON (interrupted
+                    # stream, provider truncation) used to dispatch as a
+                    # {}-args tool call — executing a real tool with none
+                    # of its arguments. Drop it; the interrupt/failure
+                    # path owns recovery.
+                    logger.warning(
+                        "Dropping toolUse %r (%s): truncated JSON arguments",
+                        current_tool.get("toolUseId"),
+                        current_tool.get("name"),
+                    )
+                    input_dict = None
+                if input_dict is not None:
+                    tool_calls.append(SimpleNamespace(
+                        id=current_tool["toolUseId"],
+                        type="function",
+                        function=SimpleNamespace(
+                            name=current_tool["name"],
+                            arguments=json.dumps(input_dict),
+                        ),
+                    ))
                 current_tool = None
             elif current_text_buffer:
                 text_parts.append("".join(current_text_buffer))
@@ -1193,10 +1185,13 @@ def stream_converse_with_callbacks(
         finish_reason=finish_reason,
     )
 
+    # C3-3: model="" lost Bedrock-stream attribution in accounting (the
+    # non-stream path reports response["modelId"]); the caller knows the
+    # modelId it requested — pass it through.
     return SimpleNamespace(
         choices=[choice],
         usage=usage,
-        model="",
+        model=model,
     )
 
 

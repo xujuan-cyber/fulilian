@@ -130,11 +130,16 @@ def probe_gemini_tier(
         with httpx.Client(timeout=timeout) as client:
             resp = client.post(
                 url,
-                params={"key": key},
                 json=payload,
                 headers={
                     "Content-Type": "application/json",
                     "X-Goog-Api-Client": f"fulilian-agent/{_FULILIAN_VERSION}",
+                    # C3-35: the key used to ride in the URL query
+                    # (?key=...) — provider-side exceptions/logs then
+                    # embedded the credentialed URL. The main client
+                    # already authenticates via the x-goog-api-key header
+                    # (:1151); the probe does the same now.
+                    "x-goog-api-key": key,
                 },
             )
     except Exception as exc:
