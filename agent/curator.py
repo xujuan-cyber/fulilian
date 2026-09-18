@@ -21,11 +21,13 @@ Strict invariants:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
 import re
 import threading
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, NamedTuple, Optional, Set
@@ -84,6 +86,79 @@ DEFAULT_CONSOLIDATE = False
 
 def _state_file() -> Path:
     return get_fulilian_home() / "skills" / ".curator_state"
+
+
+# C3-26: automatic curator passes are triggered from two independent
+# processes (CLI session-start hook + gateway heartbeat tick). Both used to
+# read a stale ``last_run_at`` from .curator_state and run concurrent
+# passes. Serialise them with a kernel-managed advisory lock: flock is
+# released by the OS when the holder dies, so a crashed pass cannot wedge
+# future runs the way a stale pidfile would.
+_CURATOR_LOCK_TIMEOUT_SECONDS = 2.0
+_CURATOR_LOCK_POLL_SECONDS = 0.25
+
+
+@contextlib.contextmanager
+def _curator_run_lock(timeout: float = _CURATOR_LOCK_TIMEOUT_SECONDS):
+    """Hold the cross-process curator run lock.
+
+    Yields True when this process holds the lock, False after a bounded
+    wait — False means another live pass is running and the caller should
+    skip this tick (never an error). Failing to OPEN the lock file is
+    deliberately fail-open (yield True): a curator double-run is redundant
+    work, not corruption, and blocking skill maintenance on an unwritable
+    state dir would be worse.
+    """
+    lock_path = get_fulilian_home() / "skills" / ".curator.lock"
+    handle = None
+    try:
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        handle = lock_path.open("a+b")
+    except OSError as exc:
+        logger.debug(
+            "curator lock %s could not be opened (%s) — proceeding "
+            "unserialised (double-run is redundant, not unsafe)",
+            lock_path, exc,
+        )
+        yield True
+        return
+
+    acquired = False
+    try:
+        deadline = time.monotonic() + timeout
+        while True:
+            try:
+                if os.name == "nt":
+                    import msvcrt
+
+                    handle.seek(0)
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                else:
+                    import fcntl
+
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                acquired = True
+                break
+            except (BlockingIOError, OSError):
+                if time.monotonic() >= deadline:
+                    break
+                time.sleep(_CURATOR_LOCK_POLL_SECONDS)
+        yield acquired
+    finally:
+        if acquired:
+            try:
+                if os.name == "nt":
+                    import msvcrt
+
+                    handle.seek(0)
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    import fcntl
+
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+            except OSError:  # pragma: no cover — best-effort release
+                pass
+        handle.close()
 
 
 def _default_state() -> Dict[str, Any]:
@@ -2034,7 +2109,20 @@ def maybe_run_curator(
             min_idle_s = get_min_idle_hours() * 3600.0
             if idle_for_seconds < min_idle_s:
                 return None
-        return run_curator_review(on_summary=on_summary)
+        # C3-26: serialise automatic passes across processes and re-check
+        # the schedule gate INSIDE the lock — the other trigger may have
+        # completed a full pass (updating last_run_at) between our stale
+        # check above and the lock acquisition, which is exactly the
+        # double-run this lock exists to prevent.
+        with _curator_run_lock() as held:
+            if not held:
+                logger.debug(
+                    "curator pass skipped: another process holds the run lock"
+                )
+                return None
+            if not should_run_now():
+                return None
+            return run_curator_review(on_summary=on_summary)
     except Exception as e:
         logger.debug("maybe_run_curator failed: %s", e, exc_info=True)
         return None

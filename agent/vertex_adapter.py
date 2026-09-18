@@ -19,6 +19,7 @@ under the ``vertex:`` section; env vars take precedence over config.yaml.
 import logging
 import os
 import time
+from datetime import datetime, timezone
 from typing import Optional, Tuple
 
 from agent.secret_scope import get_secret as _get_secret, is_multiplex_active
@@ -108,6 +109,21 @@ def _refresh_credentials(creds) -> None:
     creds.refresh(auth_req)
 
 
+def _expiry_epoch_seconds(expiry: datetime) -> float:
+    """Epoch seconds for a google-auth ``Credentials.expiry`` (C3-67).
+
+    google-auth produces a NAIVE datetime expressed in UTC
+    (``google.auth._helpers.utcnow()``). Calling naive ``.timestamp()``
+    interprets it in the LOCAL zone: on a UTC+8 host the remaining-time
+    check overestimated by 8 hours, so the 300s early-refresh window below
+    never fired and requests rode the access token to (and past) expiry.
+    Anchor naive values to UTC explicitly; aware values pass through.
+    """
+    if expiry.tzinfo is None:
+        return expiry.replace(tzinfo=timezone.utc).timestamp()
+    return expiry.timestamp()
+
+
 def get_vertex_credentials(credentials_path: Optional[str] = None) -> Tuple[Optional[str], Optional[str]]:
     """Return a (fresh access_token, project_id) pair or (None, None) on failure.
 
@@ -161,7 +177,7 @@ def get_vertex_credentials(credentials_path: Optional[str] = None) -> Tuple[Opti
             or getattr(creds, "expired", False)
             or (
                 getattr(creds, "expiry", None) is not None
-                and (creds.expiry.timestamp() - time.time()) < 300
+                and (_expiry_epoch_seconds(creds.expiry) - time.time()) < 300
             )
         )
         if needs_refresh:
