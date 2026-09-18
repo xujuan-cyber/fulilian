@@ -132,12 +132,31 @@ from fulilian_cli.timeouts import (
 
 _fulilian_home = get_fulilian_home()
 _project_env = Path(__file__).parent / '.env'
-_loaded_env_paths = load_fulilian_dotenv(fulilian_home=_fulilian_home, project_env=_project_env)
-if _loaded_env_paths:
-    for _env_path in _loaded_env_paths:
-        logger.info("Loaded environment variables from %s", _env_path)
-else:
-    logger.info("No .env file found. Using system environment variables.")
+# C2-4: .env loading used to run at IMPORT time — merely importing this
+# module (tests, `from run_agent import AIAgent` in batch_runner) mutated
+# os.environ, wrecking test isolation. Runtime consumers call
+# _ensure_dotenv_loaded() explicitly instead; it is idempotent, so the
+# first AIAgent construction or main() invocation performs the load and
+# everything after is a no-op.
+_DOTENV_LOAD_LOCK = threading.Lock()
+_DOTENV_LOADED = False
+
+
+def _ensure_dotenv_loaded() -> None:
+    """Load the Fulilian/project .env files exactly once, on demand."""
+    global _DOTENV_LOADED
+    with _DOTENV_LOAD_LOCK:
+        if _DOTENV_LOADED:
+            return
+        loaded_paths = load_fulilian_dotenv(
+            fulilian_home=_fulilian_home, project_env=_project_env
+        )
+        _DOTENV_LOADED = True
+    if loaded_paths:
+        for _env_path in loaded_paths:
+            logger.info("Loaded environment variables from %s", _env_path)
+    else:
+        logger.info("No .env file found. Using system environment variables.")
 
 
 # Import our tool system
@@ -9536,6 +9555,8 @@ def main(
     Toolset Examples:
         - "research": Web search, extract, crawl + vision tools
     """
+    # C2-4: .env load moved here from import time (see _ensure_dotenv_loaded).
+    _ensure_dotenv_loaded()
     print("🤖 AI Agent with Tool Calling")
     print("=" * 50)
     

@@ -663,6 +663,14 @@ def init_agent(
             identity even when skip_context_files=True. Project context files from the cwd
             remain skipped.
     """
+    # C2-4: .env load moved out of run_agent import time; the first agent
+    # construction performs it (idempotent — main() may have already done
+    # it). NOTE: do NOT bind this import to the name `_ra` — that name is
+    # the module-level lazy-import helper used throughout this function
+    # (_ra()._fulilian_home etc.), and shadowing it broke ~200 tests.
+    import run_agent as _run_agent_for_env
+
+    _run_agent_for_env._ensure_dotenv_loaded()
     _install_safe_stdio()
 
     agent.model = model
