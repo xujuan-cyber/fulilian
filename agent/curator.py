@@ -1772,7 +1772,7 @@ def run_curator_review(
                     )
                 else:
                     prompt = f"{CURATOR_REVIEW_PROMPT}{builtins_note}\n\n{candidate_list}"
-                llm_meta = _run_llm_review(prompt)
+                llm_meta = _run_llm_review(prompt, suppress_output=synchronous)
                 final_summary = (
                     f"{prefix}{auto_summary}; llm: {llm_meta.get('summary', 'no change')}"
                 )
@@ -1920,7 +1920,7 @@ def _resolve_review_model(cfg: Dict[str, Any]) -> tuple[str, str]:
     return b.provider, b.model
 
 
-def _run_llm_review(prompt: str) -> Dict[str, Any]:
+def _run_llm_review(prompt: str, *, suppress_output: bool = False) -> Dict[str, Any]:
     """Spawn an AIAgent fork to run the curator review prompt.
 
     Returns a dict with:
@@ -2054,7 +2054,7 @@ def _run_llm_review(prompt: str) -> Dict[str, Any]:
         # session's stdout (display.py's capture contradicts the
         # thread-isolation assumption). Suppress only on the synchronous CLI
         # path, where this thread IS the foreground.
-        if synchronous:
+        if suppress_output:
             with open(os.devnull, "w", encoding="utf-8") as _devnull, \
                  contextlib.redirect_stdout(_devnull), \
                  contextlib.redirect_stderr(_devnull):
