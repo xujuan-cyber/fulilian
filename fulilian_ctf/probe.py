@@ -22,6 +22,32 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+from .env_overrides import (
+    ENV_PROBE_SCAN_TIMEOUT,
+    ENV_PROBE_TIMEOUT,
+    env_float,
+    env_int,
+)
+
+# 探针超时默认值（秒）。socket 层实际取 min(timeout, 10)（见 probe_challenge），
+# 所以调大到 10 以上只影响"总超时"预算，不改变单次 connect 的等待。
+DEFAULT_PROBE_TIMEOUT = 60
+DEFAULT_PROBE_SCAN_TIMEOUT = 5.0
+
+
+def probe_timeout_default() -> int:
+    """生效的探针超时（env ``FULILIAN_CTF_PROBE_TIMEOUT``，秒）。
+
+    dispatcher 也复用本函数，保证"探针超时"只有一个旋钮、一处默认。
+    """
+    return env_int(ENV_PROBE_TIMEOUT, DEFAULT_PROBE_TIMEOUT, min_value=1)
+
+
+def probe_scan_timeout_default() -> float:
+    """生效的兜底端口扫描总超时（env ``FULILIAN_CTF_PROBE_SCAN_TIMEOUT``，秒）。"""
+    return env_float(ENV_PROBE_SCAN_TIMEOUT, DEFAULT_PROBE_SCAN_TIMEOUT, min_value=0.1)
+
+
 # 常见 CTF 端口（按类别分组）
 _COMMON_PORTS = [
     21, 22, 23, 25, 53, 80, 110, 143, 443, 445, 993, 995,
@@ -589,19 +615,24 @@ _SCAN_PORTS = [
 ]
 
 
-def _scan_common_ports(host: str, exclude_port: int = 0, scan_timeout: float = 5.0) -> list[int]:
+def _scan_common_ports(
+    host: str, exclude_port: int = 0, scan_timeout: Optional[float] = None
+) -> list[int]:
     """扫描常见端口，返回所有开放端口列表。
 
     Args:
         host: 目标主机
         exclude_port: 排除的端口（已检测过的主端口）
-        scan_timeout: 扫描总超时
+        scan_timeout: 扫描总超时（秒）；``None`` → env → 默认 5.0
 
     Returns:
         list[int]: 开放端口列表
     """
     open_ports: list[int] = []
-    deadline = time.time() + scan_timeout
+    resolved_scan_timeout = (
+        float(scan_timeout) if scan_timeout is not None else probe_scan_timeout_default()
+    )
+    deadline = time.time() + resolved_scan_timeout
     for port in _SCAN_PORTS:
         if port == exclude_port:
             continue
@@ -622,7 +653,7 @@ def _scan_common_ports(host: str, exclude_port: int = 0, scan_timeout: float = 5
 
 
 def probe_challenge(
-    target_host: str, target_port: int = 0, timeout: int = 60
+    target_host: str, target_port: int = 0, timeout: Optional[int] = None
 ) -> str | tuple[str, int]:
     """快速探针确定题目是否可达。
 
@@ -634,12 +665,15 @@ def probe_challenge(
     Args:
         target_host: 目标 IP 或主机名（空串视为本地文件类题目，直接可达）
         target_port: 目标端口
-        timeout: 探针超时（秒），socket 层实际取 min(timeout, 10)
+        timeout: 探针超时（秒）；``None`` → env ``FULILIAN_CTF_PROBE_TIMEOUT``
+            → 默认 60。socket 层实际取 min(timeout, 10)
 
     Returns:
         ProbeResult: REACHABLE / INFRA_BLOCKED / UNKNOWN
         或 ``(ProbeResult.DISCOVERED, port)``: 发现隐藏端口
     """
+    if timeout is None:
+        timeout = probe_timeout_default()
     if not target_host:
         # 无网络目标（本地文件/二进制题）不需要探活
         return ProbeResult.REACHABLE
@@ -702,10 +736,14 @@ def probe_challenge(
 
 __all__ = [
     "AutoPrompter",
+    "DEFAULT_PROBE_SCAN_TIMEOUT",
+    "DEFAULT_PROBE_TIMEOUT",
     "EnvInfo",
     "FileInfo",
     "NetworkInfo",
     "ProbeResult",
     "QuickScanResult",
     "probe_challenge",
+    "probe_scan_timeout_default",
+    "probe_timeout_default",
 ]

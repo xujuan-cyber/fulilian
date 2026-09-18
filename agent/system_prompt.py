@@ -232,7 +232,14 @@ def _restore_plugin_prompt_sections(prompt: str) -> tuple:
     if end < 0:
         return ()
     after_end = end + len(PLUGIN_SECTIONS_END)
-    if not prompt[after_end:].startswith("\n\nConversation started:"):
+    # C3-59: the tail anchor only matched the dated "Conversation started:"
+    # line. Timeless Bot Chat prompts emit a "Timezone:" line instead
+    # (:893), so plugin sections were silently dropped for them.
+    _after = prompt[after_end:]
+    if not (
+        _after.startswith("\n\nConversation started:")
+        or _after.startswith("\n\nTimezone:")
+    ):
         return ()
     framed = prompt[start:after_end]
 

@@ -392,7 +392,13 @@ def _sandbox_failure_hint(stderr_text: str, enabled_tools=None) -> Optional[str]
         )
         if m:
             missing = m.group(1)
-            available = sorted(SANDBOX_ALLOWED_TOOLS & set(enabled_tools or SANDBOX_ALLOWED_TOOLS))
+            # C4-22: an empty enabled_tools is now a real fail-closed
+            # toolset — don't let `or` re-expand it to the full whitelist.
+            available = sorted(
+                SANDBOX_ALLOWED_TOOLS & set(
+                    enabled_tools if enabled_tools is not None else SANDBOX_ALLOWED_TOOLS
+                )
+            )
             builtin = {"json_parse", "shell_quote", "retry"}
             if missing in builtin:
                 return (
@@ -598,6 +604,24 @@ _FILE_TRANSPORT_HEADER = '''\
 import json, os, shlex, tempfile, threading, time
 
 _RPC_DIR = os.environ.get("FULILIAN_RPC_DIR") or os.path.join(tempfile.gettempdir(), "fulilian_rpc")
+
+def _rpc_token() -> str:
+    """Token for RPC requests.
+
+    Prefer the env var (local/UDS path). On remote backends the parent
+    drops the token into a 0600 ``.token`` file inside _RPC_DIR instead of
+    the script command line (C4-23: the command line is world-readable on
+    the remote host via ps / /proc/*/cmdline).
+    """
+    tok = os.environ.get("FULILIAN_RPC_TOKEN", "")
+    if tok:
+        return tok
+    try:
+        with open(os.path.join(_RPC_DIR, ".token"), "r", encoding="utf-8") as f:
+            return f.read().strip()
+    except OSError:
+        return ""
+
 _seq = 0
 # `_seq += 1` is not atomic (read-modify-write), so concurrent _call()
 # invocations from multiple threads could allocate the same sequence number
@@ -620,12 +644,16 @@ def _call(tool_name, args):
     # (or any non-UTF-8 locale) the default open() mode would mangle
     # non-ASCII chars in tool args when encoding them as JSON.
     tmp = req_file + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
+    # C4-23: the request file embeds the RPC token — create it 0600 from
+    # the start (default open() mode is umask-dependent, typically 0644,
+    # readable by every same-host user).
+    _fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(_fd, "w", encoding="utf-8") as f:
         json.dump({
             "tool": tool_name,
             "args": args,
             "seq": seq,
-            "token": os.environ.get("FULILIAN_RPC_TOKEN", ""),
+            "token": _rpc_token(),
         }, f)
     os.rename(tmp, req_file)
 
@@ -1121,7 +1149,14 @@ def _execute_remote(
     session_tools = set(enabled_tools) if enabled_tools else set()
     sandbox_tools = frozenset(SANDBOX_ALLOWED_TOOLS & session_tools)
     if not sandbox_tools:
-        sandbox_tools = SANDBOX_ALLOWED_TOOLS
+        # C4-22: escalate to the full whitelist ONLY when no session
+        # enablement info was plumbed in (enabled_tools is None). A session
+        # that explicitly enabled none of the sandbox tools must NOT be
+        # handed the full whitelist — fail closed with an empty toolset so
+        # in-sandbox tool calls are refused (execute_code itself is gated
+        # by check_sandbox_requirements, so a session running it with every
+        # sandbox tool disabled deliberately turned them off).
+        sandbox_tools = SANDBOX_ALLOWED_TOOLS if enabled_tools is None else frozenset()
 
     effective_task_id = task_id or "default"
     env, env_type = _get_or_create_env(effective_task_id)
@@ -1163,6 +1198,16 @@ def _execute_remote(
 
         rpc_token = secrets.token_urlsafe(32)
 
+        # C4-23: hand the token to the sandbox via a 0600 file instead of
+        # the script command line — env.execute exposes the full command
+        # line to every same-host user via ps / /proc/*/cmdline.
+        token_b64 = base64.b64encode(rpc_token.encode("utf-8")).decode("ascii")
+        quoted_token_path = shlex.quote(f"{sandbox_dir}/rpc/.token")
+        env.execute(
+            f"umask 077 && echo '{token_b64}' | base64 -d > {quoted_token_path}",
+            cwd="/", timeout=10,
+        )
+
         # Generate and ship files
         tools_src = generate_fulilian_tools_module(
             list(sandbox_tools), transport="file",
@@ -1185,9 +1230,10 @@ def _execute_remote(
         rpc_thread.start()
 
         # Build environment variable prefix for the script
+        # C4-23: FULILIAN_RPC_TOKEN deliberately NOT on the command line —
+        # the generated client reads rpc/.token (0600) instead.
         env_prefix = (
             f"FULILIAN_RPC_DIR={shlex.quote(f'{sandbox_dir}/rpc')} "
-            f"FULILIAN_RPC_TOKEN={shlex.quote(rpc_token)} "
             f"PYTHONDONTWRITEBYTECODE=1"
         )
         tz = os.getenv("FULILIAN_TIMEZONE", "").strip()
@@ -1485,7 +1531,14 @@ def execute_code(
     sandbox_tools = frozenset(SANDBOX_ALLOWED_TOOLS & session_tools)
 
     if not sandbox_tools:
-        sandbox_tools = SANDBOX_ALLOWED_TOOLS
+        # C4-22: escalate to the full whitelist ONLY when no session
+        # enablement info was plumbed in (enabled_tools is None). A session
+        # that explicitly enabled none of the sandbox tools must NOT be
+        # handed the full whitelist — fail closed with an empty toolset so
+        # in-sandbox tool calls are refused (execute_code itself is gated
+        # by check_sandbox_requirements, so a session running it with every
+        # sandbox tool disabled deliberately turned them off).
+        sandbox_tools = SANDBOX_ALLOWED_TOOLS if enabled_tools is None else frozenset()
 
     if _get_kernel_mode() == "session":
         # Session kernels keep one interpreter alive across calls; the guards

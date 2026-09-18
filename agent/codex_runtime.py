@@ -1204,7 +1204,9 @@ def _consume_codex_event_stream(
                     }
             continue
 
-        if "output_text.delta" in event_type or event_type == "response.output_text.delta":
+        # C3-9: the `== "response.output_text.delta"` arm was dead — any
+        # event it matched already satisfies the substring check above it.
+        if "output_text.delta" in event_type:
             delta_text = _event_field(event, "delta", "")
             if delta_text and active_message_phase == "commentary":
                 commentary_text_deltas.append(delta_text)
@@ -1439,6 +1441,27 @@ def _consume_codex_event_stream(
         raise RuntimeError(
             "Codex Responses stream did not emit a terminal response"
         )
+
+    # C3-8: clean EOF without a terminal event leaves pending function calls
+    # unsettled (the settle path above requires saw_response_completed). With
+    # done items present the stream used to return silently: the pending
+    # calls vanished without a log while final.status still read "completed"
+    # (the default for a missing terminal frame) — model and user both blind.
+    # Warn, and report the status honestly as "incomplete" so downstream
+    # retry/telemetry sees the truncation.
+    if pending_function_calls and not saw_response_completed:
+        logger.warning(
+            "Codex Responses stream ended without a terminal event — "
+            "dropping %d unsettled function_call item(s): %s",
+            len(pending_function_calls),
+            ", ".join(
+                sorted(
+                    str(_item_field(p["item"], "name", None) or _item_field(p["item"], "id", "?"))
+                    for p in pending_function_calls.values()
+                )
+            ),
+        )
+        terminal_status = "incomplete"
 
     assembled_text = "".join(collected_text_deltas)
 

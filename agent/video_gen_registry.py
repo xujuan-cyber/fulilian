@@ -86,6 +86,10 @@ def get_provider(name: str, *, scope: Optional[str] = None) -> Optional[VideoGen
 def snapshot_registration(
     name: str, *, scope: Optional[str] = None
 ) -> Optional[VideoGenProvider]:
+    if not isinstance(name, str):
+        # C3-70: same isinstance guard as the tts twin (C3-63) — non-str
+        # names degrade to a lookup miss instead of crashing.
+        return None
     with _lock:
         target = _providers if scope is None else _scoped_providers.get(scope, {})
         return target.get(name.strip())
@@ -99,6 +103,9 @@ def restore_registration(
     scope: Optional[str] = None,
 ) -> bool:
     """Restore a plugin registration only when *current* is still installed."""
+    if not isinstance(name, str):
+        # C3-70: same isinstance guard as snapshot.
+        return False
     key = name.strip()
     with _lock:
         target = _providers if scope is None else _scoped_providers.setdefault(scope, {})

@@ -529,10 +529,24 @@ def scan_skill_commands() -> Dict[str, Dict[str, Any]]:
                         "skill_md_path": str(skill_md),
                         "skill_dir": str(skill_md.parent),
                     }
-                except Exception:
+                except Exception as _skill_err:
+                    # C3-54: per-file failures used to vanish silently — a
+                    # broken SKILL.md just made the skill disappear. Leave a
+                    # breadcrumb (debug: a large tree may legitimately carry
+                    # unreadable files; the outer warning covers real trouble).
+                    logger.debug(
+                        "Skipping unreadable skill file %s: %s",
+                        skill_md, _skill_err,
+                    )
                     continue
-    except Exception:
-        pass
+    except Exception as _scan_err:
+        # C3-54: an import/generator failure here yielded an EMPTY command
+        # map with zero diagnostics — the visible symptom was "all slash
+        # commands gone". Warn loudly instead.
+        logger.warning(
+            "Skill command scan failed (%s); publishing an empty command "
+            "map — skills remain loadable via /skill <name>.", _scan_err,
+        )
     # Publish the finished map and the platform/home it was scanned for as
     # ONE step. Bare assignments are not atomic together: a reader landing
     # between them sees the NEW map still carrying the OLD platform tag, and

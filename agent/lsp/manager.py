@@ -526,8 +526,17 @@ class LSPService:
         srv = find_server_for_file(file_path)
         if not (ws and gated and srv):
             return []
+        # C3-75: clients are keyed by the SERVER-scoped root (the marker dir
+        # srv.resolve_root returns, same key _get_or_spawn stores under) —
+        # this lookup used the raw git worktree root, never matched, and the
+        # path silently returned [] for every file.
+        per_server_root = srv.resolve_root(file_path, ws)
+        if per_server_root is None:
+            # Exclude-marker hit: _get_or_spawn would refuse to spawn here
+            # too, so there is no client to ask.
+            return []
         with self._state_lock:
-            client = self._clients.get((srv.server_id, ws))
+            client = self._clients.get((srv.server_id, per_server_root))
         if client is None:
             return []
         return list(client.diagnostics_for(file_path, fresh_only=True))

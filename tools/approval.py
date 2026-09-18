@@ -2182,8 +2182,16 @@ def _deobfuscate_shell_word_for_detection(word: str) -> str:
 
 def _iter_shell_command_starts(command: str):
     starts = [0]
+    # C4-6: the recursive descent over nested $()/backticks had no depth
+    # bound — a crafted command with hundreds of nestings blew the Python
+    # stack inside the approval path itself. 32 levels covers any real
+    # command; beyond it we simply stop descending (outer-command starts
+    # are still yielded — approval stays fail-closed).
+    _MAX_SCAN_DEPTH = 32
 
-    def scan(start: int, end: int) -> None:
+    def scan(start: int, end: int, depth: int = 0) -> None:
+        if depth > _MAX_SCAN_DEPTH:
+            return
         quote: str | None = None
         i = start
         while i < end:
@@ -2204,13 +2212,13 @@ def _iter_shell_command_starts(command: str):
                 if command.startswith("$(", i):
                     nested_end = _scan_dollar_paren_end(command, i)
                     starts.append(i + 2)
-                    scan(i + 2, nested_end - 1 if nested_end is not None else end)
+                    scan(i + 2, nested_end - 1 if nested_end is not None else end, depth + 1)
                     i = nested_end if nested_end is not None else end
                     continue
                 if ch == "`":
                     nested_end = _scan_backtick_end(command, i)
                     starts.append(i + 1)
-                    scan(i + 1, nested_end - 1 if nested_end is not None else end)
+                    scan(i + 1, nested_end - 1 if nested_end is not None else end, depth + 1)
                     i = nested_end if nested_end is not None else end
                     continue
                 i += 1
@@ -3477,6 +3485,34 @@ def _get_approval_timeout() -> int:
     return raw
 
 
+def _dangerous_command_fail_closed() -> bool:
+    """C4-4: fail-closed by default for the dangerous-command gate in bare
+    non-interactive contexts (user decision 2026-09-19: "可以" to closing
+    the unpaired door).
+
+    Cron and single-query already had explicit modes and the plugin path
+    opted in — this was the last auto-approve door with no way to close
+    it. Default is now True: a bare script (FULILIAN_INTERACTIVE unset,
+    no gateway) that trips a dangerous-command pattern is BLOCKED instead
+    of silently auto-approved. Operators who intentionally want the old
+    fail-open behavior set approvals.dangerous_command_fail_closed: false
+    in config.yaml. Deny rules and the hardline floor are unaffected (they
+    run before this gate either way).
+    """
+    try:
+        from fulilian_cli.config import load_config_readonly
+
+        config = load_config_readonly()
+        return bool(
+            cfg_get(
+                config, "approvals", "dangerous_command_fail_closed", default=True
+            )
+        )
+    except Exception:
+        # Fail-closed: if the config cannot be read, keep the door shut.
+        return True
+
+
 def _get_cron_approval_mode() -> str:
     """Read the cron approval mode from config. Returns 'deny' or 'approve'."""
     try:
@@ -4045,6 +4081,10 @@ def check_dangerous_command(command: str, env_type: str,
         return {"approved": True, "message": None}
 
     return _run_approval_gate(
+        # C4-4: the door can now be closed deliberately. Default stays the
+        # documented fail-open; approvals.dangerous_command_fail_closed:
+        # true in config.yaml opts batch scripts into hard denial.
+        fail_closed_when_no_human=_dangerous_command_fail_closed(),
         pattern_key=pattern_key,
         description=description,
         display_target=command,

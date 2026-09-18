@@ -32,7 +32,7 @@ _SAFE_MP_CONTEXT = multiprocessing.get_context(
     "forkserver" if "forkserver" in multiprocessing.get_all_start_methods() else "spawn"
 )
 from .fsutil import atomic_write_text
-from .probe import ProbeResult, probe_challenge
+from .probe import ProbeResult, probe_challenge, probe_timeout_default
 from .relay import (
     build_relay,
     is_relay_meta_text,
@@ -43,6 +43,16 @@ from .relay import (
 )
 from .solver import SOLVER_LOG, SolverResult, read_flag_file, scan_log_for_flag, solver_worker
 from .verify import VerificationResult, check_output_for_flag, verify_flag
+from .env_overrides import (
+    ENV_ESCALATION_TIMEBOX_MULTIPLIER,
+    ENV_MAX_ATTEMPTS,
+    ENV_NO_OUTPUT_ROUND_SECONDS,
+    ENV_PROBE_CONCURRENCY,
+    ENV_TIMEBOX,
+    ENV_WORKERS,
+    env_float,
+    env_int,
+)
 from .stopper import (
     DEFAULT_MAX_NO_OUTPUT_ROUNDS,
     DEFAULT_MAX_TOKENS,
@@ -52,6 +62,8 @@ from .stopper import (
     TokenCounter,
     count_variant_failures,
     estimate_tokens_from_log,
+    max_no_output_rounds_default,
+    max_variant_failures_default,
     usage_tokens,
 )
 from .timebox import Timebox, difficulty_adjusted_budget
@@ -84,8 +96,50 @@ DEFAULT_ROUTE = "plain_retry"  # 无匹配 → 现状行为（同模型同 promp
 # 难度因子（EV 计算用）：越难的题回收价值越低
 DIFFICULTY_FACTORS = {"easy": 1.0, "medium": 0.7, "hard": 0.4}
 
-# 探针并行数上限（同时探活的题数）
+# 探针并行数上限（同时探活的题数）—— 默认值；运行期请用 probe_concurrency()
 PROBE_CONCURRENCY = 4
+
+# 调度参数默认值 —— 运行期请用下方 *_default() 取生效值（env 可覆盖）
+DEFAULT_MAX_WORKERS = 3
+DEFAULT_MAX_ATTEMPTS = 5
+DEFAULT_NO_OUTPUT_ROUND_SECONDS = 60
+DEFAULT_ESCALATION_TIMEBOX_MULTIPLIER = 1.5
+
+
+def max_workers_default() -> int:
+    """生效的并行 solver 数（env ``FULILIAN_CTF_WORKERS``）。"""
+    return env_int(ENV_WORKERS, DEFAULT_MAX_WORKERS, min_value=1)
+
+
+def max_attempts_default() -> int:
+    """生效的单题最大尝试次数（env ``FULILIAN_CTF_MAX_ATTEMPTS``）。"""
+    return env_int(ENV_MAX_ATTEMPTS, DEFAULT_MAX_ATTEMPTS, min_value=1)
+
+
+def probe_concurrency() -> int:
+    """生效的并发探活题数（env ``FULILIAN_CTF_PROBE_CONCURRENCY``）。"""
+    return env_int(ENV_PROBE_CONCURRENCY, PROBE_CONCURRENCY, min_value=1)
+
+
+def no_output_round_seconds_default() -> int:
+    """生效的"一轮无产出"折算秒数（env ``FULILIAN_CTF_NO_OUTPUT_ROUND_SECONDS``）。"""
+    return env_int(ENV_NO_OUTPUT_ROUND_SECONDS, DEFAULT_NO_OUTPUT_ROUND_SECONDS, min_value=1)
+
+
+def timebox_override_default() -> int:
+    """生效的单档时间盒覆盖（env ``FULILIAN_CTF_TIMEBOX``，秒）。
+
+    **0 是合法哨兵**（按难度自适应），所以 ``min_value=0`` 且调用侧必须用
+    ``is not None`` 判断"是否显式传入"，不能用 ``or``。
+    """
+    return env_int(ENV_TIMEBOX, 0, min_value=0)
+
+
+def escalation_timebox_multiplier() -> float:
+    """生效的收割升级时间盒延长倍率（env ``FULILIAN_CTF_ESCALATION_TIMEBOX_MULTIPLIER``）。"""
+    return env_float(
+        ENV_ESCALATION_TIMEBOX_MULTIPLIER, DEFAULT_ESCALATION_TIMEBOX_MULTIPLIER, min_value=1.0
+    )
 
 
 def _safe_target(solver_fn: Callable, project: Project, work_dir: str,
@@ -227,40 +281,58 @@ class Dispatcher:
 
     def __init__(
         self,
-        max_workers: int = 3,
+        max_workers: Optional[int] = None,
         model: str = "",
-        probe_timeout: int = 60,
-        max_attempts: int = 5,
-        timebox_override: int = 0,
+        probe_timeout: Optional[int] = None,
+        max_attempts: Optional[int] = None,
+        timebox_override: Optional[int] = None,
         solver_fn: Optional[Callable] = None,
         quiet: bool = False,
         max_tokens: Optional[int] = None,
-        max_no_output_rounds: int = DEFAULT_MAX_NO_OUTPUT_ROUNDS,
-        max_variant_failures: int = DEFAULT_MAX_VARIANT_FAILURES,
+        max_no_output_rounds: Optional[int] = None,
+        max_variant_failures: Optional[int] = None,
         stop_loss: bool = True,
         token_counter: Optional[TokenCounter] = None,
-        no_output_round_seconds: int = 60,
+        no_output_round_seconds: Optional[int] = None,
         warmup: bool = True,  # 新增：启动前批量端口检测
     ):
-        self.max_workers = max(1, int(max_workers))
+        # 数值旋钮一律「显式传参 > env > 默认」。None 表示未指定，0/负数按
+        # 未指定处理（与既有 `x or DEFAULT` 行为一致）——**唯一例外是
+        # timebox_override**，它的 0 是合法哨兵（按难度自适应），故走
+        # `is not None` 判断。
+        self.max_workers = max(1, int(max_workers or max_workers_default()))
         self.model = model
-        self.probe_timeout = max(1, int(probe_timeout))
-        self.max_attempts = max(1, int(max_attempts))
-        self.timebox_override = int(timebox_override)
+        self.probe_timeout = max(1, int(probe_timeout or probe_timeout_default()))
+        self.max_attempts = max(1, int(max_attempts or max_attempts_default()))
+        self.timebox_override = (
+            int(timebox_override) if timebox_override is not None else timebox_override_default()
+        )
         self._solver_fn = solver_fn or solver_worker
         self.quiet = quiet
         # 止损治理器（F2-004 / F2-011，步骤 07）
         # max_tokens=None（默认）→ 不设 token 预算上限；显式传入（CLI
         # --max-tokens）才启用预算保险丝。每题止损器均复用同一配置。
+        # 注意：先在本层把 None 解析成 int 再转发，避免 Stopper 二次解析 env
+        # 造成两处默认值静默分叉。
         self.stop_loss = bool(stop_loss)
         self.stopper = Stopper(
             max_tokens=max_tokens,
-            max_no_output_rounds=max_no_output_rounds,
-            max_variant_failures=max_variant_failures,
+            max_no_output_rounds=(
+                max_no_output_rounds
+                if max_no_output_rounds is not None
+                else max_no_output_rounds_default()
+            ),
+            max_variant_failures=(
+                max_variant_failures
+                if max_variant_failures is not None
+                else max_variant_failures_default()
+            ),
         )
         # 无产出的「一轮」= 这么多秒无任何进展（新 Fact 或 solver.log 增长）。
         # 调度器轮询间隔不固定，轮数按停滞时长折算，避免高频轮询误杀活跃 solver。
-        self.no_output_round_seconds = max(1, int(no_output_round_seconds))
+        self.no_output_round_seconds = max(
+            1, int(no_output_round_seconds or no_output_round_seconds_default())
+        )
         self.token_counter = token_counter  # 可注入精确 token 计数器；None 走日志估算
         self.projects: dict[str, Project] = {}
         self._running: dict[str, dict] = {}  # challenge_id → slot
@@ -359,7 +431,7 @@ class Dispatcher:
             except Exception:  # noqa: BLE001
                 return cid, ProbeResult.UNKNOWN
 
-        with _TExecutor(max_workers=min(PROBE_CONCURRENCY, 8)) as ex:
+        with _TExecutor(max_workers=min(probe_concurrency(), 8)) as ex:
             futures = {ex.submit(_check, cid, h, p): cid for cid, h, p in hosts}
             import concurrent.futures as _cf
 
@@ -554,7 +626,7 @@ class Dispatcher:
         targets = candidates[:remaining_limit] if remaining_limit is not None else candidates
         if not targets:
             return
-        with ThreadPoolExecutor(max_workers=min(PROBE_CONCURRENCY, self.max_workers)) as ex:
+        with ThreadPoolExecutor(max_workers=min(probe_concurrency(), self.max_workers)) as ex:
             # P1-2 / M-3：limit 透传到 _spawn，名额在锁内原子消耗
             # （remaining_limit 只是启发式预过滤，硬上限由锁内判断保证）
             # P2：走逐题隔离包装 —— ex.map 会把单题异常重抛给调用方。
@@ -644,10 +716,10 @@ class Dispatcher:
             )
             self._inject_block(project, "\n\n[Escalation]\n", block)
         elif route == "extend_timebox":
-            # 1.5 倍延长：只对本次 respawn 生效。倍率随返回值传给 _spawn，
+            # 倍率延长：只对本次 respawn 生效。倍率随返回值传给 _spawn，
             # 不写 self._timebox_multiplier —— 那是 Dispatcher 级共享字段，
             # _spawn_candidates 的线程池并发下会被别的题抢先消费并复位。
-            esc.timebox_multiplier = 1.5
+            esc.timebox_multiplier = escalation_timebox_multiplier()
         elif route == "switch_model":
             try:
                 from .racer import resolve_race_models
@@ -1308,4 +1380,15 @@ __all__ = [
     "Dispatcher",
     "HARVESTABLE",
     "DIFFICULTY_FACTORS",
+    "DEFAULT_ESCALATION_TIMEBOX_MULTIPLIER",
+    "DEFAULT_MAX_ATTEMPTS",
+    "DEFAULT_MAX_WORKERS",
+    "DEFAULT_NO_OUTPUT_ROUND_SECONDS",
+    "PROBE_CONCURRENCY",
+    "escalation_timebox_multiplier",
+    "max_attempts_default",
+    "max_workers_default",
+    "no_output_round_seconds_default",
+    "probe_concurrency",
+    "timebox_override_default",
 ]

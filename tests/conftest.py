@@ -447,6 +447,35 @@ _FULILIAN_BEHAVIORAL_VARS = frozenset({
     "WHATSAPP_REQUIRE_MENTION",
     "DINGTALK_REQUIRE_MENTION",
     "MATRIX_REQUIRE_MENTION",
+    # CTF 数值旋钮（fulilian_ctf/env_overrides.py 的 OVERRIDE_REGISTRY 与之对应）。
+    # 这些阈值有测试直接断言字面量（test_timebox / test_stopper /
+    # test_usage_budget_tiers / test_loop_guard / test_submit_guard /
+    # test_harvest_escalation），而本项目是"从 agent 会话里跑的"——生产代码会把
+    # FULILIAN_* 注入子进程 env。不逐测试清空的话，一次 shell 泄漏就会让这些断言
+    # 以"数值/字符串不匹配"的形式挂掉，且现象离真因很远。
+    # 顺序与 env_overrides.OVERRIDE_REGISTRY 一致。
+    "FULILIAN_CTF_TIER_THRESHOLDS",
+    "FULILIAN_CTF_DIFFICULTY_BUDGETS",
+    "FULILIAN_CTF_TOKEN_BUDGETS",
+    "FULILIAN_CTF_PARTIAL_FLAG_MULTIPLIER",
+    "FULILIAN_CTF_MAX_NO_OUTPUT_ROUNDS",
+    "FULILIAN_CTF_MAX_VARIANT_FAILURES",
+    "FULILIAN_CTF_LOOP_WINDOW",
+    "FULILIAN_CTF_LOOP_WARN",
+    "FULILIAN_CTF_LOOP_BREAK",
+    "FULILIAN_CTF_PROBE_TIMEOUT",
+    "FULILIAN_CTF_PROBE_SCAN_TIMEOUT",
+    "FULILIAN_CTF_PROBE_CONCURRENCY",
+    "FULILIAN_CTF_WORKERS",
+    "FULILIAN_CTF_MAX_ATTEMPTS",
+    "FULILIAN_CTF_TIMEBOX",
+    "FULILIAN_CTF_NO_OUTPUT_ROUND_SECONDS",
+    "FULILIAN_CTF_ESCALATION_TIMEBOX_MULTIPLIER",
+    # 下面两个不是"数值旋钮"，但同属 CTF 行为变量：work_dir 决定 CTF 钩子往
+    # 哪里写黑板/日志（hypothesis_track 会按它落盘），日志镜像决定失败分类读
+    # 哪个副本。泄漏进测试进程会让钩子去写真实目录。
+    "FULILIAN_CTF_WORK_DIR",
+    "FULILIAN_SOLVER_LOG_MIRROR",
 })
 
 

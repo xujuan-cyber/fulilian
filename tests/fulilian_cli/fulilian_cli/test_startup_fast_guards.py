@@ -22,7 +22,13 @@ import subprocess
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+# Repo root. NOT parents[2]: that resolves to <repo>/tests, which holds a
+# shadowing ``fulilian_cli/`` directory with no ``__init__.py``. Running
+# ``python -m fulilian_cli.main`` with that as cwd therefore imports the
+# shadow as a namespace package and ``from fulilian_cli import __version__``
+# fails with "unknown location". This file lives at
+# tests/fulilian_cli/fulilian_cli/, so the repo root is parents[3].
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 # Modules that must NEVER be imported by the fast path. Each one either
 # pulls yaml/argparse/logging config or is itself a god-module.

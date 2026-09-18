@@ -11,6 +11,7 @@ import sys
 import threading
 import contextvars
 from collections import OrderedDict
+from contextvars import ContextVar
 from pathlib import Path
 
 from fulilian_constants import (
@@ -20,7 +21,7 @@ from fulilian_constants import (
     reset_fulilian_home_override,
     set_fulilian_home_override,
 )
-from typing import List, Optional
+from typing import List, Optional, Set
 
 from agent.runtime_cwd import resolve_agent_cwd
 from agent.skill_utils import (
@@ -1469,31 +1470,38 @@ _SKILLS_PROMPT_CACHE_LOCK = threading.Lock()
 # ── On-demand skill loading tracker ──────────────────────────────────────────
 # Tracks which skills have been loaded via skill_view() so the system prompt
 # can show their descriptions while keeping all other skills as names-only.
-# Thread-safe; cleared on session start (/reset, new session).
-_LOADED_SKILL_NAMES: set[str] = set()
-_LOADED_SKILL_NAMES_LOCK = threading.Lock()
+# C3-42: a process-global set cross-contaminated concurrent gateway sessions
+# (session A's loaded skill leaked into session B's prompt and its snapshot
+# cache key). A ContextVar gives per-thread/per-task isolation — same pattern
+# as auxiliary_client._RUNTIME_MAIN_CONTEXT. Cleared on session start.
+_LOADED_SKILL_NAMES: ContextVar[Optional[Set[str]]] = ContextVar(
+    "loaded_skill_names", default=None
+)
 
 
 def record_loaded_skill(name: str) -> None:
     """Record that a skill has been loaded by name via skill_view().
 
-    Thread-safe.  Used by the system prompt builder to include descriptions
-    of loaded skills while keeping unloaded skills as names-only.
+    Thread/task-safe.  Used by the system prompt builder to include
+    descriptions of loaded skills while keeping unloaded skills as
+    names-only.
     """
-    with _LOADED_SKILL_NAMES_LOCK:
-        _LOADED_SKILL_NAMES.add(name)
+    names = _LOADED_SKILL_NAMES.get()
+    if names is None:
+        names = set()
+        _LOADED_SKILL_NAMES.set(names)
+    names.add(name)
 
 
 def get_loaded_skill_names() -> frozenset[str]:
     """Return the set of skill names that have been loaded this session."""
-    with _LOADED_SKILL_NAMES_LOCK:
-        return frozenset(_LOADED_SKILL_NAMES)
+    names = _LOADED_SKILL_NAMES.get()
+    return frozenset(names) if names else frozenset()
 
 
 def clear_loaded_skills() -> None:
     """Clear the loaded-skill tracker (e.g. on session reset)."""
-    with _LOADED_SKILL_NAMES_LOCK:
-        _LOADED_SKILL_NAMES.clear()
+    _LOADED_SKILL_NAMES.set(set())
 
 # v2: entries gained org provenance fields (org_id/org_author/rel_dir) for M2
 # org-shared skills; older snapshots are discarded and rebuilt.
@@ -1625,6 +1633,11 @@ def _build_snapshot_entry(
     platforms = frontmatter.get("platforms") or []
     if isinstance(platforms, str):
         platforms = [platforms]
+    # C3-41: persist the environments declaration so the snapshot fast path
+    # can run the SAME environment gate the cold path enforces.
+    environments = frontmatter.get("environments") or []
+    if isinstance(environments, str):
+        environments = [environments]
 
     entry = {
         "skill_name": skill_name,
@@ -1632,6 +1645,7 @@ def _build_snapshot_entry(
         "frontmatter_name": str(frontmatter.get("name", skill_name)),
         "description": description,
         "platforms": [str(p).strip() for p in platforms if str(p).strip()],
+        "environments": [str(e).strip() for e in environments if str(e).strip()],
         "conditions": extract_skill_conditions(frontmatter),
     }
     if org_id:
@@ -1851,6 +1865,14 @@ def _build_skills_system_prompt_inner(
             frontmatter_name = entry.get("frontmatter_name") or skill_name
             platforms = entry.get("platforms") or []
             if not skill_matches_platform_list(platforms):
+                continue
+            # C3-41: the cold path enforces skill_matches_environment (:1676)
+            # but this fast path did NOT — snapshot-loaded skills tagged for
+            # an inactive runtime environment (kanban/s6/docker) still
+            # surfaced. Same gate, on the persisted environments list.
+            if not skill_matches_environment(
+                {"environments": entry.get("environments") or []}
+            ):
                 continue
             if frontmatter_name in disabled or skill_name in disabled:
                 continue

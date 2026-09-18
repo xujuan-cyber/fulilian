@@ -26,12 +26,25 @@ explicit bounded joins.
 
 from __future__ import annotations
 
+import inspect
 import threading
 import weakref
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures.thread import _worker
 
 __all__ = ["DaemonThreadPoolExecutor"]
+
+# C4-34: the private _worker() contract changed in CPython 3.14 —
+#   3.8–3.13: _worker(executor_reference, work_queue, initializer, initargs)
+#   3.14+:    _worker(executor_reference, ctx, work_queue)
+#             with ctx = executor._create_worker_context()
+# Detect the arity ONCE at import instead of sniffing version strings, so
+# the mirror below keeps binding correctly (or failing loudly) on any
+# interpreter, including the py3.14 Windows runtime.
+try:
+    _WORKER_PARAM_COUNT = len(inspect.signature(_worker).parameters)
+except (TypeError, ValueError):  # pragma: no cover - exotic builds
+    _WORKER_PARAM_COUNT = 4
 
 
 class DaemonThreadPoolExecutor(ThreadPoolExecutor):
@@ -52,13 +65,22 @@ class DaemonThreadPoolExecutor(ThreadPoolExecutor):
             t = threading.Thread(
                 name=thread_name,
                 target=_worker,
-                args=(
-                    weakref.ref(self, weakref_cb),
-                    self._work_queue,
-                    self._initializer,
-                    self._initargs,
-                ),
+                args=self._daemon_worker_args(weakref_cb),
                 daemon=True,
             )
             t.start()
             self._threads.add(t)
+
+    def _daemon_worker_args(self, weakref_cb):
+        """Build the _worker() args for THIS interpreter's contract (C4-34).
+
+        The 3.8–3.13 mirror passed (ref, work_queue, initializer, initargs);
+        on py3.14 that mis-binds — _worker's 2nd positional is the worker
+        context and the 3rd is the queue — so daemon workers either crashed
+        at startup or bound the queue into the initializer slot. See the
+        arity note at module top.
+        """
+        ref = weakref.ref(self, weakref_cb)
+        if _WORKER_PARAM_COUNT == 3:
+            return (ref, self._create_worker_context(), self._work_queue)
+        return (ref, self._work_queue, self._initializer, self._initargs)

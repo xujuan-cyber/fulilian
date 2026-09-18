@@ -93,23 +93,22 @@ def _resolve_kb_path() -> Path:
 
 KB_PATH = _resolve_kb_path()
 
-# Obsidian 知识库（唯一知识写入源）。2026-09-06 起直接索引 vault，
-# 不再经本地镜像目录（镜像已删除，写入一律进 vault）。
-# 路径可经 FULILIAN_OBSIDIAN_VAULT 覆盖；默认值中的 vault 目录名是
-# 用户自己的资产命名（不在本项目品牌清理范围内）。
-OBSIDIAN_VAULT = Path(
-    os.environ.get(
-        "FULILIAN_OBSIDIAN_VAULT",
-        "/mnt/e/Program Files/Obsidian/Document/Markdown/Hermes知识库",
-    ).strip()
-)
-
-
+# 知识库唯一根。2026-09-16 起 Obsidian vault 的内容已一次性迁入
+# `KB_PATH/security-knowledge/`，vault 本身不再是索引根。
+#
+# 原双根结构（KB_PATH + OBSIDIAN_VAULT）的问题：一个位于 /mnt/e
+# （WSL 挂载的 Windows 盘、可失联）且已判定废弃的库，贡献了全文索引
+# 2597 篇里的 1378 篇（53%），而它的内容与 KB_PATH 零重名、零重复——
+# 即"已废弃"只在文档层面成立，代码层面从未生效。
+# 迁移前的双根实现见 git 历史（关键字 OBSIDIAN_VAULT / FULILIAN_OBSIDIAN_VAULT）。
 def _kb_roots():
-    roots = [KB_PATH]
-    if OBSIDIAN_VAULT.exists():
-        roots.append(OBSIDIAN_VAULT)
-    return roots
+    """返回索引根。刻意保持单根——要加第二根前先读上面这段注释。
+
+    必须在**使用点**读 KB_PATH，不能在 import 期快照成模块常量：
+    KB_PATH 是既有测试的 monkeypatch 面（tests 的 _isolated_knowledge_env
+    fixture 会替换它），快照会让替换静默失效。
+    """
+    return [KB_PATH]
 
 # C0-1: 求值时点结论——DB_PATH 保留在模块 import 期求值（现经
 # get_fulilian_home() 解析，override 在 import 前生效则跟随），而非推迟到
@@ -691,10 +690,12 @@ def _authoritative_category(
        （重名文件不许靠名字认领别人的分类）；
     3. 都没命中 → _guess_category（JSON 只有十几条，绝大多数文档走这里）。
 
-    为什么不能只用 source_path：_kb_roots() 有两个根（KB_PATH 与
-    OBSIDIAN_VAULT，本机 vault 贡献了 2584 行里的 1378 行），vault 根的
-    文档天然不会有 KB_PATH 前缀的 source_path；且 KB_PATH 一旦经环境变量
-    或软链迁移，所有绝对路径前缀同时失效。
+    为什么不能只用 source_path：双键匹配是为多根索引设计的（2026-09-16 前
+    _kb_roots() 同时返回 KB_PATH 与 Obsidian vault，vault 根贡献了其中
+    1378 篇）；vault 根的文档天然不会有 KB_PATH 前缀的 source_path，且
+    KB_PATH 一旦经环境变量或软链迁移，所有绝对路径前缀同时失效。
+    现已收拢为单根，但这段回退逻辑对 source_path 缺失/失配依然必要，
+    不要因为根变少了就删掉按文件名匹配那一路。
     """
     cat = by_path.get(str(md_file))
     if cat:

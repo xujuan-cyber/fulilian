@@ -100,6 +100,10 @@ def get_provider(name: str, *, scope: Optional[str] = None) -> Optional[WebSearc
 def snapshot_registration(
     name: str, *, scope: Optional[str] = None
 ) -> Optional[WebSearchProvider]:
+    if not isinstance(name, str):
+        # C3-72: third twin of the snapshot/restore isinstance gap (tts
+        # C3-63, video_gen C3-70) — non-str names degrade to a miss.
+        return None
     with _lock:
         target = _providers if scope is None else _scoped_providers.get(scope, {})
         return target.get(name.strip())
@@ -113,6 +117,9 @@ def restore_registration(
     scope: Optional[str] = None,
 ) -> bool:
     """Restore a plugin registration only when *current* is still installed."""
+    if not isinstance(name, str):
+        # C3-72: same isinstance guard as snapshot.
+        return False
     key = name.strip()
     with _lock:
         target = _providers if scope is None else _scoped_providers.setdefault(scope, {})

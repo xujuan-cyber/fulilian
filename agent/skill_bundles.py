@@ -45,6 +45,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -411,10 +412,21 @@ def save_bundle(
     if instruction:
         payload["instruction"] = instruction
 
-    path.write_text(
-        yaml.safe_dump(payload, sort_keys=False, allow_unicode=True),
-        encoding="utf-8",
-    )
+    # C3-53: write via mkstemp + atomic replace — a crash mid-write used to
+    # leave a truncated YAML that fails to parse forever (every subsequent
+    # scan_bundles hit the same broken file).
+    text = yaml.safe_dump(payload, sort_keys=False, allow_unicode=True)
+    fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+        os.replace(tmp_name, path)
+    except BaseException:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
     scan_bundles()  # refresh cache
     return path
 

@@ -7,6 +7,7 @@ rate-limited provider concurrently.
 
 import random
 import threading
+import math
 import time
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
@@ -67,13 +68,18 @@ def parse_retry_after_seconds(value_or_headers: Any) -> Optional[float]:
     if isinstance(raw, bool):
         return None
     if isinstance(raw, (int, float)):
-        return max(0.0, float(raw))
+        seconds = float(raw)
+        # C3-50: "1e999" parses to inf — the docstring promises finite
+        # non-negative seconds, and an inf reached consumer sleep/schedule
+        # unbounded.
+        return max(0.0, seconds) if math.isfinite(seconds) else None
     text = str(raw).strip()
     if not text:
         return None
     try:
-        return max(0.0, float(text))
-    except (TypeError, ValueError):
+        seconds = float(text)
+        return max(0.0, seconds) if math.isfinite(seconds) else None
+    except (TypeError, ValueError, OverflowError):
         pass
     # HTTP-date form (RFC 7231): seconds until that instant, clamped at 0.
     try:

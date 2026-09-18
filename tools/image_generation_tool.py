@@ -1390,6 +1390,12 @@ def image_generate_tool(
 
         return json.dumps(response_data, indent=2, ensure_ascii=False)
 
+    except ImageGenerationInterrupted:
+        # C4-44: the generic handler swallowed the main-generation-wait
+        # interrupt into an error JSON, contradicting the re-raise policy
+        # _upscale_image enforces (test_upscale_interrupt_propagates).
+        # Re-raise so the interrupt surfaces as a cancel.
+        raise
     except Exception as e:
         generation_time = (datetime.datetime.now() - start_time).total_seconds()
         error_msg = f"Error generating image: {str(e)}"

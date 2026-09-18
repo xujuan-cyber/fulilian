@@ -377,13 +377,15 @@ def test_sessions_export_all_rejects_single_oversized_session(
         db.close()
 
     monkeypatch.setattr(fulilian_state, "resolved_max_export_messages", lambda: 3)
-    export_all_calls = []
+    export_calls = []
 
-    def tracked_export_all(self, source=None):
-        export_all_calls.append(source)
-        raise AssertionError("export_all must not run before every guard passes")
+    def tracked_iter_export_all(self, source=None):
+        export_calls.append(source)
+        raise AssertionError(
+            "iter_export_all must not run before every guard passes"
+        )
 
-    monkeypatch.setattr(SessionDB, "export_all", tracked_export_all)
+    monkeypatch.setattr(SessionDB, "iter_export_all", tracked_iter_export_all)
     output = tmp_path / "all-sessions.jsonl"
 
     result = FulilianConsoleEngine().execute(
@@ -396,7 +398,7 @@ def test_sessions_export_all_rejects_single_oversized_session(
     assert "more than 3 active" in result.output
     assert "streaming Export" in result.output
     assert "max_export_messages" in result.output
-    assert export_all_calls == []
+    assert export_calls == []
     assert not output.exists()
 
 

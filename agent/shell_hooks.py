@@ -743,10 +743,19 @@ def _serialize_payload(event: str, kwargs: Dict[str, Any]) -> str:
     """Render the stdin JSON payload.  Unserialisable values are
     stringified via ``default=str`` rather than dropped."""
     extras = {k: v for k, v in kwargs.items() if k not in _TOP_LEVEL_PAYLOAD_KEYS}
+    # C3-51: Path.cwd() ignored the per-session cwd pin — in multi-session
+    # gateways every hook payload carried the PROCESS cwd instead of the
+    # session's logical cwd. resolve_agent_cwd() honours the
+    # runtime_cwd/_SESSION_CWD override first and falls back to process cwd.
     try:
-        cwd = str(Path.cwd())
-    except OSError:
-        cwd = ""
+        from agent.runtime_cwd import resolve_agent_cwd
+
+        cwd = str(resolve_agent_cwd())
+    except Exception:
+        try:
+            cwd = str(Path.cwd())
+        except OSError:
+            cwd = ""
     payload = {
         "hook_event_name": event,
         "tool_name": kwargs.get("tool_name"),
@@ -898,10 +907,15 @@ def save_allowlist(data: Dict[str, Any]) -> None:
 
 def _is_allowlisted(event: str, command: str) -> bool:
     data = load_allowlist()
+    current_mtime = script_mtime_iso(command)
     return any(
         isinstance(e, dict)
         and e.get("event") == event
         and e.get("command") == command
+        # C3-52: the stored script_mtime_at_approval was recorded but never
+        # compared — an approved-then-REPLACED script kept its allowlist
+        # pass. Require the file to be unmodified since approval.
+        and (not current_mtime or e.get("script_mtime_at_approval") == current_mtime)
         for e in data.get("approvals", [])
     )
 

@@ -165,10 +165,31 @@ def sanitize_borrowed_credential_payload(
 
     fingerprint = _credential_secret_fingerprint(result)
     sanitized = {
-        key: value
+        key: _sanitize_payload_value(key, value)
         for key, value in result.items()
         if not _is_secret_payload_key(key)
     }
     if fingerprint:
         sanitized["secret_fingerprint"] = fingerprint
     return sanitized
+
+
+def _sanitize_payload_value(key: Any, value: Any) -> Any:
+    """Recurse the secret-key filter into nested containers (C3-21).
+
+    The original filter only stripped TOP-LEVEL secret keys, so a payload
+    shape like ``{"oauth_state": {"access_token": ...}}`` reached disk with
+    the raw secret intact — the sanitizer's contract is "no raw secret
+    value fields", not "no top-level secret fields".
+    """
+    if isinstance(value, Mapping):
+        return {
+            inner_key: _sanitize_payload_value(inner_key, inner_value)
+            for inner_key, inner_value in value.items()
+            if not _is_secret_payload_key(inner_key)
+        }
+    if isinstance(value, list):
+        return [_sanitize_payload_value(key, item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_sanitize_payload_value(key, item) for item in value)
+    return value

@@ -249,12 +249,24 @@ def _cmd_restart() -> int:
 def _cmd_which(server_id: str) -> int:
     from agent.lsp.install import INSTALL_RECIPES, _existing_binary
 
-    recipe = INSTALL_RECIPES.get(server_id)
-    bin_name = (recipe or {}).get("bin", server_id)
-    resolved = _existing_binary(bin_name)
-    if resolved:
-        sys.stdout.write(resolved + "\n")
-        return 0
+    # C3-74: the 4 aliased server_ids (typescript, vue-language-server,
+    # astro-language-server, dockerfile-ls) keep their recipe under the
+    # _recipe_pkg_for alias key — a direct INSTALL_RECIPES.get(server_id)
+    # missed them and reported "not installed" even when installed. Try the
+    # alias's recipe, then the raw id's, then the bare id as bin name.
+    candidates: list = []
+    for key in (_recipe_pkg_for(server_id), server_id):
+        recipe = INSTALL_RECIPES.get(key) or {}
+        bin_name = recipe.get("bin")
+        if bin_name and bin_name not in candidates:
+            candidates.append(bin_name)
+    if server_id not in candidates:
+        candidates.append(server_id)
+    for bin_name in candidates:
+        resolved = _existing_binary(bin_name)
+        if resolved:
+            sys.stdout.write(resolved + "\n")
+            return 0
     sys.stderr.write(f"{server_id}: not installed\n")
     return 1
 

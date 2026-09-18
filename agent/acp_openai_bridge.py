@@ -35,7 +35,7 @@ from __future__ import annotations
 import json
 import re
 from types import SimpleNamespace
-from typing import Any, Iterable
+from typing import Any, Iterable, Optional, Tuple
 
 from openai.types.chat.chat_completion_message_tool_call import (
     ChatCompletionMessageToolCall,
@@ -77,6 +77,50 @@ class StreamChunks(list):
     them on the ``stream=True`` path, so ACP clients return this instead and copy
     the extras onto it.
     """
+
+
+def _balanced_json_end(text: str, open_idx: int, limit: int):
+    """Index past the balanced close of the object opening at *open_idx*, or
+    None when unbalanced before *limit*. String/escape aware (C3-2)."""
+    depth = 0
+    in_str = False
+    esc = False
+    for i in range(open_idx, min(limit, len(text))):
+        ch = text[i]
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return i + 1
+    return None
+
+
+def _scan_tool_call_blocks(text: str):
+    """Yield (block_start, json_start, consume_end, raw_json) for
+    ``<tool_call>{...}</tool_call>`` spans with brace-balanced JSON (C3-2)."""
+    close_tag = "</tool_call>"
+    for m in re.finditer(r"<tool_call>\s*", text):
+        brace = text.find("{", m.end())
+        if brace < 0:
+            continue
+        close = text.find(close_tag, brace)
+        if close < 0:
+            continue
+        json_end = _balanced_json_end(text, brace, close)
+        if json_end is None:
+            continue
+        yield m.start(), brace, close + len(close_tag), text[brace:json_end]
 
 
 def completion_to_stream_chunks(completion: SimpleNamespace) -> StreamChunks:
@@ -251,10 +295,16 @@ def extract_tool_calls_from_text(
             )
         )
 
-    for m in TOOL_CALL_BLOCK_RE.finditer(text):
-        raw = m.group(1)
+    # C3-2: the non-greedy \{.*?\} in TOOL_CALL_BLOCK_RE stopped at the
+    # FIRST '}': nested JSON inside the arguments string truncated the
+    # payload, json.loads failed, the call was dropped AND the block was
+    # still stripped from the text — model and user both blind. Scan with
+    # brace-balanced extraction (string/escape aware) instead; only spans
+    # whose JSON balanced are consumed, so an unbalanced block stays
+    # visible rather than vanishing.
+    for open_tag, brace, close_end, raw in _scan_tool_call_blocks(text):
         _try_add_tool_call(raw)
-        consumed_spans.append((m.start(), m.end()))
+        consumed_spans.append((open_tag, close_end))
 
     # Only try bare-JSON fallback when no XML blocks were found.
     if not extracted:

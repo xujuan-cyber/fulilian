@@ -73,6 +73,30 @@ _BWS_RELEASE_BASE = (
 )
 _BWS_CHECKSUM_NAME = f"bws-sha256-checksums-{_BWS_VERSION}.txt"
 
+# C3-80: out-of-band SHA-256 pins for the pinned bws release. The in-channel
+# ``bws-sha256-checksums-<ver>.txt`` comes from the same GitHub release as
+# the binary, so a compromised channel could rewrite both — it is kept only
+# as a secondary consistency check. Values below were fetched out-of-band on
+# 2026-09-18 from the official bws-v2.0.0 checksums asset at fix time.
+# Bumping _BWS_VERSION MUST be paired with refreshing this table; an
+# unpinned asset fails closed with an instructive error.
+_BWS_PINNED_SHA256: Dict[str, str] = {
+    "bws-macos-universal-2.0.0.zip":
+        "67ab9bc345e2ec3b5dfddd116f938fdab79538042623a6bcca5ca0c1b0c42d95",
+    "bws-x86_64-pc-windows-msvc-2.0.0.zip":
+        "4284944f3b0c7b97a4d4105c715cd814c744ceff0405481a213937955e31d866",
+    "bws-aarch64-pc-windows-msvc-2.0.0.zip":
+        "1a02fca3a855ba32d8f0c40813af8da705cf1e7cf9b932164959531e57eccbe0",
+    "bws-x86_64-unknown-linux-gnu-2.0.0.zip":
+        "a8340ce01da609200441f2eca0e591173e124f012c88a16afda574279c052013",
+    "bws-aarch64-unknown-linux-gnu-2.0.0.zip":
+        "49a250d4f3121c67155c195afbad4ced90a92a878c3256ca091276b82e7ad131",
+    "bws-x86_64-unknown-linux-musl-2.0.0.zip":
+        "ea6eb18f1270388f12d15a35f919ccb3488d32a777433baefe883d561f46fc73",
+    "bws-aarch64-unknown-linux-musl-2.0.0.zip":
+        "de61bfbacbcf6e3648ddc8dbd6ca8bb2245438ccf5f94d54129997528f5a752d",
+}
+
 # How long to wait for bws subprocesses and HTTP downloads, in seconds.
 _BWS_DOWNLOAD_TIMEOUT = 60
 _BWS_RUN_TIMEOUT = 30
@@ -240,12 +264,26 @@ def install_bws(*, force: bool = False) -> Path:
         _http_download(asset_url, zip_path)
         _http_download(checksum_url, checksum_path)
 
-        expected = _expected_sha256(checksum_path, asset_name)
         actual = _sha256_file(zip_path)
+        # C3-80: the out-of-band pin is the primary trust anchor; the
+        # in-channel checksums.txt is only a secondary consistency check.
+        pinned = _BWS_PINNED_SHA256.get(asset_name)
+        if pinned is None:
+            raise RuntimeError(
+                f"No vendored SHA-256 pin for {asset_name} — refusing to "
+                "install. Extend _BWS_PINNED_SHA256 (fetched out-of-band) "
+                "when bumping _BWS_VERSION."
+            )
+        if pinned.lower() != actual.lower():
+            raise RuntimeError(
+                f"Checksum mismatch for {asset_name} against the vendored "
+                f"pin: expected {pinned}, got {actual}"
+            )
+        expected = _expected_sha256(checksum_path, asset_name)
         if expected.lower() != actual.lower():
             raise RuntimeError(
-                f"Checksum mismatch for {asset_name}: "
-                f"expected {expected}, got {actual}"
+                f"Checksum mismatch for {asset_name} against the release "
+                f"checksums file: expected {expected}, got {actual}"
             )
 
         with zipfile.ZipFile(zip_path) as zf:

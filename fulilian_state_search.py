@@ -1362,7 +1362,12 @@ class SessionSearchMixin:
 
         Returns the matching rows, or ``None`` when the query cannot be
         executed (e.g. the tokenizer is unavailable at runtime) so the
-        caller can fall back to another strategy.
+        caller can fall back to another strategy. A corrupt FTS shadow
+        table (``sqlite3.DatabaseError`` beyond the syntax-class
+        ``OperationalError``) is healed with one in-place rebuild + retry
+        before giving up — C1-6 moved that self-heal here from the
+        previously-duplicated inline CJK routes in
+        :meth:`_search_messages_impl`, so every table shares it.
         """
         tokens = raw_query.split()
         parts = []
@@ -1404,13 +1409,39 @@ class SessionSearchMixin:
             LIMIT ? OFFSET ?
         """
         tri_params.extend([limit, offset])
-        with self._read_ctx() as conn:
-            try:
+        try:
+            with self._read_ctx() as conn:
                 tri_cursor = conn.execute(tri_sql, tri_params)
-            except sqlite3.OperationalError:
-                # Query failed at runtime — let the caller fall back.
+                return [dict(row) for row in tri_cursor.fetchall()]
+        except sqlite3.OperationalError:
+            # Query failed at runtime (syntax / tokenizer missing) — let the
+            # caller fall back.
+            logger.debug("%s query failed; falling back.", table, exc_info=True)
+            return None
+        except sqlite3.DatabaseError as exc:
+            # Corruption-class failure (OperationalError is the syntax
+            # subclass, caught above): a corrupt shadow table raises
+            # malformed / "fts5: corrupt structure record". Rebuild once —
+            # the read context above holds no writer lock and is released
+            # before this point, so rebuild_fts() can re-acquire it — and
+            # retry. On refusal/failure return None so the caller falls
+            # back to the LIKE substring path.
+            if not self._try_runtime_fts_rebuild(exc):
+                logger.warning(
+                    "%s search hit a corruption error (%s) and no in-place "
+                    "rebuild was possible; falling back.", table, exc,
+                )
                 return None
-            return [dict(row) for row in tri_cursor.fetchall()]
+            try:
+                with self._read_ctx() as conn:
+                    tri_cursor = conn.execute(tri_sql, tri_params)
+                    return [dict(row) for row in tri_cursor.fetchall()]
+            except sqlite3.DatabaseError:
+                logger.warning(
+                    "%s search still failing after in-place rebuild; "
+                    "falling back.", table,
+                )
+                return None
 
     def search_messages(
         self,
@@ -1890,83 +1921,26 @@ class SessionSearchMixin:
                 and not _wants_tool_rows
                 and not self._has_lone_cjk_run(raw_query)
             ):
-                tokens = raw_query.split()
-                parts = []
-                for tok in tokens:
-                    if tok.upper() in {"AND", "OR", "NOT"}:
-                        parts.append(tok)
-                    else:
-                        parts.append('"' + tok.replace('"', '""') + '"')
-                cjk_query = " ".join(parts)
-                cjk_where = ["messages_fts_cjk MATCH ?"]
-                cjk_params: list = [cjk_query]
-                if not include_inactive:
-                    cjk_where.append("(m.active = 1 OR m.compacted = 1)")
-                if source_filter is not None:
-                    cjk_where.append(f"s.source IN ({','.join('?' for _ in source_filter)})")
-                    cjk_params.extend(source_filter)
-                if exclude_sources is not None:
-                    cjk_where.append(f"s.source NOT IN ({','.join('?' for _ in exclude_sources)})")
-                    cjk_params.extend(exclude_sources)
-                if role_filter:
-                    cjk_where.append(f"m.role IN ({','.join('?' for _ in role_filter)})")
-                    cjk_params.extend(role_filter)
-                cjk_sql = f"""
-                    SELECT
-                        m.id,
-                        m.session_id,
-                        m.role,
-                        snippet(messages_fts_cjk, -1, '>>>', '<<<', '...', 40) AS snippet,
-                        m.timestamp,
-                        m.tool_name,
-                        s.source,
-                        s.model,
-                        s.started_at AS session_started
-                    FROM messages_fts_cjk
-                    JOIN messages m ON m.id = messages_fts_cjk.rowid
-                    JOIN sessions s ON s.id = m.session_id
-                    WHERE {' AND '.join(cjk_where)}
-                    {order_by_sql}
-                    LIMIT ? OFFSET ?
-                """
-                cjk_params.extend([limit, offset])
-                try:
-                    with self._read_ctx() as conn:
-                        cjk_cursor = conn.execute(cjk_sql, cjk_params)
-                        matches = [dict(row) for row in cjk_cursor.fetchall()]
-                        _trigram_succeeded = True
-                except sqlite3.OperationalError:
-                    # Tokenizer missing on this connection / query syntax —
-                    # the trigram + LIKE routes below still answer.
-                    logger.debug(
-                        "messages_fts_cjk query failed; falling back to "
-                        "trigram/LIKE", exc_info=True,
-                    )
-                except sqlite3.DatabaseError as exc:
-                    # Same corruption class as the other FTS reads: rebuild
-                    # in place once and retry; on refusal/failure fall back.
-                    if self._try_runtime_fts_rebuild(exc):
-                        try:
-                            with self._read_ctx() as conn:
-                                cjk_cursor = conn.execute(
-                                    cjk_sql, cjk_params
-                                )
-                                matches = [
-                                    dict(row) for row in cjk_cursor.fetchall()
-                                ]
-                                _trigram_succeeded = True
-                        except sqlite3.DatabaseError:
-                            logger.warning(
-                                "CJK-bigram FTS search still failing after "
-                                "in-place rebuild; falling back to "
-                                "trigram/LIKE."
-                            )
-                    else:
-                        logger.warning(
-                            "CJK-bigram FTS search hit a corruption error "
-                            "(%s) and no in-place rebuild was possible; "
-                            "falling back to trigram/LIKE.", exc,
-                        )
+                # C1-6: the where/SQL here was identical to
+                # _run_trigram_search(table="messages_fts_cjk") modulo the
+                # table name — delegate instead of duplicating ~70 lines.
+                # The helper returns [] on a clean zero-hit run and None on
+                # failure, preserving the "don't fall through to the
+                # trigram/LIKE routes on an empty index answer" semantics.
+                bigram_matches = self._run_trigram_search(
+                    raw_query,
+                    table="messages_fts_cjk",
+                    order_by_sql=order_by_sql,
+                    include_inactive=include_inactive,
+                    source_filter=source_filter,
+                    exclude_sources=exclude_sources,
+                    role_filter=role_filter,
+                    limit=limit,
+                    offset=offset,
+                )
+                if bigram_matches is not None:
+                    matches = bigram_matches
+                    _trigram_succeeded = True
 
             if (
                 not _trigram_succeeded
@@ -1975,90 +1949,24 @@ class SessionSearchMixin:
                 and self._trigram_available
                 and not _wants_tool_rows
             ):
-                # Trigram FTS5 path — quote each non-operator token to handle
-                # FTS5 special chars (%, *, etc.) while preserving boolean
-                # operators (AND, OR, NOT) for multi-term queries.
-                tokens = raw_query.split()
-                parts = []
-                for tok in tokens:
-                    if tok.upper() in {"AND", "OR", "NOT"}:
-                        parts.append(tok)
-                    else:
-                        parts.append('"' + tok.replace('"', '""') + '"')
-                trigram_query = " ".join(parts)
-                tri_where = ["messages_fts_trigram MATCH ?"]
-                tri_params: list = [trigram_query]
-                if not include_inactive:
-                    tri_where.append("(m.active = 1 OR m.compacted = 1)")
-                if source_filter is not None:
-                    tri_where.append(f"s.source IN ({','.join('?' for _ in source_filter)})")
-                    tri_params.extend(source_filter)
-                if exclude_sources is not None:
-                    tri_where.append(f"s.source NOT IN ({','.join('?' for _ in exclude_sources)})")
-                    tri_params.extend(exclude_sources)
-                if role_filter:
-                    tri_where.append(f"m.role IN ({','.join('?' for _ in role_filter)})")
-                    tri_params.extend(role_filter)
-                tri_sql = f"""
-                    SELECT
-                        m.id,
-                        m.session_id,
-                        m.role,
-                        snippet(messages_fts_trigram, -1, '>>>', '<<<', '...', 40) AS snippet,
-                        m.timestamp,
-                        m.tool_name,
-                        s.source,
-                        s.model,
-                        s.started_at AS session_started
-                    FROM messages_fts_trigram
-                    JOIN messages m ON m.id = messages_fts_trigram.rowid
-                    JOIN sessions s ON s.id = m.session_id
-                    WHERE {' AND '.join(tri_where)}
-                    {order_by_sql}
-                    LIMIT ? OFFSET ?
-                """
-                tri_params.extend([limit, offset])
-                try:
-                    with self._read_ctx() as conn:
-                        tri_cursor = conn.execute(tri_sql, tri_params)
-                        matches = [dict(row) for row in tri_cursor.fetchall()]
-                        _trigram_succeeded = True
-                except sqlite3.OperationalError:
-                    # Trigram query failed at runtime — fall through to LIKE.
-                    pass
-                except sqlite3.DatabaseError as exc:
-                    # Same corruption class the main FTS5 MATCH branch
-                    # self-heals above: a corrupt trigram shadow table raises
-                    # malformed / "fts5: corrupt structure record", which is a
-                    # DatabaseError (parent of the OperationalError syntax arm
-                    # caught first). Rebuild once outside the lock — the lock
-                    # is released here so rebuild_fts() can re-acquire it —
-                    # and retry the trigram query. If the rebuild is refused
-                    # (already attempted / FTS disabled / different error
-                    # class) or the retry fails again, fall through to the
-                    # LIKE substring path, which reads only the canonical
-                    # messages table, so CJK search stays available.
-                    if self._try_runtime_fts_rebuild(exc):
-                        try:
-                            with self._read_ctx() as conn:
-                                tri_cursor = conn.execute(
-                                    tri_sql, tri_params
-                                )
-                                matches = [
-                                    dict(row) for row in tri_cursor.fetchall()
-                                ]
-                                _trigram_succeeded = True
-                        except sqlite3.DatabaseError:
-                            logger.warning(
-                                "Trigram FTS search still failing after "
-                                "in-place rebuild; falling back to LIKE."
-                            )
-                    else:
-                        logger.warning(
-                            "Trigram FTS search hit a corruption error (%s) "
-                            "and no in-place rebuild was possible; falling "
-                            "back to LIKE.", exc,
-                        )
+                # C1-6: same delegation as the bigram route above — the
+                # inlined where/SQL was identical to _run_trigram_search's
+                # modulo the table name (the corruption self-heal now lives
+                # in the helper too). None → fall through to LIKE below.
+                tri_matches = self._run_trigram_search(
+                    raw_query,
+                    table="messages_fts_trigram",
+                    order_by_sql=order_by_sql,
+                    include_inactive=include_inactive,
+                    source_filter=source_filter,
+                    exclude_sources=exclude_sources,
+                    role_filter=role_filter,
+                    limit=limit,
+                    offset=offset,
+                )
+                if tri_matches is not None:
+                    matches = tri_matches
+                    _trigram_succeeded = True
             if not _trigram_succeeded:
                 # Short / mixed CJK query, trigram unavailable, or trigram
                 # <3 CJK chars. Fall back to LIKE substring search.

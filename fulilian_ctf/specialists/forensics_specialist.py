@@ -20,6 +20,6 @@ class ForensicsSpecialist(BaseSpecialist):
         self.asset_discipline = (
             "Before solving, check existing assets first:\n"
             "- search(query, category='forensics') and search_snippets(query, category='forensics') from fulilian_ctf/knowledge_retriever.py for similar past write-ups and exp snippets\n"
-            "- skills/ctf-knowledge/scripts/ROUTE.md may point to a ready-made script (carving, decoding, pcap extraction); adapt it instead of writing from scratch"
+            "- skills/ctf-cards/scripts/ROUTE.md may point to a ready-made script (carving, decoding, pcap extraction); adapt it instead of writing from scratch"
         )
         super().__init__()

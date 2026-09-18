@@ -129,12 +129,20 @@ def _submit_flag_impl(work_dir: str) -> str:
     if not candidate:
         return "FLAG file is empty."
 
-    # 走 flag 校验门（声明式提交路径：无工具输出作证据，require_grounding=False；
-    # 对抗门为规则实现，LLM negator 未接线——见 P2-5）
+    # 提交闸门：只防「已确认 flag 重提」（见 fulilian_ctf/submit_guard.py）。
+    # 递增冷却与同 flag 去重短路已于 2026-09-17 移除——它们依赖"平台判错"
+    # 能正确记账，而那个判定原先极性是错的，导致冷却从未真正生效、
+    # 去重反而把错 flag 锁成"已确认"。
+    from fulilian_ctf.submit_guard import default_guard
     from fulilian_ctf.verify import VerificationResult, verify_flag
 
+    guard = default_guard()
+    ok, reject = guard.check(work_dir, candidate)
+    if not ok:
+        return f"submit_flag: {reject}"
     result = verify_flag(candidate, evidence="", require_grounding=False)
     if result == VerificationResult.CONFIRMED:
+        guard.mark_confirmed(work_dir, candidate)
         return f"Flag submitted: {candidate}"
     return f"Flag rejected by verification gate: {result.value}"
 

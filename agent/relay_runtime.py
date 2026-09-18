@@ -2031,6 +2031,9 @@ def _clear_relay_plugins(relay: Any) -> None:
     _resolve_plugin_awaitable(relay.plugin.clear_async())
 
 
+_PLUGIN_AWAITABLE_JOIN_TIMEOUT_S = 60.0  # C3-48: bounded plugin-lifecycle join
+
+
 def _resolve_plugin_awaitable(value: Any) -> Any:
     """Resolve Relay's async plugin API from synchronous host construction."""
     if not inspect.isawaitable(value):
@@ -2055,7 +2058,16 @@ def _resolve_plugin_awaitable(value: Any) -> Any:
         daemon=True,
     )
     thread.start()
-    thread.join()
+    # C3-48: a bare join() let a deadlocked plugin asyncio.run hang the host
+    # thread forever (the deadlock class this module itself documents).
+    # Bound the wait; on expiry raise instead of silently returning. The
+    # thread is daemon, so process exit is never blocked by the abandonment.
+    thread.join(timeout=_PLUGIN_AWAITABLE_JOIN_TIMEOUT_S)
+    if thread.is_alive():
+        raise TimeoutError(
+            "plugin lifecycle awaitable did not finish within "
+            f"{_PLUGIN_AWAITABLE_JOIN_TIMEOUT_S}s (abandoned; daemon thread)"
+        )
     if "exc" in error:
         raise error["exc"]
     return result.get("value")

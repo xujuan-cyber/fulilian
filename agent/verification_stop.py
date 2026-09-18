@@ -108,7 +108,14 @@ def verify_on_stop_enabled(config: dict[str, Any] | None = None) -> bool:
     """
     env = os.environ.get("FULILIAN_VERIFY_ON_STOP")
     if env is not None:
-        return env.strip().lower() not in {"0", "false", "no", "off"}
+        value = env.strip().lower()
+        # C3-66: "auto" used to fall into the truthy set and become an
+        # UNCONDITIONAL override, defeating the config the token advertises.
+        # It means "defer to config" — treat it like unset.
+        if value == "auto":
+            env = None
+        else:
+            return value not in {"0", "false", "no", "off"}
     if config is None:
         try:
             from fulilian_cli.config import load_config_readonly

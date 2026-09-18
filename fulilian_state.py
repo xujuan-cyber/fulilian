@@ -107,6 +107,36 @@ logger = logging.getLogger(__name__)
 MAX_SAFE_RESUME_MESSAGES = 20_000
 MAX_SAFE_EXPORT_MESSAGES = 20_000
 
+#: Characters that must never appear in a session id used to build a path or a
+#: glob pattern. Legitimate ids are colon-delimited multi-segment values
+#: (``agent:main:<platform>:...``) and contain none of these.
+_GLOB_METACHARS = frozenset("*?[]")
+
+
+def _session_file_component_unsafe(session_id: object) -> bool:
+    """Return True when *session_id* must NOT be used to build a file path.
+
+    Mirrors the entry-boundary guard in ``gateway/session.py::_is_path_unsafe``
+    — parent traversal (``..``), a path separator anywhere (``/`` or ``\\``),
+    and a leading Windows drive letter (``C:``) — and additionally rejects
+    ``glob`` metacharacters, because :meth:`SessionDB._remove_session_files`
+    deletes through ``sessions_dir.glob(f"request_dump_{session_id}_*.json")``
+    and an id containing ``*``/``?``/``[`` would over-match unrelated dumps.
+
+    Empty / falsy ids are unsafe too: they would build a bare ``.json`` path
+    and a ``request_dump__*.json`` glob. Keep the traversal checks in lockstep
+    with the gateway guard — this module cannot import ``gateway`` (layering),
+    so the duplication is deliberate and commented at both ends.
+    """
+    if not session_id:
+        return True
+    s = str(session_id)
+    if ".." in s or "/" in s or "\\" in s:
+        return True
+    if any(ch in s for ch in _GLOB_METACHARS):
+        return True
+    return len(s) >= 2 and s[0].isalpha() and s[1] == ":"
+
 
 def _configured_transcript_limit(key: str, fallback: int) -> int:
     """Resolve a transcript safety limit from config at call time.
@@ -1994,6 +2024,10 @@ def _cross_process_repair_lock(db_path: Path):
     redundant work — proceeding here would be exactly the unsafe interleaving
     we are trying to prevent, so a caller that gets False must NOT do surgery.
 
+    Failing to OPEN the lock file yields False too (see the OSError branch):
+    without the lock file there is no cross-process serialisation at all, so
+    the same rule applies.
+
     ``flock`` is the right primitive for this: the kernel drops the lock when
     the holding process dies, so a crashed repairer cannot leave a stale lock
     that wedges every future repair (a pidfile would).  The acquire is still
@@ -2006,14 +2040,23 @@ def _cross_process_repair_lock(db_path: Path):
         lock_path.parent.mkdir(parents=True, exist_ok=True)
         handle = lock_path.open("a+b")
     except OSError as exc:
-        # Read-only dir, exhausted fds, exotic filesystem: fall back to the
-        # in-process behaviour that shipped before this lock existed rather
-        # than refusing to repair a DB we could otherwise heal.
+        # Read-only dir, exhausted fds, exotic filesystem. Without the lock
+        # file there is NO cross-process serialisation of the writable_schema
+        # surgery + VACUUM — the exact interleaving this lock exists to
+        # prevent (see the module comment above the timeout constants: two
+        # hosts each ran the full surgery on their own private connection with
+        # nothing serialising them). Refuse rather than race: the caller
+        # re-probes, reports a deferral, and a later open retries (fail
+        # closed). The warning below carries the true reason, so the caller's
+        # generic "another process holds the repair lock" text is not the only
+        # trace an operator gets.
         logger.warning(
-            "Could not open state.db repair lock %s (%s) — proceeding with "
-            "in-process serialisation only.", lock_path, exc,
+            "Could not open state.db repair lock %s (%s) — skipping schema "
+            "surgery in this process instead of running it unserialised "
+            "(a later open retries).",
+            lock_path, exc,
         )
-        yield True
+        yield False
         return
 
     acquired = False
@@ -4109,6 +4152,9 @@ def collect_state_db_stats(db_path: Path) -> Dict[str, Any]:
       finished (high_water present and progress < high_water)
     - ``fts_rebuild_high_water`` / ``fts_rebuild_progress`` — raw ints
     - ``fts_rebuild_deferral`` — durable blocked-repair diagnostic, when present
+    - ``pk_rebuild_failures`` — durable count of failed session_model_usage
+      PK heal / v22 rebuild attempts (C1-1); None when the key is absent
+      (i.e. no failure ever recorded)
     """
     stats: Dict[str, Any] = {
         "page_count": None,
@@ -4207,6 +4253,7 @@ def collect_state_db_stats(db_path: Path) -> Dict[str, Any]:
                 return None
 
         stats["fts_storage_version"] = _meta_int("fts_storage_version")
+        stats["pk_rebuild_failures"] = _meta_int("pk_rebuild_failures")
         high_water = _meta_int("fts_rebuild_high_water")
         progress = _meta_int("fts_rebuild_progress")
         stats["fts_rebuild_high_water"] = high_water
@@ -5540,6 +5587,13 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
         """
         if not sys.platform.startswith("linux") or psutil is None:
             return []
+        # Deliberate lazy reverse import (state → fulilian_cli.dashboard_procs).
+        # Every fulilian_cli import in this module is function-local by
+        # convention: the CLI layer imports the state layer, so a module-level
+        # import here would invert the dependency at load time. Called out
+        # explicitly because the reaper depends on this one: if it is
+        # unavailable (partial install, older CLI) reaping is skipped entirely
+        # rather than mis-classifying a live backend as an orphan.
         try:
             from fulilian_cli.dashboard_procs import _is_ephemeral_port_zero_backend
         except Exception:
@@ -7865,8 +7919,12 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
                 "try_acquire_compression_lock(%s) failed: %s",
                 session_id, exc,
             )
-            # Fail open: returning False makes the caller skip compression,
-            # which is the safe behaviour when the lock subsystem is broken.
+            # Fail SAFE — the earlier wording ("fail open") described the
+            # opposite of what happens. Returning False makes the caller skip
+            # compression, i.e. the guarded action is DENIED when the lock
+            # subsystem is broken. That is the safe direction: a skipped
+            # compression costs one missed optimisation, whereas proceeding
+            # without the lock lets two compressors fork the same session.
             return False
 
     def release_compression_lock(self, session_id: str, holder: str) -> None:
@@ -8114,15 +8172,20 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
         """Return the current (non-expired) holder for ``session_id``, or None.
 
         Diagnostic helper — not used by the locking protocol itself.
+
+        Reads through the shared read path (``_read_ctx``) like every other
+        diagnostic read: the bare ``self._conn`` read this used to do bypassed
+        the lock/pool discipline the rest of the class follows.
         """
         if not session_id:
             return None
         now = time.time()
-        row = self._conn.execute(
-            "SELECT holder FROM compression_locks "
-            "WHERE session_id = ? AND expires_at >= ?",
-            (session_id, now),
-        ).fetchone()
+        with self._read_ctx() as conn:
+            row = conn.execute(
+                "SELECT holder FROM compression_locks "
+                "WHERE session_id = ? AND expires_at >= ?",
+                (session_id, now),
+            ).fetchone()
         if row is None:
             return None
         return row["holder"] if isinstance(row, sqlite3.Row) else row[0]
@@ -9843,8 +9906,8 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
 
     def get_session_title(self, session_id: str) -> Optional[str]:
         """Get the title for a session, or None."""
-        with self._lock:
-            cursor = self._conn.execute(
+        with self._read_ctx() as conn:
+            cursor = conn.execute(
                 "SELECT title FROM sessions WHERE id = ?", (session_id,)
             )
             row = cursor.fetchone()
@@ -9852,8 +9915,8 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
 
     def get_session_title_source(self, session_id: str) -> Optional[str]:
         """Get the provenance of a session's title, or None when untitled."""
-        with self._lock:
-            cursor = self._conn.execute(
+        with self._read_ctx() as conn:
+            cursor = conn.execute(
                 "SELECT title, title_source FROM sessions WHERE id = ?",
                 (session_id,),
             )
@@ -10007,7 +10070,17 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
             tip_id = self.resolve_resume_session_id(session_id) or session_id
             if tip_id != session_id:
                 tip = self.get_session(tip_id) or row
-        except Exception:
+        except (sqlite3.Error, KeyError, TypeError) as exc:
+            # Best effort: judge recoverability at the row itself rather than
+            # aborting the unarchive. Narrowed from a bare ``except Exception``
+            # so a genuine programming error can't masquerade as a DB fault,
+            # and logged so an actual DB failure leaves a trace instead of
+            # silently degrading the tip walk.
+            logger.debug(
+                "unarchive_session: resume-tip resolution failed for %s (%s); "
+                "judging recoverability at the row itself",
+                session_id, exc,
+            )
             tip_id = session_id
         if (tip.get("end_reason") or "") not in self.RECOVERABLE_END_REASONS:
             return False
@@ -10267,8 +10340,8 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
         # Find all existing numbered variants
         # Escape SQL LIKE wildcards (%, _) in the base to prevent false matches
         escaped = _escape_like(base)
-        with self._lock:
-            cursor = self._conn.execute(
+        with self._read_ctx() as conn:
+            cursor = conn.execute(
                 "SELECT title FROM sessions WHERE title = ? OR title LIKE ? ESCAPE '\\'",
                 (base, f"{escaped} #%"),
             )
@@ -10312,8 +10385,8 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
         # Bound the walk defensively — compression chains this deep are
         # pathological and shouldn't happen in practice. 100 = plenty.
         for _ in range(100):
-            with self._lock:
-                cursor = self._conn.execute(
+            with self._read_ctx() as conn:
+                cursor = conn.execute(
                     f"""
                     SELECT child.id
                     FROM sessions parent
@@ -11394,8 +11467,8 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
         if not session_id or message_row_id is None:
             return []
 
-        with self._lock:
-            row = self._conn.execute(
+        with self._read_ctx() as conn:
+            row = conn.execute(
                 "SELECT display_metadata FROM messages WHERE id = ? AND session_id = ?",
                 (message_row_id, session_id),
             ).fetchone()
@@ -11492,8 +11565,8 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
             "AND content IS NOT NULL AND TRIM(content) != '' " if require_text else ""
         )
 
-        with self._lock:
-            row = self._conn.execute(
+        with self._read_ctx() as conn:
+            row = conn.execute(
                 "SELECT id FROM messages WHERE session_id = ? AND role = ? "
                 f"AND active = 1 {text_filter}ORDER BY id DESC LIMIT 1 OFFSET ?",
                 (session_id, role, int(offset)),
@@ -12240,7 +12313,14 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
         # and the reply isn't there" report on large sessions.
         try:
             tip = self.get_compression_tip(session_id)
-        except Exception:
+        except (sqlite3.Error, KeyError, TypeError) as exc:
+            # Same narrowing as unarchive_session: a lineage-walk failure must
+            # not abort the resume, but it must not be invisible either.
+            logger.debug(
+                "resolve_resume_session_id: compression-tip walk failed for "
+                "%s (%s); resuming the id as given",
+                session_id, exc,
+            )
             tip = session_id
         if tip and tip != session_id:
             session_id = tip
@@ -13177,8 +13257,8 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
             params.extend(ws_params)
         where_sql = f" WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
         params.extend([limit, offset])
-        with self._lock:
-            cursor = self._conn.execute(
+        with self._read_ctx() as conn:
+            cursor = conn.execute(
                 f"{select_with_last_active}"
                 f"{where_sql} "
                 "ORDER BY last_active DESC, s.started_at DESC, s.id DESC LIMIT ? OFFSET ?",
@@ -13247,8 +13327,8 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
 
         where_sql = f" WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
 
-        with self._lock:
-            cursor = self._conn.execute(f"SELECT COUNT(*) FROM sessions s{where_sql}", params)
+        with self._read_ctx() as conn:
+            cursor = conn.execute(f"SELECT COUNT(*) FROM sessions s{where_sql}", params)
             return cursor.fetchone()[0]
 
     def session_count_ge(self, n: int = 1) -> bool:
@@ -13314,13 +13394,13 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
 
     def message_count(self, session_id: str = None) -> int:
         """Count messages, optionally for a specific session."""
-        with self._lock:
+        with self._read_ctx() as conn:
             if session_id:
-                cursor = self._conn.execute(
+                cursor = conn.execute(
                     "SELECT COUNT(*) FROM messages WHERE session_id = ?", (session_id,)
                 )
             else:
-                cursor = self._conn.execute("SELECT COUNT(*) FROM messages")
+                cursor = conn.execute("SELECT COUNT(*) FROM messages")
             return cursor.fetchone()[0]
 
     def has_platform_message_id(
@@ -13333,8 +13413,8 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
         to skip re-persisting a user message that was already saved on a
         prior retry of the same inbound platform message.
         """
-        with self._lock:
-            cursor = self._conn.execute(
+        with self._read_ctx() as conn:
+            cursor = conn.execute(
                 "SELECT 1 FROM messages "
                 "WHERE session_id = ? AND platform_message_id = ? LIMIT 1",
                 (session_id, platform_message_id),
@@ -13447,8 +13527,20 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
         ``request_dump_{session_id}_*.json`` files left by the gateway.
         Silently skips files that don't exist and swallows OSError so a
         filesystem hiccup never blocks a DB operation.
+
+        Unsafe ids (parent traversal, path separators, leading drive letter,
+        glob metacharacters) are refused outright rather than sanitised: this
+        helper DELETES, and a mangled name would either miss the real
+        transcript or take out an unrelated file. Legitimate ids never trip
+        the guard.
         """
         if sessions_dir is None:
+            return
+        if _session_file_component_unsafe(session_id):
+            logger.warning(
+                "Refusing to remove transcript files: unsafe session id %r",
+                session_id,
+            )
             return
         for suffix in (".json", ".jsonl"):
             p = sessions_dir / f"{session_id}{suffix}"
@@ -14383,9 +14475,18 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
           v1 — initial shape (no ON DELETE CASCADE on session_id FK)
           v2 — session_id FK gets ON DELETE CASCADE so session pruning
                automatically clears bindings.
+
+        Atomicity: every statement runs through ``conn.execute`` inside the
+        ``BEGIN IMMEDIATE`` transaction ``_execute_write`` opened. This used to
+        use ``conn.executescript``, which implicitly COMMITs any pending
+        transaction first — so the whole migration actually ran OUTSIDE that
+        transaction, and the v1→v2 rebuild could be interrupted between its
+        DROP TABLE and its RENAME (leaving no bindings table at all) while the
+        caller believed it was atomic. DDL is transactional in SQLite, so the
+        individual-execute form restores the all-or-nothing guarantee.
         """
         def _do(conn):
-            conn.executescript(
+            for statement in (
                 """
                 CREATE TABLE IF NOT EXISTS telegram_dm_topic_mode (
                     chat_id TEXT PRIMARY KEY,
@@ -14398,8 +14499,9 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
                     capability_checked_at REAL,
                     intro_message_id TEXT,
                     pinned_message_id TEXT
-                );
-
+                )
+                """,
+                """
                 CREATE TABLE IF NOT EXISTS telegram_dm_topic_bindings (
                     chat_id TEXT NOT NULL,
                     thread_id TEXT NOT NULL,
@@ -14410,15 +14512,18 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
                     linked_at REAL NOT NULL,
                     updated_at REAL NOT NULL,
                     PRIMARY KEY (chat_id, thread_id)
-                );
-
-                CREATE UNIQUE INDEX IF NOT EXISTS idx_telegram_dm_topic_bindings_session
-                ON telegram_dm_topic_bindings(session_id);
-
-                CREATE INDEX IF NOT EXISTS idx_telegram_dm_topic_bindings_user
-                ON telegram_dm_topic_bindings(user_id, chat_id);
+                )
+                """,
                 """
-            )
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_telegram_dm_topic_bindings_session
+                ON telegram_dm_topic_bindings(session_id)
+                """,
+                """
+                CREATE INDEX IF NOT EXISTS idx_telegram_dm_topic_bindings_user
+                ON telegram_dm_topic_bindings(user_id, chat_id)
+                """,
+            ):
+                conn.execute(statement)
 
             # v1 → v2: rebuild telegram_dm_topic_bindings if its session_id FK
             # lacks ON DELETE CASCADE. SQLite can't ALTER a foreign key, so we
@@ -14437,7 +14542,7 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
                     for row in fk_rows
                 )
                 if needs_rebuild:
-                    conn.executescript(
+                    for statement in (
                         """
                         CREATE TABLE telegram_dm_topic_bindings_new (
                             chat_id TEXT NOT NULL,
@@ -14449,20 +14554,29 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
                             linked_at REAL NOT NULL,
                             updated_at REAL NOT NULL,
                             PRIMARY KEY (chat_id, thread_id)
-                        );
+                        )
+                        """,
+                        """
                         INSERT INTO telegram_dm_topic_bindings_new
                             SELECT chat_id, thread_id, user_id, session_key,
                                    session_id, managed_mode, linked_at, updated_at
-                            FROM telegram_dm_topic_bindings;
-                        DROP TABLE telegram_dm_topic_bindings;
-                        ALTER TABLE telegram_dm_topic_bindings_new
-                            RENAME TO telegram_dm_topic_bindings;
-                        CREATE UNIQUE INDEX idx_telegram_dm_topic_bindings_session
-                            ON telegram_dm_topic_bindings(session_id);
-                        CREATE INDEX idx_telegram_dm_topic_bindings_user
-                            ON telegram_dm_topic_bindings(user_id, chat_id);
+                            FROM telegram_dm_topic_bindings
+                        """,
+                        "DROP TABLE telegram_dm_topic_bindings",
                         """
-                    )
+                        ALTER TABLE telegram_dm_topic_bindings_new
+                            RENAME TO telegram_dm_topic_bindings
+                        """,
+                        """
+                        CREATE UNIQUE INDEX idx_telegram_dm_topic_bindings_session
+                            ON telegram_dm_topic_bindings(session_id)
+                        """,
+                        """
+                        CREATE INDEX idx_telegram_dm_topic_bindings_user
+                            ON telegram_dm_topic_bindings(user_id, chat_id)
+                        """,
+                    ):
+                        conn.execute(statement)
 
             conn.execute(
                 "INSERT INTO state_meta (key, value) VALUES (?, ?) "
@@ -14904,12 +15018,17 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
         Returns None if the pragmas cannot be read.
         """
         try:
+            # Deliberately NOT routed through _read_ctx() (unlike the other
+            # read-only helpers in this class): the ``self._conn is None``
+            # closed-DB guard just below has no meaning against a pooled read
+            # connection, and two PRAGMAs are cheap enough that splitting the
+            # guard in two is not worth the risk of a closed-store read.
             with self._lock:
                 if self._conn is None:
                     return None
                 page_count = self._conn.execute("PRAGMA page_count").fetchone()[0]
                 page_size = self._conn.execute("PRAGMA page_size").fetchone()[0]
-            return int(page_count) * int(page_size)
+                return int(page_count) * int(page_size)
         except Exception as exc:
             logger.debug("Could not read logical DB size: %s", exc)
             return None
@@ -14923,10 +15042,22 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
         explicitly VACUUM.
 
         VACUUM rewrites the entire DB, so it's expensive (seconds per
-        100MB) and cannot run inside a transaction. It also acquires an
-        exclusive lock, so callers must ensure no other writers are
-        active. Safe to call at startup before the gateway/CLI starts
-        serving traffic.
+        100MB) and cannot run inside a transaction.
+
+        HARD PRECONDITION — no other writer may touch this DB. VACUUM itself
+        takes an exclusive lock, but the TRUNCATE checkpoint below does NOT
+        inherit that protection: resetting the WAL out from under a live
+        writer tears B-tree pages (#45383). That makes this method safe only
+        for a process that owns the file outright — the transient
+        ``fulilian sessions vacuum`` / ``sessions optimize`` CLI, or startup
+        before the gateway/CLI starts serving traffic. A long-lived process
+        (gateway, Desktop ``fulilian serve`` backend, TUI slash worker) shares
+        state.db with other writers and must NOT call this directly; it goes
+        through the repair-lock-guarded prune path
+        (:meth:`maybe_auto_prune_and_vacuum`) instead.
+
+        This is a caller contract and is deliberately not enforced here: only
+        the caller knows whether it is the sole writer.
 
         FTS5 segments are merged first via :meth:`optimize_fts` so the
         subsequent VACUUM reclaims the pages freed by the merge. This is a
@@ -15148,12 +15279,13 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
         no handoff record.
         """
         try:
-            cur = self._conn.execute(
-                "SELECT handoff_state, handoff_platform, handoff_error "
-                "FROM sessions WHERE id = ?",
-                (session_id,),
-            )
-            row = cur.fetchone()
+            with self._read_ctx() as conn:
+                cur = conn.execute(
+                    "SELECT handoff_state, handoff_platform, handoff_error "
+                    "FROM sessions WHERE id = ?",
+                    (session_id,),
+                )
+                row = cur.fetchone()
             if not row:
                 return None
             return {
@@ -15170,15 +15302,17 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
         Used by the gateway's handoff watcher.
         """
         try:
-            cur = self._conn.execute(
-                "SELECT s.*, "
-                "COALESCE(sp.prompt, s.system_prompt) AS _system_prompt_resolved "
-                "FROM sessions s "
-                "LEFT JOIN system_prompts sp ON sp.hash = s.system_prompt_hash "
-                "WHERE s.handoff_state = 'pending' "
-                "ORDER BY s.started_at ASC"
-            )
-            return [self._session_row_dict(r) for r in cur.fetchall()]
+            with self._read_ctx() as conn:
+                cur = conn.execute(
+                    "SELECT s.*, "
+                    "COALESCE(sp.prompt, s.system_prompt) AS _system_prompt_resolved "
+                    "FROM sessions s "
+                    "LEFT JOIN system_prompts sp ON sp.hash = s.system_prompt_hash "
+                    "WHERE s.handoff_state = 'pending' "
+                    "ORDER BY s.started_at ASC"
+                )
+                rows = cur.fetchall()
+            return [self._session_row_dict(r) for r in rows]
         except Exception:
             return []
 

@@ -2837,7 +2837,10 @@ SEARCH_FILES_SCHEMA = {
 
 def _handle_read_file(args, **kw):
     tid = kw.get("task_id") or "default"
-    return read_file_tool(path=args.get("path", ""), offset=args.get("offset", 1), limit=args.get("limit", 500), task_id=tid)
+    # C4-41: the handler fallback was 500 while READ_FILE_SCHEMA declares
+    # default 2000 — an omitted limit silently returned a third of the
+    # documented default. Read the schema default.
+    return read_file_tool(path=args.get("path", ""), offset=args.get("offset", 1), limit=args.get("limit", 2000), task_id=tid)
 
 
 def _handle_write_file(args, **kw):

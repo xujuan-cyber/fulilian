@@ -1399,16 +1399,17 @@ def _get_cute_tool_message(
 
     def _trunc(s, n=40):
         s = str(s)
-        if _tool_preview_max_len == 0:
-            return s  # no limit
-        limit = _tool_preview_max_len
+        # C3-29: the n parameter was dead — the body read the global cap
+        # only, so 30+ call sites passed lengths that did nothing (and the
+        # global default 0 meant previews were never truncated at all).
+        # Semantics now: a configured positive global is THE cap; with the
+        # default 0 (unconfigured), the per-call n applies.
+        limit = _tool_preview_max_len or (n if n and n > 0 else 40)
         return (s[:limit-3] + "...") if len(s) > limit else s
 
     def _path(p, n=35):
         p = str(p)
-        if _tool_preview_max_len == 0:
-            return p  # no limit
-        limit = _tool_preview_max_len
+        limit = _tool_preview_max_len or (n if n and n > 0 else 35)
         return ("..." + p[-(limit-3):]) if len(p) > limit else p
 
     def _wrap(line: str) -> str:

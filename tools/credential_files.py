@@ -206,6 +206,24 @@ def _load_config_files() -> List[Dict[str, str]]:
                         continue
                     resolved_path = host_path.resolve()
                     if resolved_path.is_file():
+                        # C4-27: config-declared entries skipped the
+                        # master-store deny-list that skill-declared ones
+                        # go through — a one-line config entry could mount
+                        # auth.json / state.db into the sandbox. Apply the
+                        # same read guard (fail-closed, same as the skill
+                        # chain).
+                        try:
+                            from agent.file_safety import get_read_block_error
+
+                            block = get_read_block_error(str(resolved_path))
+                        except Exception as block_err:
+                            block = f"read guard unavailable: {block_err}"
+                        if block:
+                            logger.warning(
+                                "credential_files: config path %r blocked by "
+                                "read guard: %s", rel, block,
+                            )
+                            continue
                         container_path = f"/root/.fulilian/{rel}"
                         result.append({
                             "host_path": str(resolved_path),
@@ -505,7 +523,12 @@ def from_agent_visible_cache_path(
     auto-mounted cache directory — the caller then treats a still-container
     path as "no host file" and falls back to an in-container read.
     """
-    if os.environ.get("TERMINAL_ENV", "local") != "docker":
+    # C4-28: the raw env read here ("Docker" ≠ "docker") made this
+    # translation silently NOT fire while its documented inverse
+    # (to_agent_visible_cache_path, below) DID fire — the two directions
+    # disagreed about where the file lives. Normalize identically.
+    backend = (os.environ.get("TERMINAL_ENV") or "local").strip().lower()
+    if backend != "docker":
         return container_path
 
     path = Path(container_path)

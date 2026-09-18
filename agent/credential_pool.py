@@ -44,6 +44,8 @@ from fulilian_cli.auth import (
 
 logger = logging.getLogger(__name__)
 
+import json  # C3-24: suppression fallback reads auth.json directly
+
 
 def _load_config_safe() -> Optional[dict]:
     """Load config.yaml read-only, returning None on any error.
@@ -308,6 +310,38 @@ def label_from_token(token: str, fallback: str) -> str:
 
 def _next_priority(entries: List[PooledCredential]) -> int:
     return max((entry.priority for entry in entries), default=-1) + 1
+
+
+def _is_source_suppressed_fallback(provider_id: str, source: str) -> bool:
+    """C3-24: read-only suppression check for when ``fulilian_cli.auth``
+    cannot be imported.
+
+    The previous ImportError fallback returned False unconditionally, which
+    made EVERY removal suppression inert — `fulilian auth remove <p> <N>`
+    was silently undone on the next load_pool() re-seed. This mirrors
+    is_source_suppressed()'s read of the auth store's suppressed_sources
+    map without importing the CLI module. On a read failure it still
+    returns False (nothing better to answer), but loudly — a silent False
+    here is exactly the resurrection bug.
+    """
+    try:
+        from fulilian_constants import get_fulilian_home
+
+        auth_file = get_fulilian_home() / "auth.json"
+        if not auth_file.exists():
+            return False
+        data = json.loads(auth_file.read_text(encoding="utf-8-sig"))
+        suppressed = (data or {}).get("suppressed_sources") or {}
+        sources = suppressed.get(provider_id) or []
+        return source in sources
+    except Exception:
+        logger.warning(
+            "credential pool: suppression fallback could not read the auth "
+            "store — treating %s/%s as NOT suppressed (removal may be "
+            "re-seeded)",
+            provider_id, source,
+        )
+        return False
 
 
 def _is_manual_source(source: str) -> bool:
@@ -738,6 +772,10 @@ class CredentialPool:
         # loop runs unbounded and non-interruptible.  Reset whenever a real
         # entry is identified or an escape path returns None.
         self._unmatched_rotation_streak: int = 0
+        # C3-22: monotonic timestamp of the last scheduling-state persist
+        # (least_used request_count). Coalesces per-selection durability so
+        # counts survive restarts without rewriting auth.json on every call.
+        self._last_scheduling_persist_at: Optional[float] = None
 
     def has_credentials(self) -> bool:
         with self._lock:
@@ -2055,6 +2093,24 @@ class CredentialPool:
         self._last_no_entries_log_at = now
         logger.info("credential pool: no available entries (all exhausted or empty)")
 
+    # C3-22: coalescing window for scheduling-only persistence (least_used
+    # request_count). Real mutations keep their immediate _persist().
+    _SCHEDULING_PERSIST_INTERVAL_S = 60.0
+
+    def _maybe_persist_scheduling_state(self) -> None:
+        """Persist scheduling counters at most once per interval (C3-22)."""
+        now = time.monotonic()
+        last = self._last_scheduling_persist_at
+        if last is not None and (now - last) < self._SCHEDULING_PERSIST_INTERVAL_S:
+            return
+        self._last_scheduling_persist_at = now
+        try:
+            self._persist()
+        except Exception as exc:  # noqa: BLE001 — durability is best-effort
+            logger.debug(
+                "credential pool: scheduling-state persist failed: %s", exc
+            )
+
     def _select_unlocked(self, *, refresh: bool = True) -> Tuple[Optional[PooledCredential], List[tuple]]:
         """Select the best available credential entry.
 
@@ -2082,6 +2138,10 @@ class CredentialPool:
             # Increment usage counter so subsequent selections distribute load
             updated = replace(entry, request_count=entry.request_count + 1)
             self._replace_entry(entry, updated)
+            # C3-22: request_count was never persisted, so a restart forgot
+            # the load distribution entirely. Persist coalesced (bounded
+            # write rate) instead of never.
+            self._maybe_persist_scheduling_state()
             self._current_id = entry.id
             return updated, pending_refresh
 
@@ -2090,7 +2150,12 @@ class CredentialPool:
             rotated = [candidate for candidate in self._entries if candidate.id != entry.id]
             rotated.append(replace(entry, priority=len(self._entries) - 1))
             self._entries = [replace(candidate, priority=idx) for idx, candidate in enumerate(rotated)]
-            self._persist()
+            # C3-22: no per-selection _persist() here — the rotation is
+            # process-local scheduling state, and rewriting the whole
+            # auth.json on EVERY model call was pure write amplification.
+            # The rotated priorities ride along with the next real
+            # mutation's persist; after a restart the pool re-seeds in
+            # stored-priority order (fairness restarts — acceptable).
             self._current_id = entry.id
             return self._current_unlocked() or entry, pending_refresh
 
@@ -2571,8 +2636,9 @@ def _seed_from_singletons(provider: str, entries: List[PooledCredential]) -> Tup
     try:
         from fulilian_cli.auth import is_source_suppressed as _is_suppressed
     except ImportError:
-        def _is_suppressed(_p, _s):  # type: ignore[misc]
-            return False
+        # C3-24: read the suppression map locally instead of the old
+        # always-False stub that silently resurrected removed credentials.
+        _is_suppressed = _is_source_suppressed_fallback
 
     if provider == "anthropic":
         # Only auto-discover external credentials (Claude Code, Fulilian PKCE)
@@ -2988,8 +3054,8 @@ def _seed_from_env(provider: str, entries: List[PooledCredential]) -> Tuple[bool
     try:
         from fulilian_cli.auth import is_source_suppressed as _is_source_suppressed
     except ImportError:
-        def _is_source_suppressed(_p, _s):  # type: ignore[misc]
-            return False
+        # C3-24: same fallback fix as the other suppression gates.
+        _is_source_suppressed = _is_source_suppressed_fallback
 
     def _secret_source_for_env(env_var: str) -> Optional[str]:
         try:
@@ -3128,8 +3194,9 @@ def _seed_custom_pool(pool_key: str, entries: List[PooledCredential]) -> Tuple[b
     try:
         from fulilian_cli.auth import is_source_suppressed as _is_suppressed
     except ImportError:
-        def _is_suppressed(_p, _s):  # type: ignore[misc]
-            return False
+        # C3-24: read the suppression map locally instead of the old
+        # always-False stub that silently resurrected removed credentials.
+        _is_suppressed = _is_source_suppressed_fallback
 
     # Seed from the custom_providers config entry's api_key field
     cp_config = _get_custom_provider_config(pool_key)

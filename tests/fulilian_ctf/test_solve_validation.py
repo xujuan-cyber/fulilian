@@ -68,7 +68,8 @@ def test_missing_absolute_path_exits_2_without_agent(stub_run_agent, tmp_path, c
     err = capsys.readouterr().err
     assert str(target) in err  # 指出检查过的路径
     assert "does not exist" in err
-    assert "ctfd sync" in err  # usage 提示：先同步平台挑战
+    assert "ctfd sync" not in err
+    assert "manifest file" in err  # usage 提示：传题目目录或本地清单文件
 
 
 def test_missing_relative_path_exits_2(stub_run_agent, tmp_path, capsys):
@@ -172,7 +173,7 @@ def test_existing_directory_with_challenge_json_passes(stub_run_agent, tmp_path)
 
 
 def test_manifest_file_passes_and_uses_entry_dir(stub_run_agent, tmp_path):
-    """平台清单文件 → 放行，按条目 dir 解析 work_dir（CTFd sync 产物的单题用法）。"""
+    """平台清单文件 → 放行，按条目 dir 解析 work_dir（本地清单的单题用法）。"""
     (tmp_path / "web-01").mkdir()
     manifest = tmp_path / "platform.json"
     manifest.write_text(

@@ -931,7 +931,33 @@ class SessionSchemaMixin:
                 "ON session_model_usage(model)"
             )
         except sqlite3.OperationalError as exc:
-            logger.debug("session_model_usage PK heal skipped: %s", exc)
+            # NOT a debug-level detail. A half-applied heal leaves the legacy
+            # 5-column PK in place, and every _record_model_usage() upsert then
+            # fails with "ON CONFLICT clause does not match any PRIMARY KEY or
+            # UNIQUE constraint" — aborting the enclosing write transaction and
+            # silently zeroing all token *and* cost accounting (#73823). The
+            # heal already logged the intent at INFO above, so a silent
+            # downgrade here is the only trace the operator would get.
+            logger.warning(
+                "session_model_usage PK heal FAILED and was skipped (%s); the "
+                "legacy primary key stays in place, so token/cost accounting "
+                "remains broken until the table is rebuilt (#73823).",
+                exc,
+            )
+            try:
+                # C1-1 second half: durable failure counter — surfaces in
+                # collect_state_db_stats() / doctor even when the process
+                # holding the failure is gone.
+                cursor.execute(
+                    "INSERT INTO state_meta (key, value) VALUES "
+                    "('pk_rebuild_failures', '1') "
+                    "ON CONFLICT(key) DO UPDATE SET value = "
+                    "CAST(CAST(value AS INTEGER) + 1 AS TEXT)",
+                )
+            except sqlite3.Error:
+                logger.debug(
+                    "pk_rebuild_failures counter bump failed", exc_info=True
+                )
         finally:
             cursor.execute("PRAGMA foreign_keys=ON")
 
@@ -1225,7 +1251,31 @@ class SessionSchemaMixin:
                             "ON session_model_usage(model)"
                         )
                 except sqlite3.OperationalError as exc:
-                    logger.debug("v22 session_model_usage rebuild skipped: %s", exc)
+                    # Same reasoning as _heal_session_model_usage_pk above: a
+                    # skipped v22 rebuild leaves the pre-task 5-column PK, and
+                    # the resulting upsert failures silently zero token/cost
+                    # accounting (#73823). Warn, don't whisper.
+                    logger.warning(
+                        "v22 session_model_usage rebuild FAILED and was "
+                        "skipped (%s); the pre-task primary key stays in "
+                        "place and accounting remains broken (#73823).",
+                        exc,
+                    )
+                    try:
+                        # C1-1 second half: durable failure counter (same
+                        # key the runtime heal arm bumps — one number per
+                        # db file counts every failed PK rebuild attempt).
+                        cursor.execute(
+                            "INSERT INTO state_meta (key, value) VALUES "
+                            "('pk_rebuild_failures', '1') "
+                            "ON CONFLICT(key) DO UPDATE SET value = "
+                            "CAST(CAST(value AS INTEGER) + 1 AS TEXT)",
+                        )
+                    except sqlite3.Error:
+                        logger.debug(
+                            "pk_rebuild_failures counter bump failed",
+                            exc_info=True,
+                        )
             if current_version < 23:
                 # v23: FTS storage redesign (issues #22478, #43690, #55233).
                 # The v11 inline-mode FTS tables each store a full private

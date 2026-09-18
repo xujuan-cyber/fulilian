@@ -1463,17 +1463,30 @@ def _sessions_export(_engine: FulilianConsoleEngine, args: list[str]) -> str:
                     for session in db.search_sessions(source=ns.source, limit=100000)
                 ]
                 _guard_exports(session_ids)
-                rows = db.export_all(source=ns.source)
+                rows = db.iter_export_all(source=ns.source)
 
-            lines = [json.dumps(row, ensure_ascii=False) for row in rows]
-            text = "\n".join(lines)
-            if text:
-                text += "\n"
+            # Stream one JSONL line per session straight into the sink. The
+            # old path built `lines` AND the joined `text`, holding the whole
+            # export twice over; the per-session budget above bounds each
+            # session but not the total, so a many-session DB still spiked.
             if ns.output == "-":
-                sys.stdout.write(text)
+                out = sys.stdout
+                close_out = False
             else:
-                Path(ns.output).expanduser().write_text(text, encoding="utf-8")
-                print(f"Exported {len(rows)} session(s) to {ns.output}")
+                out = open(
+                    Path(ns.output).expanduser(), "w", encoding="utf-8"
+                )
+                close_out = True
+            count = 0
+            try:
+                for row in rows:
+                    out.write(json.dumps(row, ensure_ascii=False) + "\n")
+                    count += 1
+            finally:
+                if close_out:
+                    out.close()
+            if ns.output != "-":
+                print(f"Exported {count} session(s) to {ns.output}")
         finally:
             db.close()
 

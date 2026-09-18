@@ -130,11 +130,16 @@ def probe_gemini_tier(
         with httpx.Client(timeout=timeout) as client:
             resp = client.post(
                 url,
-                params={"key": key},
                 json=payload,
                 headers={
                     "Content-Type": "application/json",
                     "X-Goog-Api-Client": f"fulilian-agent/{_FULILIAN_VERSION}",
+                    # C3-35: the key used to ride in the URL query
+                    # (?key=...) — provider-side exceptions/logs then
+                    # embedded the credentialed URL. The main client
+                    # already authenticates via the x-goog-api-key header
+                    # (:1151); the probe does the same now.
+                    "x-goog-api-key": key,
                 },
             )
     except Exception as exc:
@@ -796,12 +801,24 @@ def translate_gemini_response(resp: Dict[str, Any], model: str) -> SimpleNamespa
 
     finish_reason = "tool_calls" if tool_calls else _map_gemini_finish_reason(str(cand.get("finishReason") or ""))
     usage_meta = resp.get("usageMetadata") or {}
+    # C3-34: Gemini reports thinking tokens OUTSIDE candidatesTokenCount
+    # (totalTokenCount = prompt + candidates + thoughts), but OpenAI-shape
+    # accounting expects completion_tokens to INCLUDE reasoning, with
+    # reasoning_tokens as a subset detail. Dropping thoughtsTokenCount made
+    # native-Gemini output accounting systematically low, left
+    # reasoning_tokens unset (usage_pricing reads
+    # completion_tokens_details.reasoning_tokens), and let pure-thinking
+    # responses pass the zero-output guard as "empty".
+    _thoughts = int(usage_meta.get("thoughtsTokenCount") or 0)
     usage = SimpleNamespace(
         prompt_tokens=int(usage_meta.get("promptTokenCount") or 0),
-        completion_tokens=int(usage_meta.get("candidatesTokenCount") or 0),
+        completion_tokens=int(usage_meta.get("candidatesTokenCount") or 0) + _thoughts,
         total_tokens=int(usage_meta.get("totalTokenCount") or 0),
         prompt_tokens_details=SimpleNamespace(
             cached_tokens=int(usage_meta.get("cachedContentTokenCount") or 0),
+        ),
+        completion_tokens_details=SimpleNamespace(
+            reasoning_tokens=_thoughts,
         ),
     )
     reasoning = "".join(reasoning_pieces) or None
@@ -973,12 +990,20 @@ def translate_stream_event(event: Dict[str, Any], model: str, tool_call_indices:
         # non-streaming path in translate_gemini_response).
         usage_meta = event.get("usageMetadata") or {}
         if usage_meta:
+            # C3-34: fold thinking tokens into completion + reasoning
+            # details (mirrors translate_gemini_response above).
+            _thoughts = int(usage_meta.get("thoughtsTokenCount") or 0)
             finish_chunk.usage = SimpleNamespace(
                 prompt_tokens=int(usage_meta.get("promptTokenCount") or 0),
-                completion_tokens=int(usage_meta.get("candidatesTokenCount") or 0),
+                completion_tokens=(
+                    int(usage_meta.get("candidatesTokenCount") or 0) + _thoughts
+                ),
                 total_tokens=int(usage_meta.get("totalTokenCount") or 0),
                 prompt_tokens_details=SimpleNamespace(
                     cached_tokens=int(usage_meta.get("cachedContentTokenCount") or 0),
+                ),
+                completion_tokens_details=SimpleNamespace(
+                    reasoning_tokens=_thoughts,
                 ),
             )
         chunks.append(finish_chunk)

@@ -364,9 +364,8 @@ def _report_invalid_solve_target(challenge_id: str) -> None:
         file=sys.stderr,
     )
     print(
-        "  usage: pass an existing challenge directory, or sync platform "
-        "challenges first (`fulilian ctfd sync <base_url> <out_dir>`) "
-        "and solve a challenge directory under <out_dir>",
+        "  usage: pass an existing challenge directory, or a local challenge "
+        "manifest file (platform.json / manifest.json / challenges.json)",
         file=sys.stderr,
     )
 
@@ -384,9 +383,6 @@ def handle_solve_command(args: argparse.Namespace) -> None:
       退出（exit 2），不发生任何 LLM API 调用
     """
     challenge_id = args.id
-    if getattr(args, "rpc", False):
-        from .solve_rpc import serve
-        sys.exit(serve())
     # 前置校验：目标无效时秒级退出（exit 2），绝不启动 agent / 发 API 请求。
     # --race / --multi-agent / 默认单 agent 三分支共用同一 args.id，统一在此拦截。
     if _validate_solve_target(challenge_id) is None:
@@ -600,7 +596,13 @@ def handle_solve_all_command(args: argparse.Namespace) -> None:
     → 无新题时收割轮按 EV 回退已放弃的题。
     """
     from fulilian_ctf.dispatcher import Dispatcher
+    from fulilian_ctf.dispatcher import max_attempts_default, max_workers_default
+    from fulilian_ctf.probe import probe_timeout_default
     from fulilian_ctf.registry import challenge_to_project, load_challenges
+    from fulilian_ctf.stopper import (
+        max_no_output_rounds_default,
+        max_variant_failures_default,
+    )
 
     platform = args.platform
     base = Path(platform).expanduser()
@@ -624,7 +626,12 @@ def handle_solve_all_command(args: argparse.Namespace) -> None:
         print("solve-all: no challenges to solve", file=sys.stderr)
         sys.exit(0)
 
-    workers = getattr(args, "workers", None) or 3
+    # 数值旋钮一律「CLI flag > env > 默认」：显式 flag 非空即胜出，否则落到
+    # 读 env 的 resolver（见 env_overrides）。`or` 保留既有语义——显式 0
+    # 视为未指定，回退默认。**唯一例外是 timebox_override**（0 是合法哨兵），
+    # 它必须透传 None 让 Dispatcher 去解析 env，写成 `or 0` 会用 0 覆盖掉
+    # FULILIAN_CTF_TIMEBOX。
+    workers = getattr(args, "workers", None) or max_workers_default()
     # --max-turns：显式指定才限制 solver 轮数（经环境变量传给 solver 子
     # 进程）；0/未设 = 不限轮数（题目一直解到出 flag，靠进展型止损兜底）
     max_turns_override = getattr(args, "max_turns", None) or 0
@@ -633,12 +640,16 @@ def handle_solve_all_command(args: argparse.Namespace) -> None:
     dispatcher = Dispatcher(
         max_workers=workers,
         model=getattr(args, "model", "") or "",
-        probe_timeout=getattr(args, "probe_timeout", None) or 60,
-        max_attempts=getattr(args, "max_attempts", None) or 5,
-        timebox_override=getattr(args, "timebox", None) or 0,
+        probe_timeout=getattr(args, "probe_timeout", None) or probe_timeout_default(),
+        max_attempts=getattr(args, "max_attempts", None) or max_attempts_default(),
+        timebox_override=getattr(args, "timebox", None),
         max_tokens=getattr(args, "max_tokens", None),
-        max_no_output_rounds=getattr(args, "max_no_output_rounds", None) or 7,
-        max_variant_failures=getattr(args, "max_variant_failures", None) or 7,
+        max_no_output_rounds=(
+            getattr(args, "max_no_output_rounds", None) or max_no_output_rounds_default()
+        ),
+        max_variant_failures=(
+            getattr(args, "max_variant_failures", None) or max_variant_failures_default()
+        ),
         stop_loss=not getattr(args, "no_stop_loss", False),
         warmup=not getattr(args, "no_warmup", False),
     )
@@ -857,101 +868,6 @@ def handle_replay_command(args: argparse.Namespace) -> None:
         )
     )
     sys.exit(0)
-
-
-def handle_ctfd_command(args: argparse.Namespace) -> None:
-    """CTFd platform integration (Phase 3 — F3-011/F3-012).
-
-    ``fulilian ctfd list <base_url> [--api-key K]``
-    ``fulilian ctfd submit <base_url> <id> <flag> [--api-key K]``
-    ``fulilian ctfd sync <base_url> <out_dir> [--api-key K]``
-    ``fulilian ctfd poll <base_url> <platform_dir> [--api-key K]``
-    ``fulilian ctfd poll-job <base_url> <platform_dir> [--schedule S]``
-    ``fulilian ctfd serve-mcp [--base-url U] [--api-key K]``
-    """
-    from fulilian_ctf.ctfd_adapter import (
-        ENV_CTFD_API_KEY,
-        ENV_CTFD_BASE_URL,
-        CTFdAdapter,
-        create_poll_job,
-        poll_new_challenges,
-        serve_mcp,
-        sync_challenges,
-    )
-
-    action = getattr(args, "ctfd_action", None)
-    if not action:
-        print("ctfd: use one of list / submit / sync / poll / poll-job / serve-mcp")
-        sys.exit(2)
-
-    if action == "serve-mcp":
-        # MCP server：stdout 只输出协议消息，配置经参数或环境变量
-        import os
-
-        if getattr(args, "base_url", None):
-            os.environ[ENV_CTFD_BASE_URL] = args.base_url
-        if getattr(args, "api_key", None):
-            os.environ[ENV_CTFD_API_KEY] = args.api_key
-        sys.exit(serve_mcp())
-
-    if action == "poll-job":
-        job = create_poll_job(
-            base_url=args.base_url,
-            api_key=getattr(args, "api_key", None) or "",
-            platform_dir=args.platform_dir,
-            schedule=getattr(args, "schedule", None) or "every 5m",
-        )
-        print(f"ctfd: cron job created id={job.get('id')} next_run={job.get('next_run_at')}")
-        print("ctfd: note — cron jobs fire while the gateway process is running")
-        sys.exit(0)
-
-    adapter = CTFdAdapter(
-        args.base_url, getattr(args, "api_key", None) or None
-    )
-
-    if action == "list":
-        items = adapter.list_challenges()
-        print(f"ctfd: {len(items)} challenge(s) on {args.base_url}")
-        for item in items:
-            print(
-                f"  [{item.get('id', '?'):>4}] {item.get('name', '')}"
-                f"  ({item.get('category', '')}, {item.get('value', 0)} pts)"
-            )
-        sys.exit(0)
-
-    if action == "submit":
-        result = adapter.submit_flag(args.challenge_id, args.flag)
-        data = result.get("data", result)
-        status = data.get("status", result.get("success", "?"))
-        message = data.get("message", "")
-        print(f"ctfd: submit challenge={args.challenge_id} → {status}"
-              + (f" ({message})" if message else ""))
-        sys.exit(0 if status == "correct" else 1)
-
-    if action == "sync":
-        # expanduser 后再用：`fulilian ctfd sync ... ~/ctfd` 会原样建一个名为
-        # "~" 的目录（shell 在引号内不展开），而后续 solve-all 又会把 ~ 展开
-        # —— 同步到 A、去 B 里找，静默扑空。本文件其余入口（_resolve_project
-        # / _prepare_work_dir）都先 expanduser，这里与它们对齐。
-        out_dir = Path(args.out_dir).expanduser()
-        entries = sync_challenges(adapter, str(out_dir))
-        print(
-            f"ctfd: synced {len(entries)} challenge(s) → "
-            f"{out_dir / 'manifest.json'}"
-        )
-        print(f"ctfd: run `fulilian solve-all {out_dir}` to batch-solve")
-        sys.exit(0)
-
-    if action == "poll":
-        state_file = Path(args.platform_dir).expanduser() / "poll-state.json"
-        new = poll_new_challenges(adapter, state_file)
-        if new:
-            print(f"ctfd: {len(new)} new challenge(s):")
-            for item in new:
-                print(f"  [{item.get('id', '?'):>4}] {item.get('name', '')}")
-        else:
-            print("ctfd: no new challenges")
-        sys.exit(0)
 
 
 def handle_knowledge_command(args: argparse.Namespace) -> None:

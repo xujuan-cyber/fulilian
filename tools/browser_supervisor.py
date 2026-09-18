@@ -158,6 +158,16 @@ _DIALOG_BRIDGE_SCRIPT = r"""
 
 
 @dataclass
+def _log_forward_failure(task) -> None:
+    """C4-13: fire-and-forget Fetch.continueRequest failures must not be
+    silently swallowed — a dropped forward hangs the page's request."""
+    if task.cancelled():
+        return
+    exc = task.exception()
+    if exc is not None:
+        logger.debug("Fetch.continueRequest forward failed: %s", exc)
+
+
 class PendingDialog:
     """A JS dialog currently open on some frame's session."""
 
@@ -1106,13 +1116,18 @@ class CDPSupervisor:
         # intercepted requests if patterns were ever broadened.
         if DIALOG_BRIDGE_HOST not in url:
             # Not ours — forward unchanged so the page sees its own request.
-            try:
-                await self._cdp(
+            # C4-13: awaiting this _cdp call INSIDE _on_event self-deadlocks
+            # — only the reader loop resolves _pending_calls futures, so the
+            # reader blocks on a reply only it can deliver (the file
+            # documents this exact constraint at :1297). Schedule like every
+            # other in-event CDP call (_enable_child_domains, auto-dialog).
+            task = asyncio.create_task(
+                self._cdp(
                     "Fetch.continueRequest", {"requestId": request_id},
                     session_id=session_id, timeout=3.0,
                 )
-            except Exception:
-                pass
+            )
+            task.add_done_callback(_log_forward_failure)
             return
 
         # Parse query string for dialog metadata. Use urllib to be robust.

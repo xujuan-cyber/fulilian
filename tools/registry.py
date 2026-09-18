@@ -921,7 +921,15 @@ class ToolRegistry:
                 return
             if entry is None:
                 return
-            if not entry.toolset.startswith("mcp-"):
+            # C4-3: the blanket "mcp-" exemption let ANY plugin deregister
+            # any mcp-* tool without ownership/opt-in. All MCP toolset
+            # registrations originate from tools/mcp_tool.py — exempt only
+            # that caller.
+            _mcp_exempt = entry.toolset.startswith("mcp-") and caller_mod in (
+                "tools.mcp_tool",
+                "mcp_tool",
+            )
+            if not _mcp_exempt:
                 owner = self._plugin_owner_of(entry.handler)
                 # Ownership check: bind to the plugin package root
                 # (``fulilian_plugins.{name}``), not the exact module string.
@@ -1323,13 +1331,21 @@ def tool_error(message, **extra) -> str:
 def tool_result(data=None, **kwargs) -> str:
     """Return a JSON result string for tool handlers.
 
-    Accepts a dict positional arg *or* keyword arguments (not both):
+    Accepts a dict positional arg *or* keyword arguments. When both are
+    given, kwargs are merged INTO the dict (C4-2: they used to be silently
+    discarded, contradicting the helper's contract):
 
     >>> tool_result(success=True, count=42)
     '{"success": true, "count": 42}'
     >>> tool_result({"key": "value"})
     '{"key": "value"}'
+    >>> tool_result({"key": "value"}, extra=1)
+    '{"key": "value", "extra": 1}'
     """
     if data is not None:
+        if kwargs:
+            merged = dict(data) if isinstance(data, dict) else {"data": data}
+            merged.update(kwargs)
+            return json.dumps(merged, ensure_ascii=False)
         return json.dumps(data, ensure_ascii=False)
     return json.dumps(kwargs, ensure_ascii=False)

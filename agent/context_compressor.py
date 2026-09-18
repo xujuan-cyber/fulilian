@@ -1547,7 +1547,7 @@ _MAX_KEEP_TOOL_IMAGES = 3
 # eats most of the reclaimed headroom, so compaction re-fires every 1-2
 # turns and the session spends most of its wall-clock summarizing.
 _SMALL_CTX_WINDOW_LIMIT = 512_000
-_SMALL_CTX_THRESHOLD_PERCENT = 0.60
+_SMALL_CTX_THRESHOLD_PERCENT = 0.75
 
 # Force-compression interval: trigger compaction every N turns even when the
 # token threshold has not been reached, preventing unbounded context growth
@@ -3435,7 +3435,7 @@ class ContextCompressor(ContextEngine):
         """Apply the small-context threshold floor (raise-only).
 
         Models under ``_SMALL_CTX_WINDOW_LIMIT`` (512K) trigger at no less
-        than ``_SMALL_CTX_THRESHOLD_PERCENT`` (60%) of the window.  An
+        than ``_SMALL_CTX_THRESHOLD_PERCENT`` (75%) of the window.  An
         explicitly higher threshold (user config or per-model autoraise,
         e.g. Codex gpt-5.5's 85%) always wins; only lower values are raised.
         Large-context models keep the configured value — at 512K+ the default
@@ -4805,10 +4805,13 @@ class ContextCompressor(ContextEngine):
 
         def _compact_fallback_turn(value: Any) -> str:
             text = _redact_compaction_text(_content_text_for_contains(value))
-            text = re.sub(r"\bgh[pousr]_[A-Za-z0-9_]{8,}\b", "[REDACTED]", text)
             text = re.sub(r"\s+", " ", text).strip()
             if len(text) > _FALLBACK_TURN_MAX_CHARS:
                 text = text[: _FALLBACK_TURN_MAX_CHARS - 15].rstrip() + " ...[truncated]"
+            # C3-12: two different gh[pousr]_ regexes ran over the same text
+            # (this broader one second, silently overwriting the first).
+            # Single mask, broad pattern — every match of the narrow one is
+            # subsumed.
             return re.sub(r"\bgh[pousr]_[A-Za-z0-9_.-]+", "[REDACTED]", text)
 
         def _remember_dropped_turn(label: str, text: str, *, limit: int = 8) -> None:
@@ -5069,16 +5072,24 @@ Summary generation was unavailable, so this is a best-effort deterministic fallb
             if not segment.strip():
                 continue
             try:
-                from agent.auxiliary_client import call_llm
-
-                resp = call_llm(
-                    messages=[{
-                        "role": "user",
-                        "content": _LEAN_DIGEST_PROMPT.format(segment=segment),
-                    }],
-                    task="compression",
-                    max_tokens=_LEAN_DIGEST_MAX_TOKENS,
+                from agent.auxiliary_client import (
+                    aux_interrupt_protection,
+                    call_llm,
                 )
+
+                # C3-13: the aux call was NOT wrapped in
+                # aux_interrupt_protection (main :5561 and micro :7378 both
+                # wrap) — an interrupt during digesting degraded EVERY chunk
+                # to a placeholder instead of surfacing as a cancel.
+                with aux_interrupt_protection():
+                    resp = call_llm(
+                        messages=[{
+                            "role": "user",
+                            "content": _LEAN_DIGEST_PROMPT.format(segment=segment),
+                        }],
+                        task="compression",
+                        max_tokens=_LEAN_DIGEST_MAX_TOKENS,
+                    )
                 body = (
                     resp.choices[0].message.content
                     if hasattr(resp, "choices") else str(resp)
@@ -7392,7 +7403,19 @@ This compaction should PRIORITISE preserving all information related to the focu
             )
             return None
 
-        message = response.choices[0].message
+        # C3-11: mirror the str/dict shape convergence _generate_summary
+        # applies — some OpenAI-compatible proxies return dict-shaped
+        # responses, and a bare attribute access here raised all the way
+        # into finalize_turn callers.
+        if isinstance(response, dict):
+            _choices = response.get("choices") or [{}]
+            message = (
+                _choices[0].get("message")
+                if isinstance(_choices[0], dict)
+                else getattr(_choices[0], "message", None)
+            )
+        else:
+            message = response.choices[0].message
         if isinstance(message, dict):
             content = message.get("content")
         else:

@@ -161,10 +161,21 @@ class _DocState:
     seed_seen: bool = False
 
     def fresh_push(self, version: Optional[int] = None) -> bool:
-        return self.push_version >= (self.version if version is None else version)
+        # C3-76: -1 sentinels mean "never opened / no data yet" — the
+        # docstring's "keeping them unfresh" contract. The bare >= made
+        # (-1 >= -1) report never-opened docs (relatedDocuments spillover,
+        # pre-open seed pushes) as FRESH. Require a real (>= 0) version on
+        # both sides before the catch-up comparison.
+        target = self.version if version is None else version
+        if self.push_version < 0 or target < 0:
+            return False
+        return self.push_version >= target
 
     def fresh_pull(self, version: Optional[int] = None) -> bool:
-        return self.pull_version >= (self.version if version is None else version)
+        target = self.version if version is None else version
+        if self.pull_version < 0 or target < 0:
+            return False
+        return self.pull_version >= target
 
 
 class LSPClient:

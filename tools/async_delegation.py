@@ -465,6 +465,15 @@ def restore_undelivered_completions(target_queue) -> int:
             evt = json.loads(payload)
             if isinstance(evt, dict):
                 evt["restored"] = True
+            # C4-7: restore never refreshed updated_at, so the prune pass's
+            # 1h pending grace deleted a JUST-RESTORED overnight/weekend row
+            # (whose age is legitimately under the 48h replay cap) while it
+            # sat back in the queue. Touch updated_at on restore — the 48h
+            # age cap above stays the real bound.
+            conn.execute(
+                "UPDATE async_delegations SET updated_at=? WHERE delegation_id=?",
+                (now, delegation_id),
+            )
             target_queue.put(evt)
             restored += 1
     return restored

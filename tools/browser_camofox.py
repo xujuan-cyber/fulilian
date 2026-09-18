@@ -384,37 +384,46 @@ def _get_session(task_id: Optional[str]) -> Dict[str, Any]:
     task_id = task_id or "default"
     with _sessions_lock:
         if task_id in _sessions:
-            return _adopt_existing_tab(_sessions[task_id])
-
-        camofox_cfg = _get_camofox_config()
-        identity_override = _camofox_identity_override(task_id, camofox_cfg)
-        if identity_override:
-            session = {
-                "user_id": identity_override["user_id"],
-                "tab_id": None,
-                "session_key": identity_override["session_key"],
-                "managed": True,
-                "adopt_existing_tab": _adopt_existing_tab_enabled(camofox_cfg),
-            }
-        elif bool(camofox_cfg.get("managed_persistence")):
-            identity = get_camofox_identity(task_id)
-            session = {
-                "user_id": identity["user_id"],
-                "tab_id": None,
-                "session_key": identity["session_key"],
-                "managed": True,
-                "adopt_existing_tab": _adopt_existing_tab_enabled(camofox_cfg),
-            }
+            session = _sessions[task_id]
         else:
-            session = {
-                "user_id": f"fulilian_{uuid.uuid4().hex[:10]}",
-                "tab_id": None,
-                "session_key": f"task_{task_id[:16]}",
-                "managed": False,
-                "adopt_existing_tab": False,
-            }
-        _sessions[task_id] = session
-        return _adopt_existing_tab(session)
+            session = _build_new_session(task_id)
+            _sessions[task_id] = session
+    # C4-11: adoption performs an HTTP GET (5s timeout) — it used to run
+    # while HOLDING _sessions_lock, so one session's network wait convoyed
+    # every other session's browser calls. Network I/O happens outside the
+    # lock now; a concurrent same-id creation is benign (last writer wins,
+    # one extra server-side tab).
+    return _adopt_existing_tab(session)
+
+
+def _build_new_session(task_id: str) -> Dict[str, Any]:
+    """Build (but do not register) a fresh session record. No I/O."""
+    camofox_cfg = _get_camofox_config()
+    identity_override = _camofox_identity_override(task_id, camofox_cfg)
+    if identity_override:
+        return {
+            "user_id": identity_override["user_id"],
+            "tab_id": None,
+            "session_key": identity_override["session_key"],
+            "managed": True,
+            "adopt_existing_tab": _adopt_existing_tab_enabled(camofox_cfg),
+        }
+    if bool(camofox_cfg.get("managed_persistence")):
+        identity = get_camofox_identity(task_id)
+        return {
+            "user_id": identity["user_id"],
+            "tab_id": None,
+            "session_key": identity["session_key"],
+            "managed": True,
+            "adopt_existing_tab": _adopt_existing_tab_enabled(camofox_cfg),
+        }
+    return {
+        "user_id": f"fulilian_{uuid.uuid4().hex[:10]}",
+        "tab_id": None,
+        "session_key": f"task_{task_id[:16]}",
+        "managed": False,
+        "adopt_existing_tab": False,
+    }
 
 
 def _ensure_tab(task_id: Optional[str], url: str = "about:blank") -> Dict[str, Any]:

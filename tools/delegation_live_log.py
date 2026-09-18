@@ -330,16 +330,18 @@ def create_live_transcripts(
     try:
         deleg_id = delegation_id or new_live_delegation_id()
         writers: List[Optional[LiveTranscriptWriter]] = []
-        paths: List[str] = []
+        # C4-38: paths must stay INDEX-ALIGNED with task_list (None for a
+        # failed construction) — compacting the list desynced
+        # entry["live_log_path"] onto the wrong task.
+        paths: List[Optional[str]] = []
         for i, t in enumerate(task_list):
             w = LiveTranscriptWriter(
                 deleg_id, i, str(t.get("goal", "")),
                 context=t.get("context") or context,
             )
             writers.append(w if w.path is not None else None)
-            if w.path is not None:
-                paths.append(str(w.path))
-        if not paths:
+            paths.append(str(w.path) if w.path is not None else None)
+        if not any(paths):
             return None, [None] * n, []
         _write_manifest(deleg_id, task_list, paths, model=model, provider=provider)
         return deleg_id, writers, paths

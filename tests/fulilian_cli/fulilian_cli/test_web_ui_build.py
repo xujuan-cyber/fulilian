@@ -327,7 +327,10 @@ class TestBuildWebUIFlock:
         mock_run.assert_not_called()  # fresh after the wait -> no rebuild
 
     def test_lock_file_is_gitignored(self):
-        gitignore = Path(__file__).resolve().parents[2] / ".gitignore"
+        # Repo root — parents[3], NOT parents[2]: this file lives at
+        # tests/fulilian_cli/fulilian_cli/, so parents[2] is <repo>/tests
+        # (which has no .gitignore; the repo root does).
+        gitignore = Path(__file__).resolve().parents[3] / ".gitignore"
         assert ".web_ui_build.lock" in gitignore.read_text(encoding="utf-8")
 
 

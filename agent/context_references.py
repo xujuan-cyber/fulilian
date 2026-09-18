@@ -209,6 +209,12 @@ def parse_context_references(message: str) -> list[ContextReference]:
     return refs
 
 
+# C3-14: hard wall-clock bound for the running-loop sync bridge below.
+# Generous: a healthy URL fetch finishes in seconds; this only exists so a
+# hung fetcher/plugin cannot wedge the caller's loop thread indefinitely.
+_SYNC_BRIDGE_TIMEOUT_S = 120.0
+
+
 def preprocess_context_references(
     message: str,
     *,
@@ -230,9 +236,15 @@ def preprocess_context_references(
     except RuntimeError:
         loop = None
     if loop and loop.is_running():
-        import concurrent.futures
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            return pool.submit(asyncio.run, coro).result()
+        # C3-14: this bridge had NO timeout at all — plugin expand() /
+        # url_fetcher could hang the loop thread forever. Hard deadline
+        # (the coroutine itself is auxiliary reference expansion; abandoning
+        # it degrades the refs to warnings, never corrupts anything).
+        from agent.hard_deadline import call_with_deadline
+
+        return call_with_deadline(
+            asyncio.run, coro, timeout_s=_SYNC_BRIDGE_TIMEOUT_S
+        )
     return asyncio.run(coro)
 
 
@@ -412,7 +424,7 @@ def _expand_folder_reference(
     if not path.is_dir():
         return f"{ref.raw}: path is not a folder", None
 
-    listing = _build_folder_listing(path, cwd)
+    listing = _build_folder_listing(path, cwd, allowed_root=allowed_root)
     return None, f"📁 {ref.raw} ({estimate_tokens_rough(listing)} tokens)\n{listing}"
 
 
@@ -583,16 +595,47 @@ def _is_binary_file(path: Path) -> bool:
         path.name.endswith(ext) for ext in (".py", ".md", ".txt", ".json", ".yaml", ".yml", ".toml", ".js", ".ts")
     ):
         return True
-    chunk = path.read_bytes()[:4096]
+    # C3-16: read_bytes()[:4096] materialised the WHOLE file (GB images)
+    # to look at 4KB — open the file and read exactly the probe window.
+    with path.open("rb") as f:
+        chunk = f.read(4096)
     return b"\x00" in chunk
 
 
-def _build_folder_listing(path: Path, cwd: Path, limit: int = 200) -> str:
-    lines = [f"{path.relative_to(cwd)}/"]
-    entries = _iter_visible_entries(path, cwd, limit=limit)
+def _folder_listing_base(path: Path, cwd: Path, allowed_root: Path | None) -> Path:
+    """Base path for relative display/enumeration of a folder reference.
+
+    C3-15: the listing family hard-assumed the referenced folder lives
+    under ``cwd`` (``path.relative_to(cwd)`` / ``cwd / rel``). When
+    allowed_root is WIDER than cwd, a legitimate reference resolves outside
+    cwd, relative_to raised, and the whole reference degraded to a warning.
+    Pick the narrowest base that actually contains the folder: cwd, else
+    allowed_root, else the folder itself (listings render absolute).
+    """
+    try:
+        path.relative_to(cwd)
+        return cwd
+    except ValueError:
+        pass
+    if allowed_root is not None:
+        try:
+            path.relative_to(allowed_root)
+            return allowed_root
+        except ValueError:
+            pass
+    return path
+
+
+def _build_folder_listing(
+    path: Path, cwd: Path, limit: int = 200, allowed_root: Path | None = None
+) -> str:
+    base = _folder_listing_base(path, cwd, allowed_root)
+    header = path.relative_to(base) if base != path else path
+    lines = [f"{header}/"]
+    entries = _iter_visible_entries(path, cwd, limit=limit, allowed_root=allowed_root)
     for entry in entries:
-        rel = entry.relative_to(cwd)
-        indent = "  " * max(len(rel.parts) - len(path.relative_to(cwd).parts) - 1, 0)
+        rel = entry.relative_to(base)
+        indent = "  " * max(len(rel.parts) - len(path.relative_to(base).parts) - 1, 0)
         if entry.is_dir():
             lines.append(f"{indent}- {entry.name}/")
         else:
@@ -603,15 +646,18 @@ def _build_folder_listing(path: Path, cwd: Path, limit: int = 200) -> str:
     return "\n".join(lines)
 
 
-def _iter_visible_entries(path: Path, cwd: Path, limit: int) -> list[Path]:
-    rg_entries = _rg_files(path, cwd, limit=limit)
+def _iter_visible_entries(
+    path: Path, cwd: Path, limit: int, allowed_root: Path | None = None
+) -> list[Path]:
+    base = _folder_listing_base(path, cwd, allowed_root)
+    rg_entries = _rg_files(path, cwd, limit=limit, allowed_root=allowed_root)
     if rg_entries is not None:
         output: list[Path] = []
         seen_dirs: set[Path] = set()
         for rel in rg_entries:
-            full = cwd / rel
+            full = base / rel
             for parent in full.parents:
-                if parent == cwd or parent in seen_dirs or path not in {parent, *parent.parents}:
+                if parent == base or parent in seen_dirs or path not in {parent, *parent.parents}:
                     continue
                 seen_dirs.add(parent)
                 output.append(parent)
@@ -634,12 +680,16 @@ def _iter_visible_entries(path: Path, cwd: Path, limit: int) -> list[Path]:
     return output
 
 
-def _rg_files(path: Path, cwd: Path, limit: int) -> list[Path] | None:
+def _rg_files(
+    path: Path, cwd: Path, limit: int, allowed_root: Path | None = None
+) -> list[Path] | None:
     _popen_kwargs = {"creationflags": windows_hide_flags()} if IS_WINDOWS else {}
+    base = _folder_listing_base(path, cwd, allowed_root)
+    rg_arg = "." if base == path else str(path.relative_to(base))
     try:
         result = subprocess.run(
-            ["rg", "--files", str(path.relative_to(cwd))],
-            cwd=cwd,
+            ["rg", "--files", rg_arg],
+            cwd=base,
             capture_output=True,
             text=True, encoding='utf-8', errors='replace',
             timeout=10,
@@ -697,10 +747,16 @@ def _file_metadata(path: Path) -> str:
     if _is_binary_file(path):
         return f"{path.stat().st_size} bytes"
     try:
-        line_count = path.read_text(encoding="utf-8").count("\n") + 1
+        # C3-16: full-file read_text() just to count newlines streamed the
+        # entire file through memory; count newline bytes chunk-wise
+        # instead (0x0A never appears inside a multi-byte UTF-8 sequence).
+        line_count = 0
+        with path.open("rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                line_count += chunk.count(b"\n")
+        return f"{line_count + 1} lines"
     except Exception:
         return f"{path.stat().st_size} bytes"
-    return f"{line_count} lines"
 
 
 def _code_fence_language(path: Path) -> str:

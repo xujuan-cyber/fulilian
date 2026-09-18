@@ -45,9 +45,12 @@ No more per-source if/elif chain in ``auth_remove_command``.
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass, field
 from typing import Callable, List, Optional
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -257,6 +260,19 @@ def _remove_nous_device_code(provider: str, removed) -> RemovalResult:
     result = RemovalResult()
     if _clear_auth_store_provider(provider):
         result.cleaned.append(f"Cleared {provider} OAuth tokens from auth store")
+    # C3-23: suppress the canonical re-seed source, not just whatever
+    # source the removed entry had — the central dispatcher suppresses
+    # removed.source ("manual:device_code" for manual adds), while the
+    # re-seed gate checks the literal "device_code" key. Without this the
+    # next _seed_from_singletons() resurrected the credential. Mirrors the
+    # codex step below.
+    try:
+        from fulilian_cli.auth import suppress_credential_source
+
+        suppress_credential_source(provider, "device_code")
+        result.hints.append("Suppressed nous device_code source — it will not be re-seeded.")
+    except Exception as exc:  # noqa: BLE001 — suppression is best-effort
+        logger.debug("nous device_code suppression failed: %s", exc)
     return result
 
 
@@ -270,6 +286,16 @@ def _remove_minimax_oauth(provider: str, removed) -> RemovalResult:
     result = RemovalResult()
     if _clear_auth_store_provider(provider):
         result.cleaned.append(f"Cleared {provider} OAuth tokens from auth store")
+    # C3-23: suppress the canonical re-seed key (same rationale as the nous
+    # step) — the central dispatcher only suppresses removed.source, which
+    # can be the manual: variant and miss the literal "oauth" gate.
+    try:
+        from fulilian_cli.auth import suppress_credential_source
+
+        suppress_credential_source(provider, "oauth")
+        result.hints.append("Suppressed minimax-oauth source — it will not be re-seeded.")
+    except Exception as exc:  # noqa: BLE001 — suppression is best-effort
+        logger.debug("minimax oauth suppression failed: %s", exc)
     return result
 
 
@@ -416,6 +442,12 @@ def _register_all_sources() -> None:
     ))
     register(RemovalStep(
         provider="nous", source_id="device_code",
+        # C3-23: entries can appear as the seeded "device_code" or the
+        # manual-add variant "manual:device_code" (credential_pool.py
+        # singleton_sources lists both) — literal source_id matching
+        # missed the manual variant, so its removal found no step and the
+        # re-seed gate resurrected the credential.
+        match_fn=lambda src: src == "device_code" or src.endswith(":device_code"),
         remove_fn=_remove_nous_device_code,
         description="auth.json providers.nous",
     ))
@@ -427,6 +459,8 @@ def _register_all_sources() -> None:
     ))
     register(RemovalStep(
         provider="xai-oauth", source_id="device_code",
+        # C3-23: same manual:* variant coverage as nous/codex above.
+        match_fn=lambda src: src == "device_code" or src.endswith(":device_code"),
         remove_fn=_remove_xai_oauth_device_code,
         description="auth.json providers.xai-oauth",
     ))
@@ -437,6 +471,8 @@ def _register_all_sources() -> None:
     ))
     register(RemovalStep(
         provider="minimax-oauth", source_id="oauth",
+        # C3-23: same manual:* variant coverage as nous/codex above.
+        match_fn=lambda src: src == "oauth" or src.endswith(":oauth"),
         remove_fn=_remove_minimax_oauth,
         description="auth.json providers.minimax-oauth",
     ))

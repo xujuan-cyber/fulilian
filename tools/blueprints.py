@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+import glob
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -154,7 +155,9 @@ def blueprint_spec_for_installed(skill_name: str) -> Optional[BlueprintSpec]:
 
     base = Path(SKILLS_DIR)
     # Skills live at skills/<category>/<name>/SKILL.md or skills/<name>/SKILL.md.
-    candidates = list(base.glob(f"**/{skill_name}/SKILL.md"))
+    # C4-8: skill_name interpolated unescaped — glob metacharacters in the
+    # name made the pattern match arbitrary trees. Escape the segment.
+    candidates = list(base.glob(f"**/{glob.escape(skill_name)}/SKILL.md"))
     for path in candidates:
         try:
             text = path.read_text(encoding="utf-8")

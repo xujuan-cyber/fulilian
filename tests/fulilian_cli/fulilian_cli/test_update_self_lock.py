@@ -35,7 +35,12 @@ import fulilian_cli.main as cli_main
 import fulilian_cli.update_cmd as update_cmd
 from fulilian_cli import _early_recovery
 
-ROOT = Path(__file__).resolve().parents[2]
+# Repo root — parents[3], NOT parents[2]: this file lives at
+# tests/fulilian_cli/fulilian_cli/, so parents[2] is <repo>/tests, which holds
+# a shadowing ``fulilian_cli/`` directory with no ``__init__.py``. A subprocess
+# run with that cwd resolves ``fulilian_cli`` as a namespace package and
+# ``from fulilian_cli import __version__`` fails ("unknown location").
+ROOT = Path(__file__).resolve().parents[3]
 
 
 # ---------------------------------------------------------------------------

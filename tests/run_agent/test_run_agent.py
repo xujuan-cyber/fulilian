@@ -2728,7 +2728,10 @@ class TestHandleMaxIterations:
             result = agent._handle_max_iterations(messages, 60)
         assert isinstance(result, str)
         assert "error" in result.lower()
-        assert "API down" in result
+        # C3-5: the raw exception text used to be embedded in the
+        # user-facing response (gateway/IM info disclosure); the user gets
+        # a generic line, the detail lives in the log.
+        assert "API down" not in result
         complete_logical.assert_called_once()
         assert complete_logical.call_args.kwargs == {"outcome": "failed"}
 

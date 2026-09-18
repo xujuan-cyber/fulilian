@@ -2163,9 +2163,14 @@ def _dump_subagent_timeout_diagnostic(
         ):
             try:
                 val = getattr(child, attr, None)
-                # Redact api_key-shaped values defensively
-                if isinstance(val, str) and attr == "base_url":
-                    pass
+                # C4-37: the guard here was a literal `pass` — base_url
+                # (which can embed credentials for key-in-URL endpoints)
+                # went UNREDACTED into the diagnostic log. Mask the query
+                # string; keep the host for diagnosability.
+                if isinstance(val, str) and attr == "base_url" and val:
+                    from agent.redact import redact_sensitive_text as _rsr
+
+                    val = _rsr(val, force=True)
                 _w(f"  {attr}: {val!r}")
             except Exception:
                 _w(f"  {attr}: <unreadable>")
@@ -2972,7 +2977,7 @@ def _run_single_child(
                 _first_text, _output_schema
             )
             if (
-                not _schema_valid
+                _schema_valid is False
                 and _first_text.strip()
                 and not result.get("interrupted", False)
             ):
@@ -3168,7 +3173,9 @@ def _run_single_child(
         # T1-24: schema-validation outcome — emitted ONLY when a schema was
         # requested, so legacy (schema-less) payloads keep their exact shape.
         if isinstance(_output_schema, dict):
-            entry["schema_valid"] = bool(_schema_valid)
+            # C4-39: None (validation unavailable) must stay None, not be
+            # coerced to a false "valid".
+            entry["schema_valid"] = _schema_valid
             if _schema_retries:
                 entry["schema_retries"] = _schema_retries
             if not _schema_valid and _schema_errors:
@@ -4028,6 +4035,16 @@ def delegate_task(
                                 }
                             results.append(entry)
                             completed_count += 1
+                        # C4-35: "abandon the rest" must actually bail — the
+                        # with-exit shutdown(wait=True) joined every worker
+                        # thread, blocking the interrupt bail until wedged
+                        # children finished. Cancel queued futures and clear
+                        # the thread registry so that join is empty. Running
+                        # workers are daemon AND unregistered from
+                        # _threads_queues (daemon_pool), so they block
+                        # neither the parent return nor interpreter exit.
+                        executor.shutdown(wait=False, cancel_futures=True)
+                        executor._threads.clear()
                         break
 
                     from concurrent.futures import wait as _cf_wait, FIRST_COMPLETED

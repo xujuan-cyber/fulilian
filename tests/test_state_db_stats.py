@@ -257,3 +257,44 @@ def test_render_handles_all_none_stats():
     empty["fts_tables"] = None
     lines = _render_state_db_stats(empty, holders=None)
     assert isinstance(lines, list)  # must not raise
+
+
+# ── C1-1 second half: durable PK-rebuild failure counter ────────────────
+
+
+def test_collect_stats_exposes_pk_rebuild_failures(populated_db):
+    """The counter key surfaces in the read-only snapshot once recorded."""
+    import sqlite3 as _sq
+
+    with _sq.connect(populated_db) as conn:
+        conn.execute(
+            "INSERT INTO state_meta (key, value) VALUES "
+            "('pk_rebuild_failures', '3')"
+        )
+    stats = collect_state_db_stats(populated_db)
+    assert stats["pk_rebuild_failures"] == 3
+
+
+def test_collect_stats_pk_rebuild_failures_none_when_healthy(populated_db):
+    """No failure recorded → the key is present but None (absent marker)."""
+    stats = collect_state_db_stats(populated_db)
+    assert stats["pk_rebuild_failures"] is None
+
+
+def test_render_warns_on_pk_rebuild_failures():
+    from fulilian_cli.doctor import _render_state_db_stats
+
+    lines = _render_state_db_stats(
+        _base_stats(pk_rebuild_failures=2), holders=None
+    )
+    warns = [line for line in lines if line[0] == "warn"]
+    blob = " ".join(" ".join(str(p) for p in line) for line in warns)
+    assert "pk rebuild failed" in blob.lower()
+
+
+def test_render_no_pk_warning_when_none():
+    from fulilian_cli.doctor import _render_state_db_stats
+
+    lines = _render_state_db_stats(_base_stats(), holders=None)
+    blob = " ".join(" ".join(str(p) for p in line) for line in lines)
+    assert "pk rebuild" not in blob.lower()

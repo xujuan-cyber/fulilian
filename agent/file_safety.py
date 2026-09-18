@@ -164,11 +164,24 @@ def _classify_write_denial(path: str) -> Optional[str]:
         # generic file tools rewrite state.db or legacy JSON snapshots can
         # falsify conversation history and invalidate resume/compression state.
         try:
-            if resolved == os.path.realpath(os.path.join(base_real, "state.db")):
-                return True
+            # C3-31/C4-40: this branch returned True — violating the
+            # Optional[str] contract ('credential' / 'safe_root' / None).
+            # Return the proper class so get_write_denied_error can render
+            # the app-state message.
+            # C3-33: the protection covered only state.db + sessions/ —
+            # knowledge.db / kanban.db / verification_evidence.db were
+            # writable via write_file/patch. Guard every application DB.
+            for _db_name in (
+                "state.db",
+                "knowledge.db",
+                "kanban.db",
+                "verification_evidence.db",
+            ):
+                if resolved == os.path.realpath(os.path.join(base_real, _db_name)):
+                    return "app_state"
             sessions_real = os.path.realpath(os.path.join(base_real, "sessions"))
             if resolved == sessions_real or resolved.startswith(sessions_real + os.sep):
-                return True
+                return "app_state"
         except Exception:
             pass
         try:
@@ -212,6 +225,14 @@ def get_write_denied_error(path: str, *, verb: str = "Write") -> Optional[str]:
         return (
             f"{verb} denied: '{path}' is outside FULILIAN_WRITE_SAFE_ROOT "
             f"({roots_display}). Unset the variable or add this path's directory prefix."
+        )
+    if denial == "app_state":
+        # C3-31/C4-40: dedicated message — state.db/sessions are app-owned
+        # history, not credentials; the generic text misled users.
+        return (
+            f"{verb} denied: '{path}' is application-owned state (session "
+            "transcript / state.db). Rewriting it can falsify conversation "
+            "history and break resume/compression."
         )
     return f"{verb} denied: '{path}' is a protected system/credential file."
 
@@ -335,6 +356,9 @@ def get_read_block_error(path: str) -> Optional[str]:
         # to avoid re-fetching across back-to-back CLI invocations. The file
         # was introduced by #31968 but not added to this guard.
         os.path.join("cache", "bws_cache.json"),
+        # C3-32: GitHub CLI token written by the gh auth flow (0600 on disk,
+        # verified present) — same exposure class as the files above.
+        os.path.join("tokens", "gh-token"),
     )
     for hd in fulilian_dirs:
         for name in credential_file_names:

@@ -2779,7 +2779,18 @@ def try_activate_fallback(agent, reason: "FailoverReason | None" = None) -> bool
         )
 
         # LM Studio: preload before probing the fallback's context length.
-        agent._ensure_lmstudio_runtime_loaded()
+        # C3-6: a post-swap failure used to propagate to the chain-advancing
+        # handler below, leaving the agent half-swapped with
+        # _fallback_activated=True while the NEXT chain entry overwrote the
+        # identity again. Post-swap refinements degrade locally instead of
+        # advancing the chain.
+        try:
+            agent._ensure_lmstudio_runtime_loaded()
+        except Exception as _lm_err:
+            logger.warning(
+                "Fallback %s: LM Studio preload failed (continuing with the "
+                "fallback active): %s", fb_model, _lm_err,
+            )
 
         # Update context compressor limits for the fallback model.
         # Without this, compression decisions use the primary model's
@@ -2789,26 +2800,36 @@ def try_activate_fallback(agent, reason: "FailoverReason | None" = None) -> bool
         # (model.context_length in config.yaml) is respected — without this,
         # the fallback activation drops to 128K even when config says 204800.
         if hasattr(agent, 'context_compressor') and agent.context_compressor:
-            from agent.model_metadata import get_model_context_length
-            # ``agent.api_key`` may be callable (Entra ID); the
-            # context-length resolver expects a string for live
-            # probes. Foundry typically resolves via config/static
-            # catalogs anyway, so coerce defensively.
-            _fb_ctx_api_key = agent.api_key if isinstance(agent.api_key, str) else ""
-            fb_context_length = get_model_context_length(
-                agent.model, base_url=agent.base_url,
-                api_key=_fb_ctx_api_key, provider=agent.provider,
-                config_context_length=getattr(agent, "_config_context_length", None),
-                custom_providers=getattr(agent, "_custom_providers", None),
-            )
-            agent.context_compressor.update_model(
-                model=agent.model,
-                context_length=fb_context_length,
-                base_url=agent.base_url,
-                api_key=getattr(agent, "api_key", ""),  # callable preserved → call_llm
-                provider=agent.provider,
-                api_mode=agent.api_mode,
-            )
+            # C3-6: wrap the whole post-swap compressor refinement — the
+            # live context-length probe can raise, and letting it reach the
+            # chain-advancing handler left a half-swapped agent behind.
+            try:
+                from agent.model_metadata import get_model_context_length
+                # ``agent.api_key`` may be callable (Entra ID); the
+                # context-length resolver expects a string for live
+                # probes. Foundry typically resolves via config/static
+                # catalogs anyway, so coerce defensively.
+                _fb_ctx_api_key = agent.api_key if isinstance(agent.api_key, str) else ""
+                fb_context_length = get_model_context_length(
+                    agent.model, base_url=agent.base_url,
+                    api_key=_fb_ctx_api_key, provider=agent.provider,
+                    config_context_length=getattr(agent, "_config_context_length", None),
+                    custom_providers=getattr(agent, "_custom_providers", None),
+                )
+                agent.context_compressor.update_model(
+                    model=agent.model,
+                    context_length=fb_context_length,
+                    base_url=agent.base_url,
+                    api_key=getattr(agent, "api_key", ""),  # callable preserved → call_llm
+                    provider=agent.provider,
+                    api_mode=agent.api_mode,
+                )
+            except Exception as _ctx_err:
+                logger.warning(
+                    "Fallback %s: context-length re-resolution failed "
+                    "(compressor keeps current limits until the next "
+                    "update_model): %s", fb_model, _ctx_err,
+                )
 
         # Re-resolve reasoning_config for the new fallback model (Closes #21256).
         # Shared chokepoint: per-model override > global reasoning_effort
@@ -2887,12 +2908,11 @@ def handle_max_iterations(agent, messages: list, api_call_count: int) -> str:
     else:
         agent._safe_print(warning)
 
-    summary_request = (
-        "You've reached the maximum number of tool-calling iterations allowed. "
-        "Please provide a final response summarizing what you've found and accomplished so far, "
-        "without calling any more tools."
-    )
-
+    # C3-7: an inline summary_request used to be assigned here and then
+    # unconditionally overwritten by MAX_ITERATIONS_SUMMARY_REQUEST below —
+    # dead code that invited drift between the two texts. The shared
+    # constant is the single source of truth (compaction recognizers match
+    # on it; see _is_synthetic_compression_user_turn).
     summary_api_request_id = f"iteration-summary:{uuid.uuid4()}"
     summary_call_outcome = "failed"
 
@@ -3220,7 +3240,14 @@ def handle_max_iterations(agent, messages: list, api_call_count: int) -> str:
 
     except Exception as e:
         logger.warning("Failed to get summary response: %s", e)
-        final_response = f"I reached the maximum iterations ({agent.max_iterations}) but couldn't summarize. Error: {str(e)}"
+        # C3-5: raw str(e) went straight into the user-facing final_response
+        # (gateway/IM info disclosure — provider errors carry URLs, internal
+        # hostnames, occasionally key fragments). Full detail stays in the
+        # log; the user gets a generic line.
+        final_response = (
+            f"Error: I reached the maximum iterations ({agent.max_iterations}) "
+            "but couldn't summarize. See agent.log for details."
+        )
     finally:
         from agent import relay_llm
 
@@ -3493,7 +3520,8 @@ def interruptible_streaming_api_call(agent, api_kwargs: dict, *, on_first_delta=
 
                 def _finalize_bedrock_stream():
                     return stream_converse_with_callbacks(
-                        {"stream": list(intercepted_events)}
+                        {"stream": list(intercepted_events)},
+                        model=str(getattr(agent, "model", "") or ""),
                     )
 
                 def _bedrock_stream_created(_stream: Any) -> None:
@@ -3542,6 +3570,7 @@ def interruptible_streaming_api_call(agent, api_kwargs: dict, *, on_first_delta=
                 )
                 streamed_response = stream_converse_with_callbacks(
                     {"stream": stream},
+                    model=str(getattr(agent, "model", "") or ""),
                     on_text_delta=_on_text if agent._has_stream_consumers() else None,
                     on_tool_start=_on_tool,
                     on_reasoning_delta=_on_reasoning

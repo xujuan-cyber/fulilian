@@ -38,6 +38,12 @@ import hashlib
 import json
 import logging
 logger = logging.getLogger(__name__)
+
+# C2-13: cap for the per-agent anthropic image-fallback note cache. Values
+# are full vision descriptions (KBs each), so the cap bounds a long image-
+# heavy session to a few hundred KB instead of growing without limit.
+_ANTHROPIC_IMAGE_FALLBACK_CACHE_MAX = 64
+
 import os
 import re
 import sys
@@ -143,6 +149,7 @@ from model_tools import (
 )
 from tools.terminal_tool import cleanup_vm, get_active_env
 from tools.interrupt import set_interrupt as _set_interrupt
+from tools.interrupt import is_interrupted as _is_interrupted
 from tools.browser_tool import cleanup_browser
 
 
@@ -2806,10 +2813,17 @@ class AIAgent:
                         return redact_sensitive_text(f"{prefix}{str(payload['message'])[:300]}")
                 return redact_sensitive_text(f"{prefix}{snippet[:300]}")
 
-        # Fallback: truncate the raw string but give more room than 200 chars
+        # Fallback: truncate the raw string but give more room than 200 chars.
+        # Redact here too — every branch above routes through
+        # redact_sensitive_text, and this last resort is the one that still
+        # holds the *raw* body (it runs precisely when JSON parsing failed),
+        # so an unparsed credential is exactly what it would otherwise leak
+        # into the status line and gateway messages.
         status_code = getattr(error, "status_code", None)
         prefix = f"HTTP {status_code}: " if status_code else ""
-        return AIAgent._decorate_xai_entitlement_error(f"{prefix}{raw[:500]}")
+        return AIAgent._decorate_xai_entitlement_error(
+            redact_sensitive_text(f"{prefix}{raw[:500]}")
+        )
 
     def _mask_api_key_for_logs(self, key: Any) -> Optional[str]:
         # Azure Foundry Entra ID bearer providers are callables — never
@@ -3428,7 +3442,17 @@ class AIAgent:
             except Exception as e:
                 logger.debug("Failed to propagate interrupt to child agent: %s", e)
         if not self.quiet_mode:
-            print("\n⚡ Interrupt requested" + (f": '{message[:40]}...'" if message and len(message) > 40 else f": '{message}'" if message else ""))
+            # _safe_print, not print: in headless runs (systemd/Docker/nohup)
+            # a raw print on a closed stdout raises OSError *inside the
+            # interrupt path*, turning a user interrupt into a crash.
+            self._safe_print(
+                "\n⚡ Interrupt requested"
+                + (
+                    f": '{message[:40]}...'"
+                    if message and len(message) > 40
+                    else f": '{message}'" if message else ""
+                )
+            )
 
     def hard_interrupt(
         self,
@@ -4778,6 +4802,16 @@ class AIAgent:
         """
         from tools.todo_tool import MAX_TODO_RESULT_CHARS
 
+        # C2-3: snapshot the current thread's interrupt bit before hydration.
+        # The trailing clear below exists to wipe a bit that was ALREADY set
+        # when hydration started (stale leftover from a prior turn on this
+        # thread). Unconditionally clearing also ate a legitimate interrupt
+        # that arrived DURING hydration (the history scan + todo replay can
+        # take real time), silently losing the user's stop request — so only
+        # clear when the bit predates hydration; anything set during
+        # hydration survives.
+        stale_interrupt_at_entry = _is_interrupted()
+
         # Walk history backwards to find the most recent todo tool response
         last_todo_response = None
         for idx in range(len(history) - 1, -1, -1):
@@ -4814,7 +4848,8 @@ class AIAgent:
             self._todo_store.write(last_todo_response, merge=False)
             if not self.quiet_mode:
                 self._vprint(f"{self.log_prefix}📋 Restored {len(last_todo_response)} todo item(s) from history")
-        _set_interrupt(False)
+        if stale_interrupt_at_entry:
+            _set_interrupt(False)
 
     @classmethod
     def _tool_response_matches_todo_call(
@@ -7141,8 +7176,11 @@ class AIAgent:
 
     def _describe_image_for_anthropic_fallback(self, image_url: str, role: str) -> str:
         cache_key = hashlib.sha256(str(image_url or "").encode("utf-8")).hexdigest()
-        cached = self._anthropic_image_fallback_cache.get(cache_key)
-        if cached:
+        # C2-13: refresh recency by re-inserting (works for both dict and
+        # OrderedDict caches — the plain-dict case is what tests inject).
+        cached = self._anthropic_image_fallback_cache.pop(cache_key, None)
+        if cached is not None:
+            self._anthropic_image_fallback_cache[cache_key] = cached
             return cached
 
         role_label = {
@@ -7157,11 +7195,17 @@ class AIAgent:
 
         vision_source = str(image_url or "")
         cleanup_path: Optional[Path] = None
-        if vision_source.startswith("data:"):
-            vision_source, cleanup_path = self._materialize_data_url_for_vision(vision_source)
 
         description = ""
         try:
+            # Materialisation can raise on a malformed data: URL (bad base64
+            # padding -> binascii.Error). It used to sit OUTSIDE this try, so
+            # one bad URL failed the entire turn instead of degrading to a
+            # note like every other vision failure on this path.
+            if vision_source.startswith("data:"):
+                vision_source, cleanup_path = self._materialize_data_url_for_vision(
+                    vision_source
+                )
             from tools.vision_tools import vision_analyze_tool
 
             result_json = asyncio.run(
@@ -7187,7 +7231,15 @@ class AIAgent:
                 f"\n[If you need a closer look, use vision_analyze with image_url: {vision_source}]"
             )
 
-        self._anthropic_image_fallback_cache[cache_key] = note
+        # C2-13: the cache is per-agent (per gateway session) but previously
+        # unbounded — a long session walking many image rows grew it without
+        # limit (values are full vision descriptions). Evict oldest-inserted
+        # entries past the cap; the get-path re-insert above makes this
+        # recency-aware.
+        cache = self._anthropic_image_fallback_cache
+        while len(cache) >= _ANTHROPIC_IMAGE_FALLBACK_CACHE_MAX:
+            cache.pop(next(iter(cache)))
+        cache[cache_key] = note
         return note
 
     def _model_supports_vision(self) -> bool:
@@ -9033,7 +9085,18 @@ class AIAgent:
                     # Clear any interrupt the refresher may have fired between
                     # the inner stop and this join. Must run AFTER join so a
                     # late interrupt does not survive into the next turn.
+                    # C2-11: a timed-out join means the refresher could still
+                    # fire one more interrupt right after the clear below.
+                    # Re-join briefly and clear again so the final clear is
+                    # sampled after the refresher is (very likely) gone; the
+                    # activity-lock gate covers the remaining window.
                     _clear_durable_turn_lease_interrupt()
+                    if (
+                        durable_turn_lease_thread is not None
+                        and durable_turn_lease_thread.is_alive()
+                    ):
+                        durable_turn_lease_thread.join(timeout=0.5)
+                        _clear_durable_turn_lease_interrupt()
                     if durable_turn_lease is not None:
                         try:
                             _turn_db.release_session_turn_lease(
@@ -9127,6 +9190,12 @@ def _strip_skill_frontmatter(text: str) -> str:
 
     找不到第二个分隔符时返回原文（解析失败比吞掉内容安全，至少可读）。
     """
+    # Require the document to actually OPEN with the delimiter. Without this,
+    # a body that merely contains two ``---`` lines (a Markdown horizontal
+    # rule, a diff, a yaml block further down) had its opening content sliced
+    # off and the middle of the file returned as "the body".
+    if not text.lstrip().startswith("---"):
+        return text
     parts = text.split("---", 2)
     if len(parts) >= 3:
         return parts[2]
@@ -9283,7 +9352,12 @@ def _cap_ctf_compression_threshold(agent) -> None:
     )
     if hasattr(compressor, "_apply_threshold_tokens_cap"):
         compressor._apply_threshold_tokens_cap()
-    print(f"🧩 CTF mode: compression threshold capped {current_cfg:.2f} → {ctf_cap:.2f}")
+    # C2-12: print() polluted batch-runner stdout (parsed as tool/model
+    # output); route through the agent logger like every other runtime note.
+    logger.info(
+        "🧩 CTF mode: compression threshold capped %.2f → %.2f",
+        current_cfg, ctf_cap,
+    )
 
 
 def _run_solver_turn(
@@ -9348,6 +9422,16 @@ def _run_solver_turn(
             "result": {"completed": False, "api_calls": 0, "messages": [], "final_response": ""},
             "agent": None,
         }
+    except Exception as e:
+        # C2-8: init can raise beyond RuntimeError (config/type errors from
+        # provider plumbing). Letting it escape broke main()'s M-2 exit-code
+        # contract — the caller read a traceback exit instead of a clean
+        # agent=None → completed=False → exit 1.
+        print(f"❌{label} Failed to initialize agent: {type(e).__name__}: {e}")
+        return {
+            "result": {"completed": False, "api_calls": 0, "messages": [], "final_response": ""},
+            "agent": None,
+        }
 
     # F4-006：CTF 模式上下文压缩更激进（长解题轨迹）——阈值钳到 ≤0.6。
     # 全局默认 0.50 本就低于 0.6（此时不生效）；用户把 threshold 调高时
@@ -9361,7 +9445,22 @@ def _run_solver_turn(
     print(f"\n📝{label} Query: {query[:120]}{'...' if len(query) > 120 else ''}")
     print("\n" + "=" * 50)
 
-    result = agent.run_conversation(query)
+    try:
+        result = agent.run_conversation(query)
+    except Exception as e:
+        # C2-8: an unexpected exception escaping the conversation loop used
+        # to propagate past main()'s M-2 exit-code contract (fire re-raised
+        # → traceback exit instead of completed=False → exit 1). Degrade to
+        # the same stub shape the init-failure path returns; the traceback
+        # goes to the agent logger, stdout stays machine-readable.
+        logger.exception("run_conversation crashed: %s", e)
+        print(f"❌{label} Conversation crashed: {type(e).__name__}: {e}")
+        result = {
+            "completed": False,
+            "api_calls": 0,
+            "messages": [],
+            "final_response": "",
+        }
 
     # F2-004 修订（2026-09-04）：CTF 模式把精确 token 消耗写入
     # ``$FULILIAN_CTF_WORK_DIR/usage.json``（solver_worker 与单题 solve 路径
@@ -9416,7 +9515,8 @@ def main(
 
     Args:
         query (str): Natural language query for the agent. Defaults to Python 3.13 example.
-        model (str): Model name to use (OpenRouter format: provider/model). Defaults to anthropic/claude-sonnet-4.6.
+        model (str): Model name to use (OpenRouter format: provider/model). Empty by default — the
+            agent then resolves the model from config / environment.
         api_key (str): API key for authentication. Uses OPENROUTER_API_KEY env var if not provided.
         base_url (str): Base URL for the model API. Defaults to https://openrouter.ai/api/v1
         max_turns (int): Maximum number of API call iterations. 10 for normal mode, 30 for CTF mode.
@@ -9586,9 +9686,24 @@ def main(
         plan_result = plan_out["result"]
         plan_agent = plan_out["agent"]
 
+        # A planner that failed, was interrupted, or returned nothing
+        # leaves no plan. Injecting the plan header regardless made the
+        # executor run blind while its prompt claimed a plan existed.
+        plan_text = (plan_result.get("final_response") or "").strip()
+        if plan_text:
+            exec_query = (
+                user_query + f"\n\n已规划：{plan_text}\n\n执行规划。"
+            )
+        else:
+            print(
+                "\n⚠️  Architect planning produced no plan; executing the "
+                "raw query without one."
+            )
+            exec_query = user_query
+
         exec_model = executor_model or model
         exec_out = _run_solver_turn(
-            query=user_query + f"\n\n已规划：{plan_result.get('final_response', '')}\n\n执行规划。",
+            query=exec_query,
             model=exec_model,
             max_turns=max_turns,
             base_url=base_url, api_key=api_key,
@@ -9599,7 +9714,16 @@ def main(
             ctf_prompt=ctf_prompt, phase_label="[EXECUTE]",
         )
         result = exec_out["result"]
-        agent = exec_out["agent"] or plan_agent
+        exec_agent = exec_out["agent"]
+        # C2-9: when the executor produced its own agent, the planner's
+        # agent is no longer referenced anywhere — close it so its provider
+        # client / executor threads don't leak for the rest of the process.
+        if plan_agent is not None and exec_agent is not None and exec_agent is not plan_agent:
+            try:
+                plan_agent.close()
+            except Exception:
+                pass
+        agent = exec_agent or plan_agent
 
     # ── Single-turn mode (default) ──
     else:
@@ -9618,7 +9742,11 @@ def main(
         agent = out["agent"]
     
     # Save sample trajectory to UUID-named file if requested
-    if save_sample:
+    # C2-9: skip when there is no result-producing agent or the message list
+    # is empty — in architect mode a failed executor falls back to
+    # plan_agent while `result` carries the executor's stub, and converting
+    # that empty list under the fallback agent produced a garbage sample.
+    if save_sample and agent is not None and result.get("messages"):
         sample_id = str(uuid.uuid4())[:8]
         sample_filename = f"sample_{sample_id}.json"
         

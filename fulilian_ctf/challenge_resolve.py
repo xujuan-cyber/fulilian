@@ -10,8 +10,8 @@ agent，agent 在文件系统里乱找十几轮 API 调用白烧 token。本模�
 输入：
 
 1. 存在的目录（裸挑战目录 / 含 challenge.json / 平台清单目录）→ 该目录
-2. 平台清单文件（``registry.load_challenges`` 可解析出挑战，如 ctfd sync 的
-   ``manifest.json``）→ 条目的工作目录
+2. 清单文件（``registry.load_challenges`` 可解析出挑战，如 ``manifest.json``）
+   → 条目的工作目录
 3. 历史轨迹 ``FULILIAN_HOME/traces/<id>.json``（``record_solve_outcome`` 写入）
    → solve 将按既有机制新建的 ``cwd/<id>`` 目录
 4. 相对裸 id（如 ``web-01``）→ 既有机制：在 cwd 下建同名工作目录，放行
@@ -114,7 +114,7 @@ def _resolve(challenge_id: str) -> Optional[str]:
         project = challenge_json_to_project(challenge_json)
         return solve_work_dir_for(project, challenge_id)
 
-    # 2) 平台清单文件 / 其它 load_challenges 可解析形态（ctfd sync 产物等）
+    # 2) 清单文件 / 其它 load_challenges 可解析形态
     from fulilian_ctf.registry import challenge_to_project, load_challenges
 
     try:

@@ -99,7 +99,15 @@ _STREAM_DROP_FRAGMENTS = (
     "incomplete chunked read",
     "connection broken",
     "stream ended prematurely",
-    "sse",
+    # C3-30: the bare "sse" fragment matched inside assert/assess/possess,
+    # misclassifying unrelated failures as stream_drop. Require the
+    # space-delimited token (or a leading boundary) instead.
+    " sse ",
+    " sse.",
+    " sse:",
+    "(sse)",
+    "sse connection",
+    "sse stream",
     "mid-stream",
 )
 

@@ -675,12 +675,18 @@ class TestExecuteCodeEdgeCases(unittest.TestCase):
 
 
     @unittest.skipIf(sys.platform == "win32", "UDS not available on Windows")
-    def test_nonoverlapping_tools_fallback(self):
-        """When enabled_tools has no overlap with SANDBOX_ALLOWED_TOOLS,
-        should fall back to all allowed tools."""
+    def test_nonoverlapping_tools_fail_closed(self):
+        """C4-22: when the session's enabled_tools don't overlap
+        SANDBOX_ALLOWED_TOOLS, the sandbox must fail CLOSED (no tool stubs
+        — importing one must fail), NOT escalate to the full whitelist.
+        The old "fall back to all allowed tools" behavior let a session
+        that explicitly disabled terminal/web call them via execute_code."""
         code = (
-            "from fulilian_tools import terminal\n"
-            "print('fallback ok')\n"
+            "try:\n"
+            "    from fulilian_tools import terminal\n"
+            "    print('ESCALATED: terminal import succeeded')\n"
+            "except ImportError:\n"
+            "    print('fail-closed ok')\n"
         )
         with patch("model_tools.handle_function_call",
                     return_value=json.dumps({"ok": True})):
@@ -689,7 +695,8 @@ class TestExecuteCodeEdgeCases(unittest.TestCase):
                 enabled_tools=["vision_analyze", "browser_snapshot"],
             ))
         self.assertEqual(result["status"], "success")
-        self.assertIn("fallback ok", result["output"])
+        self.assertIn("fail-closed ok", result["output"])
+        self.assertNotIn("ESCALATED", result["output"])
 
 
 # ---------------------------------------------------------------------------
