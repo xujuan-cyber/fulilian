@@ -153,6 +153,13 @@ def execute(
             defer_logical_completion=defer_logical_completion,
         ):
             return raw_response["value"]
+        # C3-47: relay-side failures used to leave the logical call record
+        # unclosed entirely (the stream paths always complete theirs) — an
+        # asymmetry that made non-stream failures invisible to outcome
+        # accounting. Record the failure unless deferred (the caller then
+        # owns the completion, mirroring the success branch above).
+        if not defer_logical_completion:
+            _complete_logical(logical, outcome="failure")
         raise
 
     if not defer_logical_completion:
@@ -246,6 +253,13 @@ async def execute_async(
             defer_logical_completion=defer_logical_completion,
         ):
             return raw_response["value"]
+        # C3-47: relay-side failures used to leave the logical call record
+        # unclosed entirely (the stream paths always complete theirs) — an
+        # asymmetry that made non-stream failures invisible to outcome
+        # accounting. Record the failure unless deferred (the caller then
+        # owns the completion, mirroring the success branch above).
+        if not defer_logical_completion:
+            _complete_logical(logical, outcome="failure")
         raise
 
     if not defer_logical_completion:
