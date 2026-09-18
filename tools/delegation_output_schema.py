@@ -120,8 +120,11 @@ def validate_output(
     try:
         from jsonschema.validators import validator_for  # type: ignore[import-untyped]
     except ImportError:
-        logger.debug("jsonschema unavailable; accepting parsed JSON without validation")
-        return True, []
+        # C4-39: (True, []) made the parent-facing schema_valid field read
+        # True with NO validation having run. Return None = "not validated"
+        # so the consumer stamps an honest null instead of a lie.
+        logger.debug("jsonschema unavailable; output schema validation skipped")
+        return None, ["jsonschema package not installed — validation skipped"]
     validator = validator_for(schema)(schema)
     errors = sorted(validator.iter_errors(parsed), key=lambda e: list(e.absolute_path))
     if not errors:
