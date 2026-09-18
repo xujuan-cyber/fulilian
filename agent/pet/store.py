@@ -334,7 +334,11 @@ def thumbnail_png(slug: str, *, source_url: str = "", timeout: float = 30.0) -> 
     break a direct ``<img src=cdn>`` and lets the result ride the authenticated
     gateway as a same-origin data URL.
     """
-    slug = slug.strip()
+    # C3-78: this was the ONLY filesystem entry in the module that skipped
+    # _safe_slug — a raw client-reachable slug with `../` could read any
+    # same-suffix *.png (and write into ../ dirs) relative to .thumbs.
+    # Normalize like every other entry; empty (rejected) → placeholder.
+    slug = _safe_slug(slug)
     if not slug:
         return None
 
