@@ -1165,6 +1165,14 @@ def resolve_skill_config_values(
         if isinstance(value, str) and ("~" in value or "${" in value):
             value = os.path.expanduser(os.path.expandvars(value))
 
+        # C3-56: resolved values are injected verbatim into conversation and
+        # traces; a user-stored credential in skills.config.<key> used to
+        # flow through raw. Redact credential-shaped strings at the source.
+        if isinstance(value, str) and value:
+            from agent.redact import redact_sensitive_text
+
+            value = redact_sensitive_text(value)
+
         resolved[logical_key] = value
 
     return resolved
@@ -1206,7 +1214,22 @@ def iter_skill_index_files(skills_dir: Path, filename: str):
     active_org = read_active_org_id(skills_dir)
     org_root = os.path.join(skills_dir_str, ORG_MIRROR_DIR_NAME)
     matches: list[str] = []
+    # C3-57: followlinks=True + a symlink cycle (skill link pointing back at
+    # an ancestor) made os.walk revisit directories forever — startup hang +
+    # unbounded memory. Prune any directory whose real path was already
+    # walked.
+    visited_real_dirs: set[str] = set()
     for root, dirs, files in os.walk(skills_dir_str, followlinks=True):
+        real_root = os.path.realpath(root)
+        if real_root in visited_real_dirs:
+            dirs[:] = []
+            continue
+        visited_real_dirs.add(real_root)
+        dirs[:] = [
+            d
+            for d in dirs
+            if os.path.realpath(os.path.join(root, d)) not in visited_real_dirs
+        ]
         has_skill_md = "SKILL.md" in files
         if root == skills_dir_str and ORG_MIRROR_DIR_NAME in dirs and active_org is None:
             dirs.remove(ORG_MIRROR_DIR_NAME)

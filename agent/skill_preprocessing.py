@@ -68,36 +68,58 @@ def run_inline_shell(command: str, cwd: Path | None, timeout: int) -> str:
     Failures return a short ``[inline-shell error: ...]`` marker instead of
     raising, so one bad snippet can't wreck the whole skill message.
     """
+    # C3-55: subprocess.run(timeout=...) kills only the direct bash child —
+    # grandchildren (make, npm, ...) keep running and can hold the pipes
+    # open, wedging the reader. Spawn in a fresh session/process group and
+    # on timeout terminate the WHOLE tree via agent.deadline
+    # .kill_process_tree (mirrors shell_hooks.py's tree kill).
     _popen_kwargs = {"creationflags": windows_hide_flags()} if IS_WINDOWS else {}
+    popen_kwargs: dict = dict(
+        cwd=str(cwd) if cwd else None,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        stdin=subprocess.DEVNULL,
+        text=True, encoding='utf-8', errors='replace',
+        **_popen_kwargs,
+    )
+    if not IS_WINDOWS:
+        popen_kwargs["start_new_session"] = True
     try:
-        completed = subprocess.run(
-            ["bash", "-c", command],
-            cwd=str(cwd) if cwd else None,
-            capture_output=True,
-            text=True, encoding='utf-8', errors='replace',
-            timeout=max(1, int(timeout)),
-            check=False,
-            stdin=subprocess.DEVNULL,
-            **_popen_kwargs,
-        )
-    except subprocess.TimeoutExpired:
-        return f"[inline-shell timeout after {timeout}s: {command}]"
+        proc = subprocess.Popen(["bash", "-c", command], **popen_kwargs)
     except FileNotFoundError:
         return "[inline-shell error: bash not found]"
+    except Exception as exc:
+        return f"[inline-shell error: {exc}]"
+
+    try:
+        stdout_text, stderr_text = proc.communicate(timeout=max(1, int(timeout)))
+    except subprocess.TimeoutExpired:
+        try:
+            from agent.deadline import kill_process_tree
+
+            kill_process_tree(proc.pid)
+        except Exception as _kill_err:  # noqa: BLE001 — kill is best-effort
+            logger.debug("inline-shell tree kill failed: %s", _kill_err)
+            proc.kill()
+        try:
+            proc.communicate(timeout=5)
+        except Exception:  # noqa: BLE001 — reaper gave up; move on
+            pass
+        return f"[inline-shell timeout after {timeout}s: {command}]"
     except RuntimeError as exc:
         # tests/conftest.py installs a live-system guard that blocks real
-        # os.kill on out-of-tree PIDs. subprocess.run(timeout=...) may trip
-        # that guard while trying to clean up the timed-out shell; treat that
-        # as the same timeout outcome instead of surfacing the guard error.
+        # os.kill on out-of-tree PIDs. The cleanup kill may trip that guard;
+        # treat that as the same timeout outcome instead of surfacing the
+        # guard error.
         if "live-system guard: blocked os.kill" in str(exc):
             return f"[inline-shell timeout after {timeout}s: {command}]"
         return f"[inline-shell error: {exc}]"
     except Exception as exc:
         return f"[inline-shell error: {exc}]"
 
-    output = (completed.stdout or "").rstrip("\n")
-    if not output and completed.stderr:
-        output = completed.stderr.rstrip("\n")
+    output = (stdout_text or "").rstrip("\n")
+    if not output and stderr_text:
+        output = stderr_text.rstrip("\n")
     if len(output) > _INLINE_SHELL_MAX_OUTPUT:
         output = output[:_INLINE_SHELL_MAX_OUTPUT] + "...[truncated]"
     return output
