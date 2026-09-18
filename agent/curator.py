@@ -1772,7 +1772,7 @@ def run_curator_review(
                     )
                 else:
                     prompt = f"{CURATOR_REVIEW_PROMPT}{builtins_note}\n\n{candidate_list}"
-                llm_meta = _run_llm_review(prompt, suppress_output=synchronous)
+                llm_meta = _run_llm_review(prompt)
                 final_summary = (
                     f"{prefix}{auto_summary}; llm: {llm_meta.get('summary', 'no change')}"
                 )
@@ -1841,7 +1841,15 @@ def run_curator_review(
                 pass
 
     if synchronous:
-        _llm_pass()
+        # C3-27: suppress the fork's stdout/stderr chatter here — only on
+        # the synchronous CLI path, where this thread IS the foreground and
+        # a process-global redirect cannot swallow other sessions' output
+        # (the gateway/background path never redirects; it hides its own
+        # output by other means).
+        with open(os.devnull, "w", encoding="utf-8") as _devnull, \
+             contextlib.redirect_stdout(_devnull), \
+             contextlib.redirect_stderr(_devnull):
+            _llm_pass()
     else:
         t = threading.Thread(target=_llm_pass, daemon=True, name="curator-review")
         t.start()
@@ -1920,7 +1928,7 @@ def _resolve_review_model(cfg: Dict[str, Any]) -> tuple[str, str]:
     return b.provider, b.model
 
 
-def _run_llm_review(prompt: str, *, suppress_output: bool = False) -> Dict[str, Any]:
+def _run_llm_review(prompt: str) -> Dict[str, Any]:
     """Spawn an AIAgent fork to run the curator review prompt.
 
     Returns a dict with:
@@ -2048,19 +2056,13 @@ def _run_llm_review(prompt: str, *, suppress_output: bool = False) -> Dict[str, 
         # terminal. The background-thread runner also hides it; this
         # belt-and-suspenders path matters when a caller invokes
         # run_curator_review(synchronous=True) from the CLI.
-        # C3-27: redirect_stdout is PROCESS-GLOBAL, not thread-local. The
-        # background-thread runner (gateway heartbeat) already hides its own
-        # output; wrapping the pass there additionally swallowed EVERY other
-        # session's stdout (display.py's capture contradicts the
-        # thread-isolation assumption). Suppress only on the synchronous CLI
-        # path, where this thread IS the foreground.
-        if suppress_output:
-            with open(os.devnull, "w", encoding="utf-8") as _devnull, \
-                 contextlib.redirect_stdout(_devnull), \
-                 contextlib.redirect_stderr(_devnull):
-                conv_result = review_agent.run_conversation(user_message=prompt)
-        else:
-            conv_result = review_agent.run_conversation(user_message=prompt)
+        # C3-27: the redirect lived HERE but redirect_stdout is
+        # PROCESS-GLOBAL, not thread-local — the gateway heartbeat's
+        # background thread swallowed every other session's stdout too.
+        # The suppression now happens at the synchronous CLI call site
+        # (run_curator_review), where this thread IS the foreground; the
+        # background runner hides its own output by other means.
+        conv_result = review_agent.run_conversation(user_message=prompt)
 
         final = ""
         if isinstance(conv_result, dict):
