@@ -521,6 +521,14 @@ class InsightsEngine:
 
         if models:
             total_cost = sum(float(m.get("cost") or 0.0) for m in models)
+            # C3-39: actual_cost stayed summed from the sessions aggregate
+            # while everything else here re-derived from the per-model
+            # table — reproducing the #58592/#9979 aux-cost omission for
+            # this field only. Re-derive it the same way (the rows carry
+            # actual_cost_usd straight from session_model_usage).
+            actual_cost = sum(
+                float(m.get("actual_cost") or 0.0) for m in models
+            )
             # Token totals likewise: the per-model breakdown includes
             # auxiliary usage rows (vision/compression/titles — task
             # dimension in session_model_usage, #23270) plus reconciled
