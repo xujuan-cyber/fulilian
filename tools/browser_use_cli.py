@@ -6,6 +6,8 @@ instead of default browser tools
 
 import json
 import logging
+
+from agent.redact import redact_sensitive_text
 import os
 import re
 import shutil
@@ -431,6 +433,11 @@ def _workspace_dir(task_id: Optional[str]) -> Optional[str]:
         from fulilian_constants import get_fulilian_home
 
         safe = _TASK_ID_SAFE_RE.sub("_", str(task_id or "default"))[:80] or "default"
+        # C4-19: the sanitizer KEEPS dots, so a task_id of ".." (or ".")
+        # survived intact and the workspace resolved OUTSIDE the
+        # browser-use cache root. Collapse dot-only ids.
+        if set(safe) <= {"."}:
+            safe = "default"
         path = Path(get_fulilian_home()) / "cache" / "browser-use" / "workspace" / safe
         path.mkdir(parents=True, exist_ok=True)
         return str(path)
@@ -796,10 +803,16 @@ def browser_exec(
     except OSError as e:
         return tool_error(f"Failed to launch browser-use CLI: {e}")
 
+    # C4-18: proc.stdout went to the model UNREDACTED and UNCAPPED (only
+    # stderr was capped) — the Browser-Use agent's log can carry page
+    # content, tokens in URLs, etc. Redact and cap like every other path.
+    stdout = redact_sensitive_text(proc.stdout or "")
+    if len(stdout) > _STDERR_CAP_CHARS * 5:
+        stdout = stdout[: _STDERR_CAP_CHARS * 5] + "\n… (output truncated)"
     result = {
         "success": proc.returncode == 0,
         "exit_code": proc.returncode,
-        "output": proc.stdout,
+        "output": stdout,
     }
     if workspace:
         result["workspace"] = workspace

@@ -4051,11 +4051,13 @@ def browser_navigate(url: str, task_id: Optional[str] = None) -> str:
                 "error": "Blocked: redirect landed on a private/internal address",
             })
 
-        response = {
+        # C4-14: title/final_url went out raw — a redirect target's title
+        # can carry query-string tokens the success path never redacts.
+        response = _redact_browser_output({
             "success": True,
             "url": final_url,
             "title": title
-        }
+        })
         # Auditability: stamp navigations that ran on the user's real-profile
         # copy-browser so usage is visible in the tool result.
         try:
@@ -4853,8 +4855,13 @@ def _browser_eval(expression: str, task_id: Optional[str] = None) -> str:
             # produce the same exception, but slower).
             err = sup_result.get("error") or "evaluate_runtime failed"
             if "supervisor" not in err.lower():
-                # Real JS-side error — return it.
-                return json.dumps({"success": False, "error": err}, ensure_ascii=False)
+                # Real JS-side error — return it. C4-17: the error text can
+                # embed evaluated values from the page; redact like the
+                # success path does.
+                return json.dumps(
+                    {"success": False, "error": _redact_browser_output(err)},
+                    ensure_ascii=False,
+                )
             # Supervisor-side failure (loop down, no session) — fall through.
             logger.debug(
                 "browser_eval: supervisor path unavailable (%s), falling back to subprocess",
@@ -4893,9 +4900,10 @@ def _browser_eval(expression: str, task_id: Optional[str] = None) -> str:
                 ),
             }
             return json.dumps(_copy_fallback_warning(response, result))
+        # C4-17: same redaction for the subprocess-path JS error.
         response = {
             "success": False,
-            "error": err,
+            "error": _redact_browser_output(err),
         }
         return json.dumps(_copy_fallback_warning(response, result))
 
@@ -6161,7 +6169,7 @@ registry.register(
         fallback=lambda: browser_get_images(task_id=kw.get("task_id")),
         **_browser_router_kw(kw),
     ),
-    check_fn=check_browser_requirements,
+    check_fn=check_browser_routed_requirements,
     emoji="🖼️",
 )
 registry.register(
@@ -6187,6 +6195,6 @@ registry.register(
         fallback=lambda: browser_console(clear=args.get("clear", False), expression=args.get("expression"), task_id=kw.get("task_id")),
         **_browser_router_kw(kw),
     ),
-    check_fn=check_browser_requirements,
+    check_fn=check_browser_routed_requirements,
     emoji="🖥️",
 )

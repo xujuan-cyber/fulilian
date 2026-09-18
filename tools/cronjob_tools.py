@@ -1395,7 +1395,10 @@ def _try_dispatch_background_run(
         "cronjob run: background pool unavailable (%s); running job '%s' inline.",
         dispatch.get("error", "rejected"), job_name,
     )
-    result = _run_claimed_job(job, extra_prompt=extra_prompt)
+    # C4-30: pass the CLAIMED snapshot — the pre-claim `job` dict lacks the
+    # fire_claim fencing, so the inline run derived a wrong/absent
+    # fire_owner and the at-most-once guarantee silently degraded.
+    result = _run_claimed_job(claimed_job or job, extra_prompt=extra_prompt)
     result["dispatched"] = False
     return result
 
@@ -1926,7 +1929,13 @@ def cronjob(
                 parsed_schedule = parse_schedule(schedule)
                 updates["schedule"] = parsed_schedule
                 updates["schedule_display"] = parsed_schedule.get("display", schedule)
-                if job.get("state") != "paused":
+                # C4-31: the raw `state != "paused"` check missed
+                # "half-paused" records (enabled=False but
+                # state="scheduled") — editing their schedule force-RESUMED
+                # them. Use the derived effective state like _format_job.
+                from cron.jobs import effective_job_state
+
+                if effective_job_state(job) != "paused":
                     updates["state"] = "scheduled"
                     updates["enabled"] = True
             if not updates:
@@ -2074,7 +2083,11 @@ def _cronjob_handler(args, **kw):
         name=args.get("name"),
         repeat=args.get("repeat"),
         deliver=args.get("deliver"),
-        include_disabled=args.get("include_disabled", True),
+        # C4-29: the handler default was True while cronjob()'s own
+        # signature (and the schema's intent) default to False — the model
+        # can never set this (not a schema property), so every model-invoked
+        # list silently included paused/disabled jobs.
+        include_disabled=args.get("include_disabled", False),
         skill=args.get("skill"),
         skills=args.get("skills"),
         # model / provider / base_url are intentionally NOT read from the

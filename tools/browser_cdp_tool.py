@@ -382,13 +382,19 @@ def _browser_cdp_via_supervisor(
             cdp_docs=CDP_DOCS_URL,
         )
 
+    # C4-12: the supervisor's response was forwarded with success=True
+    # WITHOUT checking its own status — a supervisor-side error payload
+    # was reported to the model as a successful CDP result.
+    supervisor_error = result_msg.get("error") if isinstance(result_msg, dict) else None
     payload: Dict[str, Any] = {
-        "success": True,
+        "success": supervisor_error is None,
         "method": method,
         "frame_id": frame_id,
         "session_id": child_sid,
-        "result": result_msg.get("result", {}),
+        "result": result_msg.get("result", {}) if isinstance(result_msg, dict) else {},
     }
+    if supervisor_error is not None:
+        payload["error"] = str(supervisor_error)
     return json.dumps(payload, ensure_ascii=False)
 
 

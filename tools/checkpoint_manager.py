@@ -138,6 +138,18 @@ DEFAULT_EXCLUDES = [
     ".env.*",
     ".env.local",
     ".env.*.local",
+    # C4-20: common credential artifacts that used to ride into checkpoints
+    # when the working dir (or a parent resolved by the marker walk) sits
+    # near a credential store.
+    "auth.json",
+    "credentials.json",
+    "tokens/",
+    "*.pem",
+    "*.key",
+    "id_rsa*",
+    "*.p12",
+    ".aws/",
+    ".netrc",
     # OS junk
     ".DS_Store",
     "Thumbs.db",

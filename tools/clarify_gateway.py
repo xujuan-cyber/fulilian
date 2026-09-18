@@ -542,9 +542,21 @@ def resolve_clarify_timeout(config: dict) -> int:
     auto-skip while the user is still deciding); the waiting loops translate
     that into a null deadline.  A non-numeric value falls back to 3600.
     """
-    raw = (config.get("clarify") or {}).get("timeout")
+    # C4-21: the resolver assumed config/clarify/agent are all dicts — a
+    # YAML scalar like `clarify: off` raised AttributeError here and the
+    # caller's broad try/except masked it to the 3600 default, hiding the
+    # real config problem. Degrade to defaults per level instead.
+    if not isinstance(config, dict):
+        return 3600
+    clarify = config.get("clarify")
+    raw = clarify.get("timeout") if isinstance(clarify, dict) else None
     if raw is None:
-        raw = (config.get("agent") or {}).get("clarify_timeout", 3600)
+        agent_cfg = config.get("agent")
+        raw = (
+            agent_cfg.get("clarify_timeout", 3600)
+            if isinstance(agent_cfg, dict)
+            else 3600
+        )
     try:
         return int(raw)
     except (TypeError, ValueError):
