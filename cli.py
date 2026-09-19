@@ -5222,7 +5222,9 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         # Streaming display state
         self._stream_buf = ""        # Partial line buffer for line-buffered rendering
         self._stream_started = False  # True once first delta arrives
-        self._stream_box_opened = False  # True once the response box header is printed
+        self._stream_box_opened = False  # True once the response body has started
+        self._stream_bullet_emitted = False  # True once the ● bullet line was printed
+        self._stream_in_fence = False  # Inside a ``` / ~~~ block (indent-exempt)
         self._reasoning_preview_buf = ""  # Coalesce tiny reasoning chunks for [thinking] output
         # Table-row buffer.  When a streamed line looks like it could be
         # part of a markdown table, hold it here until the block ends so
@@ -7843,7 +7845,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         )
         lines = user_input.split("\n")
         if len(lines) <= 1:
-            return f"[bold {_accent_hex()}]●[/] [bold]{_escape(user_input)}[/]{ts_suffix}"
+            return f"[bold {_accent_hex()}]❯[/] [bold]{_escape(user_input)}[/]{ts_suffix}"
 
         first_lines = int(getattr(self, "user_message_preview_first_lines", 2))
         last_lines = int(getattr(self, "user_message_preview_last_lines", 2))
@@ -7860,7 +7862,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             tail = []
 
         preview_lines = [
-            f"[bold {_accent_hex()}]●[/] [bold]{_escape(head[0])}[/]{ts_suffix}"
+            f"[bold {_accent_hex()}]❯[/] [bold]{_escape(head[0])}[/]{ts_suffix}"
         ]
         preview_lines.extend(f"[bold]{_escape(line)}[/]" for line in head[1:])
 
@@ -7897,7 +7899,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         if "\n" in text:
             ChatConsole().print(self._format_submitted_user_message_preview(text))
         else:
-            ChatConsole().print(f"[bold {_accent_hex()}]●[/] [bold]{_escape(text)}[/]")
+            ChatConsole().print(f"[bold {_accent_hex()}]❯[/] [bold]{_escape(text)}[/]")
 
     def _stream_reasoning_delta(self, text: str) -> None:
         """Stream reasoning/thinking tokens into a dim box above the response.
@@ -7916,13 +7918,12 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         if getattr(self, "_stream_box_opened", False):
             return
 
-        # Open reasoning box on first reasoning token
+        # Open the reasoning block on first reasoning token.  Uses the same
+        # transcript grammar as tool calls (dim bullet + indented body) so the
+        # scrollback reads as one system rather than a boxed panel bolted on.
         if not getattr(self, "_reasoning_box_opened", False):
             self._reasoning_box_opened = True
-            w = self._scrollback_box_width()
-            r_label = " Reasoning "
-            r_fill = w - 2 - len(r_label)
-            _cprint(f"\n{_DIM}┌─{r_label}{'─' * max(r_fill - 1, 0)}┐{_RST}")
+            _cprint(f"\n{_DIM}● Thinking…{_RST}")
 
         self._reasoning_buf = getattr(self, "_reasoning_buf", "") + text
 
@@ -7930,21 +7931,19 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         # reasoning is visible in real-time even without newlines.
         while "\n" in self._reasoning_buf:
             line, self._reasoning_buf = self._reasoning_buf.split("\n", 1)
-            _cprint(f"{_DIM}{line}{_RST}")
+            _cprint(f"  {_DIM}{line}{_RST}")
         if len(self._reasoning_buf) > 80:
-            _cprint(f"{_DIM}{self._reasoning_buf}{_RST}")
+            _cprint(f"  {_DIM}{self._reasoning_buf}{_RST}")
             self._reasoning_buf = ""
 
     def _close_reasoning_box(self) -> None:
-        """Close the live reasoning box if it's open."""
+        """Close the live reasoning block if it's open."""
         if getattr(self, "_reasoning_box_opened", False):
             # Flush remaining reasoning buffer
             buf = getattr(self, "_reasoning_buf", "")
             if buf:
-                _cprint(f"{_DIM}{buf}{_RST}")
+                _cprint(f"  {_DIM}{buf}{_RST}")
                 self._reasoning_buf = ""
-            w = self._scrollback_box_width()
-            _cprint(f"{_DIM}└{'─' * (w - 2)}┘{_RST}")
             self._reasoning_box_opened = False
 
             # Flush any content that was deferred while reasoning was rendering.
@@ -8099,6 +8098,23 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                 self._stream_prefilt = self._stream_prefilt[-max_tag_len:]
             return
 
+    def _claim_stream_line_prefix(self, *, exempt: bool = False) -> str:
+        """Return the leading pad for the next streamed response line.
+
+        The first emitted line carries the ``●`` bullet; later lines carry a
+        two-space hanging indent so the bullet reads as the paragraph marker
+        (Claude-Code transcript style).  *exempt* lines — fenced code and
+        realigned tables — keep flush-left padding: indenting them would
+        misalign their columns and re-introduce the leading-whitespace
+        pollution that copy/paste of code used to suffer from.
+        """
+        if not getattr(self, "_stream_bullet_emitted", False):
+            self._stream_bullet_emitted = True
+            return f"{_ACCENT}●{_RST} "
+        if exempt:
+            return ""
+        return "  "
+
     def _emit_stream_text(self, text: str) -> None:
         """Emit filtered text to the streaming display."""
         if not text:
@@ -8114,13 +8130,22 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         # Close the live reasoning box before opening the response box
         self._close_reasoning_box()
 
-        # Open the response box header on the very first visible text
+        # Open the response on the first visible text with a single bullet
+        # marker (Claude-Code transcript style) rather than a full-width box
+        # header.  Continuation lines take a hanging indent so the bullet
+        # stays visually attached to its paragraph; fenced code and realigned
+        # tables opt out (see _claim_stream_line_prefix) so their columns stay
+        # aligned and copied code is not polluted with leading whitespace.
+        # When timestamps are enabled the old label line is kept, dimmed, so
+        # that opt-in behaviour survives the header removal.
         if not self._stream_box_opened:
             # Strip leading whitespace/newlines before first visible content
             text = text.lstrip("\n")
             if not text:
                 return
             self._stream_box_opened = True
+            self._stream_bullet_emitted = False
+            self._stream_in_fence = False
             try:
                 from fulilian_cli.skin_engine import get_active_skin
                 _skin = get_active_skin()
@@ -8139,18 +8164,20 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             except (ValueError, IndexError):
                 self._stream_text_ansi = ""
             if self.show_timestamps:
-                label = f"{label} {datetime.now().strftime(getattr(self, 'timestamp_format', '%H:%M'))}"
-            w = self._scrollback_box_width()
-            fill = w - 2 - FulilianCLI._status_bar_display_width(label)
-            _cprint(f"\n{_ACCENT}╭─{label}{'─' * max(fill - 1, 0)}╮{_RST}")
+                _ts = datetime.now().strftime(getattr(self, "timestamp_format", "%H:%M"))
+                _cprint(f"\n{_DIM}{label} {_ts}{_RST}")
 
         self._stream_buf += text
 
         # Emit complete lines, keep partial remainder in buffer
         _tc = getattr(self, "_stream_text_ansi", "")
 
-        def _emit_one(printed_line: str) -> None:
-            _cprint(f"{_STREAM_PAD}{_tc}{printed_line}{_RST}" if _tc else f"{_STREAM_PAD}{printed_line}")
+        def _emit_one(printed_line: str, *, exempt: bool = False) -> None:
+            pad = self._claim_stream_line_prefix(exempt=exempt)
+            if _tc:
+                _cprint(f"{pad}{_tc}{printed_line}{_RST}")
+            else:
+                _cprint(f"{pad}{printed_line}")
 
         def _flush_table_buf() -> None:
             buf = self._stream_table_buf
@@ -8168,7 +8195,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                 joined = _strip_markdown_syntax(joined)
             block = realign_markdown_tables(joined, _terminal_width_for_streaming())
             for ln in block.split("\n"):
-                _emit_one(ln)
+                _emit_one(ln, exempt=True)
 
         while "\n" in self._stream_buf:
             line, self._stream_buf = self._stream_buf.split("\n", 1)
@@ -8190,9 +8217,18 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                 self._in_stream_table = True
                 continue
 
+            # Fenced code opts out of the hanging indent: indenting would
+            # misalign the block and pollute copied code.  The fence state is
+            # read from the RAW line, because in "strip" mode
+            # _strip_markdown_syntax removes the fence markers themselves —
+            # detecting afterwards would let every code line get indented.
+            in_fence = bool(getattr(self, "_stream_in_fence", False))
+            is_fence = line.lstrip().startswith(("```", "~~~"))
+            if is_fence:
+                self._stream_in_fence = not in_fence
             if self.final_response_markdown == "strip":
                 line = _strip_markdown_syntax(line)
-            _emit_one(line)
+            _emit_one(line, exempt=in_fence or is_fence)
 
         # Long partial lines are emitted ONLY at real newlines — we no
         # longer hard-wrap paragraphs at terminal width ourselves.  Each
@@ -8261,23 +8297,25 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                 joined = _strip_markdown_syntax(joined)
             block = realign_markdown_tables(joined, _terminal_width_for_streaming())
             for ln in block.split("\n"):
-                _cprint(f"{_STREAM_PAD}{_tc}{ln}{_RST}" if _tc else f"{_STREAM_PAD}{ln}")
+                pad = self._claim_stream_line_prefix(exempt=True)
+                _cprint(f"{pad}{_tc}{ln}{_RST}" if _tc else f"{pad}{ln}")
 
         if self._stream_buf:
             line = _strip_markdown_syntax(self._stream_buf) if self.final_response_markdown == "strip" else self._stream_buf
-            _cprint(f"{_STREAM_PAD}{_tc}{line}{_RST}" if _tc else f"{_STREAM_PAD}{line}")
+            # A trailing partial line is still prose (never code: the fence
+            # tracker only exempts whole fenced blocks), so it keeps the
+            # hanging indent.
+            pad = self._claim_stream_line_prefix()
+            _cprint(f"{pad}{_tc}{line}{_RST}" if _tc else f"{pad}{line}")
             self._stream_buf = ""
-
-        # Close the response box
-        if self._stream_box_opened:
-            w = self._scrollback_box_width()
-            _cprint(f"{_ACCENT}╰{'─' * (w - 2)}╯{_RST}")
 
     def _reset_stream_state(self) -> None:
         """Reset streaming state before each agent invocation."""
         self._stream_buf = ""
         self._stream_started = False
         self._stream_box_opened = False
+        self._stream_bullet_emitted = False
+        self._stream_in_fence = False
         self._stream_text_ansi = ""
         self._stream_prefilt = ""
         self._in_reasoning_block = False
@@ -14696,9 +14734,15 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                     return
                 self._last_scrollback_tool = function_name
                 try:
-                    from agent.display import get_cute_tool_message
-                    line = get_cute_tool_message(function_name, stored_args, duration, result=kwargs.get("result"))
-                    _cprint(f"  {line}")
+                    # Claude-Code transcript grammar: ``● Tool(args)`` followed
+                    # by a ``⎿`` result line (and a numbered block for file
+                    # content).  The legacy ``get_cute_tool_message`` line is
+                    # still used by the agent-level verbose path and ACP.
+                    from agent.display import render_tool_completion
+                    for _line in render_tool_completion(
+                        function_name, stored_args, duration, result=kwargs.get("result"),
+                    ):
+                        _cprint(_line)
                 except Exception:
                     pass
                 # First-touch onboarding: on the first tool in this process
@@ -17204,17 +17248,27 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                     if _post_stream_text.strip():
                         _cprint(_post_stream_text)
                 else:
-                    _chat_console = ChatConsole()
-                    _chat_console.print(Panel(
+                    # Claude-Code transcript grammar: the response opens with a
+                    # ``●`` bullet instead of the labelled ⚕ box.  A two-cell
+                    # grid keeps the bullet inline with the first line and the
+                    # body indented, while Rich still renders the markdown.
+                    # This is the DEFAULT (non-streaming) response path, so it
+                    # must match what _emit_stream_text produces.
+                    from rich.table import Table as _RichTable
+                    if self.show_timestamps:
+                        # Mirrors the streaming path: dropping the ⚕ box would
+                        # otherwise lose the opt-in response timestamp.
+                        _ts = datetime.now().strftime(getattr(self, "timestamp_format", "%H:%M"))
+                        _cprint(f"\n{_DIM}{label} {_ts}{_RST}")
+                    _grid = _RichTable.grid(padding=0)
+                    _grid.add_column(width=2)
+                    _grid.add_column()
+                    _grid.add_row(
+                        _RichText.from_markup(f"[{_resp_color} bold]●[/] "),
                         _render_final_assistant_content(response, mode=self.final_response_markdown),
-                        title=f"[{_resp_color} bold]{label}[/]",
-                        title_align="left",
-                        border_style=_resp_color,
-                        style=_resp_text,
-                        box=rich_box.HORIZONTALS,
-                        padding=(1, 0),
-                        width=self._scrollback_box_width(),
-                    ))
+                    )
+                    _chat_console = ChatConsole()
+                    _chat_console.print(_grid, style=_resp_text)
 
                 # Durable, provider-agnostic billing CTA below the response. The
                 # response panel carries the full guidance; this pins the single

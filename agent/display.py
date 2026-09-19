@@ -988,6 +988,285 @@ def _render_inline_unified_diff(diff: str) -> list[str]:
     return rendered
 
 
+# =========================================================================
+# Transcript grammar — ``● Tool(args)`` calls and ``⎿`` result lines
+# =========================================================================
+#
+# Claude-Code-style transcript grammar, shared by the CLI transcript and the
+# inline diff previews so both use one visual rhythm:
+#
+#     ● Write(notes.md)
+#       ⎿  Wrote 6 lines to notes.md
+#            1 Lorem ipsum dolor sit amet
+#            2 Sed do eiusmod tempor
+#
+# These helpers are pure and never raise: a tool call must still render when
+# its args or result are unusable.
+
+# Internal tool name -> transcript label.  Unlisted tools fall back to a
+# PascalCase form of the snake_case name, so new tools render sensibly
+# without touching this table.
+_TOOL_DISPLAY_NAMES = {
+    "terminal": "Bash",
+    "read_file": "Read",
+    "write_file": "Write",
+    "patch": "Edit",
+    "search_files": "Search",
+    "web_search": "WebSearch",
+    "web_extract": "WebFetch",
+    "process": "Process",
+    "todo": "Todo",
+    "delegate_task": "Task",
+    "execute_code": "Code",
+    "browser_navigate": "Navigate",
+    "browser_snapshot": "Snapshot",
+    "browser_click": "Click",
+    "browser_type": "Type",
+    "browser_back": "Back",
+    "browser_press": "Press",
+    "browser_scroll": "Scroll",
+    "browser_exec": "BrowserCode",
+    "browser_vision": "Vision",
+    "vision_analyze": "Vision",
+    "image_generate": "ImageGen",
+    "text_to_speech": "Speak",
+    "clarify": "Ask",
+    "skill_view": "Skill",
+    "skills_list": "Skills",
+    "skill_manage": "SkillEdit",
+    "memory": "Memory",
+    "cronjob": "Cron",
+}
+
+# Tools whose result body is worth showing under the ``⎿`` line when it fits.
+# Everything else keeps a one-line summary so a verbose tool cannot flood the
+# transcript.
+_BODY_ELIGIBLE_TOOLS = {"read_file", "terminal", "execute_code", "browser_exec"}
+
+# Body-eligible tools whose content is a file/payload with meaningful line
+# numbers — these get the gutter, and the summary reports the size instead of
+# eating the first line.
+_NUMBERED_BODY_TOOLS = {"read_file"}
+
+# Tools whose result is a status message rather than content: summarize only.
+_SUMMARY_ONLY_TOOLS = {"write_file", "patch", "todo", "memory"}
+
+_TRANSCRIPT_GUTTER_INDENT = 6
+
+
+def _colorize_default() -> bool:
+    """Resolve terminal color support, defaulting to False when unknown."""
+    try:
+        from fulilian_cli.colors import should_use_color
+        return bool(should_use_color())
+    except Exception:
+        return False
+
+
+def tool_display_name(tool_name: str) -> str:
+    """Map an internal tool name to its transcript label."""
+    name = str(tool_name or "").strip()
+    if not name:
+        return "Tool"
+    if name in _TOOL_DISPLAY_NAMES:
+        return _TOOL_DISPLAY_NAMES[name]
+    parts = [part for part in name.split("_") if part]
+    return "".join(part[:1].upper() + part[1:] for part in parts) or "Tool"
+
+
+def render_tool_call_line(
+    tool_name: str, args: dict | None, *, colorize: bool = True, max_len: int = 60,
+) -> str:
+    """Render the ``● Tool(args)`` line that opens a tool call."""
+    try:
+        label = tool_display_name(tool_name)
+        preview = build_tool_preview(tool_name, args or {}, max_len=max_len)
+        text = f"{label}({preview})" if preview else label
+    except Exception:
+        text = tool_display_name(tool_name)
+    if not colorize:
+        return f"● {text}"
+    return f"{_diff_dim()}●{_ANSI_RESET} {text}"
+
+
+def render_numbered_block(
+    lines: list[str] | tuple[str, ...],
+    *,
+    start: int = 1,
+    markers: list[str] | tuple[str, ...] | None = None,
+    indent: int = _TRANSCRIPT_GUTTER_INDENT,
+    colorize: bool = True,
+    numbers: bool = True,
+) -> list[str]:
+    """Render *lines* with a right-aligned line-number gutter.
+
+    ``numbers=False`` keeps the indent rhythm without the gutter, for output
+    where line numbers would be meaningless (command stdout, code results).
+
+    ``markers`` supplies a per-line prefix for the diff case (``-``/``+``/
+    `` ``) and must match *lines* in length; a mismatch drops the markers
+    rather than mislabelling lines.  Callers decide *colorize* (see
+    ``_colorize_default``), so the non-TTY and background paths can render
+    the same block as plain text.
+    """
+    if not lines:
+        return []
+    if markers is not None and len(markers) != len(lines):
+        markers = None
+    has_markers = markers is not None
+
+    width = max(1, len(str(start + len(lines) - 1))) if numbers else 0
+    pad = " " * max(indent, 0)
+    if colorize:
+        dim, minus, plus, reset = _diff_dim(), _diff_minus(), _diff_plus(), _ANSI_RESET
+    else:
+        dim = minus = plus = reset = ""
+
+    out: list[str] = []
+    for offset, raw in enumerate(lines):
+        marker = markers[offset] if has_markers else " "
+        if marker == "-":
+            style = minus
+        elif marker == "+":
+            style = plus
+        else:
+            style = dim
+        if numbers:
+            number = str(start + offset).rjust(width)
+            # Only reserve a marker column when markers were supplied, so
+            # plain file content reads as ``      1 text`` and diffs read as
+            # ``      1 -text``.
+            if has_markers:
+                out.append(f"{pad}{dim}{number}{reset} {style}{marker}{raw}{reset}")
+            else:
+                out.append(f"{pad}{dim}{number}{reset} {style}{raw}{reset}")
+        elif has_markers and marker != " ":
+            out.append(f"{pad}{style}{marker}{raw}{reset}")
+        else:
+            out.append(f"{pad}{style}{raw}{reset}")
+    return out
+
+
+def _tool_result_text(tool_name: str, result: str | None) -> str:
+    """Best-effort plain-text body of a tool result."""
+    if result is None:
+        return ""
+    if not isinstance(result, str):
+        result = str(result)
+
+    # Some tools wrap their payload as a JSON string inside a JSON envelope
+    # (``{"output": "{\"exit_code\": 0, ...}"}``), so unwrap a bounded number
+    # of times before giving up and showing the raw value.
+    current = result
+    for _ in range(2):
+        data = safe_json_loads(current)
+        if isinstance(data, dict):
+            nested = None
+            for key in ("output", "stdout", "stderr", "content", "text", "result", "message"):
+                value = data.get(key)
+                if isinstance(value, str) and value.strip():
+                    nested = value
+                    break
+            if nested is None:
+                return ""
+            current = nested
+            continue
+        if isinstance(data, list):
+            return "\n".join(str(item) for item in data)
+        break
+    return current
+
+
+def render_tool_result_summary(
+    tool_name: str,
+    result: str | None,
+    *,
+    max_lines: int = _MAX_INLINE_DIFF_LINES,
+    max_line_width: int = 200,
+) -> tuple[str, list[str], bool]:
+    """Split a tool result into a ``⎿`` summary plus body lines.
+
+    Returns ``(summary, body_lines, numbered)``.  ``numbered`` asks the
+    caller to render *body_lines* through the line-number gutter; it is True
+    only for file content, where the numbers are the file's own line numbers.
+    Body lines are empty unless the tool is body-eligible (see
+    ``_BODY_ELIGIBLE_TOOLS``) and the result fits within *max_lines* — long
+    output is summarized with a line count so one chatty tool cannot flood
+    the transcript.
+    """
+    try:
+        is_failure, failure_suffix = _detect_tool_failure(tool_name, result)
+    except Exception:
+        is_failure, failure_suffix = False, ""
+    if is_failure:
+        reason = failure_suffix.strip().strip("[]").strip()
+        return (reason or "failed"), [], False
+
+    text = _tool_result_text(tool_name, result)
+    raw = [line.rstrip() for line in text.splitlines()]
+    while raw and not raw[-1].strip():
+        raw.pop()
+    if not raw:
+        return "no output", [], False
+
+    total = len(raw)
+    clipped = [_truncate_preview(line, max_line_width) for line in raw]
+
+    # File content: the gutter carries the file's own line numbers, so every
+    # line belongs to the body and the summary states the size instead.
+    if tool_name in _NUMBERED_BODY_TOOLS:
+        if total > max_lines:
+            return (f"Read {total} lines (showing first {max_lines})", clipped[:max_lines], True)
+        return f"Read {total} line{'' if total == 1 else 's'}", clipped, True
+
+    head = _truncate_preview(_oneline(raw[0]), max_line_width)
+    if total == 1:
+        return head, [], False
+
+    if tool_name in _SUMMARY_ONLY_TOOLS or tool_name not in _BODY_ELIGIBLE_TOOLS:
+        return f"{head} (+{total - 1} lines)", [], False
+
+    if total > max_lines:
+        return f"{head} … (+{total - 1} lines)", [], False
+
+    return head, clipped[1:], False
+
+
+def render_tool_completion(
+    tool_name: str,
+    args: dict | None,
+    duration: float = 0.0,
+    result: str | None = None,
+    *,
+    colorize: bool | None = None,
+    max_lines: int = _MAX_INLINE_DIFF_LINES,
+) -> list[str]:
+    """Render a completed tool call as transcript lines.
+
+    Produces the ``● Tool(args)`` line, the ``⎿`` result summary, and (when
+    the result is body-eligible and short enough) a numbered content block::
+
+        ● Read(agent/display.py)
+          ⎿  Read 24 lines (0.3s)
+               1 import logging
+               2 import os
+    """
+    if colorize is None:
+        colorize = _colorize_default()
+
+    lines = [render_tool_call_line(tool_name, args, colorize=colorize)]
+    summary, body, numbered = render_tool_result_summary(
+        tool_name, result, max_lines=max_lines,
+    )
+    if duration and duration > 0:
+        summary = f"{summary} ({duration:.1f}s)"
+    connector = f"{_diff_dim()}⎿{_ANSI_RESET}" if colorize else "⎿"
+    lines.append(f"  {connector}  {summary}")
+    if body:
+        lines.extend(render_numbered_block(body, colorize=colorize, numbers=numbered))
+    return lines
+
+
 def _split_unified_diff_sections(diff: str) -> list[str]:
     """Split a unified diff into per-file sections."""
     sections: list[list[str]] = []

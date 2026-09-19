@@ -14,6 +14,21 @@ from unittest.mock import MagicMock, patch
 _cli_mod = None
 _UNSET = object()
 
+# The transcript grammar commits two lines per tool call — ``● Tool(args)``
+# and ``  ⎿  result`` — so tests assert on the number of *call* lines rather
+# than the raw _cprint count, which would also move when a result body is
+# rendered.
+_TOOL_CALL_MARKER = "●"
+
+
+def _tool_call_lines(mock_print):
+    """Return the committed transcript call lines (``● …``) from a mock."""
+    out = []
+    for call in mock_print.call_args_list:
+        if call.args and isinstance(call.args[0], str) and call.args[0].startswith(_TOOL_CALL_MARKER):
+            out.append(call.args[0])
+    return out
+
 
 def _make_cli(tool_progress="all", verbose=_UNSET):
     """Create a FulilianCLI instance with minimal mocking."""
@@ -62,7 +77,7 @@ class TestToolProgressScrollback:
     """Stacked scrollback lines for 'all' and 'new' modes."""
 
     def test_all_mode_prints_scrollback_on_completed(self):
-        """In 'all' mode, tool.completed prints a stacked line."""
+        """In 'all' mode, tool.completed prints the stacked transcript lines."""
         cli = _make_cli(tool_progress="all")
         # Simulate tool.started
         cli._on_tool_progress("tool.started", "terminal", "git log", {"command": "git log"})
@@ -70,10 +85,12 @@ class TestToolProgressScrollback:
         with patch.object(_cli_mod, "_cprint") as mock_print:
             cli._on_tool_progress("tool.completed", "terminal", None, None, duration=1.5, is_error=False)
 
-        mock_print.assert_called_once()
-        line = mock_print.call_args[0][0]
-        # Should contain tool info (the cute message format has "git log" for terminal)
-        assert "git log" in line or "$" in line
+        call_lines = _tool_call_lines(mock_print)
+        assert len(call_lines) == 1
+        assert "Bash(git log)" in call_lines[0]
+        printed = " ".join(str(c.args[0]) for c in mock_print.call_args_list)
+        # The result connector line is committed too.
+        assert "⎿" in printed
 
     def test_all_mode_prints_every_call(self):
         """In 'all' mode, consecutive calls to the same tool each get a line."""
@@ -86,7 +103,7 @@ class TestToolProgressScrollback:
             cli._on_tool_progress("tool.started", "read_file", "run_agent.py", {"path": "run_agent.py"})
             cli._on_tool_progress("tool.completed", "read_file", None, None, duration=0.2, is_error=False)
 
-        assert mock_print.call_count == 2
+        assert len(_tool_call_lines(mock_print)) == 2
 
 
 
@@ -113,7 +130,7 @@ class TestToolProgressScrollback:
             cli._on_tool_progress("tool.completed", "web_search", None, None, duration=1.0, is_error=False)
             cli._on_tool_progress("tool.completed", "web_search", None, None, duration=1.5, is_error=False)
 
-        assert mock_print.call_count == 2
+        assert len(_tool_call_lines(mock_print)) == 2
 
 
     def test_verbose_mode_commits_every_call(self):
@@ -129,7 +146,7 @@ class TestToolProgressScrollback:
             cli._on_tool_progress("tool.started", "terminal", "echo two", {"command": "echo two"})
             cli._on_tool_progress("tool.completed", "terminal", None, None, duration=0.1, is_error=False)
 
-        assert mock_print.call_count == 2
+        assert len(_tool_call_lines(mock_print)) == 2
 
 
 
