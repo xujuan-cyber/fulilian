@@ -1267,6 +1267,53 @@ def render_tool_completion(
     return lines
 
 
+def build_pending_write_preview(
+    old_text: str | None,
+    new_content: str | None,
+    *,
+    max_lines: int = _MAX_INLINE_DIFF_LINES,
+    indent: int = 2,
+) -> list[str]:
+    """Preview a pending write as numbered ``-``/``+`` rows.
+
+    Mirrors the whole-file replace view Claude Code shows in its write-approval
+    dialog: every previous line marked ``-`` followed by every new line marked
+    ``+`` (a new file has only the ``+`` block).  No ANSI is emitted — the
+    approval panel styles these rows itself through prompt_toolkit fragments,
+    and embedded escapes would corrupt its width arithmetic.
+
+    Returns ``[]`` when there is nothing meaningful to show, so callers can
+    pass the result straight through as ``preview_lines`` and the panel falls
+    back to its previous layout.
+    """
+    if new_content is None:
+        return []
+    old_lines = (old_text or "").splitlines()
+    new_lines = str(new_content).splitlines()
+    if old_lines == new_lines:
+        return []
+
+    body: list[str] = []
+    if old_lines:
+        body.extend(
+            render_numbered_block(
+                old_lines, markers=["-"] * len(old_lines), indent=indent, colorize=False,
+            )
+        )
+    if new_lines:
+        body.extend(
+            render_numbered_block(
+                new_lines, markers=["+"] * len(new_lines), indent=indent, colorize=False,
+            )
+        )
+    if not body:
+        return []
+    if len(body) > max_lines:
+        hidden = len(body) - max_lines + 1
+        body = body[: max_lines - 1] + [f"… ({hidden} more lines)"]
+    return body
+
+
 def _split_unified_diff_sections(diff: str) -> list[str]:
     """Split a unified diff into per-file sections."""
     sections: list[list[str]] = []

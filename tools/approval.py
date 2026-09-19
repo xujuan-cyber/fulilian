@@ -13,6 +13,7 @@ import contextvars
 import fnmatch
 import functools
 import hashlib
+import inspect
 import logging
 import os
 import re
@@ -3178,7 +3179,8 @@ def prompt_dangerous_approval(command: str, description: str,
                               allow_permanent: bool = True,
                               approval_callback=None,
                               *, allow_session: bool = True,
-                              smart_denied: bool = False) -> str:
+                              smart_denied: bool = False,
+                              preview_lines: list[str] | None = None) -> str:
     """Prompt the user to approve a dangerous command (CLI only).
 
     Args:
@@ -3198,6 +3200,10 @@ def prompt_dangerous_approval(command: str, description: str,
             allow_session=True, smart_denied=False) -> str. Legacy callback
             signatures remain supported while both keywords hold their
             defaults.
+        preview_lines: Optional already-rendered preview body (e.g. a unified
+            diff of the pending write) shown inside the panel. Callbacks that
+            do not accept ``preview_lines`` are called without it, so legacy
+            signatures keep working. Lines are redacted before display.
 
     Returns: 'once', 'session', 'always', 'deny', or 'timeout'.
         'timeout' means the prompt expired without a user response — the
@@ -3220,7 +3226,26 @@ def prompt_dangerous_approval(command: str, description: str,
             approval_callback,
             allow_session=allow_session,
             smart_denied=smart_denied,
+            preview_lines=preview_lines,
         )
+
+
+def _callback_accepts(callback, name: str) -> bool:
+    """Whether *callback* can take keyword *name*.
+
+    Guards the legacy-signature contract: callbacks registered before
+    ``preview_lines`` existed must keep working. Introspection failure is
+    treated as "no" — the extra keyword is display-only, so dropping it is
+    always safe, whereas passing it to a strict callback would raise and be
+    converted into a deny.
+    """
+    try:
+        params = inspect.signature(callback).parameters
+    except (TypeError, ValueError):
+        return False
+    if name in params:
+        return True
+    return any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values())
 
 
 def _prompt_dangerous_approval_inner(command: str, description: str,
@@ -3228,7 +3253,8 @@ def _prompt_dangerous_approval_inner(command: str, description: str,
                                      allow_permanent: bool = True,
                                      approval_callback=None,
                                      *, allow_session: bool = True,
-                                     smart_denied: bool = False) -> str:
+                                     smart_denied: bool = False,
+                                     preview_lines: list[str] | None = None) -> str:
     # Redact secrets before any user-visible rendering. The original
     # `command` is still what executes after approval; only the displayed
     # copy is scrubbed. Reuses the same redaction module used for memory
@@ -3248,6 +3274,12 @@ def _prompt_dangerous_approval_inner(command: str, description: str,
                 callback_kwargs["allow_session"] = False
             if smart_denied:
                 callback_kwargs["smart_denied"] = True
+            if preview_lines and _callback_accepts(approval_callback, "preview_lines"):
+                # Same redaction pass as the command/description: a diff of an
+                # SSH config can carry hostnames and key paths.
+                callback_kwargs["preview_lines"] = [
+                    redact_sensitive_text(str(line)) for line in preview_lines
+                ]
             return approval_callback(
                 display_command, display_description, **callback_kwargs
             )
@@ -3731,6 +3763,7 @@ def _run_approval_gate(
     autoapprove_log_prefix: str,
     fail_closed_when_no_human: bool = False,
     no_human_block_message: str = "",
+    preview_lines: list[str] | None = None,
 ) -> dict:
     """Shared human-approval gate for a flagged action (command or tool).
 
@@ -3963,7 +3996,8 @@ def _run_approval_gate(
         surface="cli",
     )
     choice = prompt_dangerous_approval(display_target, description,
-                                       approval_callback=approval_callback)
+                                       approval_callback=approval_callback,
+                                       preview_lines=preview_lines)
     _fire_approval_hook(
         "post_approval_response",
         command=display_target,

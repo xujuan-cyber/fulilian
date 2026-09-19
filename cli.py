@@ -2968,6 +2968,11 @@ _STREAM_PARTIAL_PREVIEW_LEN = 60  # tail of an unfinished logical line mirrored
 # bottom chrome jump; the region always shows the tail.
 _REASONING_LIVE_LINES = 3
 
+# Row cap for the diff preview embedded in the dangerous-command approval
+# panel. The preview is charged against the panel's row budget, so a huge diff
+# can never clip the approve/deny options.
+_APPROVAL_PREVIEW_MAX_ROWS = 12
+
 
 def _hex_to_ansi(hex_color: str, *, bold: bool = False) -> str:
     """Convert a hex color like '#268bd2' to a true-color ANSI escape.
@@ -16280,7 +16285,8 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
     def _approval_callback(self, command: str, description: str,
                            *, allow_permanent: bool = True,
                            allow_session: bool = True,
-                           smart_denied: bool = False) -> str:
+                           smart_denied: bool = False,
+                           preview_lines: list[str] | None = None) -> str:
         """
         Prompt for dangerous command approval through the prompt_toolkit UI.
 
@@ -16291,6 +16297,10 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         reason (for example tirith), only 'always' is hidden.
         Long commands also get a 'view' option so the full command can be
         expanded before deciding.
+
+        ``preview_lines`` optionally carries an already-rendered body (a
+        unified diff of the pending write) shown between the command and the
+        choices, so a write can be reviewed instead of approved blind.
 
         Uses _approval_lock to serialize concurrent requests (e.g. from
         parallel delegation subtasks) so each prompt gets its own turn
@@ -16305,6 +16315,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             self._approval_state = {
                 "command": command,
                 "description": description,
+                "preview_lines": list(preview_lines) if preview_lines else [],
                 "choices": self._approval_choices(
                     command,
                     allow_permanent=allow_permanent,
@@ -16548,11 +16559,41 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                 inner_text_width,
             )
 
+        # ── Diff preview (write/patch approvals) ──
+        # Rendered between the command and the choices: for a pending write the
+        # diff is what the decision actually hinges on. Charged against the
+        # same row budget as the description so it can never clip the
+        # approve/deny options, and capped so a huge diff cannot swallow the
+        # panel. When both exist the description keeps at least one row.
+        preview_source = [str(line) for line in (state.get("preview_lines") or []) if str(line).strip()]
+        desc_sep_cost = 0 if use_compact_chrome else 1
+        leftover_rows = max(
+            0, available - (chrome_rows + len(cmd_wrapped) + len(choice_wrapped)) - desc_sep_cost
+        )
+        if preview_source and description:
+            preview_room = min(_APPROVAL_PREVIEW_MAX_ROWS, max(0, leftover_rows - 1))
+        else:
+            preview_room = min(_APPROVAL_PREVIEW_MAX_ROWS, leftover_rows)
+
+        preview_wrapped: list[str] = []
+        if preview_source and preview_room >= 1:
+            for line in preview_source:
+                preview_wrapped.extend(
+                    _wrap_panel_text(line, inner_text_width, subsequent_indent="  ")
+                )
+            if len(preview_wrapped) > preview_room:
+                keep = max(1, preview_room - 1)
+                preview_wrapped = preview_wrapped[:keep] + [
+                    f"… ({len(preview_wrapped) - keep} more diff lines)"
+                ]
+        # preview_room < 1 leaves preview_wrapped empty on purpose: a short
+        # terminal keeps the choices rather than showing a stub.
+        preview_sep_cost = desc_sep_cost if preview_wrapped else 0
+
         # Allocate any remaining rows to description. The extra -1 in full mode
         # accounts for the blank separator between choices and description.
-        mandatory_no_desc = chrome_rows + len(cmd_wrapped) + len(choice_wrapped)
-        desc_sep_cost = 0 if use_compact_chrome else 1
-        available_for_desc = available - mandatory_no_desc - desc_sep_cost
+        mandatory_no_desc = chrome_rows + len(cmd_wrapped) + len(preview_wrapped) + len(choice_wrapped)
+        available_for_desc = available - mandatory_no_desc - desc_sep_cost - preview_sep_cost
         # Even on huge terminals, cap description height so the panel stays compact.
         available_for_desc = max(0, min(available_for_desc, 10))
 
@@ -16577,6 +16618,12 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             _append_panel_line(lines, 'class:approval-border', 'class:approval-cmd', wrapped, box_width)
         if not use_compact_chrome:
             _append_blank_panel_line(lines, 'class:approval-border', box_width)
+
+        if preview_wrapped:
+            for wrapped in preview_wrapped:
+                _append_panel_line(lines, 'class:approval-border', 'class:approval-preview', wrapped, box_width)
+            if not use_compact_chrome:
+                _append_blank_panel_line(lines, 'class:approval-border', box_width)
 
         for i, wrapped in choice_wrapped:
             style = 'class:approval-selected' if i == selected else 'class:approval-choice'
@@ -20683,6 +20730,9 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             'approval-title': '#FF8C00 bold',
             'approval-desc': '#E9F1FC bold',
             'approval-cmd': '#AAAAAA italic',
+            # Embedded diff preview: monospace-ish, dimmer than the command so
+            # the ❯ choice row stays the most prominent element.
+            'approval-preview': '#8FBFE0',
             'approval-choice': '#AAAAAA',
             'approval-selected': '#5DB8F5 bold',
             # Voice mode

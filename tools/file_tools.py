@@ -887,8 +887,48 @@ def _protected_instruction_reason(filepath: str, task_id: str = "default",
     return None
 
 
+def _pending_write_preview(path: str, content: str, task_id: str = "default",
+                           extra_paths: list[tuple[str, str]] | None = None) -> list[str]:
+    """Build the diff body shown inside a write-approval prompt.
+
+    Display-only and strictly best-effort: any failure (unresolvable path,
+    unreadable file, display helper missing) yields an empty list so the
+    approval panel falls back to its previous layout rather than the gate
+    failing or showing a guessed diff.
+    """
+    try:
+        from agent.display import build_pending_write_preview
+    except Exception:
+        return []
+
+    pairs: list[tuple[str, str]] = []
+    if path:
+        pairs.append((path, content))
+    pairs.extend(extra_paths or [])
+
+    preview: list[str] = []
+    for target, target_content in pairs:
+        try:
+            resolved = _resolve_path_for_task(target, task_id)
+            try:
+                old_text = Path(resolved).read_text(encoding="utf-8", errors="replace")
+            except (OSError, ValueError, UnicodeDecodeError):
+                old_text = ""
+            lines = build_pending_write_preview(old_text, target_content)
+        except Exception:
+            continue
+        if not lines:
+            continue
+        if preview:
+            preview.append("")
+        preview.append(str(target))
+        preview.extend(lines)
+    return preview
+
+
 def _request_protected_instruction_approval(
-        reasons: list[str], task_id: str = "default") -> str | None:
+        reasons: list[str], task_id: str = "default",
+        preview_lines: list[str] | None = None) -> str | None:
     """Ask the human to approve a write to protected instruction file(s).
 
     Returns ``None`` when approved, or a BLOCKED error string. This gate
@@ -969,6 +1009,7 @@ def _request_protected_instruction_approval(
             allow_permanent=False,
             allow_session=False,
             approval_callback=callback,
+            preview_lines=preview_lines,
         )
         if choice in {"once", "session", "always"}:
             # One-operation grant; never persisted (see docstring).
@@ -987,7 +1028,8 @@ def _request_protected_instruction_approval(
 
 
 def _check_protected_instruction_write(paths: list[str],
-                                       task_id: str = "default") -> str | None:
+                                       task_id: str = "default",
+                                       pending_content: str | None = None) -> str | None:
     """Gate a write/patch touching protected instruction files.
 
     Returns ``None`` when no target is protected or the human approved;
@@ -996,23 +1038,35 @@ def _check_protected_instruction_write(paths: list[str],
     protected target, and a deny applies nothing (including innocent
     files) — partial application of an approved-in-part patch would be
     more surprising than an atomic all-or-nothing outcome.
+
+    ``pending_content`` is the text about to be written for a single-target
+    write; it is only used to render the approval panel's diff preview, and is
+    read lazily so a write that needs no approval pays nothing.
     """
     enabled, extra = _protected_instruction_config()
     if not enabled:
         return None
     reasons: list[str] = []
+    protected_paths: list[str] = []
     for p in paths:
         reason = _protected_instruction_reason(
             p, task_id, enabled=enabled, extra_patterns=extra)
         if reason:
             reasons.append(reason)
+            protected_paths.append(p)
     if not reasons:
         return None
-    return _request_protected_instruction_approval(reasons, task_id)
+    preview_lines: list[str] = []
+    if pending_content is not None and len(protected_paths) == 1:
+        preview_lines = _pending_write_preview(
+            protected_paths[0], pending_content, task_id)
+    return _request_protected_instruction_approval(
+        reasons, task_id, preview_lines=preview_lines)
 
 
 def _check_approval_required_write(paths: list[str],
-                                   task_id: str = "default") -> str | None:
+                                   task_id: str = "default",
+                                   pending_content: str | None = None) -> str | None:
     """Gate a write/patch touching an approval-required path (``~/.ssh/config``).
 
     These paths are NOT credentials and NOT hard-denied, but a write must
@@ -1035,6 +1089,12 @@ def _check_approval_required_write(paths: list[str],
     targets = [p for p in paths if is_write_approval_required(p)]
     if not targets:
         return None
+
+    # Built only now that the gate actually fires, so an ordinary write pays
+    # nothing for the preview.
+    preview_lines: list[str] = []
+    if pending_content is not None and len(targets) == 1:
+        preview_lines = _pending_write_preview(targets[0], pending_content, task_id)
 
     display_targets = ", ".join(dict.fromkeys(targets))
     description = (
@@ -1070,6 +1130,7 @@ def _check_approval_required_write(paths: list[str],
         no_human_block_message=blocked.format(
             why="requires approval but no interactive user or gateway is "
                 "present to approve it."),
+        preview_lines=preview_lines,
     )
     if result.get("approved"):
         return None
@@ -2319,10 +2380,12 @@ def write_file_tool(path: str, content: str, task_id: str = "default",
     binary_doc_err = _check_binary_document_write(path, task_id)
     if binary_doc_err:
         return tool_error(binary_doc_err)
-    protected_err = _check_protected_instruction_write([path], task_id)
+    protected_err = _check_protected_instruction_write([path], task_id,
+                                                       pending_content=content)
     if protected_err:
         return tool_error(protected_err)
-    approval_err = _check_approval_required_write([path], task_id)
+    approval_err = _check_approval_required_write([path], task_id,
+                                                 pending_content=content)
     if approval_err:
         return tool_error(approval_err)
     if not cross_profile:
