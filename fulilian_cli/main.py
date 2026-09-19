@@ -182,6 +182,8 @@ def _run_and_exit_oneshot(
     toolsets: object = None,
     skills: object = None,
     usage_file: object = None,
+    output_format: object = None,
+    include_partial_messages: object = False,
 ) -> None:
     try:
         from fulilian_cli.oneshot import run_oneshot
@@ -193,6 +195,8 @@ def _run_and_exit_oneshot(
             toolsets=toolsets,
             skills=skills,
             usage_file=usage_file,
+            output_format=output_format,
+            include_partial_messages=include_partial_messages,
         )
     except KeyboardInterrupt:
         rc = 130
@@ -12729,6 +12733,8 @@ def _try_fast_chat_launch() -> bool:
             toolsets=getattr(args, "toolsets", None),
             skills=getattr(args, "skills", None),
             usage_file=getattr(args, "usage_file", None),
+            output_format=getattr(args, "output_format", None),
+            include_partial_messages=getattr(args, "include_partial_messages", False),
         )
 
     if (args.resume or args.continue_last) and args.command is None:
@@ -12787,6 +12793,8 @@ def _try_termux_fast_cli_launch() -> bool:
             toolsets=getattr(args, "toolsets", None),
             skills=getattr(args, "skills", None),
             usage_file=getattr(args, "usage_file", None),
+            output_format=getattr(args, "output_format", None),
+            include_partial_messages=getattr(args, "include_partial_messages", False),
         )
 
     if (args.resume or args.continue_last) and args.command is None:
@@ -14786,6 +14794,8 @@ def main():
             toolsets=getattr(args, "toolsets", None),
             skills=getattr(args, "skills", None),
             usage_file=getattr(args, "usage_file", None),
+            output_format=getattr(args, "output_format", None),
+            include_partial_messages=getattr(args, "include_partial_messages", False),
         )
 
     # Handle top-level --resume / --continue as shortcut to chat

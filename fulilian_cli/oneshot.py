@@ -199,6 +199,216 @@ def _write_usage_file(path: Optional[str], result: dict, failure: Optional[str] 
         pass
 
 
+# =========================================================================
+# Machine-readable output (``--output-format json | stream-json``)
+# =========================================================================
+#
+# Event names mirror the Anthropic Messages API (``message_start`` /
+# ``content_block_start`` / ``content_block_delta`` / ``content_block_stop`` /
+# ``message_delta`` / ``message_stop``) wrapped in Claude-Code-style
+# envelopes (``system`` / ``assistant`` / ``user`` / ``result`` /
+# ``stream_event``), so a consumer that already speaks that protocol can parse
+# fulilian's stream unchanged.
+#
+# Every line is written to the caller's REAL stdout.  ``run_oneshot`` redirects
+# the process streams to devnull for the whole agent call tree, so a sink that
+# used plain ``print()`` would be swallowed — and ``stream-json`` has to reach
+# the pipe as events happen, not in one batch at exit.
+#
+# Emission is strictly best-effort: a broken machine-readable line must never
+# abort a run whose turn already happened.
+
+
+def _result_payload(result: dict, response: str) -> dict:
+    """Map fulilian's run result onto the Claude-Code ``result`` object."""
+    failed = bool(result.get("failed")) or bool(result.get("partial"))
+    payload = {
+        "subtype": "error" if failed else "success",
+        "is_error": failed,
+        "result": response or "",
+        "session_id": result.get("session_id"),
+        "model": result.get("model"),
+        "provider": result.get("provider"),
+        "num_turns": result.get("api_calls"),
+        "total_cost_usd": result.get("estimated_cost_usd"),
+        "cost_status": result.get("cost_status"),
+        "usage": {
+            "input_tokens": result.get("input_tokens"),
+            "output_tokens": result.get("output_tokens"),
+            "cache_read_input_tokens": result.get("cache_read_tokens"),
+            "cache_creation_input_tokens": result.get("cache_write_tokens"),
+            "reasoning_tokens": result.get("reasoning_tokens"),
+            "total_tokens": result.get("total_tokens"),
+        },
+        "completed": result.get("completed"),
+        "service_tier": result.get("service_tier"),
+    }
+    return {key: value for key, value in payload.items() if value is not None}
+
+
+def _content_text(value: object) -> str:
+    """Best-effort plain text for a tool result payload."""
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    try:
+        import json as _json
+
+        return _json.dumps(value, ensure_ascii=False, default=str)
+    except Exception:
+        return str(value)
+
+
+class JsonEventSink:
+    """Newline-delimited JSON emitter for ``--output-format``.
+
+    ``include_partial`` adds token-level ``content_block_delta`` events; without
+    it only block-level envelopes are emitted, which keeps the stream small for
+    callers that just want the final answer plus tool activity.
+    """
+
+    def __init__(self, stream, *, include_partial: bool = False) -> None:
+        import threading as _threading
+
+        self._stream = stream
+        self._include_partial = bool(include_partial)
+        self._lock = _threading.Lock()
+        self._message_open = False
+        self._open_block_kind: Optional[str] = None
+        self._block_index = 0
+        self._text_parts: list[str] = []
+        self._thinking_parts: list[str] = []
+
+    # ── low-level ──
+    def emit(self, event: dict) -> None:
+        try:
+            import json as _json
+
+            line = _json.dumps(event, ensure_ascii=False, default=str)
+            with self._lock:
+                self._stream.write(line + "\n")
+                self._stream.flush()
+        except Exception:
+            # A machine-readable line must never abort the run.
+            pass
+
+    def system_init(self, **fields) -> None:
+        self.emit({"type": "system", "subtype": "init", **fields})
+
+    def _event(self, event: dict) -> None:
+        self.emit({"type": "stream_event", "event": event})
+
+    def _open_message(self) -> None:
+        if self._message_open:
+            return
+        self._message_open = True
+        self._block_index = 0
+        self._open_block_kind = None
+        self._event({"type": "message_start"})
+
+    def _ensure_block(self, kind: str) -> None:
+        """Open a content block of *kind*, closing any block still open."""
+        if self._open_block_kind == kind:
+            return
+        if self._open_block_kind is not None:
+            self._close_block()
+        self._open_message()
+        self._event({
+            "type": "content_block_start",
+            "index": self._block_index,
+            "content_block": {"type": kind},
+        })
+        self._open_block_kind = kind
+
+    def _close_block(self) -> None:
+        if self._open_block_kind is None:
+            return
+        self._event({"type": "content_block_stop", "index": self._block_index})
+        self._block_index += 1
+        self._open_block_kind = None
+
+    # ── agent callbacks ──
+    def text_delta(self, text: str) -> None:
+        if not text:
+            return
+        self._ensure_block("text")
+        self._text_parts.append(text)
+        if self._include_partial:
+            self._event({
+                "type": "content_block_delta",
+                "index": self._block_index,
+                "delta": {"type": "text_delta", "text": text},
+            })
+
+    def reasoning_delta(self, text: str) -> None:
+        if not text:
+            return
+        self._ensure_block("thinking")
+        self._thinking_parts.append(text)
+        if self._include_partial:
+            self._event({
+                "type": "content_block_delta",
+                "index": self._block_index,
+                "delta": {"type": "thinking_delta", "thinking": text},
+            })
+
+    def tool_start(self, tool_call_id, name, args) -> None:
+        self.close_message()
+        self._open_message()
+        self._ensure_block("tool_use")
+        self.emit({
+            "type": "assistant",
+            "message": {
+                "role": "assistant",
+                "content": [{
+                    "type": "tool_use",
+                    "id": tool_call_id,
+                    "name": name,
+                    "input": args if isinstance(args, dict) else {},
+                }],
+            },
+        })
+        self._close_block()
+
+    def tool_complete(self, tool_call_id, name, args, result) -> None:
+        self.emit({
+            "type": "user",
+            "message": {
+                "role": "user",
+                "content": [{
+                    "type": "tool_result",
+                    "tool_use_id": tool_call_id,
+                    "content": _content_text(result),
+                }],
+            },
+        })
+        self.close_message()
+
+    def close_message(self) -> None:
+        """Flush the pending assistant envelope and close the message."""
+        if not self._message_open:
+            return
+        self._close_block()
+        content = []
+        if self._thinking_parts:
+            content.append({"type": "thinking", "thinking": "".join(self._thinking_parts)})
+        if self._text_parts:
+            content.append({"type": "text", "text": "".join(self._text_parts)})
+        if content:
+            self.emit({"type": "assistant", "message": {"role": "assistant", "content": content}})
+        self._event({"type": "message_delta"})
+        self._event({"type": "message_stop"})
+        self._message_open = False
+        self._open_block_kind = None
+        self._text_parts = []
+        self._thinking_parts = []
+
+    def result(self, result: dict, response: str) -> None:
+        self.close_message()
+        self.emit({"type": "result", **_result_payload(result, response)})
+
+
 def run_oneshot(
     prompt: str,
     model: Optional[str] = None,
@@ -206,6 +416,8 @@ def run_oneshot(
     toolsets: object = None,
     skills: object = None,
     usage_file: Optional[str] = None,
+    output_format: object = None,
+    include_partial_messages: object = False,
 ) -> int:
     """Execute a single prompt and print only the final content block.
 
@@ -270,6 +482,31 @@ def run_oneshot(
     real_stderr = sys.stderr
     devnull = open(os.devnull, "w", encoding="utf-8")
 
+    # --output-format: "text" prints the response; the machine-readable modes
+    # print an event stream instead. The sink holds real_stdout so events escape
+    # the devnull redirect below and reach the pipe as they happen.
+    _output_format = str(output_format or "text").strip().lower() or "text"
+    if _output_format not in {"text", "json", "stream-json"}:
+        real_stderr.write(
+            f"fulilian -z: unknown --output-format {output_format!r}; "
+            "expected text, json, or stream-json.\n"
+        )
+        real_stderr.flush()
+        return 2
+    event_sink = None
+    if _output_format in {"json", "stream-json"}:
+        event_sink = JsonEventSink(
+            real_stdout, include_partial=bool(include_partial_messages),
+        )
+        if _output_format == "stream-json":
+            event_sink.system_init(
+                cwd=os.getcwd(),
+                model=(model or os.getenv("FULILIAN_INFERENCE_MODEL", "") or None),
+                provider=provider,
+                permission_mode="bypassPermissions",
+                output_format=_output_format,
+            )
+
     response: Optional[str] = None
     result: dict = {}
     failure: BaseException | None = None
@@ -283,6 +520,7 @@ def run_oneshot(
                     toolsets=explicit_toolsets,
                     use_config_toolsets=use_config_toolsets,
                     skills=skills,
+                    event_sink=event_sink,
                 )
             except BaseException as exc:  # noqa: BLE001
                 # Capture anything that escapes the agent (including OSError
@@ -306,6 +544,18 @@ def run_oneshot(
             _write_usage_file(usage_file, result, failure=repr(failure))
             raise failure
         _write_usage_file(usage_file, result, failure=str(failure))
+        if event_sink is not None:
+            # A consumer blocked on the stream must still see a terminal object.
+            try:
+                event_sink.emit({
+                    "type": "result",
+                    **_result_payload(result or {}, ""),
+                    "subtype": "error",
+                    "is_error": True,
+                    "failure": str(failure),
+                })
+            except Exception:
+                pass
         real_stderr.write(f"fulilian -z: agent failed: {failure}\n")
         real_stderr.flush()
         return 1
@@ -321,7 +571,14 @@ def run_oneshot(
 
         response = _sanitize_surrogates(response)
 
-    if response:
+    if event_sink is not None:
+        # Machine-readable: the result object IS the output. Emitted before the
+        # failure returns below so a consumer always gets a terminal object.
+        try:
+            event_sink.result(result or {}, response or "")
+        except Exception:
+            pass
+    elif response:
         real_stdout.write(response)
         if not response.endswith("\n"):
             real_stdout.write("\n")
@@ -361,6 +618,7 @@ def _run_agent(
     toolsets: object = None,
     use_config_toolsets: bool = True,
     skills: object = None,
+    event_sink: "JsonEventSink | None" = None,
 ) -> tuple[str, dict]:
     """Build an AIAgent exactly like a normal CLI chat turn would, then
     run a single conversation.  Returns ``(final_response, run_result)``."""
@@ -507,7 +765,30 @@ def _run_agent(
         agent.stream_delta_callback = None
         agent.tool_gen_callback = None
 
+        if event_sink is not None:
+            # --output-format json/stream-json: the machine-readable sink
+            # replaces the display callbacks that were just disabled. It writes
+            # to the caller's real stdout, so it is unaffected by the devnull
+            # redirect around this call.
+            agent.stream_delta_callback = lambda text: event_sink.text_delta(text)
+            agent.reasoning_callback = lambda text: event_sink.reasoning_delta(text)
+            agent.tool_start_callback = (
+                lambda tool_call_id, name, args: event_sink.tool_start(tool_call_id, name, args)
+            )
+            agent.tool_complete_callback = (
+                lambda tool_call_id, name, args, result: event_sink.tool_complete(
+                    tool_call_id, name, args, result
+                )
+            )
+
         result = agent.run_conversation(prompt)
+        if event_sink is not None:
+            # Flush the last assistant envelope before the caller emits the
+            # result object, so block ordering stays correct.
+            try:
+                event_sink.close_message()
+            except Exception:
+                pass
         return (result.get("final_response") or "", result)
     finally:
         # Ordering deliberately mirrors gateway/run.py:_cleanup_agent_resources,

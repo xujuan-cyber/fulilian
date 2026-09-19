@@ -38,6 +38,7 @@ _VALUE_FLAGS_FALLBACK: frozenset[str] = frozenset(
         "-r", "--resume",
         "-s", "--skills",
         "--usage-file",
+        "--output-format",
         "--in",
     }
 )
@@ -172,6 +173,29 @@ def build_top_level_parser():
             "(estimated cost, token counts, model, api_calls) to PATH. "
             "The report is written even when the run fails, so pipelines "
             "can always account for spend. No effect outside -z/--oneshot."
+        ),
+    )
+    parser.add_argument(
+        "--output-format",
+        choices=("text", "json", "stream-json"),
+        default="text",
+        help=(
+            "One-shot mode only: shape of stdout. 'text' (default) prints "
+            "just the final response; 'json' prints a single result object; "
+            "'stream-json' prints newline-delimited JSON events as they "
+            "arrive (message_start / content_block_delta / tool_use / "
+            "tool_result / result), using the same event names as the "
+            "Anthropic Messages API. No effect outside -z/--oneshot."
+        ),
+    )
+    parser.add_argument(
+        "--include-partial-messages",
+        action="store_true",
+        default=False,
+        help=(
+            "With --output-format stream-json: also emit token-level "
+            "content_block_delta events. Without it, only block-level "
+            "assistant/user/result events are emitted."
         ),
     )
     # --model / --provider are accepted at the top level so they can pair
