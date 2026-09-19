@@ -78,6 +78,7 @@ class TestExtensionHookDefaults:
             approval_widget="approval",
             clarify_widget="clarify",
             spinner_widget="spinner",
+            reasoning_widget="reasoning",
             spacer="spacer",
             status_bar="status",
             input_rule_top="top-rule",
@@ -87,9 +88,11 @@ class TestExtensionHookDefaults:
             voice_status_bar="voice-status",
             completions_menu="completions-menu",
         )
-        # First element is Window(height=0), rest are the named widgets
+        # First element is Window(height=0), rest are the named widgets.
+        # reasoning sits directly above spinner: the live reasoning tail is
+        # part of the same activity cluster.
         assert children[1:] == [
-            "sudo", "secret", "approval", "clarify", "spinner",
+            "sudo", "secret", "approval", "clarify", "reasoning", "spinner",
             "spacer", "status", "top-rule", "image-bar", "input-area",
             "bottom-rule", "voice-status", "completions-menu",
         ]

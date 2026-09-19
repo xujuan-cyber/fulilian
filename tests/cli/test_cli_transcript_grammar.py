@@ -167,6 +167,84 @@ class TestStreamBulletGrammar:
             assert not ln.startswith("  "), f"table row was indented: {ln!r}"
 
 
+class TestReasoningLiveRegion:
+    """Reasoning streams into the live region and folds to one committed line.
+
+    The live region is the bottom chrome (never the scrollback), so a long
+    thinking block cannot bury the transcript; closing it commits exactly one
+    line unless display.reasoning_full opts into the whole trace.
+    """
+
+    def _reasoning_cli(self, **display_extra):
+        cli = _make_cli(display_extra=display_extra)
+        cli.show_reasoning = True
+        cli._reset_stream_state()
+        return cli
+
+    def test_in_flight_reasoning_is_not_committed_to_scrollback(self):
+        cli = self._reasoning_cli()
+        with patch.object(_cli_mod, "_cprint") as mock_print:
+            cli._stream_reasoning_delta("step one\n")
+            cli._stream_reasoning_delta("step two\n")
+        assert _emitted(mock_print) == []
+
+    def test_live_region_shows_the_tail(self):
+        cli = self._reasoning_cli()
+        cli._stream_reasoning_delta("one\ntwo\nthree\nfour\nfive\n")
+        assert cli._render_reasoning_live_lines() == ["three", "four", "five"]
+
+    def test_live_region_empty_when_inactive(self):
+        cli = self._reasoning_cli()
+        assert cli._render_reasoning_live_lines() == []
+        assert cli._reasoning_widget_height() == 0
+
+    def test_widget_height_is_fixed_while_in_flight(self):
+        cli = self._reasoning_cli()
+        cli._stream_reasoning_delta("one line\n")
+        assert cli._reasoning_widget_height() == 3
+        cli._stream_reasoning_delta("two\nthree\nfour\nfive\nsix\n")
+        assert cli._reasoning_widget_height() == 3
+
+    def test_close_folds_into_a_single_line(self):
+        cli = self._reasoning_cli()
+        cli._stream_reasoning_delta("thinking hard\nabout things\n")
+        with patch.object(_cli_mod, "_cprint") as mock_print:
+            cli._close_reasoning_box()
+        lines = [ln for ln in _emitted(mock_print) if ln.strip()]
+        assert len(lines) == 1
+        assert re.search(r"● Thought for \d+s", lines[0])
+        assert "/reasoning full" in lines[0]
+        # The live region collapses once closed.
+        assert cli._render_reasoning_live_lines() == []
+
+    def test_close_is_idempotent_when_nothing_in_flight(self):
+        cli = self._reasoning_cli()
+        with patch.object(_cli_mod, "_cprint") as mock_print:
+            cli._close_reasoning_box()
+            cli._close_reasoning_box()
+        assert _emitted(mock_print) == []
+
+    def test_reasoning_full_dumps_the_whole_trace(self):
+        cli = self._reasoning_cli(reasoning_full=True)
+        cli._stream_reasoning_delta("alpha\nbeta\n")
+        with patch.object(_cli_mod, "_cprint") as mock_print:
+            cli._close_reasoning_box()
+        plain = _emitted(mock_print)
+        assert any(re.search(r"● Thinking for \d+s", ln) for ln in plain)
+        assert any("alpha" in ln for ln in plain)
+        assert any("beta" in ln for ln in plain)
+        assert not any("/reasoning full" in ln for ln in plain)
+
+    def test_late_reasoning_after_response_started_is_dropped(self):
+        cli = self._reasoning_cli()
+        cli._stream_box_opened = True
+        with patch.object(_cli_mod, "_cprint") as mock_print:
+            cli._stream_reasoning_delta("should not render")
+            cli._close_reasoning_box()
+        assert _emitted(mock_print) == []
+        assert cli._render_reasoning_live_lines() == []
+
+
 class TestNonStreamingResponseGrammar:
     """The default (non-streaming) response path must use the same ● bullet."""
 

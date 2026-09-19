@@ -2963,6 +2963,11 @@ _STREAM_PAD = ""  # No indent for streamed response text — leading whitespace 
 _STREAM_PARTIAL_PREVIEW_LEN = 60  # tail of an unfinished logical line mirrored
 # into the spinner while streaming (TTFT perception without hard-wrapping)
 
+# Lines of the in-flight reasoning stream shown in the bottom live region.
+# Fixed (not content-sized) so a growing reasoning stream cannot make the
+# bottom chrome jump; the region always shows the tail.
+_REASONING_LIVE_LINES = 3
+
 
 def _hex_to_ansi(hex_color: str, *, bold: bool = False) -> str:
     """Convert a hex color like '#268bd2' to a true-color ANSI escape.
@@ -5225,6 +5230,9 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         self._stream_box_opened = False  # True once the response body has started
         self._stream_bullet_emitted = False  # True once the ● bullet line was printed
         self._stream_in_fence = False  # Inside a ``` / ~~~ block (indent-exempt)
+        self._reasoning_box_opened = False  # Live reasoning block in flight
+        self._reasoning_live_text = ""  # Accumulated in-flight reasoning stream
+        self._reasoning_started_at = 0.0  # monotonic() when reasoning began
         self._reasoning_preview_buf = ""  # Coalesce tiny reasoning chunks for [thinking] output
         # Table-row buffer.  When a streamed line looks like it could be
         # part of a markdown table, hold it here until the block ends so
@@ -7901,16 +7909,83 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         else:
             ChatConsole().print(f"[bold {_accent_hex()}]❯[/] [bold]{_escape(text)}[/]")
 
+    def _render_reasoning_live_lines(self) -> list[str]:
+        """Tail of the in-flight reasoning stream, for the bottom live region.
+
+        Claude-Code-style: reasoning streams into the live region (never the
+        scrollback) and is folded into a single committed line when it closes,
+        so a long thinking block cannot bury the transcript.  Returns an empty
+        list whenever no reasoning is in flight.
+        """
+        if not getattr(self, "_reasoning_box_opened", False):
+            return []
+        text = getattr(self, "_reasoning_live_text", "")
+        if not text:
+            return []
+        lines = [line.rstrip() for line in text.splitlines() if line.strip()]
+        if not lines:
+            return []
+        return lines[-_REASONING_LIVE_LINES:]
+
+    def _reasoning_live_fragments(self):
+        """prompt_toolkit FormattedText for the live reasoning region.
+
+        Each line is clamped to one terminal row so the fixed-height region
+        always shows the true tail instead of a wrapped fragment of an older
+        line.
+        """
+        lines = self._render_reasoning_live_lines()
+        if not lines:
+            return []
+        try:
+            width = self._get_tui_terminal_width()
+        except Exception:
+            width = 0
+        frags = []
+        for i, line in enumerate(lines):
+            if i:
+                frags.append(("", "\n"))
+            if width and width > 4:
+                line = self._truncate_display_width(line, width - 2)
+            frags.append(("class:hint", f"  {line}"))
+        return frags
+
+    def _truncate_display_width(self, text: str, width: int) -> str:
+        """Clamp *text* to *width* terminal cells, appending an ellipsis."""
+        if width <= 4 or self._status_bar_display_width(text) <= width:
+            return text
+        budget = width - 1  # leave room for the ellipsis
+        out: list[str] = []
+        used = 0
+        for ch in text:
+            w = self._status_bar_display_width(ch)
+            if used + w > budget:
+                break
+            out.append(ch)
+            used += w
+        return "".join(out) + "…"
+
+    def _reasoning_widget_height(self, width: Optional[int] = None) -> int:
+        """Fixed height for the live reasoning region (0 when inactive)."""
+        if self._use_minimal_tui_chrome(width=width):
+            return 0
+        return _REASONING_LIVE_LINES if self._render_reasoning_live_lines() else 0
+
+    def _reasoning_elapsed(self) -> float:
+        """Seconds spent in the reasoning block that just closed."""
+        started = getattr(self, "_reasoning_started_at", 0.0) or 0.0
+        if started <= 0:
+            return 0.0
+        return max(0.0, time.monotonic() - started)
+
     def _stream_reasoning_delta(self, text: str) -> None:
-        """Stream reasoning/thinking tokens into a dim box above the response.
+        """Accumulate reasoning tokens into the bottom live region.
 
-        Opens a dim reasoning box on first token, streams line-by-line.
-        The box is closed automatically when content tokens start arriving
-        (via _stream_delta → _emit_stream_text).
-
-        Once the response box is open, suppress any further reasoning
-        rendering — a late thinking block (e.g. after an interrupt) would
-        otherwise draw a reasoning box inside the response box.
+        Nothing is committed to the scrollback while reasoning streams — the
+        live region shows the tail and ``_close_reasoning_box`` folds the whole
+        block into one line.  A late thinking block arriving after the response
+        has started is dropped, so it cannot draw reasoning inside the response
+        box.
         """
         if not text:
             return
@@ -7918,39 +7993,45 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         if getattr(self, "_stream_box_opened", False):
             return
 
-        # Open the reasoning block on first reasoning token.  Uses the same
-        # transcript grammar as tool calls (dim bullet + indented body) so the
-        # scrollback reads as one system rather than a boxed panel bolted on.
         if not getattr(self, "_reasoning_box_opened", False):
             self._reasoning_box_opened = True
-            _cprint(f"\n{_DIM}● Thinking…{_RST}")
-
-        self._reasoning_buf = getattr(self, "_reasoning_buf", "") + text
-
-        # Emit complete lines, and force-flush long partial lines so
-        # reasoning is visible in real-time even without newlines.
-        while "\n" in self._reasoning_buf:
-            line, self._reasoning_buf = self._reasoning_buf.split("\n", 1)
-            _cprint(f"  {_DIM}{line}{_RST}")
-        if len(self._reasoning_buf) > 80:
-            _cprint(f"  {_DIM}{self._reasoning_buf}{_RST}")
-            self._reasoning_buf = ""
+            self._reasoning_started_at = time.monotonic()
+            self._reasoning_live_text = ""
+        self._reasoning_live_text = getattr(self, "_reasoning_live_text", "") + text
+        self._invalidate()
 
     def _close_reasoning_box(self) -> None:
-        """Close the live reasoning block if it's open."""
-        if getattr(self, "_reasoning_box_opened", False):
-            # Flush remaining reasoning buffer
-            buf = getattr(self, "_reasoning_buf", "")
-            if buf:
-                _cprint(f"  {_DIM}{buf}{_RST}")
-                self._reasoning_buf = ""
-            self._reasoning_box_opened = False
+        """Fold the live reasoning block into a single committed transcript line.
 
-            # Flush any content that was deferred while reasoning was rendering.
-            deferred = getattr(self, "_deferred_content", "")
-            if deferred:
-                self._deferred_content = ""
-                self._emit_stream_text(deferred)
+        ``display.reasoning_full`` (/reasoning full) opts into dumping the whole
+        trace instead of the fold, mirroring how the non-streaming reasoning
+        block already behaves.
+        """
+        if not getattr(self, "_reasoning_box_opened", False):
+            return
+
+        self._reasoning_box_opened = False
+        text = getattr(self, "_reasoning_live_text", "")
+        self._reasoning_live_text = ""
+        elapsed = self._reasoning_elapsed()
+        self._reasoning_started_at = 0.0
+
+        if text.strip():
+            if getattr(self, "reasoning_full", False):
+                _cprint(f"\n{_DIM}● Thinking for {elapsed:.0f}s{_RST}")
+                for line in text.splitlines():
+                    _cprint(f"  {_DIM}{line}{_RST}")
+            else:
+                _cprint(f"{_DIM}● Thought for {elapsed:.0f}s{_RST}"
+                        f"{_DIM} ( /reasoning full to show ){_RST}")
+
+        self._invalidate()
+
+        # Flush any content that was deferred while reasoning was rendering.
+        deferred = getattr(self, "_deferred_content", "")
+        if deferred:
+            self._deferred_content = ""
+            self._emit_stream_text(deferred)
 
     def _stream_delta(self, text) -> None:
         """Line-buffered streaming callback for real-time token rendering.
@@ -8321,7 +8402,8 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         self._in_reasoning_block = False
         self._stream_last_was_newline = True
         self._reasoning_box_opened = False
-        self._reasoning_buf = ""
+        self._reasoning_live_text = ""
+        self._reasoning_started_at = 0.0
         self._reasoning_preview_buf = ""
         self._deferred_content = ""
         self._stream_table_buf = []
@@ -17205,20 +17287,19 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             if self.show_reasoning and result and not _reasoning_already_shown:
                 reasoning = result.get("last_reasoning")
                 if reasoning:
-                    w = self._scrollback_box_width()
-                    r_label = " Reasoning "
-                    r_fill = w - 2 - len(r_label)
-                    r_top = f"{_DIM}┌─{r_label}{'─' * max(r_fill - 1, 0)}┐{_RST}"
-                    r_bot = f"{_DIM}└{'─' * (w - 2)}┘{_RST}"
+                    # Same transcript grammar as the streaming path: a dim
+                    # bullet plus an indented body, instead of a bordered box.
                     # Collapse long reasoning to the first 10 lines unless the
                     # user opted into full display via /reasoning full.
                     lines = reasoning.strip().splitlines()
+                    _cprint(f"\n{_DIM}● Thinking{_RST}")
                     if len(lines) > 10 and not getattr(self, "reasoning_full", False):
-                        display_reasoning = "\n".join(lines[:10])
-                        display_reasoning += f"\n{_DIM}  ... ({len(lines) - 10} more lines — /reasoning full to show){_RST}"
+                        for line in lines[:10]:
+                            _cprint(f"  {_DIM}{line}{_RST}")
+                        _cprint(f"  {_DIM}... ({len(lines) - 10} more lines — /reasoning full to show){_RST}")
                     else:
-                        display_reasoning = reasoning.strip()
-                    _cprint(f"\n{r_top}\n{_DIM}{display_reasoning}{_RST}\n{r_bot}")
+                        for line in lines:
+                            _cprint(f"  {_DIM}{line}{_RST}")
 
             if response and not response_previewed:
                 # Use skin engine for label/color with fallback
@@ -17793,6 +17874,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         model_picker_widget=None,
         command_palette_widget=None,
         spinner_widget=None,
+        reasoning_widget=None,
         spacer,
         status_bar,
         input_rule_top,
@@ -17826,6 +17908,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                 clarify_widget,
                 model_picker_widget,
                 command_palette_widget,
+                reasoning_widget,
                 spinner_widget,
                 spacer,
                 *self._get_extra_tui_widgets(),
@@ -19735,6 +19818,15 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             wrap_lines=True,
         )
 
+        # Live reasoning region: shows the tail of the in-flight thinking
+        # stream above the spinner.  Height collapses to 0 when nothing is in
+        # flight, so it is a no-op for users without reasoning display on.
+        reasoning_widget = Window(
+            content=FormattedTextControl(self._reasoning_live_fragments),
+            height=self._reasoning_widget_height,
+            wrap_lines=True,
+        )
+
         # Petdex mascot — right-aligned half-block sprite above the prompt,
         # mirroring the TUI's PetPane. Collapses to height 0 when no pet is
         # enabled, so it's a no-op for everyone else. The _pet_anim_loop thread
@@ -20463,8 +20555,9 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                     slash_confirm_widget=slash_confirm_widget,
                     clarify_widget=clarify_widget,
                     model_picker_widget=model_picker_widget,
-                    command_palette_widget=command_palette_widget,
-                    spinner_widget=spinner_widget,
+                command_palette_widget=command_palette_widget,
+                reasoning_widget=reasoning_widget,
+                spinner_widget=spinner_widget,
                     spacer=spacer,
                     status_bar=status_bar,
                     input_rule_top=input_rule_top,
