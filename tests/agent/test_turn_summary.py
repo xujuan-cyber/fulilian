@@ -157,6 +157,9 @@ def _make_cli(**overrides):
         _turn_summary_record = cli_module.FulilianCLI._turn_summary_record
         _turn_summary_emit = cli_module.FulilianCLI._turn_summary_emit
         _spinner_token_flow = cli_module.FulilianCLI._spinner_token_flow
+        # _render_spinner_text draws its label and phase marker through these.
+        _spinner_label = cli_module.FulilianCLI._spinner_label
+        _spinner_phase_metric = cli_module.FulilianCLI._spinner_phase_metric
         _render_spinner_text = cli_module.FulilianCLI._render_spinner_text
 
     stub = _Stub()
