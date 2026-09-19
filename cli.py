@@ -5201,6 +5201,13 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         self._spinner_token_flow_enabled = bool(
             CLI_CONFIG["display"].get("spinner_token_flow", True)
         )
+        # display.spinner_verbs: "cc" (default) draws the spinner label from
+        # Claude Code's verb pool; "off" keeps the fixed "Thinking" label.
+        self._spinner_verbs_enabled = str(
+            CLI_CONFIG["display"].get("spinner_verbs", "cc")
+        ).strip().lower() not in {"off", "false", "0", "no", "none"}
+        self._spinner_phase = ""
+        self._spinner_phase_seed = ""
         self._turn_summary_collector = None
         self._turn_summary_start = 0.0
         self._turn_token_baseline = 0
@@ -6755,8 +6762,48 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             return max(1, math.ceil(text_width / width))
         return 1
 
+    def _set_spinner_phase(self, phase: str) -> None:
+        """Record the current activity phase, redrawing the label only on change.
+
+        The spinner repaints many times per second, so the phase (and therefore
+        the drawn verb) is latched: a new verb appears when the turn moves from
+        thinking to responding to running a tool, not on every frame.
+        """
+        phase = str(phase or "").strip().lower()
+        if not phase or phase == getattr(self, "_spinner_phase", ""):
+            return
+        self._spinner_phase = phase
+        # A value fixed for this phase instance: monotonic time is stable
+        # within the phase and differs between two consecutive phases.
+        self._spinner_phase_seed = f"{phase}:{int(time.monotonic() * 1000)}"
+        self._invalidate()
+
+    def _spinner_label(self) -> str:
+        """Spinner verb label: a pooled verb plus an ellipsis, or "Thinking"."""
+        if not getattr(self, "_spinner_verbs_enabled", True):
+            return "Thinking"
+        try:
+            from agent.spinner_verbs import pick_verb
+        except Exception:
+            return "Thinking"
+        seed = getattr(self, "_spinner_phase_seed", "") or getattr(self, "_spinner_phase", "")
+        if not seed:
+            # Before the first phase is latched, keep the historical label.
+            return "Thinking"
+        return f"{pick_verb(seed)}…"
+
+    def _spinner_phase_metric(self) -> str:
+        """Trailing phase marker, mirroring Claude Code's ``· thinking``.
+
+        Only emitted while reasoning is actually in flight — the label already
+        names the activity, so anything else would just repeat it.
+        """
+        if getattr(self, "_reasoning_box_opened", False):
+            return "thinking"
+        return ""
+
     def _render_spinner_text(self) -> str:
-        """Return the live Thinking status exactly as rendered in the TUI."""
+        """Return the live activity status exactly as rendered in the TUI."""
         txt = getattr(self, "_spinner_text", "")
         if not txt:
             return ""
@@ -6764,22 +6811,27 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         flow = self._spinner_token_flow()
         t0 = getattr(self, "_tool_start_time", 0) or getattr(self, "_thinking_start_time", 0) or 0
         detail = txt.strip()
+        label = self._spinner_label()
+
+        metrics: list[str] = []
         if t0 > 0:
             elapsed = time.monotonic() - t0
             if elapsed >= 60:
                 _m, _s = int(elapsed // 60), int(elapsed % 60)
                 # Fixed-width timer to avoid status-line wrap jitter while
                 # scrolling/repainting (e.g. 01m05s, 12m09s).
-                elapsed_str = f"{_m:02d}m{_s:02d}s"
+                metrics.append(f"{_m:02d}m{_s:02d}s")
             else:
                 # Keep width stable before the 60s rollover as well.
-                elapsed_str = f"{elapsed:5.1f}s"
-            if flow:
-                return f"  {frame} Thinking · {detail}  ({elapsed_str} · {flow})"
-            return f"  {frame} Thinking · {detail}  ({elapsed_str})"
+                metrics.append(f"{elapsed:5.1f}s")
         if flow:
-            return f"  {frame} Thinking · {detail}  ({flow})"
-        return f"  {frame} Thinking · {detail}"
+            metrics.append(flow)
+        phase_metric = self._spinner_phase_metric()
+        if phase_metric:
+            metrics.append(phase_metric)
+
+        suffix = f"  ({' · '.join(metrics)})" if metrics else ""
+        return f"  {frame} {label} · {detail}{suffix}"
 
     # ── Per-turn accounting (display.turn_summary / spinner_token_flow) ──
     #
@@ -7997,6 +8049,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             self._reasoning_box_opened = True
             self._reasoning_started_at = time.monotonic()
             self._reasoning_live_text = ""
+        self._set_spinner_phase("thinking")
         self._reasoning_live_text = getattr(self, "_reasoning_live_text", "") + text
         self._invalidate()
 
@@ -8210,6 +8263,8 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
 
         # Close the live reasoning box before opening the response box
         self._close_reasoning_box()
+        # Content is arriving, so the turn has moved on from thinking.
+        self._set_spinner_phase("responding")
 
         # Open the response on the first visible text with a single bullet
         # marker (Claude-Code transcript style) rather than a full-width box
@@ -8404,6 +8459,10 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         self._reasoning_box_opened = False
         self._reasoning_live_text = ""
         self._reasoning_started_at = 0.0
+        # Forget the latched phase so the next phase instance draws a fresh
+        # verb instead of reusing the previous turn's.
+        self._spinner_phase = ""
+        self._spinner_phase_seed = ""
         self._reasoning_preview_buf = ""
         self._deferred_content = ""
         self._stream_table_buf = []
@@ -14867,6 +14926,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             self._spinner_text = f"{emoji} {label}"
             self._tool_start_time = time.monotonic()
             self._thinking_start_time = 0.0
+            self._set_spinner_phase("tool")
             # Store args for stacked scrollback line on completion
             self._pending_tool_info.setdefault(function_name, []).append(
                 function_args if function_args is not None else {}
