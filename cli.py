@@ -4612,6 +4612,39 @@ def _gradient_frame_line(left_char: str, right_char: str, width: int) -> list:
     return frags
 
 
+def _gradient_rule_line(width: int) -> list:
+    """Return formatted-text fragments for a full-width horizontal rule.
+
+    Claude Code's composer has no side borders, so the chrome around the
+    input area is a pair of plain ``─`` rules spanning the whole terminal
+    width — no corner glyphs.  Same gradient and light-mode remapping as
+    :func:`_gradient_frame_line`, but the rule covers the full width
+    instead of leaving a column for a corner character at each end.
+    """
+    _GS = 8  # gradient segments
+    start_hex = _maybe_remap_for_light_mode("#e0e7ff")
+    end_hex = _maybe_remap_for_light_mode("#94a3b8")
+    _R0, _G0, _B0 = int(start_hex[1:3], 16), int(start_hex[3:5], 16), int(start_hex[5:7], 16)
+    _R1, _G1, _B1 = int(end_hex[1:3], 16), int(end_hex[3:5], 16), int(end_hex[5:7], 16)
+    if width <= 0:
+        return []
+    seg_len = max(1, width // _GS)
+    n_segs = (width + seg_len - 1) // seg_len
+    remaining = width
+    frags = []
+    for i in range(n_segs):
+        t = i / max(1, n_segs - 1)
+        r = int(_R0 + (_R1 - _R0) * t)
+        g = int(_G0 + (_G1 - _G0) * t)
+        b = int(_B0 + (_B1 - _B0) * t)
+        count = min(seg_len, remaining)
+        if count <= 0:
+            break
+        frags.append((f'#{r:02x}{g:02x}{b:02x}', '─' * count))
+        remaining -= count
+    return frags
+
+
 def _gradient_hint_text(text: str) -> list:
     """Return hint text with horizontal gradient colors spanning the text.
 
@@ -5614,13 +5647,6 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         self._slash_confirm_state = None
         self._slash_confirm_deadline = 0
         self._model_picker_state = None
-        # Rotating task-oriented composer placeholder (C-09), chosen once per
-        # session so it stays stable while the empty input box is on screen.
-        try:
-            from fulilian_cli.tips import get_random_composer_placeholder
-            self._composer_placeholder = get_random_composer_placeholder()
-        except Exception:
-            self._composer_placeholder = ""
         self._command_palette_state = None
         # Armed when a bare `/resume` prints the recent-sessions list so the
         # very next bare numeric input (e.g. `3`) resolves to that session.
@@ -7228,10 +7254,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             width = self._get_tui_terminal_width()
         model = snapshot.get("model_short") or "Fulilian"
         provider = snapshot.get("provider_short") or ""
-        reasoning = snapshot.get("reasoning_effort") or ""
         model_label = f"{provider}/{model}" if provider else model
-        if reasoning:
-            model_label = f"{model_label} · {reasoning}"
         parts = [f"⚕ {model_label}", snapshot.get("duration", "0s")]
         goal_segment = self._status_bar_goal_segment(snapshot)
         if goal_segment:
@@ -7344,10 +7367,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             width = self._get_tui_terminal_width()
             provider = snapshot.get("provider_short") or ""
             model_short = snapshot.get("model_short") or "Fulilian"
-            reasoning = snapshot.get("reasoning_effort") or ""
             model_label = f"{provider}/{model_short}" if provider else model_short
-            if reasoning:
-                model_label = f"{model_label} · {reasoning}"
             meta_parts = [model_label, snapshot.get("duration", "0s")]
             goal_segment = self._status_bar_goal_segment(snapshot)
             if goal_segment:
@@ -7537,6 +7557,44 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         except Exception:
             return [("class:status-bar", f" {self._build_status_bar_text()} ")]
 
+    @classmethod
+    def _right_align_input_meta_fragments(cls, frags, badge: str, width: int):
+        """Right-align ``badge`` at the end of the composer meta line.
+
+        Mirrors Claude Code's footer, which parks the effort indicator at
+        the far right of the row under the prompt.  Unlike
+        :meth:`_right_align_status_title_fragments` this is a no-op when
+        ``badge`` is empty, so the meta line keeps its natural length when
+        no reasoning effort is configured.
+        """
+        badge = str(badge or "").strip()
+        if not badge:
+            return frags
+        badge = f" {badge} "
+        left_width = width - cls._status_bar_display_width(badge)
+        if left_width < 24:
+            return frags
+        trimmed = []
+        used = 0
+        for style, value in frags:
+            remaining = left_width - used
+            if remaining <= 0:
+                break
+            value_width = cls._status_bar_display_width(value)
+            if value_width <= remaining:
+                trimmed.append((style, value))
+                used += value_width
+                continue
+            clipped = cls._trim_status_bar_text(value, remaining)
+            if clipped:
+                trimmed.append((style, clipped))
+                used += cls._status_bar_display_width(clipped)
+            break
+        if used < left_width:
+            trimmed.append(("class:input-meta", " " * (left_width - used)))
+        trimmed.append(("class:input-meta-context", badge))
+        return trimmed
+
     def _get_input_meta_fragments(self):
         """Return compact context and token usage below the composer."""
         try:
@@ -7557,10 +7615,20 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                 f" / {format_token_count_compact(snapshot.get('session_output_tokens', 0))} out"
                 f" / {format_token_count_compact(snapshot.get('session_total_tokens', 0))} total"
             )
-            return [
-                ("class:input-meta-context", f"  {context_text}  "),
-                ("class:input-meta", f"·  {tokens_text}"),
+            frags = [
+                ("class:input-meta", "  "),
+                ("class:input-meta-context", context_text),
+                ("class:input-meta", " · "),
+                ("class:input-meta", tokens_text),
             ]
+            # Effort indicator sits at the far right, like Claude Code's
+            # `● high · /effort`.  The top status line no longer repeats it.
+            effort = snapshot.get("reasoning_effort") or ""
+            return self._right_align_input_meta_fragments(
+                frags,
+                f"● {effort}" if effort else "",
+                self._get_tui_terminal_width(),
+            )
         except Exception:
             return []
 
@@ -18001,9 +18069,9 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         input_composer = input_area
         if hasattr(input_area, "buffer"):
             input_composer = HSplit([
-                Window(content=FormattedTextControl(lambda: _gradient_frame_line("╭", "╮", self._get_tui_terminal_width())), height=1),
+                Window(content=FormattedTextControl(lambda: _gradient_rule_line(self._get_tui_terminal_width())), height=1),
                 input_area,
-                Window(content=FormattedTextControl(lambda: _gradient_frame_line("╰", "╯", self._get_tui_terminal_width())), height=1),
+                Window(content=FormattedTextControl(lambda: _gradient_rule_line(self._get_tui_terminal_width())), height=1),
             ])
         return [
             item for item in [
@@ -19832,11 +19900,9 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                 _stash_hint = ""
             if _stash_hint:
                 return _stash_hint
-            # Idle + empty composer: show a rotating task-oriented example to
-            # nudge the user toward a high-value first action (C-09). Chosen
-            # once per session (self._composer_placeholder) so it stays stable
-            # while being read, not flickering every render.
-            return getattr(cli_ref, "_composer_placeholder", "") or ""
+            # Idle + empty composer: Claude Code leaves the composer blank,
+            # so no placeholder text is shown here either.
+            return ""
 
         input_area.control.input_processors.append(_PlaceholderProcessor(_get_placeholder))
 

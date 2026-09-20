@@ -169,7 +169,7 @@ class TestCLIStatusBar:
             context_length=200_000,
         )
         meta = "".join(value for _, value in cli_obj._get_input_meta_fragments())
-        assert meta == "  Context 12.4K/200K (6%)  ·  Tokens 10.2K in / 2.22K out / 12.4K total"
+        assert meta == "  Context 12.4K/200K (6%) · Tokens 10.2K in / 2.22K out / 12.4K total"
 
 
 

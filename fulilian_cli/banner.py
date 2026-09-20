@@ -70,12 +70,12 @@ def _print_minimal_banner(
 
     ::
 
-        ╭──────────────────────────────────────────────╮
-        │     ✦      FuLiLian  DeepSeek-V4-Flash  · 128K │
-        │            /home/xujuan/project                │
-        ╰──────────────────────────────────────────────╯
+         ▐▛███▜▌  FuLiLian DeepSeek-V4-Flash · 128K
+        ▝▜█████▛▘ /home/xujuan/project
+          ▘▘ ▝▝   session 71430_e7d249
 
-    Star logo on the left, identity + cwd on the right — no tool/skill listings.
+    Clawd on the left, identity + cwd on the right — no tool/skill listings.
+    Printed as plain lines with no surrounding box, matching Claude Code.
     """
     from rich.table import Table
 
@@ -113,8 +113,6 @@ def _print_minimal_banner(
         "\n".join(right_lines),
     )
 
-    # Gradient frame instead of a solid-color Panel border.
-    from cli import _gradient_frame_line
     from rich.text import Text
 
     # Clawd — Claude Code's crab mascot, 3 rows x 9 cols, cyan->white gradient.
@@ -186,26 +184,10 @@ def _print_minimal_banner(
         short_id = session_id[-12:] if len(session_id) > 12 else session_id
         content_lines.append(Text.assemble(_clawd_row(2), (f" session {short_id}", _ts)))
 
-    # Full-width frame like the original Panel (expand=True): span the
-    # console width, at least as wide as the content.
-    try:
-        console_width = int(getattr(console, "width", 0) or 0)
-    except Exception:
-        console_width = 0
-    inner_width = max(len(str(l)) for l in content_lines) if content_lines else 20
-    box_width = max(console_width, inner_width + 2)
-
-    frags = _gradient_frame_line("\u256d", "\u256e", box_width)
-    console.print(Text.assemble(*[(t, s) for s, t in frags]))
+    # Claude Code prints its banner as plain lines with no surrounding box,
+    # so the content rows go straight to the console.
     for line in content_lines:
-        t = Text("\u2502")
-        t.append_text(line)
-        text_str = str(line)
-        remaining = max(0, box_width - 2 - len(text_str))
-        t.append(" " * remaining + "\u2502")
-        console.print(t)
-    frags = _gradient_frame_line("\u2570", "\u256f", box_width)
-    console.print(Text.assemble(*[(t, s) for s, t in frags]))
+        console.print(line)
 
 
 # =========================================================================
