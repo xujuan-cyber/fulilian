@@ -759,6 +759,64 @@ def repair_message_sequence(agent, messages: List[Dict]) -> int:
                 matched_tool_groups = set()
             filtered.append(msg)
 
+    # Pass 1.5 (C3-49): synthesize results for tool calls whose results
+    # were never recorded. An interrupted batch persists as
+    # ``assistant(3 calls) -> tool(T1) -> tool(T2)`` with call 3 unpaired;
+    # pairing-enforcing providers (Anthropic Messages) reject the replay
+    # with HTTP 400. A user turn or the end of the transcript closes the
+    # tool run: every still-unanswered call gets a synthetic interrupted
+    # result inserted before it, in call order. Idempotent — a repaired
+    # sequence has no unanswered calls left.
+    filled: List[Dict] = []
+    open_calls: List[Dict] = []
+
+    def _flush_open_calls() -> None:
+        nonlocal repairs
+        for tc in open_calls:
+            variants = tool_call_id_variants(tc)
+            if not variants:
+                continue
+            fn = tc.get("function") if isinstance(tc.get("function"), dict) else {}
+            filled.append({
+                "role": "tool",
+                "tool_call_id": variants[0],
+                "name": fn.get("name") or "",
+                "content": (
+                    "[interrupted — tool execution was cut off before a "
+                    "result was recorded]"
+                ),
+            })
+            repairs += 1
+        open_calls.clear()
+
+    for msg in filtered:
+        if not isinstance(msg, dict):
+            _flush_open_calls()
+            filled.append(msg)
+            continue
+        role = msg.get("role")
+        if role == "assistant":
+            open_calls = [
+                tc
+                for tc in (msg.get("tool_calls") or [])
+                if tool_call_id_variants(tc)
+            ]
+            filled.append(msg)
+        elif role == "tool":
+            result_ids = set(tool_result_id_variants(msg.get("tool_call_id")))
+            for tc in list(open_calls):
+                if set(tool_call_id_variants(tc)) & result_ids:
+                    open_calls.remove(tc)
+                    break
+            filled.append(msg)
+        else:
+            # A user turn closes the tool run — fill BEFORE it so the
+            # assistant->tool pairing stays valid across the boundary.
+            _flush_open_calls()
+            filled.append(msg)
+    _flush_open_calls()
+    filtered = filled
+
     # Pass 2: merge consecutive user messages. Preserves all user input
     # so nothing the user typed is lost.
     merged: List[Dict] = []

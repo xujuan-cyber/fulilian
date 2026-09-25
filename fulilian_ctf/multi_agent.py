@@ -50,7 +50,6 @@ from .racer import (
     _stop_process,
     model_slug,
 )
-from .reasoner import Reasoner, TaskCategory
 from .relay import is_solver_meta_fact
 from .solver import (
     FLAG_FILENAME,
@@ -565,7 +564,6 @@ def run_multi_agent(
     hallucination_detector: bool = True,
     opponent_monitor: bool = True,
     quiet: bool = False,
-    reasoner: Optional[Reasoner] = None,
 ) -> MultiAgentResult:
     """启动多 Agent 协作（F3-007/008/009）。
 
@@ -581,7 +579,6 @@ def run_multi_agent(
         hallucination_detector: 启用幻觉检测 agent
         opponent_monitor: 启用对手 Agent 监控（F3-013 集成）
         quiet: 静默输出
-        reasoner: Reasoner 实例（提供时替代随机方向分配）
 
     Returns:
         MultiAgentResult
@@ -594,13 +591,6 @@ def run_multi_agent(
     board_path = base_dir / BLACKBOARD_FILENAME
 
     dirs = resolve_directions(directions, board_path)
-    # 如果提供了 Reasoner 且没有显式 directions，用 Reasoner 的任务分配
-    if reasoner is not None and not directions:
-        plan = reasoner.initial_plan(project, None)
-        if plan and plan.tasks:
-            reasoner_dirs = [t.description for t in plan.tasks]
-            if reasoner_dirs:
-                dirs = reasoner_dirs
     resolved_model = model or project.model or resolve_default_model()
 
     budget = timeout or difficulty_adjusted_budget(project.difficulty)

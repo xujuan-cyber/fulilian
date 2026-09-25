@@ -22,7 +22,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from fulilian_constants import get_fulilian_home
+from fulilian_constants import get_fulilian_home, get_skills_dir
 
 # ── 路径常量 ─────────────────────────────────────────────────────────────
 
@@ -113,16 +113,16 @@ def _kb_roots():
 # C0-1: 求值时点结论——DB_PATH 保留在模块 import 期求值（现经
 # get_fulilian_home() 解析，override 在 import 前生效则跟随），而非推迟到
 # 使用点。理由：① 本文件内 DB_PATH 有 20+ 处调用点，推迟需全部改写且
-# 要与 4 个批外消费方（benchmark.py 的 from-import 快照、kb_writeback.py /
+# 要与 3 个批外消费方（benchmark.py 的 from-import 快照、
 # scripts/verify_wp_index.py 的 kr.DB_PATH 属性访问、fulilian_ctf/__init__.py
 # 再导出）同步，否则制造"内部动态 vs 导出快照"的新分叉，比现状更糟；
-# ② KB_PATH/DB_PATH 是既有测试 monkeypatch 面（见 kb_writeback.py 头注释），
+# ② KB_PATH/DB_PATH 是既有测试 monkeypatch 面（见 tests 的 _isolated_knowledge_env），
 # 改动态会破坏该契约。推迟求值属跨文件重构，留给后续批次；
 # 运行期 env 变更不传播到 DB_PATH 是已知残留（与改前行为一致，非回归）。
 DB_PATH = get_fulilian_home() / "knowledge.db"
 
 # skills/ctf-cards/snippets/ — 可复用攻击片段（.py，头部注释元数据）
-SNIPPETS_DIR = Path(__file__).resolve().parent.parent / "skills" / "ctf-cards" / "snippets"
+SNIPPETS_DIR = get_skills_dir() / "ctf-cards" / "snippets"
 
 # 技术标签索引（WP → tags），存在时供 similar_by_technique 使用
 TECHNIQUE_INDEX_RELPATH = Path("CTF大赛WP集合") / "wp_technique_index.json"
@@ -630,7 +630,7 @@ def _discover_contests(stems: "list[str]", min_count: int = 3) -> dict[str, str]
 def _load_authoritative_categories() -> "tuple[dict[str, str], dict[str, str]]":
     """读取 wp_technique_index.json 的权威分类，返回 (按路径, 按文件名) 两张表。
 
-    wp_technique_index.json 是 WP 元数据的**单源**：kb_writeback 回灌时写入的
+    wp_technique_index.json 是 WP 元数据的**单源**：其中写入的
     category 就是权威值。但 build_index 重建走 _guess_category 按目录名/关键词
     推断，两条路径口径不一致——实测 13 条里有 3 条被推断成别的分类
     （multiSQL→pwn、WEB2→crypto、Shiro→crypto），于是 `search(category=...)`
@@ -668,8 +668,8 @@ def _load_authoritative_categories() -> "tuple[dict[str, str], dict[str, str]]":
             # source_path 的 basename 是前缀无关的键：KB_PATH 迁移
             # （FULILIAN_CTF_KB_PATH / 软链）后绝对路径对不上，名字还能对上。
             by_name.setdefault(Path(src).name, cat)
-        # JSON 的键就是 wp_path.name（kb_writeback._register_technique_index
-        # 用 wp_path.name 当键），同样登记进名字表作为兜底来源。
+        # JSON 的键就是 wp_path.name（生成方用 wp_path.name 当键），
+        # 同样登记进名字表作为兜底来源。
         if isinstance(key, str) and key.strip():
             by_name.setdefault(key.strip(), cat)
     return by_path, by_name
@@ -840,61 +840,6 @@ def build_index(force: bool = False) -> int:
         print(f"[knowledge] snippets: {snippets} indexed", file=sys.stderr)
 
     return count
-
-
-def index_writeup_file(md_file: Path) -> bool:
-    """把单篇 Markdown 增量插入 writeups 索引（kb_writeback 回灌用）。
-
-    行结构与 build_index 完全同构（title=文件名 stem、category 走
-    _guess_category、content 截 200k）。SQL 为常量字面量 + 占位符，
-    所有运行时值经 sqlite3 参数绑定传入。表不存在/DB 锁等失败返回
-    False（调用方降级：文件已在库内，下次 force 重建自然入索引）。
-    幂等性由调用方保证（回灌前有文件级去重，每篇至多插入一次）。
-    """
-    if not DB_PATH.exists():
-        return False
-    try:
-        content = md_file.read_text(encoding="utf-8", errors="ignore")
-        if not content.strip():
-            return False
-        title = md_file.stem
-        # 与 build_index 同口径：JSON 权威分类优先。该函数目前全仓库零调用者，
-        # 但它是 build_index 的增量孪生实现——不一起改，将来有人启用它时
-        # 同一个「推断分类覆盖权威分类」的缺陷会原样复活。
-        _auth_by_path, _auth_by_name = _load_authoritative_categories()
-        category = _authoritative_category(
-            md_file, content, _auth_by_path, _auth_by_name, {md_file.name}
-        )
-        content_trunc = content[:200_000]
-        source = str(md_file)
-        # 元数据同口径抽取。注意：频次兜底赛名（_discover_contests）需要全库
-        # 统计，单文件增量插入拿不到，故这里只填词表命中的赛名；未命中的等
-        # 下次 force 重建自然补齐。year / vuln_type 不受影响（纯单文件推断）。
-        meta = parse_wp_meta(md_file, content)
-        year = meta["year"]
-        row = (
-            title,
-            category,
-            content_trunc,
-            source,
-            str(year) if year else "",
-            meta["contest"],
-            meta["vuln_type"],
-        )
-        conn = sqlite3.connect(str(DB_PATH))
-        try:
-            conn.executemany(
-                "INSERT INTO writeups "
-                "(title, category, content, source_path, year, contest, vuln_type) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                [row],
-            )
-            conn.commit()
-        finally:
-            conn.close()
-        return True
-    except Exception:  # noqa: BLE001 — 增量索引失败由调用方告警降级
-        return False
 
 
 # ── 片段（snippets）索引 ────────────────────────────────────────────────

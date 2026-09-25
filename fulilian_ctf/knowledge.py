@@ -20,8 +20,10 @@ import re
 from pathlib import Path
 from typing import Optional
 
-# skills/ctf-cards/ 目录路径（相对于项目根）
-SKILLS_DIR = Path(__file__).resolve().parent.parent / "skills" / "ctf-cards"
+from fulilian_constants import get_skills_dir
+
+# skills/ctf-cards/ 目录路径（profile 层：FULILIAN_HOME/skills/ctf-cards）
+SKILLS_DIR = get_skills_dir() / "ctf-cards"
 
 # 通用解题 playbook（注入在知识卡之前）
 PLAYBOOK_PATH = SKILLS_DIR / "playbook.md"

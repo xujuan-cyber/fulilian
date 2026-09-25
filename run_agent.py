@@ -9311,7 +9311,7 @@ def _build_ctf_system_prompt() -> str:
         "- 不要自动从输出中提取 flag 字符串\n"
         "- 只有 FLAG 文件中的内容才会被提交\n"
         "- 提交前会走三重校验门验证\n"
-        "- 每次有意义的步骤后用 git_auto_commit 记录进度\n"
+        "- 进度由工具钩子在每次成功命令后自动提交，无需手动调用 git_auto_commit\n"
         "\n"
         "## 黑板进度共享\n"
         "- 每得到一个 CONFIRMED 或 REFUTED 的发现，立即用 record_fact 工具写入黑板\n"

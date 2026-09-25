@@ -293,7 +293,7 @@ class TestSkipRulesRegression:
 # ── 7. 权威分类覆盖（wp_technique_index.json > _guess_category） ────────
 #
 # kg_retriever 曾只走 _guess_category 推断，与 wp_technique_index.json 里
-# kb_writeback 写入的权威 category 冲突（实测 13 条里 3 条不一致：
+# 记录的权威 category 冲突（实测 13 条里 3 条不一致：
 # multiSQL→pwn、WEB2→crypto、Shiro→crypto），导致 search(category=...)
 # 对这几个分类静默漏检。下面两把锁锁住双键覆盖与回退行为。
 

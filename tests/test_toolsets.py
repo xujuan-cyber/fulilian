@@ -237,8 +237,18 @@ class TestCtfSolveToolset:
 
     def test_static_definition_keeps_solver_tools_and_drops_review_tools(self):
         tools = set(TOOLSETS["ctf_solve"]["tools"])
-        # CTF 解题工具
-        assert {"verify_flag", "checkpoint", "generate_writeup", "compile_check"} <= tools
+        # CTF 解题工具（M-5：checkpoint / generate_writeup 两个 stub 已移除，
+        # 见 tools/ctf_solve.py 的注释与 registry.register 调用）
+        assert {
+            "verify_flag",
+            "submit_flag",
+            "record_fact",
+            "git_auto_commit",
+            "compile_check",
+            "run_script",
+        } <= tools
+        # 已删除的 stub 不得回归（写了名字但无注册方 = 静默失效）
+        assert not ({"checkpoint", "generate_writeup"} & tools)
         # 自省 fork 已关（A3），这两个工具是纯开销
         assert "memory" not in tools
         assert "skill_manage" not in tools

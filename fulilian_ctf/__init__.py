@@ -28,7 +28,6 @@ from .blackboard import (
     load_blackboard,
     save_blackboard,
 )
-from .budget import BudgetConfig, BudgetTracker, ChallengeUsage, Difficulty
 from .monitor import Alert, OpponentMonitor, analyze_tool_call, scan_log_for_anomalies
 from .multi_agent import (
     MultiAgentResult,
@@ -90,7 +89,7 @@ from .knowledge_retriever import (
     search_snippets,
     similar_by_technique,
 )
-from .probe import AutoPrompter, EnvInfo, FileInfo, NetworkInfo, ProbeResult, QuickScanResult, probe_challenge
+from .probe import EnvInfo, FileInfo, NetworkInfo, ProbeResult, QuickScanResult, probe_challenge
 from .specialists import (
     BaseSpecialist,
     SpecialistFactory,
@@ -101,8 +100,6 @@ from .specialists import (
     ForensicsSpecialist,
     MiscSpecialist,
 )
-from .reasoner import Plan, Reasoner, Task, TaskCategory, TaskResult
-from .planner import ContextManager, Executor, Planner, Turn, TurnRole
 from .registry import challenge_to_project, load_challenges
 from .relay import (
     build_relay, parse_relay, read_relay_file, write_relay_file,
@@ -169,31 +166,13 @@ __all__ = [
     "DIFFICULTY_BUDGETS",
     "Timebox",
     "difficulty_adjusted_budget",
-    # budget (统一预算控制层)
-    "BudgetConfig",
-    "BudgetTracker",
-    "ChallengeUsage",
-    "Difficulty",
     # probe (F2-003)
-    "AutoPrompter",
     "EnvInfo",
     "FileInfo",
     "NetworkInfo",
     "ProbeResult",
     "QuickScanResult",
     "probe_challenge",
-    # reasoner (F4-008)
-    "Plan",
-    "Reasoner",
-    "Task",
-    "TaskCategory",
-    "TaskResult",
-    # planner (F4-008)
-    "ContextManager",
-    "Executor",
-    "Planner",
-    "Turn",
-    "TurnRole",
     # relay (F2-012 契约)
     "build_relay",
     "parse_relay",

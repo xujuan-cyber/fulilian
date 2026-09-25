@@ -12419,6 +12419,9 @@ _BUILTIN_SUBCOMMANDS = frozenset(
         "model", "monitoring", "pairing", "pause", "peer", "pets", "plugins", "profile",
         "project", "proxy",
         "prompt-size",
+        # CTF 子命令：显式登记以跳过每次调用的插件发现慢路径
+        # （实测 solve/writeup/knowledge 走慢路径多付 0.2–0.3s）。
+        "solve", "solve-all", "writeup", "replay", "knowledge",
         "resume",
         "send", "sessions", "setup",
         "skin", "skills", "slack", "status", "sync", "tools", "uninstall", "update",

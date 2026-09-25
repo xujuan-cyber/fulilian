@@ -763,12 +763,6 @@ def solver_worker(project, work_dir: str, model: str, queue, solver_impl=None) -
         action="worker_start",
         tool_call=f"solver_worker({project.challenge_id}, {model})",
     ))
-    # 初始化上下文管理器（F4-008：上下文紧凑管理）
-    from .planner import ContextManager, TurnRole
-
-    context = ContextManager(f"solver_{solver_id}", max_tokens=15000)
-    context.set_system_prompt(f"Solve CTF challenge: {project.challenge_id} ({project.category})")
-    context.add_turn(TurnRole.USER, f"Starting solver for {project.challenge_id}")
     try:
         work_dir.mkdir(parents=True, exist_ok=True)
         os.environ["FULILIAN_CTF_MODE"] = "1"
@@ -807,7 +801,6 @@ def solver_worker(project, work_dir: str, model: str, queue, solver_impl=None) -
         else:
             code = solver_impl(project, work_dir, query)
         result = _solver_result_from_code(code)
-        context.add_turn(TurnRole.TOOL, f"solver finished: exit_code={code}", is_reasoning=True)
         solver_trace.add_entry(TraceEntry(
             timestamp=time.time(),
             round=1,
@@ -851,7 +844,6 @@ def solver_worker(project, work_dir: str, model: str, queue, solver_impl=None) -
 
     # 记录 flag 结果
     if result.flag:
-        context.add_turn(TurnRole.ASSISTANT, f"Flag found: {result.flag[:80]}")
         solver_trace.flag_found = True
         solver_trace.add_entry(TraceEntry(
             timestamp=time.time(),
@@ -861,7 +853,6 @@ def solver_worker(project, work_dir: str, model: str, queue, solver_impl=None) -
             tool_output=result.flag[:100],
         ))
     else:
-        context.add_turn(TurnRole.ASSISTANT, f"Flag not found: {result.error or 'no_flag'}", is_reasoning=True)
         solver_trace.add_entry(TraceEntry(
             timestamp=time.time(),
             round=2,

@@ -1097,7 +1097,7 @@ _CARDS_SYNC_HEADER = (
     "\n"
     "    fulilian knowledge cards-sync --apply\n"
     "\n"
-    "即可把保留的候选回灌进 skills/ctf-cards/ 对应知识卡的\n"
+    "即可把保留的候选回灌进 ~/.fulilian/skills/ctf-cards/ 对应知识卡的\n"
     "「实战经验沉淀」小节。apply 成功后本文件会被重置为仅含本说明。\n"
 )
 
@@ -1226,7 +1226,7 @@ def _cards_sync_generate(out_path: Path) -> None:
         blocks.append(
             f"<!-- candidate {attrs} -->\n"
             f"### [{c['category']}] {technique_line}\n"
-            f"- 目标卡: skills/ctf-cards/{card_file}\n"
+            f"- 目标卡: ~/.fulilian/skills/ctf-cards/{card_file}\n"
             f"- 证据: {evidence}；来源: {sources}\n"
             f"- 拟写入:\n"
             f"  - {bullet}\n"

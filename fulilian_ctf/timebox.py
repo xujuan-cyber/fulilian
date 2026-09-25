@@ -23,7 +23,6 @@ import time
 from dataclasses import dataclass, field
 from typing import Optional
 
-from .budget import BudgetConfig, BudgetTracker
 from .env_overrides import (
     ENV_DIFFICULTY_BUDGETS,
     ENV_TIER_THRESHOLDS,
@@ -81,13 +80,11 @@ class Timebox:
 
     initial_budget: Optional[int] = None
     incremental: bool = True
-    budget_config: Optional[BudgetConfig] = None
     current_tier: int = 0
     start_time: float = 0.0
     elapsed: float = 0.0
     is_expired: bool = False
     budgets: list[int] = field(init=False)
-    budget_tracker: BudgetTracker = field(init=False)
 
     def __post_init__(self) -> None:
         # 先判空再 int()——None 会让 int() 抛 TypeError。
@@ -99,7 +96,6 @@ class Timebox:
             self.budgets = sorted({first, *(t for t in tier_thresholds() if t >= first)})
         else:
             self.budgets = [first]
-        self.budget_tracker = BudgetTracker(self.budget_config)
 
     def start(self) -> None:
         self.start_time = time.time()

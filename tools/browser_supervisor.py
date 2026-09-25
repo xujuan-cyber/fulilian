@@ -157,7 +157,6 @@ _DIALOG_BRIDGE_SCRIPT = r"""
 # ── Data model ────────────────────────────────────────────────────────────────
 
 
-@dataclass
 def _log_forward_failure(task) -> None:
     """C4-13: fire-and-forget Fetch.continueRequest failures must not be
     silently swallowed — a dropped forward hangs the page's request."""
@@ -168,6 +167,7 @@ def _log_forward_failure(task) -> None:
         logger.debug("Fetch.continueRequest forward failed: %s", exc)
 
 
+@dataclass
 class PendingDialog:
     """A JS dialog currently open on some frame's session."""
 

@@ -9,7 +9,9 @@ class RevSpecialist(BaseSpecialist):
     """REV 类别专家：radare2 / rizin / strings / ghidra-headless。"""
 
     def __init__(self) -> None:
-        self.category = "rev"
+        # 知识层词表（知识卡/knowledge.db 的 category 列都是 "reverse"）；
+        # 注册表键仍是 "rev"，两者由 SpecialistFactory.canonical_category 收口。
+        self.category = "reverse"
         self.tools = ["radare2", "rizin", "strings", "ghidra-headless"]
         self.workflow = (
             "1. strings: extract embedded strings and hints\n"
@@ -19,7 +21,7 @@ class RevSpecialist(BaseSpecialist):
         )
         self.asset_discipline = (
             "Before solving, check existing assets first:\n"
-            "- search(query, category='reverse') and search_snippets(query, category='reverse') from fulilian_ctf/knowledge_retriever.py for similar past write-ups and exp snippets (note: the knowledge base uses 'reverse', not 'rev')\n"
-            "- skills/ctf-cards/scripts/ROUTE.md may point to a ready-made script (decoders, deobfuscation helpers); adapt it instead of writing from scratch"
+            "- search(query, category='reverse') and search_snippets(query, category='reverse') from fulilian_ctf/knowledge_retriever.py for similar past write-ups and exp snippets\n"
+            "- ~/.fulilian/skills/ctf-cards/scripts/ROUTE.md may point to a ready-made script (decoders, deobfuscation helpers); adapt it instead of writing from scratch"
         )
         super().__init__()

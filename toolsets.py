@@ -635,9 +635,9 @@ TOOLSETS = {
     # 否则自省 fork 永不触发且**静默** —— 不会报错，只是经验不再沉淀。
     # CTF 经验沉淀应在批次结束后统一做一次，不是每题一次。
     "ctf_solve": {
-        "description": "CTF mode solver tools — verify_flag, checkpoint, writeup generation, compile_check",
+        "description": "CTF mode solver tools — verify_flag, submit_flag, record_fact, git_auto_commit, compile_check, http_session, run_script",
         "tools": [
-            "verify_flag", "checkpoint", "generate_writeup", "compile_check",
+            "verify_flag", "submit_flag", "record_fact", "git_auto_commit", "compile_check",
             # P1.1：批量命令工具 —— 工具形态压往返（劝说没用，§1.2）
             "run_script",
         ],
