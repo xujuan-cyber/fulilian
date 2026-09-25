@@ -1058,9 +1058,11 @@ def search(
             conn.close()
     except sqlite3.DatabaseError:
         # OperationalError（FTS5 语法错误）是其子类；DatabaseError 一并兜住
-        # 损坏/非 SQLite 的 DB 文件，避免裸 traceback 穿透到 CLI 调用方
-        return _fallback_like_search(
-            query, category, limit,
+        # 损坏/非 SQLite 的 DB 文件，避免裸 traceback 穿透到 CLI 调用方。
+        # 走 token 版 LIKE OR —— 不能把 sanitize 后的 `"a" OR "b"` 串
+        # 当字面量去 LIKE（那等于永远搜不到）。
+        return _fallback_token_search(
+            _query_tokens(query), category, limit,
             year=year, contest=contest, vuln_type=vuln_type,
         )
 
@@ -1201,57 +1203,6 @@ def _fallback_token_search(
     ]
 
 
-def _fallback_like_search(
-    query: str,
-    category: Optional[str] = None,
-    limit: int = 5,
-    year: Optional[int] = None,
-    contest: Optional[str] = None,
-    vuln_type: Optional[str] = None,
-) -> list[dict]:
-    """FTS5 语法错误时的 LIKE 回退搜索。"""
-    try:
-        conn = sqlite3.connect(str(DB_PATH))
-        sql = r"""
-            SELECT title, category,
-                   substr(content, 1, 200) AS snip,
-                   source_path, year, contest, vuln_type
-            FROM writeups
-            WHERE content LIKE ? ESCAPE '\'
-        """
-        # 转义 LIKE 通配符，防止 query 中的 % 和 _ 被当作通配符
-        escaped = (
-            query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        )
-        params = [f"%{escaped}%"]
-
-        if category:
-            sql += " AND category = ?"
-            params.append(category)
-        sql, params = _append_meta_filters(
-            sql, params, year=year, contest=contest, vuln_type=vuln_type
-        )
-
-        sql += " LIMIT ?"
-        params.append(limit)
-
-        rows = conn.execute(sql, params).fetchall()
-        conn.close()
-
-        return [
-            {
-                "title": r[0],
-                "category": r[1],
-                "snippet": (r[2] or "")[:200] + ("..." if r[2] and len(r[2]) > 200 else ""),
-                "source_path": r[3],
-                **_meta_fields(r),
-            }
-            for r in rows
-        ]
-    except (sqlite3.OperationalError, sqlite3.DatabaseError):
-        return []
-
-
 def search_snippets(
     query: str,
     category: Optional[str] = None,
@@ -1269,7 +1220,15 @@ def search_snippets(
     Returns:
         list[dict]: [{"title", "category", "code", "source_wp", "snippet_path"}, ...]
         任何失败（DB 缺失/表为空/语法错误）返回 []，绝不抛异常。
+        与 search() 同口径：query 内部先过 sanitize_match_query，
+        调用方无需也不应自己构造 MATCH 语法。
     """
+    # P4.2 口径统一：与 search() 一样先 sanitize —— 专家 prompt 教的正是
+    # 这个入口，裸题面（引号/括号/payload）直接进 MATCH 会 OperationalError
+    # 而退化成近零召回。
+    query = sanitize_match_query(query)
+    if not query:
+        return []
     try:
         if not DB_PATH.exists():
             if auto_build:
@@ -1302,17 +1261,22 @@ def search_snippets(
             params.append(limit)
             rows = conn.execute(sql, params).fetchall()
         except sqlite3.OperationalError:
-            # FTS5 语法错误 → LIKE 回退（按 code 列模糊匹配）
+            # FTS5 语法错误 → 按 token 做 LIKE OR（把 sanitize 后的
+            # `"a" OR "b"` 串当字面量 LIKE 是搜不到的）
+            tokens = _query_tokens(query)
+            if not tokens:
+                return []
             try:
                 sql = """
                     SELECT title, category, code, source_wp, snippet_path
                     FROM snippets
-                    WHERE code LIKE ? ESCAPE '\\'
-                """
-                escaped = (
-                    query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-                )
-                params = [f"%{escaped}%"]
+                    WHERE ("""
+                sql += " OR ".join(r"code LIKE ? ESCAPE '\'" for _ in tokens)
+                sql += ")"
+                params = [
+                    "%" + t.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+                    for t in tokens
+                ]
                 if category:
                     sql += " AND category = ?"
                     params.append(category)

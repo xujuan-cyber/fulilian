@@ -52,7 +52,7 @@ __all__ = [
 
 
 class VerificationResult(Enum):
-    """三重校验门最终结果。"""
+    """校验门最终结果（实际语义为「双重门 + 格式复核」，见模块头 P2-5 诚实声明）。"""
 
     CONFIRMED = "confirmed"  # 通过所有门，可以提交
     HALLUCINATION = "hallucination"  # 第一门失败，直接拒

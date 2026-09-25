@@ -22,7 +22,8 @@ class MiscSpecialist(BaseSpecialist):
         )
         self.asset_discipline = (
             "Before solving, check existing assets first:\n"
-            "- search(query) and search_snippets(query) from fulilian_ctf/knowledge_retriever.py for similar past write-ups and exp snippets (misc has no fixed category; try category=None first, then likely ones)\n"
+            "- similar past write-ups and exp snippets are ALREADY injected into your context (see 知识卡 /\n"
+            "  相似历史 WP 参考); misc has no fixed category, so also check the 专题速查 pointers below\n"
             "- ~/.fulilian/skills/ctf-cards/scripts/ROUTE.md indexes many encoding/puzzle/conversion scripts; adapt one instead of writing from scratch"
         )
         super().__init__()

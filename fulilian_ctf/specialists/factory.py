@@ -2,10 +2,9 @@
 
 提供注册、创建和查询专家实例的功能。
 
-词表说明（与 ``reasoner.TaskCategory`` / 语料库同一套约定）：
+词表说明（与语料库/题面清单同一套约定）：
 
-- **注册表键 = 规范类别**（pwn/rev/web/crypto/forensics/misc），与
-  ``TaskCategory`` 枚举值一致，``test_reasoner_category`` 把这个不变量钉死。
+- **注册表键 = 规范类别**（pwn/rev/web/crypto/forensics/misc）。
 - **知识层用的是 "reverse"**：知识卡文件名（``knowledge.CATEGORIES``）、
   语料/``knowledge.db`` 的 category 列、题面清单都写 "reverse"。
   所以专家实例的 ``category`` 属性走知识层词表（``RevSpecialist.category

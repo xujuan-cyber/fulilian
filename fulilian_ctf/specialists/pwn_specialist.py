@@ -18,7 +18,6 @@ class PwnSpecialist(BaseSpecialist):
             "4. debug: verify with gdb, adjust offsets and leak addresses"
         )
         self.asset_discipline = (
-            "Before writing any exploit, run the three asset checks:\n"
             "1. Template match — ~/.fulilian/skills/ctf-cards/templates/ has 8 pwn templates, pick by trigger condition:\n"
             "   - pwn_ret2libc.py: stack overflow + NX on, leak GOT -> libc base -> system('/bin/sh')\n"
             "   - pwn_tcache_poison.py: menu heap with UAF/double-free, glibc >= 2.26 tcache poisoning (safe-linking branch for >= 2.32)\n"
@@ -28,8 +27,9 @@ class PwnSpecialist(BaseSpecialist):
             "   - pwn_ret2csu_stack.py: 64-bit glibc <= 2.33, overflow too short for full ROP or need rdx; stack pivot to bss\n"
             "   - pwn_fsop_apple2.py: glibc >= 2.34 (no __free_hook/__malloc_hook), heap UAF/edit -> house of apple2\n"
             "   - pwn_heap_menu.py: any add/del/edit/show menu heap challenge; scaffold to confirm the bug first, then chain into tcache_poison/fsop_apple2\n"
-            "2. History lookup — from fulilian_ctf/knowledge_retriever.py: search_snippets(query, category='pwn') for exp snippets,\n"
-            "   search(query, category='pwn') for similar past write-ups, similar_by_technique(tags) for technique-tagged matches\n"
+            "2. History lookup — similar past write-ups, exp snippets and technique-tagged matches for this\n"
+            "   category are ALREADY injected into your context (see 知识卡 / 专题速查 / 相似历史 WP 参考);\n"
+            "   read them before writing anything from scratch (do not try to call Python search() yourself)\n"
             "3. Ready-made tools — ~/.fulilian/skills/ctf-cards/scripts/ROUTE.md maps scenarios to battle-tested scripts\n"
             "Priority: template > snippet reference > adapt script > write from scratch.\n"
             "When using a template: Read its header docstring first to confirm applicability (glibc version, protections,\n"
