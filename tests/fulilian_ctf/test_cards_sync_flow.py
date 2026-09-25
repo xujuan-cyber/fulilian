@@ -87,7 +87,7 @@ class TestGenerateMode:
         m = _CAND_OPEN_RE.search(text)
         assert m, "应有 id=日期-序号 形式的候选块开标记"
         assert "### [web] SQL注入绕过WAF" in text
-        assert "- 目标卡: skills/ctf-cards/web.md" in text  # 09-14 卡目录更名 ctf-knowledge→ctf-cards,断言同步
+        assert "- 目标卡: ~/.fulilian/skills/ctf-cards/web.md" in text  # 09-25 skills 迁到 FULILIAN_HOME/skills（cli 输出同步）
         assert "成功 2 / 失败 0（含 verified 通过）" in text
         assert "来源: web-01, web-02" in text
         assert "SQL注入绕过WAF（关键命令: sqlmap" in text

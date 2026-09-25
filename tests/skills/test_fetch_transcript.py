@@ -6,7 +6,14 @@ from unittest import mock
 
 import pytest
 
-SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "skills" / "media" / "youtube-content" / "scripts"
+from fulilian_constants import get_skills_dir
+
+SCRIPTS_DIR = get_skills_dir() / "media" / "youtube-content" / "scripts"
+if not (SCRIPTS_DIR / "fetch_transcript.py").is_file():
+    pytest.skip(
+        f"youtube-content skill not installed at {SCRIPTS_DIR}",
+        allow_module_level=True,
+    )
 sys.path.insert(0, str(SCRIPTS_DIR))
 
 import fetch_transcript
