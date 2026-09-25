@@ -192,7 +192,7 @@ def _run_solve_once(project, work_dir: Optional[Path], query: str, model: str,
         }, ensure_ascii=False), flush=True)
 
     from run_agent import main as solver_main
-    from fulilian_ctf.solver import _log_prefix_chars_from_env
+    from fulilian_ctf.solver import _log_prefix_chars_from_env, resolve_max_turns_from_env
 
     base_dir = work_dir or Path.cwd()
     log_path = base_dir / SOLVER_LOG
@@ -210,6 +210,10 @@ def _run_solve_once(project, work_dir: Optional[Path], query: str, model: str,
                 query=query,
                 mode="ctf",
                 model=model,
+                # 轮数上限：与默认交互路径同口径（FULILIAN_CTF_MAX_TURNS 显式设置才
+                # 限制；未设 = 不限）。此前漏传 → run_agent 在 CTF 下默认 30 轮，
+                # -p/--json 会被静默截断。
+                max_turns=resolve_max_turns_from_env(),
                 architect_model=architect_model or "",
                 executor_model=executor_model or "",
                 log_prefix_chars=_log_prefix_chars_from_env(),

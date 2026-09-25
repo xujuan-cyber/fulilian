@@ -90,8 +90,59 @@ def _check_loop(tool_name, args):
     return None
 
 
+# 单题墙钟保险：超时后仍放行的"收尾类"工具（否则连候选 flag 都写不进 FLAG 文件）
+_TIMEOUT_ALLOWED_TOOLS = frozenset(
+    {"write_file", "read_file", "record_fact", "submit_flag", "verify_flag"}
+)
+
+
+def _solve_timeout_seconds() -> int:
+    """生效的单题墙钟预算（秒）；0 = 关闭。
+
+    调用期读 env（不 import 期冻结）：``FULILIAN_CTF_SOLVE_TIMEOUT`` 显式值时用它，
+    未设 → ``TIER_THRESHOLDS[-1]``（60 分钟，最宽档），显式 0 → 关闭。
+    """
+    from fulilian_ctf.env_overrides import ENV_SOLVE_TIMEOUT, env_int
+    from fulilian_ctf.timebox import TIER_THRESHOLDS
+
+    return env_int(ENV_SOLVE_TIMEOUT, TIER_THRESHOLDS[-1], min_value=0)
+
+
+def _check_solve_timebox(tool_name):
+    """单题墙钟保险（fail-open）。返回 None | ("block", msg)。
+
+    只在"时钟已标记"时生效（``FULILIAN_CTF_WORK_DIR`` 下存在 .solve_start），
+    所以 solve-all 的 worker（由 dispatcher 的 Timebox 管）不受影响。
+    """
+    try:
+        budget = _solve_timeout_seconds()
+        if budget <= 0:
+            return None
+        from fulilian_ctf.solve_clock import elapsed_seconds
+
+        work_dir = os.environ.get("FULILIAN_CTF_WORK_DIR") or os.getcwd()
+        elapsed = elapsed_seconds(work_dir)
+        if elapsed is None or elapsed < budget:
+            return None
+        if tool_name in _TIMEOUT_ALLOWED_TOOLS:
+            return None
+        return (
+            "block",
+            f"[timebox] solve wall-clock budget {budget}s exceeded "
+            f"(elapsed {elapsed}s). Stop exploring. If you already have a candidate "
+            f"flag, write it to the FLAG file now via write_file and finish; only "
+            f"{sorted(_TIMEOUT_ALLOWED_TOOLS)} remain available.",
+        )
+    except Exception:  # noqa: BLE001 — fail-open，保险绝不因自身异常断题
+        return None
+
+
 def _ctf_pre_tool_hook(*, tool_name=None, args=None, **_kw):
-    """pre_tool_call 回调：loop-guard（所有工具）+ terminal 危险命令检查 + 沙箱。"""
+    """pre_tool_call 回调：单题墙钟保险 + loop-guard（所有工具）+ terminal 危险命令检查 + 沙箱。"""
+    timebox = _check_solve_timebox(tool_name)
+    if timebox is not None and timebox[0] == "block":
+        _LOOP_WARN_PENDING.pop("msg", None)
+        return {"action": "block", "message": timebox[1]}
     loop = _check_loop(tool_name, args)
     if loop is not None and loop[0] == "block":
         _LOOP_WARN_PENDING.pop("msg", None)

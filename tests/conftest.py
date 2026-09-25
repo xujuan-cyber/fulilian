@@ -471,6 +471,7 @@ _FULILIAN_BEHAVIORAL_VARS = frozenset({
     "FULILIAN_CTF_TIMEBOX",
     "FULILIAN_CTF_NO_OUTPUT_ROUND_SECONDS",
     "FULILIAN_CTF_ESCALATION_TIMEBOX_MULTIPLIER",
+    "FULILIAN_CTF_SOLVE_TIMEOUT",
     # 下面两个不是"数值旋钮"，但同属 CTF 行为变量：work_dir 决定 CTF 钩子往
     # 哪里写黑板/日志（hypothesis_track 会按它落盘），日志镜像决定失败分类读
     # 哪个副本。泄漏进测试进程会让钩子去写真实目录。
