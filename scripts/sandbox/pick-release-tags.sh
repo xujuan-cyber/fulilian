@@ -24,8 +24,11 @@
 # checkout has no tags and this exits non-zero rather than silently emitting an
 # empty matrix.
 #
-# Only vYYYY.M.D[.N] release tags are considered; the repo also carries
-# backup/* and one-off tags that are not releases.
+# Release tags are dotted numeric versions behind a leading `v`. That covers
+# both shapes this repo has shipped: the upstream CalVer form (v2026.8.30,
+# v2026.4.8.1) and this fork's SemVer form (v1.2, v2.0.0). Non-releases are
+# excluded — backup/*, and one-offs like v1.2.0-cmd.1 whose trailing suffix
+# fails the pattern.
 
 set -euo pipefail
 
@@ -68,7 +71,7 @@ fi
 # lexicographic sort gets wrong.
 mapfile -t tags < <(
   git -C "$REPO" tag --list 'v*' \
-    | grep -E '^v[0-9]{4}\.[0-9]+\.[0-9]+(\.[0-9]+)?$' \
+    | grep -E '^v[0-9]+(\.[0-9]+)+$' \
     | sort -V
 )
 
