@@ -221,26 +221,68 @@ mkdir -p "$SANDBOX_ROOT"/{root,home,etc}
 UPSTREAM_REPO=""
 UPSTREAM_COMMIT=""
 if [ -n "$INSTALL_REF" ]; then
-  echo "[sandbox] fetching upstream $INSTALL_REF for installer/update test" >&2
+  echo "[sandbox] resolving upstream $INSTALL_REF for installer/update test" >&2
   UPSTREAM_REPO="$(mktemp -d -t fulilian-sandbox-upstream.XXXXXX)"
   git -C "$UPSTREAM_REPO" init -q
-  # Fetch the ref as given. A branch or tag name resolves on its own; a raw SHA
-  # needs the remote to allow fetching it directly, so fall back to fetching
-  # main and resolving the SHA locally (which works for any commit that is an
-  # ancestor of main -- the interesting case for "update from N versions ago").
+  # Resolve a tag or a SHA from the checkout under test first. It is already on
+  # disk, and it needs no credentials -- which is the whole point: the remote is
+  # private and the throwaway repo above carries no credential of its own, so
+  # against a private remote the network branches below fail unconditionally.
+  # CI checks this checkout out with the full tag set for exactly this reason.
   #
-  # Peel to ^{commit} in both cases: an annotated tag fetches as a tag OBJECT,
+  # Branch names are deliberately left out: `--from-main` promises the upstream
+  # main, and resolving that from here would quietly substitute the developer's
+  # own branch for the one the flag names.
+  local_commit=""
+  case "$INSTALL_REF" in
+    refs/*) ;;      # a fully-qualified ref: neither a bare SHA nor a tag name
+    *[!0-9a-f]*)    # holds a non-hex character, so it can only be a tag name
+      local_commit="$(git -C "$GIT_ROOT" rev-parse --verify -q "refs/tags/$INSTALL_REF^{commit}" 2>/dev/null || true)" ;;
+    ???????*)       # seven or more hex digits: a SHA, abbreviated or full
+      local_commit="$(git -C "$GIT_ROOT" rev-parse --verify -q "$INSTALL_REF^{commit}" 2>/dev/null || true)" ;;
+  esac
+
+  # Peel to ^{commit} in every case: an annotated tag fetches as a tag OBJECT,
   # and using it directly fails later with "trying to write non-commit object
   # ... to branch 'refs/heads/main'".
-  if git -C "$UPSTREAM_REPO" fetch -q "$UPSTREAM_URL" "$INSTALL_REF" 2>/dev/null; then
-    UPSTREAM_COMMIT="$(git -C "$UPSTREAM_REPO" rev-parse "FETCH_HEAD^{commit}")"
-  elif git -C "$UPSTREAM_REPO" fetch -q "$UPSTREAM_URL" refs/heads/main \
-    && UPSTREAM_COMMIT="$(git -C "$UPSTREAM_REPO" rev-parse --verify -q "$INSTALL_REF^{commit}")"; then
-    :
-  else
+  peel_upstream() {
+    git -C "$UPSTREAM_REPO" rev-parse --verify -q "${1:-FETCH_HEAD}^{commit}" 2>/dev/null || true
+  }
+
+  # Each attempt has to prove it resolved something before the next is skipped.
+  # A shallow source refuses every fetch this way -- "rejecting <sha> because
+  # shallow roots are not allowed to be updated" -- and still exits 0, leaving a
+  # FETCH_HEAD that names nothing. So a fetch that "succeeded" can leave
+  # UPSTREAM_COMMIT empty, and only the value is safe to branch on. (The clone
+  # here is full because CI checks out with fetch-depth: 0; a developer's may
+  # not be, which is why this has to degrade rather than abort.)
+  #
+  # The local fetch asks for the resolved commit, not the name the user gave:
+  # an abbreviated SHA is not a ref, and git resolves a bare fetch argument as
+  # a ref name, so `fetch . 1a2b3c4` fails outright with "couldn't find remote
+  # ref". A full commit SHA is fetched by any transport.
+  UPSTREAM_COMMIT=""
+  if [ -n "$local_commit" ] \
+    && git -C "$UPSTREAM_REPO" fetch -q "$GIT_ROOT" "$local_commit" 2>/dev/null; then
+    UPSTREAM_COMMIT="$(peel_upstream)"
+  fi
+  if [ -z "$UPSTREAM_COMMIT" ] \
+    && git -C "$UPSTREAM_REPO" fetch -q "$UPSTREAM_URL" "$INSTALL_REF" 2>/dev/null; then
+    UPSTREAM_COMMIT="$(peel_upstream)"
+  fi
+  # A raw SHA cannot be fetched by name from every remote, so fall back to
+  # fetching main and resolving the SHA locally -- which covers any commit that
+  # is an ancestor of main, the interesting case for "update from N versions
+  # ago".
+  if [ -z "$UPSTREAM_COMMIT" ] \
+    && git -C "$UPSTREAM_REPO" fetch -q "$UPSTREAM_URL" refs/heads/main 2>/dev/null; then
+    UPSTREAM_COMMIT="$(peel_upstream "$INSTALL_REF")"
+  fi
+  if [ -z "$UPSTREAM_COMMIT" ]; then
     rm -rf -- "$UPSTREAM_REPO"
     echo "error: could not resolve upstream ref: $INSTALL_REF" >&2
-    echo '       Use a branch (main), a tag (v2026.7.7), or a SHA reachable from main.' >&2
+    echo "       Looked for it in $GIT_ROOT and in $UPSTREAM_URL." >&2
+    echo '       Use a tag (v1.3), a branch (main), or a SHA.' >&2
     exit 1
   fi
 fi
