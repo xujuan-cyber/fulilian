@@ -1694,7 +1694,7 @@ def _resolve_worktree_base(
          upstream ref — so a deliberate feature-branch worktree tracks its own
          remote, not the default branch.
       2. Else refresh the remote's default branch (``origin/HEAD`` → e.g.
-         ``origin/main``) and use it.
+         ``origin/FuLilian``) and use it.
       3. Else fall back to ``HEAD`` (offline, no remote, or detached) — the
          old behavior, never worse than before.
 
@@ -1776,7 +1776,7 @@ def _resolve_worktree_base(
     try:
         up = _git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"])
         if up.returncode == 0:
-            upstream = up.stdout.strip()  # e.g. "origin/main"
+            upstream = up.stdout.strip()  # e.g. "origin/FuLilian"
             if upstream and "/" in upstream:
                 remote, branch = upstream.split("/", 1)
                 return _refresh(remote, branch, upstream)
@@ -2101,7 +2101,7 @@ def _repo_is_shallow(repo_path: str, timeout: int = 5) -> bool:
 
     Shallowness poisons every history-connectivity verdict the worktree
     machinery relies on: an older worktree's HEAD (a past snapshot of main)
-    is disconnected from current ``origin/main`` by the shallow boundary, so
+    is disconnected from current ``origin/FuLilian`` by the shallow boundary, so
     ``git log HEAD --not --remotes`` misreports thousands of already-public
     commits as "unpushed" and the worktree is preserved forever. The default
     installer clones with ``--depth 1``, so this is the normal state of a
@@ -2267,7 +2267,7 @@ def _worktree_commits_all_merged_upstream(
     import subprocess
 
     base = None
-    for candidate in ("origin/HEAD", "origin/main", "origin/master"):
+    for candidate in ("origin/HEAD", "origin/FuLilian", "origin/master"):
         try:
             probe = subprocess.run(
                 ["git", "rev-parse", "--verify", "--quiet", candidate],
@@ -2682,7 +2682,7 @@ def _prune_stale_worktrees(repo_root: str, max_age_hours: int = 24) -> None:
         return
 
     # A shallow clone (the installer's default `--depth 1`) disconnects old
-    # worktree HEADs from current origin/main, so the unpushed-commits guard
+    # worktree HEADs from current origin/FuLilian, so the unpushed-commits guard
     # misclassifies every aged worktree as unpushed work and preserves it
     # forever. Deepen once — bloblessly, in this background thread — so all
     # history verdicts below (and the session-exit cleanup) become correct.

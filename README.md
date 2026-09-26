@@ -74,7 +74,7 @@ never touches `~/.fulilian/`.
 
 ```bash
 # One-line remote install (downloads to ~/.fulilian/fulilian-agent)
-curl -fsSL https://raw.githubusercontent.com/xujuan-cyber/fulilian/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/xujuan-cyber/fulilian/FuLilian/scripts/install.sh | bash
 
 # Verify your install
 fulilian status
@@ -86,13 +86,13 @@ fulilian doctor
 Prefer the Windows CMD terminal? FuLiLian installs natively on Windows — no WSL involved — and puts `fll` and `fulilian` on PATH. From CMD:
 
 ```bat
-curl -fsSL https://raw.githubusercontent.com/xujuan-cyber/fulilian/main/scripts/install.cmd -o install.cmd && install.cmd && del install.cmd
+curl -fsSL https://raw.githubusercontent.com/xujuan-cyber/fulilian/FuLilian/scripts/install.cmd -o install.cmd && install.cmd && del install.cmd
 ```
 
 From PowerShell, the same installer directly:
 
 ```powershell
-iex (irm https://raw.githubusercontent.com/xujuan-cyber/fulilian/main/scripts/install.ps1)
+iex (irm https://raw.githubusercontent.com/xujuan-cyber/fulilian/FuLilian/scripts/install.ps1)
 ```
 
 Open a new CMD window afterwards and verify with `fll --version`.

@@ -1546,7 +1546,7 @@ adapters in older tests auto-create truthy attributes.
 
 ### Squash merges from stale branches silently revert recent fixes
 Before squash-merging a PR, ensure the branch is up to date with `main`
-(`git fetch origin main && git reset --hard origin/main` in the worktree,
+(`git fetch origin FuLilian && git reset --hard origin/FuLilian` in the worktree,
 then re-apply the PR's commits). A stale branch's version of an unrelated
 file will silently overwrite recent fixes on main when squashed. Verify
 with `git diff HEAD~1..HEAD` after merging — unexpected deletions are a

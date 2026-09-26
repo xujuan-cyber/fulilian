@@ -5,7 +5,7 @@
 #   ./run_all.sh <baseline-tree> <fixes-tree> [reps] [model ...]
 #
 #   baseline-tree  checkout of the code WITHOUT the changes (e.g. a worktree
-#                  of origin/main)
+#                  of origin/FuLilian)
 #   fixes-tree     checkout WITH the changes (e.g. your integration branch)
 #   reps           repetitions per cell (default 3)
 #   model ...      models to test (default: the Aug 2026 pair)

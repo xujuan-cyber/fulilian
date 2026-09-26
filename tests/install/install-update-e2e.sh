@@ -28,7 +28,7 @@
 #                     installer  re-running the curl one-liner over the checkout
 #   --install-ref   what to install first; anything git resolves (a branch, a
 #                   tag like v2026.7.7, or a SHA reachable from main).
-#                   Default: refs/heads/main.
+#                   Default: refs/heads/FuLilian.
 #
 # Requires a CLEAN worktree: every dev-sandbox invocation re-derives fake main
 # from the working copy, so uncommitted changes move the update target between
@@ -37,7 +37,7 @@
 set -euo pipefail
 
 ROUTE=""
-INSTALL_REF="refs/heads/main"
+INSTALL_REF="refs/heads/FuLilian"
 KEEP=false
 while [ "$#" -gt 0 ]; do
   case "$1" in

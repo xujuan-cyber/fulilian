@@ -28,8 +28,8 @@ name: uv.lock check
 #
 # Fix is to sync your branch with main and regenerate the lockfile:
 #
-#     git fetch origin main
-#     git rebase origin/main      # or merge, whatever the repo prefers
+#     git fetch origin FuLilian
+#     git rebase origin/FuLilian      # or merge, whatever the repo prefers
 #     uv lock                     # regenerates uv.lock against new pyproject.toml
 #     git add uv.lock
 #     git commit -m "chore: refresh uv.lock after rebase onto main"
@@ -142,8 +142,8 @@ jobs:
           To fix, sync with main and regenerate the lockfile:
 
           ```bash
-          git fetch origin main
-          git rebase origin/main   # or `git merge origin/main`
+          git fetch origin FuLilian
+          git rebase origin/FuLilian   # or `git merge origin/FuLilian`
           uv lock                  # regenerate against new pyproject.toml
           git add uv.lock
           git commit -m "chore: refresh uv.lock after syncing with main"
@@ -159,7 +159,7 @@ jobs:
           on `main` post-merge.
           EOF
             echo "::error title=uv.lock out of sync::Run \`uv lock\` locally and commit the result. If on a PR, sync with main first."
-            review_status='[{"source":"uv.lock check","results":[{"kind":"action_required","title":"uv.lock out of sync","summary":"uv.lock is out of sync with pyproject.toml.","how_to_fix":"Run `uv lock` locally and commit the result. If on a PR, sync with main first:\n```\ngit fetch origin main\ngit rebase origin/main\nuv lock\ngit add uv.lock\ngit commit -m \"chore: refresh uv.lock\"\n```\n"}]}]'
+            review_status='[{"source":"uv.lock check","results":[{"kind":"action_required","title":"uv.lock out of sync","summary":"uv.lock is out of sync with pyproject.toml.","how_to_fix":"Run `uv lock` locally and commit the result. If on a PR, sync with main first:\n```\ngit fetch origin FuLilian\ngit rebase origin/FuLilian\nuv lock\ngit add uv.lock\ngit commit -m \"chore: refresh uv.lock\"\n```\n"}]}]'
             echo "review_status=${review_status}" >> "$GITHUB_OUTPUT"
             echo "review_status=${review_status}" > review-status.json
             exit 1

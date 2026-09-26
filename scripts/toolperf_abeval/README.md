@@ -10,7 +10,7 @@ in real production traffic.
 ## Design
 
 - **Two arms, one variable.** `baseline` and `fixes` runs differ ONLY by
-  `PYTHONPATH` (a checkout of `origin/main` vs your integration branch). Same
+  `PYTHONPATH` (a checkout of `origin/FuLilian` vs your integration branch). Same
   Fulilian home, same model, same tasks, same reps.
 - **Tasks are traps.** Each of the 9 tasks is constructed so a specific
   failure class fires: `python` vs `python3`/venv confusion, an
@@ -48,7 +48,7 @@ in real production traffic.
 2. Prepare the two trees:
 
    ```bash
-   git worktree add /tmp/abeval-baseline origin/main
+   git worktree add /tmp/abeval-baseline origin/FuLilian
    # fixes tree = your integration branch checkout
    ```
 
