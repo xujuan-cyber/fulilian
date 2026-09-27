@@ -19343,12 +19343,12 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
 
         @kb.add('c-q')  # Ctrl+Q
         def handle_ctrl_q(event):
-            """Alternative interrupt/exit shortcut (Ctrl+Q).
+            """Alternative interrupt shortcut (Ctrl+Q).
 
             Behaves like Ctrl+C: cancels active prompts, interrupts the
-            running agent, or clears the input buffer.  Unlike Ctrl+C (which
-            never exits — exit is Ctrl+D), an empty idle prompt here still
-            exits.
+            running agent, or clears the input buffer.  Like Ctrl+C it never
+            exits — exit is Ctrl+D (or /exit) — so an empty idle prompt
+            swallows the press.
             """
             # Cancel active voice recording.
             _should_cancel_voice = False
@@ -19405,9 +19405,6 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                 event.app.current_buffer.reset()
                 self._attached_images.clear()
                 event.app.invalidate()
-            else:
-                self._should_exit = True
-                event.app.exit()
 
         @kb.add('c-d')
         def handle_ctrl_d(event):
