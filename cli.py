@@ -7618,7 +7618,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                 ("class:input-meta", "  "),
                 ("class:input-meta-context", context_text),
                 ("class:input-meta", " · "),
-                ("class:input-meta", tokens_text),
+                ("class:input-meta-tokens", tokens_text),
             ]
             # Effort indicator sits at the far right, like Claude Code's
             # `● high · /effort`.  The top status line no longer repeats it.
@@ -20747,6 +20747,11 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             'input-frame': '#2E77B9',
             'input-meta': '#777777',
             'input-meta-context': '#8FBC8F bold',
+            # Session token counters read as the primary number on that line,
+            # so they get the porcelain "strong value" color instead of the
+            # #777777 used for the separators.  No bg, so the light-mode remap
+            # turns it into near-black on cream terminals.
+            'input-meta-tokens': '#E9F1FC bold',
             'placeholder': '#888888 italic',
             'prompt': '',
             'prompt-working': '#888888 italic',
