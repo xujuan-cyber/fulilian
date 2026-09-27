@@ -18155,15 +18155,15 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             if self._preload_resumed_session():
                 self._display_resumed_history()
 
+        # Claude Code shows no welcome line under its banner — the startup
+        # chrome is the banner plus the composer, nothing else.  The active
+        # skin is still resolved here because the startup notices below read
+        # its colors.
         try:
             from fulilian_cli.skin_engine import get_active_skin
             _welcome_skin = get_active_skin()
-            _welcome_text = _welcome_skin.get_branding("welcome", "Welcome to FuLiLian! Type your message or /help for commands.")
-            _welcome_color = _welcome_skin.get_color("banner_text", "#E9F1FC")
         except Exception:
-            _welcome_text = "Welcome to FuLiLian! Type your message or /help for commands."
-            _welcome_color = "#E9F1FC"
-        self._console_print(f"[{_welcome_color}]{_welcome_text}[/]")
+            _welcome_skin = None
 
         # Warm the /model picker's provider-models cache off-thread during this
         # idle window (banner shown, user about to type). The no-args picker
@@ -18228,7 +18228,11 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             )
             if not is_seen(self.config, OPENCLAW_RESIDUE_FLAG) and detect_openclaw_residue():
                 try:
-                    _resid_color = _welcome_skin.get_color("banner_dim", "#377EB9")
+                    _resid_color = (
+                        _welcome_skin.get_color("banner_dim", "#377EB9")
+                        if _welcome_skin is not None
+                        else "#377EB9"
+                    )
                 except Exception:
                     _resid_color = "#377EB9"
                 self._console_print(f"[{_resid_color}]{openclaw_residue_hint_cli()}[/]")
@@ -18239,17 +18243,8 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                     pass  # best-effort — banner will fire again next session
         except Exception:
             pass  # banner is non-critical — never break startup
-        # Show a random tip to help users discover features
-        try:
-            from fulilian_cli.tips import get_random_tip
-            _tip = get_random_tip()
-            try:
-                _tip_color = _welcome_skin.get_color("banner_dim", "#377EB9")
-            except Exception:
-                _tip_color = "#377EB9"
-            self._console_print(f"[dim {_tip_color}]✦ Tip: {_tip}[/]")
-        except Exception:
-            pass  # Tips are non-critical — never break startup
+        # Claude Code prints no random tip at startup.  ``get_random_tip`` is
+        # still used by the gateway reset notice, so the tips module stays.
 
         # Curator — kick off a background skill-maintenance pass on startup
         # if the schedule says we're due.  Runs in a daemon thread so it
