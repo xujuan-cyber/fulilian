@@ -7375,8 +7375,17 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             subagent_count = snapshot.get("active_background_subagents", 0)
             if subagent_count:
                 meta_parts.insert(len(meta_parts) - 1, f"↻ {subagent_count}")
-            summary = f" ☿ {' │ '.join(meta_parts)} "
-            frags = [("class:status-bar", summary)]
+            # The brand symbol gets its own fragment so it can carry the
+            # azure "strong" color while the rest of the line stays at the
+            # status-bar text color.  Splitting " ☿ <meta> " into
+            # " ☿ " + "<meta> " keeps the concatenated text (and therefore
+            # the width accounting in _right_align_status_title_fragments)
+            # byte-for-byte identical to the single-fragment version.
+            summary = f"{' │ '.join(meta_parts)} "
+            frags = [
+                ("class:status-bar-symbol", " ☿ "),
+                ("class:status-bar", summary),
+            ]
             try:
                 stash_indicator = self._prompt_stash.indicator()
             except Exception:
@@ -20757,6 +20766,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             'prompt-working': '#888888 italic',
             'hint': '#888888 italic',
             'status-bar': 'bg:#1a1a2e #C0C0C0',
+            'status-bar-symbol': 'bg:#1a1a2e #5DB8F5 bold',
             'status-bar-strong': 'bg:#1a1a2e #5DB8F5 bold',
             'status-bar-dim': 'bg:#1a1a2e #8B8682',
             'status-bar-good': 'bg:#1a1a2e #8FBC8F bold',

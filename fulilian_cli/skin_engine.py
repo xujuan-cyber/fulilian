@@ -1033,6 +1033,7 @@ def get_prompt_toolkit_style_overrides() -> Dict[str, str]:
         "prompt-working": f"{dim} italic",
         "hint": f"{dim} italic",
         "status-bar": f"bg:{status_bg} {status_text}",
+        "status-bar-symbol": f"bg:{status_bg} {status_strong} bold",
         "status-bar-strong": f"bg:{status_bg} {status_strong} bold",
         "status-bar-dim": f"bg:{status_bg} {status_dim}",
         "status-bar-good": f"bg:{status_bg} {status_good} bold",
