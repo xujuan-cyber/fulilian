@@ -8026,8 +8026,14 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         return paste_ref_re.sub(_expand_ref, text)
 
     def _print_user_message_preview(self, user_input: str) -> None:
-        """Render a user message using the normal chat scrollback style."""
-        ChatConsole().print(f"[{_accent_hex()}]{'─' * 40}[/]")
+        """Render a user message using the normal chat scrollback style.
+
+        Claude Code leaves no rules around a committed user turn — the
+        full-width ``─`` pair belongs to the *live* composer at the bottom
+        of the screen only.  A fixed-width divider here (previously a
+        hardcoded 40 columns, unrelated to the terminal width) made the
+        committed turn look like a stray miniature input box.
+        """
         text = str(user_input or "")
         if "\n" in text:
             ChatConsole().print(self._format_submitted_user_message_preview(text))
@@ -16982,7 +16988,8 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             with persist_lock:
                 _stage_user_message()
 
-        ChatConsole().print(f"[{_accent_hex()}]{'─' * 40}[/]")
+        # Claude Code separates the committed user turn from the assistant
+        # reply with a blank line only; the rule lives in the live composer.
         print(flush=True)
         
         try:
