@@ -5632,7 +5632,6 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         # _handle_update_command() so the relaunch happens on the main thread,
         # not the background process_loop thread.
         self._pending_relaunch: list[str] | None = None
-        self._last_ctrl_c_time = 0
         self._clarify_state = None
         self._clarify_freetext = False
         self._clarify_deadline = 0
@@ -18302,7 +18301,6 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         # the earlier __init__ branch.
         self._last_turn_interrupted = False
         self._should_exit = False
-        self._last_ctrl_c_time = 0  # Track double Ctrl+C for force exit
 
         # Give plugin manager a CLI reference so plugins can inject messages
         from fulilian_cli.plugins import get_plugin_manager
@@ -19246,15 +19244,19 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
 
         @kb.add('c-c')
         def handle_ctrl_c(event):
-            """Handle Ctrl+C - cancel interactive prompts, interrupt agent, or exit.
-            
+            """Handle Ctrl+C - cancel interactive prompts or interrupt the agent.
+
             Priority:
             0. Cancel active voice recording
             1. Cancel active sudo/approval/clarify prompt
-            2. Interrupt the running agent (first press)
-            3. Force exit (second press within 2s, or when idle)
+            2. Interrupt the running agent
+            3. Clear the draft and any attached images
+
+            Ctrl+C never exits.  CodeBuddy Code hardcodes Ctrl+C as its
+            interrupt/cancel key and reserves Ctrl+D for ``app:exit``; the
+            double-press quit here fired on reflex and killed the session,
+            so exit now lives on Ctrl+D only.
             """
-            now = time.time()
 
             # Cancel active voice recording.
             # Run cancel() in a background thread to prevent blocking the
@@ -19316,29 +19318,19 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                 event.app.invalidate()
 
             # If we only cleared overlays and the agent is NOT running, stop here
-            # (don't fall through to the interrupt/exit path).
+            # (don't fall through to the interrupt path).
             if _overlay_cleared and not (self._agent_running and self.agent):
                 return
 
             if self._agent_running and self.agent:
-                if now - self._last_ctrl_c_time < 2.0:
-                    print("\n⚡ Force exiting...")
-                    self._should_exit = True
-                    event.app.exit()
-                    return
-                
-                self._last_ctrl_c_time = now
-                print("\n⚡ Interrupting agent... (press Ctrl+C again to force exit)")
+                print("\n⚡ Interrupting agent...")
                 request_hard_interrupt(self.agent)
             # If there's text or images, clear them (like bash).
-            # If everything is already empty, exit.
+            # An empty idle prompt swallows the press — exit is Ctrl+D.
             elif event.app.current_buffer.text or self._attached_images:
                 event.app.current_buffer.reset()
                 self._attached_images.clear()
                 event.app.invalidate()
-            else:
-                self._should_exit = True
-                event.app.exit()
 
         # Ctrl+Shift+C: no binding needed. Terminal emulators (GNOME Terminal,
         # iTerm2, kitty, Windows Terminal, etc.) intercept Ctrl+Shift+C before
@@ -19354,8 +19346,9 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             """Alternative interrupt/exit shortcut (Ctrl+Q).
 
             Behaves like Ctrl+C: cancels active prompts, interrupts the
-            running agent, or clears the input buffer. Does not support
-            the double-press 'force exit' feature of Ctrl+C.
+            running agent, or clears the input buffer.  Unlike Ctrl+C (which
+            never exits — exit is Ctrl+D), an empty idle prompt here still
+            exits.
             """
             # Cancel active voice recording.
             _should_cancel_voice = False
