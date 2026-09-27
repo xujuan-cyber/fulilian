@@ -263,4 +263,4 @@ class TestNonStreamingResponseGrammar:
         console.print(grid)
         out = console.export_text(styles=False)
         assert "● Hello there." in out
-        assert "⚕" not in out
+        assert "☿" not in out

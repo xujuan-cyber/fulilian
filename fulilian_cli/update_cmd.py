@@ -4107,9 +4107,9 @@ def _cmd_update_check(branch: str = "main", *, branch_explicit: bool = False):
                 return
             if counted is not None:
                 commits_word = "commit" if counted == 1 else "commits"
-                print(f"⚕ Update available: {counted} {commits_word} behind {compare_branch}.")
+                print(f"☿ Update available: {counted} {commits_word} behind {compare_branch}.")
             else:
-                print(f"⚕ Update available (behind {compare_branch}).")
+                print(f"☿ Update available (behind {compare_branch}).")
             print(f"  Run '{recommended_update_command()}' to install.")
         return
 
@@ -4126,7 +4126,7 @@ def _cmd_update_check(branch: str = "main", *, branch_explicit: bool = False):
         print("✓ Already up to date.")
     else:
         commits_word = "commit" if behind == 1 else "commits"
-        print(f"⚕ Update available: {behind} {commits_word} behind {compare_branch}.")
+        print(f"☿ Update available: {behind} {commits_word} behind {compare_branch}.")
         from fulilian_cli.config import recommended_update_command
 
         print(f"  Run '{recommended_update_command()}' to install.")
@@ -7256,7 +7256,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
             logger.debug("Could not read updates.non_interactive_local_changes: %s", exc)
             discard_local_changes = False
 
-    print("⚕ Updating FuLiLian...")
+    print("☿ Updating FuLiLian...")
     print()
 
     # Phase 1 (#91277): structured update receipt — record what this run

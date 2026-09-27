@@ -218,7 +218,7 @@ print_banner() {
     echo ""
     echo -e "${MAGENTA}${BOLD}"
     echo "┌─────────────────────────────────────────────────────────┐"
-    echo "│             ⚕ FuLiLian Installer                    │"
+    echo "│             ☿ FuLiLian Installer                    │"
     echo "├─────────────────────────────────────────────────────────┤"
     echo "│  CTF-dedicated agent CLI for security competitions and forensics.  │"
     echo "└─────────────────────────────────────────────────────────┘"

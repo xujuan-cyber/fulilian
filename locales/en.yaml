@@ -387,7 +387,7 @@ gateway:
     not_git_repo:            "✗ Not a git repository — cannot update."
     fulilian_cmd_not_found:    "✗ Could not locate the `fulilian` command. Fulilian is running, but the update command could not find the executable on PATH or via the current Python interpreter. Try running `fulilian update` manually in your terminal."
     start_failed:            "✗ Failed to start update: {error}"
-    starting:                "⚕ Starting Fulilian update… I'll stream progress here."
+    starting:                "☿ Starting Fulilian update… I'll stream progress here."
 
   usage:
     rate_limits:              "⏱️ **Rate Limits:** {state}"

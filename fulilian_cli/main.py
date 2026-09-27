@@ -3040,7 +3040,7 @@ def _launch_tui(
         from fulilian_cli.relaunch import relaunch
 
         print()
-        print("⚕ Launching update...")
+        print("☿ Launching update...")
         print()
         relaunch(["update"], preserve_inherited=False)
 
@@ -3494,7 +3494,7 @@ def cmd_whatsapp(args):
     from fulilian_constants import find_node_executable, with_fulilian_node_path
 
     print()
-    print("⚕ WhatsApp Setup")
+    print("☿ WhatsApp Setup")
     print("=" * 50)
 
     # ── Step 1: Choose mode ──────────────────────────────────────────────
@@ -3705,14 +3705,14 @@ def cmd_whatsapp(args):
             print("    2. Send a message to the bot's WhatsApp number")
             print("    3. The agent will reply automatically")
             print()
-            print("  Tip: Agent responses are prefixed with '⚕ FuLiLian'")
+            print("  Tip: Agent responses are prefixed with '☿ FuLiLian'")
         else:
             print("  Next steps:")
             print("    1. Start the gateway:  fulilian gateway")
             print("    2. Open WhatsApp → Message Yourself")
             print("    3. Type a message — the agent will reply")
             print()
-            print("  Tip: Agent responses are prefixed with '⚕ FuLiLian'")
+            print("  Tip: Agent responses are prefixed with '☿ FuLiLian'")
             print("  so you can tell them apart from your own messages.")
         print()
         print("  Or install as a service: fulilian gateway install")

@@ -4868,8 +4868,8 @@ def _build_compact_banner() -> str:
     dim_color = _skin.get_color("banner_dim", "#377EB9") if _skin else "#377EB9"
 
     if skin_name == "default":
-        line1 = "⚕ NOUS FULILIAN - AI Agent Framework"
-        tiny_line = "⚕ NOUS FULILIAN"
+        line1 = "☿ NOUS FULILIAN - AI Agent Framework"
+        tiny_line = "☿ NOUS FULILIAN"
     else:
         agent_name = _skin.get_branding("agent_name", "FuLiLian") if _skin else "FuLiLian"
         line1 = f"{agent_name} - AI Agent Framework"
@@ -7254,7 +7254,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         model = snapshot.get("model_short") or "Fulilian"
         provider = snapshot.get("provider_short") or ""
         model_label = f"{provider}/{model}" if provider else model
-        parts = [f"⚕ {model_label}", snapshot.get("duration", "0s")]
+        parts = [f"☿ {model_label}", snapshot.get("duration", "0s")]
         goal_segment = self._status_bar_goal_segment(snapshot)
         if goal_segment:
             # Match legacy width-tier ordering (goal sits before duration).
@@ -7281,7 +7281,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             yolo_active = self._is_session_yolo_active()
             goal_segment = self._status_bar_goal_segment(snapshot)
             if width < 52:
-                text = f"{battery_prefix}⚕ {snapshot['model_short']} · {duration_label}"
+                text = f"{battery_prefix}☿ {snapshot['model_short']} · {duration_label}"
                 if goal_segment:
                     text += f" · {goal_segment}"
                 if focus_label:
@@ -7290,7 +7290,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                     text += " · ⚠ YOLO"
                 return self._right_align_status_title(text, session_title, width)
             if width < 76:
-                parts = [f"⚕ {snapshot['model_short']}", percent_label]
+                parts = [f"☿ {snapshot['model_short']}", percent_label]
                 if battery_label:
                     parts.insert(0, battery_label)
                 compressions = snapshot.get("compressions", 0)
@@ -7322,7 +7322,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                 context_label = "ctx --"
 
             compressions = snapshot.get("compressions", 0)
-            parts = [f"⚕ {snapshot['model_short']}", context_label, percent_label]
+            parts = [f"☿ {snapshot['model_short']}", context_label, percent_label]
             if battery_label:
                 parts.insert(0, battery_label)
             if compressions:
@@ -7351,7 +7351,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                 parts.append("⚠ YOLO")
             return self._right_align_status_title(" │ ".join(parts), session_title, width)
         except Exception:
-            return f"⚕ {self.model if getattr(self, 'model', None) else 'Fulilian'}"
+            return f"☿ {self.model if getattr(self, 'model', None) else 'Fulilian'}"
 
     def _get_status_bar_fragments(self):
         if not self._status_bar_visible or getattr(self, '_model_picker_state', None) or getattr(self, '_command_palette_state', None):
@@ -7375,7 +7375,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             subagent_count = snapshot.get("active_background_subagents", 0)
             if subagent_count:
                 meta_parts.insert(len(meta_parts) - 1, f"↻ {subagent_count}")
-            summary = f" ⚕ {' │ '.join(meta_parts)} "
+            summary = f" ☿ {' │ '.join(meta_parts)} "
             frags = [("class:status-bar", summary)]
             try:
                 stash_indicator = self._prompt_stash.indicator()
@@ -7398,7 +7398,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
 
             if width < 52:
                 frags = [
-                    ("class:status-bar", " ⚕ "),
+                    ("class:status-bar", " ☿ "),
                     ("class:status-bar-strong", snapshot["model_short"]),
                     ("class:status-bar-dim", " · "),
                     ("class:status-bar-dim", duration_label),
@@ -7422,7 +7422,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                     bg_proc_count = snapshot.get("active_background_processes", 0)
                     bg_subagent_count = snapshot.get("active_background_subagents", 0)
                     frags = [
-                        ("class:status-bar", " ⚕ "),
+                        ("class:status-bar", " ☿ "),
                         ("class:status-bar-strong", snapshot["model_short"]),
                         ("class:status-bar-dim", " · "),
                         (self._status_bar_context_style(percent), percent_label),
@@ -7467,7 +7467,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                     bg_proc_count = snapshot.get("active_background_processes", 0)
                     bg_subagent_count = snapshot.get("active_background_subagents", 0)
                     frags = [
-                        ("class:status-bar", " ⚕ "),
+                        ("class:status-bar", " ☿ "),
                         ("class:status-bar-strong", snapshot["model_short"]),
                         ("class:status-bar-dim", " │ "),
                         ("class:status-bar-dim", context_label),
@@ -7537,7 +7537,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                     frags.append(("class:status-bar-strong", stash_indicator))
 
             # Battery is the first status-bar element when enabled: prepend it
-            # ahead of the leading ⚕ marker in whichever width tier ran above.
+            # ahead of the leading ☿ marker in whichever width tier ran above.
             if battery_label:
                 frags[0:0] = [
                     ("class:status-bar", " "),
@@ -8363,10 +8363,10 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             try:
                 from fulilian_cli.skin_engine import get_active_skin
                 _skin = get_active_skin()
-                label = _skin.get_branding("response_label", "⚕ Fulilian")
+                label = _skin.get_branding("response_label", "☿ Fulilian")
                 _text_hex = _skin.get_color("banner_text", "#E9F1FC")
             except Exception:
-                label = "⚕ Fulilian"
+                label = "☿ Fulilian"
                 _text_hex = "#E9F1FC"
             # Build a true-color ANSI escape for the response text color
             # so streamed content matches the Rich Panel appearance.
@@ -17056,7 +17056,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                         if not _streaming_box_opened:
                             _streaming_box_opened = True
                             w = self._scrollback_box_width(getattr(self.console, "width", 80))
-                            label = " ⚕ Fulilian "
+                            label = " ☿ Fulilian "
                             if self.show_timestamps:
                                 label = f"{label}{datetime.now().strftime(getattr(self, 'timestamp_format', '%H:%M'))} "
                             fill = w - 2 - FulilianCLI._status_bar_display_width(label)
@@ -17487,11 +17487,11 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                 try:
                     from fulilian_cli.skin_engine import get_active_skin
                     _skin = get_active_skin()
-                    label = _skin.get_branding("response_label", "⚕ Fulilian")
+                    label = _skin.get_branding("response_label", "☿ Fulilian")
                     _resp_color = _maybe_remap_for_light_mode(_skin.get_color("response_border", "#2E77B9"))
                     _resp_text = _maybe_remap_for_light_mode(_skin.get_color("banner_text", "#E9F1FC"))
                 except Exception:
-                    label = "⚕ Fulilian"
+                    label = "☿ Fulilian"
                     _resp_color = _maybe_remap_for_light_mode("#2E77B9")
                     _resp_text = _maybe_remap_for_light_mode("#E9F1FC")
 
@@ -17511,14 +17511,14 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                         _cprint(_post_stream_text)
                 else:
                     # Claude-Code transcript grammar: the response opens with a
-                    # ``●`` bullet instead of the labelled ⚕ box.  A two-cell
+                    # ``●`` bullet instead of the labelled ☿ box.  A two-cell
                     # grid keeps the bullet inline with the first line and the
                     # body indented, while Rich still renders the markdown.
                     # This is the DEFAULT (non-streaming) response path, so it
                     # must match what _emit_stream_text produces.
                     from rich.table import Table as _RichTable
                     if self.show_timestamps:
-                        # Mirrors the streaming path: dropping the ⚕ box would
+                        # Mirrors the streaming path: dropping the ☿ box would
                         # otherwise lose the opt-in response timestamp.
                         _ts = datetime.now().strftime(getattr(self, "timestamp_format", "%H:%M"))
                         _cprint(f"\n{_DIM}{label} {_ts}{_RST}")
@@ -17865,9 +17865,9 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         else:
             try:
                 from fulilian_cli.skin_engine import get_active_goodbye
-                goodbye = get_active_goodbye("Goodbye! ⚕")
+                goodbye = get_active_goodbye("Goodbye! ☿")
             except Exception:
-                goodbye = "Goodbye! ⚕"
+                goodbye = "Goodbye! ☿"
             print(goodbye)
 
     def _get_tui_prompt_symbols(self) -> tuple[str, str]:
