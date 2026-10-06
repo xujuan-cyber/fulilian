@@ -2,7 +2,7 @@
 
 Covers ``render_tool_call_line`` / ``render_numbered_block`` /
 ``render_tool_result_summary`` / ``render_tool_completion`` — the shared
-primitives behind the ``● Tool(args)`` / ``⎿`` transcript lines.
+primitives behind the ``⏺ Tool(args)`` / ``⎿`` transcript lines.
 """
 
 import json
@@ -50,22 +50,22 @@ def test_display_name_handles_empty():
 
 
 def test_call_line_includes_args_preview():
-    assert render_tool_call_line("write_file", {"path": "notes.md"}, colorize=False) == "● Write(notes.md)"
+    assert render_tool_call_line("write_file", {"path": "notes.md"}, colorize=False) == "⏺ Write(notes.md)"
 
 
 def test_call_line_without_args_has_no_parens():
-    assert render_tool_call_line("terminal", {}, colorize=False) == "● Bash"
+    assert render_tool_call_line("terminal", {}, colorize=False) == "⏺ Bash"
 
 
 def test_call_line_colorized_adds_ansi_but_keeps_text():
     line = render_tool_call_line("write_file", {"path": "a.md"}, colorize=True)
-    assert "●" in line and "Write(a.md)" in line
+    assert "⏺" in line and "Write(a.md)" in line
     assert "\033[" in line
 
 
 def test_call_line_never_raises_on_bad_args():
     for bad in (None, {}, {"path": None}, {"path": {"nested": 1}}):
-        assert "●" in render_tool_call_line("write_file", bad, colorize=False)
+        assert "⏺" in render_tool_call_line("write_file", bad, colorize=False)
 
 
 # ── render_numbered_block ────────────────────────────────────────────────
@@ -188,7 +188,7 @@ def test_completion_shape_for_write():
         json.dumps({"success": True, "message": "Wrote 6 lines to notes.md"}),
         colorize=False,
     )
-    assert lines[0] == "● Write(notes.md)"
+    assert lines[0] == "⏺ Write(notes.md)"
     assert lines[1] == "  ⎿  Wrote 6 lines to notes.md (1.2s)"
     assert len(lines) == 2
 
@@ -197,7 +197,7 @@ def test_completion_includes_numbered_body_for_read():
     lines = render_tool_completion(
         "read_file", {"path": "a.py"}, 0.3, "a\nb\nc", colorize=False,
     )
-    assert lines[0] == "● Read(a.py)"
+    assert lines[0] == "⏺ Read(a.py)"
     assert lines[1] == "  ⎿  Read 3 lines (0.3s)"
     assert lines[2].endswith("1 a")
     assert lines[4].endswith("3 c")
@@ -212,4 +212,50 @@ def test_completion_never_raises_on_garbage():
     for args in (None, {}, {"path": 1}):
         for result in (None, "", "not json", "{\"broken\":"):
             lines = render_tool_completion("read_file", args, 0.1, result, colorize=False)
-            assert lines and lines[0].startswith("● ")
+            assert lines and lines[0].startswith("⏺ ")
+
+
+# ── diff palette resolution ──────────────────────────────────────────────
+
+
+class TestDiffPaletteBySkin:
+    """``_diff_ansi`` colors: claude ships the exact Claude Code line
+    backgrounds + word foregrounds; every other skin keeps the derived
+    tint. The module caches the palette, so each case must reset it."""
+
+    @pytest.fixture(autouse=True)
+    def _reset_cache(self):
+        import agent.display as display
+
+        display._diff_colors_cached = None
+        yield
+        display._diff_colors_cached = None
+
+    def test_claude_skin_uses_exact_cc_diff_tokens(self):
+        from agent.display import _diff_ansi
+        from fulilian_cli.skin_engine import set_active_skin
+
+        set_active_skin("claude")
+        tokens = _diff_ansi()
+        # plus: #38a660 fg on #225c2b bg; minus: #b3596b fg on #7a2936 bg
+        assert tokens["plus"] == "\033[38;2;56;166;96;48;2;34;92;43m"
+        assert tokens["minus"] == "\033[38;2;179;89;107;48;2;122;41;54m"
+
+    def test_default_skin_keeps_derived_tint(self):
+        from agent.display import _diff_ansi
+        from fulilian_cli.skin_engine import set_active_skin
+
+        set_active_skin("default")
+        tokens = _diff_ansi()
+        # Derived: white fg over a half/darkened tint of ui_ok/ui_error —
+        # no explicit #225c2b/#7a2936 backgrounds.
+        assert "48;2;34;92;43m" not in tokens["plus"]
+        assert "48;2;122;41;54m" not in tokens["minus"]
+        assert "48;2;" in tokens["plus"] and "48;2;" in tokens["minus"]
+
+    def test_tool_call_line_marker_is_the_cc_dot(self):
+        """⏺ (U+23FA) marks tool calls; prose keeps ● (contract lives in
+        tests/cli/test_cli_transcript_grammar.py)."""
+        from agent.display import render_tool_call_line
+
+        assert render_tool_call_line("terminal", {}, colorize=False).startswith("⏺ ")

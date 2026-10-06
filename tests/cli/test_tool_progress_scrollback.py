@@ -14,15 +14,15 @@ from unittest.mock import MagicMock, patch
 _cli_mod = None
 _UNSET = object()
 
-# The transcript grammar commits two lines per tool call — ``● Tool(args)``
+# The transcript grammar commits two lines per tool call — ``⏺ Tool(args)``
 # and ``  ⎿  result`` — so tests assert on the number of *call* lines rather
 # than the raw _cprint count, which would also move when a result body is
 # rendered.
-_TOOL_CALL_MARKER = "●"
+_TOOL_CALL_MARKER = "⏺"
 
 
 def _tool_call_lines(mock_print):
-    """Return the committed transcript call lines (``● …``) from a mock."""
+    """Return the committed transcript call lines (``⏺ …``) from a mock."""
     out = []
     for call in mock_print.call_args_list:
         if call.args and isinstance(call.args[0], str) and call.args[0].startswith(_TOOL_CALL_MARKER):

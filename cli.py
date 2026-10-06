@@ -214,6 +214,33 @@ def realign_markdown_tables(*args, **kwargs):
 from fulilian_cli.banner import _format_context_length, format_banner_version_label
 
 _COMMAND_SPINNER_FRAMES = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
+_skin_spinner_cache: dict[str, tuple] = {}
+
+
+def _active_spinner_frames() -> tuple:
+    """Skin-overridable spinner frames, braille tuple as fallback.
+
+    A skin's face list is expanded ping-pong (frames + reverse interior)
+    once per skin name and cached, so ``/skin`` switches invalidate
+    naturally and the modulo indexing at every render tick stays O(1).
+    """
+    try:
+        from fulilian_cli.skin_engine import get_active_skin
+        skin = get_active_skin()
+        if skin is not None:
+            cached = _skin_spinner_cache.get(skin.name)
+            if cached is None:
+                faces = skin.spinner.get("waiting_faces") or \
+                    skin.spinner.get("thinking_faces") or []
+                if faces:
+                    cached = tuple(faces) + tuple(faces[-2:0:-1])
+                else:
+                    cached = _COMMAND_SPINNER_FRAMES
+                _skin_spinner_cache[skin.name] = cached
+            return cached
+    except Exception:
+        pass
+    return _COMMAND_SPINNER_FRAMES
 
 
 # Load .env from ~/.fulilian/.env first, then project root as dev fallback.
@@ -3296,6 +3323,11 @@ _LIGHT_MODE_REMAP: dict[str, str] = {
     "#EAF7FF": "#0F1B26",   # ice
     "#D4CDE0": "#6E6485",   # gradient-start lavender -> dark mauve (light mode)
     "#D77757": "#B05332",   # Clawd body orange -> darker orange (light mode)
+    # Claude skin standalone-foreground gray. Deliberately excludes the
+    # paired status-bar grays (#9a9a9a/#6e6e6e): those sit on a dark
+    # status-bar bg where a darker remap would vanish (same rule as the
+    # #C0C0C0/#888888 skips below).
+    "#999999": "#555555",   # claude inactive chrome -> darker gray
     "#B4A7C9": "#5C5275",   # gradient-end mauve -> darker mauve (light mode)
     "#F5F5F5": "#1A1A1A",
     "#FFF0D4": "#1A1A1A",
@@ -3517,6 +3549,8 @@ def _render_final_assistant_content(text: str, mode: str = "render"):
     """Render final assistant content as markdown, stripped text, or raw text."""
     from rich.markdown import Markdown
 
+    from fulilian_cli.markdown_theme import FulilianMarkdown
+
     # Estimate the cells available to the rendered table.  The Panel
     # used by the background-task / final-response path renders
     # flush-left (no horizontal padding — leading spaces pollute
@@ -3548,7 +3582,14 @@ def _render_final_assistant_content(text: str, mode: str = "render"):
     plain = _rich_text_from_ansi(text or "").plain
     plain = _preserve_windows_dot_segments_for_markdown(plain)
     plain = realign_markdown_tables(plain, panel_width)
-    return Markdown(plain)
+    # FulilianMarkdown: Claude-Code grammar (flush-left headings, no code
+    # block padding). The color palette rides on the rendering console's
+    # theme (see ChatConsole.__init__), not on the renderable.
+    try:
+        light = _detect_light_mode()
+    except Exception:
+        light = False
+    return FulilianMarkdown(plain, code_theme="ansi_light" if light else "ansi_dark")
 
 
 def _post_stream_transform_output(response: str, result: dict | None) -> str:
@@ -4612,6 +4653,27 @@ def _gradient_frame_line(left_char: str, right_char: str, width: int) -> list:
     return frags
 
 
+def _composer_rule_line(width: int, *, bottom: bool = False) -> list:
+    """Return formatted-text fragments for the composer's top/bottom rule.
+
+    ``claude`` skin: Claude Code's rounded prompt border — ``╭─…─╮`` /
+    ``╰─…─╯`` in the skin's flat ``input_rule`` gray. Every other skin
+    keeps the existing full-width gradient rule (no corner glyphs), so
+    this is a claude-only visual change.
+    """
+    try:
+        from fulilian_cli.skin_engine import get_active_skin
+        skin = get_active_skin()
+    except Exception:
+        skin = None
+    if skin is None or skin.name != "claude" or width <= 2:
+        return _gradient_rule_line(width)
+    color = _maybe_remap_for_light_mode(skin.get_color("input_rule", "#888888"))
+    bar = "─" * max(width - 2, 0)
+    left, right = ("╰", "╯") if bottom else ("╭", "╮")
+    return [(color, left + bar + right)]
+
+
 def _gradient_rule_line(width: int) -> list:
     """Return formatted-text fragments for a full-width horizontal rule.
 
@@ -4790,14 +4852,25 @@ class ChatConsole:
     that expects a console.print() interface.
     """
 
-    def __init__(self):
+    def __init__(self, theme=None):
         from io import StringIO
+        if theme is None:
+            # Markdown palette rides on the console so every renderable
+            # printed through this adapter (final responses, slash command
+            # output) picks it up. Only ``markdown.*`` keys are registered,
+            # so non-markdown Rich output is untouched.
+            try:
+                from fulilian_cli.markdown_theme import active_markdown_theme
+                theme = active_markdown_theme(_detect_light_mode())
+            except Exception:
+                theme = None
         self._buffer = StringIO()
         self._inner = Console(
             file=self._buffer,
             force_terminal=True,
             color_system="truecolor",
             highlight=False,
+            theme=theme,
         )
 
     def print(self, *args, **kwargs):
@@ -6837,7 +6910,8 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         txt = getattr(self, "_spinner_text", "")
         if not txt:
             return ""
-        frame = _COMMAND_SPINNER_FRAMES[int(time.monotonic() * 10) % len(_COMMAND_SPINNER_FRAMES)]
+        frames = _active_spinner_frames()
+        frame = frames[int(time.monotonic() * 10) % len(frames)]
         flow = self._spinner_token_flow()
         t0 = getattr(self, "_tool_start_time", 0) or getattr(self, "_thinking_start_time", 0) or 0
         detail = txt.strip()
@@ -6861,7 +6935,11 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             metrics.append(phase_metric)
 
         suffix = f"  ({' · '.join(metrics)})" if metrics else ""
-        return f"  {frame} {label} · {detail}{suffix}"
+        # Claude Code's chrome hint — only meaningful while a turn can be
+        # interrupted, so gate it on the running flag rather than painting it
+        # during command spinners.
+        interrupt = "  (esc to interrupt)" if getattr(self, "_agent_running", False) else ""
+        return f"  {frame} {label} · {detail}{suffix}{interrupt}"
 
     # ── Per-turn accounting (display.turn_summary / spinner_token_flow) ──
     #
@@ -7566,20 +7644,25 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             return [("class:status-bar", f" {self._build_status_bar_text()} ")]
 
     @classmethod
-    def _right_align_input_meta_fragments(cls, frags, badge: str, width: int):
-        """Right-align ``badge`` at the end of the composer meta line.
+    def _right_align_input_meta_fragments(cls, frags, badge: str, width: int, chip: str = ""):
+        """Right-align ``badge`` (and optional ``chip``) on the composer meta line.
 
         Mirrors Claude Code's footer, which parks the effort indicator at
         the far right of the row under the prompt.  Unlike
         :meth:`_right_align_status_title_fragments` this is a no-op when
         ``badge`` is empty, so the meta line keeps its natural length when
-        no reasoning effort is configured.
+        no reasoning effort is configured.  ``chip`` (e.g. the YOLO
+        ``bypass permissions on`` marker) renders to the badge's right in
+        the ``mode-chip`` class and is reserved its own width so the row
+        never overflows.
         """
         badge = str(badge or "").strip()
-        if not badge:
+        chip = str(chip or "").strip()
+        if not badge and not chip:
             return frags
-        badge = f" {badge} "
-        left_width = width - cls._status_bar_display_width(badge)
+        badge = f" {badge} " if badge else ""
+        chip_w = (1 + cls._status_bar_display_width(chip)) if chip else 0
+        left_width = width - cls._status_bar_display_width(badge) - chip_w
         if left_width < 24:
             return frags
         trimmed = []
@@ -7600,7 +7683,10 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             break
         if used < left_width:
             trimmed.append(("class:input-meta", " " * (left_width - used)))
-        trimmed.append(("class:input-meta-context", badge))
+        if badge:
+            trimmed.append(("class:input-meta-context", badge))
+        if chip:
+            trimmed.append(("class:mode-chip", f" {chip}"))
         return trimmed
 
     def _get_input_meta_fragments(self):
@@ -7631,11 +7717,15 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             ]
             # Effort indicator sits at the far right, like Claude Code's
             # `● high · /effort`.  The top status line no longer repeats it.
+            # Claude Code additionally parks a mode chip (`bypass permissions
+            # on`) on the same row while a permission bypass is active.
             effort = snapshot.get("reasoning_effort") or ""
+            chip = "bypass permissions on" if self._is_session_yolo_active() else ""
             return self._right_align_input_meta_fragments(
                 frags,
                 f"● {effort}" if effort else "",
                 self._get_tui_terminal_width(),
+                chip=chip,
             )
         except Exception:
             return []
@@ -8341,6 +8431,27 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         if not text:
             return
 
+        # Claude-Code render mode — "quiet stream + final render". Echoing
+        # raw markdown would scroll past as source and then be duplicated by
+        # the end-of-turn themed render. The box never opens, so
+        # already_streamed stays False and the final grid renders the whole
+        # response exactly once; the spinner tail mirror keeps the
+        # token-arrival feedback alive in the live region.
+        if self.final_response_markdown == "render":
+            tail = (getattr(self, "_stream_tail_buf", "") + text)[-200:]
+            self._stream_tail_buf = tail
+            if len(tail) >= 80:
+                preview = tail[-int(_STREAM_PARTIAL_PREVIEW_LEN):]
+                cut = preview.find(" ")
+                if 0 < cut < len(preview) - 1:
+                    preview = preview[cut + 1:]
+                try:
+                    self._spinner_text = f"… {preview}"
+                    self._invalidate()
+                except Exception:
+                    pass
+            return
+
         # When show_reasoning is on and reasoning is still rendering,
         # defer content until the reasoning box closes.  This ensures the
         # reasoning block always appears BEFORE the response in the terminal.
@@ -8535,6 +8646,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
     def _reset_stream_state(self) -> None:
         """Reset streaming state before each agent invocation."""
         self._stream_buf = ""
+        self._stream_tail_buf = ""
         self._stream_started = False
         self._stream_box_opened = False
         self._stream_bullet_emitted = False
@@ -8578,8 +8690,8 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
 
     def _command_spinner_frame(self) -> str:
         """Return the current spinner frame for slow slash commands."""
-        frame_idx = int(time.monotonic() * 10) % len(_COMMAND_SPINNER_FRAMES)
-        return _COMMAND_SPINNER_FRAMES[frame_idx]
+        frames = _active_spinner_frames()
+        return frames[int(time.monotonic() * 10) % len(frames)]
 
     @contextmanager
     def _busy_command(self, status: str, *, blocks_input: bool = True):
@@ -18084,9 +18196,9 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         input_composer = input_area
         if hasattr(input_area, "buffer"):
             input_composer = HSplit([
-                Window(content=FormattedTextControl(lambda: _gradient_rule_line(self._get_tui_terminal_width())), height=1),
+                Window(content=FormattedTextControl(lambda: _composer_rule_line(self._get_tui_terminal_width())), height=1),
                 input_area,
-                Window(content=FormattedTextControl(lambda: _gradient_rule_line(self._get_tui_terminal_width())), height=1),
+                Window(content=FormattedTextControl(lambda: _composer_rule_line(self._get_tui_terminal_width(), bottom=True)), height=1),
             ])
         return [
             item for item in [

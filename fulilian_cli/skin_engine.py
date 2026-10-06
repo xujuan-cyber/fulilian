@@ -283,6 +283,71 @@ _BUILTIN_SKINS: Dict[str, Dict[str, Any]] = {
         },
         "tool_prefix": "┊",
     },
+    # Claude Code visual grammar (dark-authored). Colors are the exact
+    # Claude Code v2.1.291 dark truecolor theme. Branding is inherited from
+    # `default` — the Claude feel comes from color + glyph + layout, not
+    # from impersonating Claude. #9a9a9a/#6e6e6e are deliberately NOT in
+    # cli.py's _LIGHT_MODE_REMAP: they are status-bar fg/bg pairs, so a
+    # global foreground remap would break their contrast pairing.
+    "claude": {
+        "name": "claude",
+        "description": "Claude Code visual grammar — clay orange, minimal chrome",
+        "colors": {
+            "banner_border": "#d77757",
+            "banner_title": "#d77757",
+            "banner_accent": "#eb9f7f",
+            "banner_dim": "#999999",
+            "banner_text": "#ffffff",
+            "ui_accent": "#d77757",
+            "ui_label": "#999999",
+            "ui_ok": "#4eba65",
+            "ui_error": "#ff6b80",
+            "ui_warn": "#ffc107",
+            "prompt": "#ffffff",
+            "input_rule": "#888888",
+            "response_border": "#d77757",
+            "status_bar_bg": "#1f1f1f",
+            "status_bar_text": "#9a9a9a",
+            "status_bar_strong": "#d77757",
+            "status_bar_dim": "#6e6e6e",
+            "status_bar_good": "#4eba65",
+            "status_bar_warn": "#ffc107",
+            "status_bar_bad": "#ff6b80",
+            "status_bar_critical": "#ff6b80",
+            "session_label": "#4782c8",
+            # #6a6a6a (not CC's #505050): the palette audit's SOFT contrast
+            # floor vs the dark pole — #505050 reads fine in CC's chrome but
+            # is under-floor here; #6a6a6a keeps the same gray character.
+            "session_border": "#6a6a6a",
+            "completion_menu_bg": "#1f1f1f",
+            "completion_menu_current_bg": "#373737",
+            # Dark steel-blue selection — CC's #b4d5ff is a light-theme value
+            # and reads as a light fill on dark terminals.
+            "selection_bg": "#2d3f5e",
+            "shell_dollar": "#af87ff",
+            # Composer mode chip (`bypass permissions on`) — Claude Code's
+            # merged/autoAccept purple.
+            "mode_chip": "#af87ff",
+            "voice_status_bg": "#1f1f1f",
+            # Diff tokens (consumed by agent/display.py::_diff_ansi) — exact
+            # Claude Code line backgrounds + word-level foregrounds.
+            "diff_added_bg": "#225c2b",
+            "diff_removed_bg": "#7a2936",
+            "diff_added_word": "#38a660",
+            "diff_removed_word": "#b3596b",
+        },
+        "spinner": {
+            "waiting_faces": ["·", "✢", "✳", "✶", "✻", "✻"],
+            "thinking_faces": ["·", "✢", "✳", "✶", "✻", "✻"],
+            "thinking_verbs": [
+                "thinking", "pondering", "reasoning", "brewing",
+                "working", "considering", "planning",
+            ],
+            "wings": [],
+        },
+        "branding": {},  # inherit FuLiLian identity from default
+        "tool_prefix": "⎿",
+    },
     "ares": {
         "name": "ares",
         "description": "War-god theme — crimson and bronze",
@@ -1017,6 +1082,7 @@ def get_prompt_toolkit_style_overrides() -> Dict[str, str]:
     status_bad = skin.get_color("status_bar_bad", skin.get_color("banner_accent", warn))
     status_critical = skin.get_color("status_bar_critical", error)
     voice_bg = skin.get_color("voice_status_bg", status_bg)
+    mode_chip = skin.get_color("mode_chip", dim)
     menu_bg = skin.get_color("completion_menu_bg", "#1a1a2e")
     menu_current_bg = skin.get_color("completion_menu_current_bg", "#333355")
     menu_meta_bg = skin.get_color("completion_menu_meta_bg", menu_bg)
@@ -1066,4 +1132,9 @@ def get_prompt_toolkit_style_overrides() -> Dict[str, str]:
         "approval-selected": f"{title} bold",
         "voice-status": f"bg:{voice_bg} {label}",
         "voice-status-recording": f"bg:{voice_bg} {error} bold",
+        # Claude Code's mode chips (`bypass permissions on`) sit at the
+        # composer footer's right edge in a muted purple-gray. Other skins
+        # keep their dim color, so this class is a no-op visually until a
+        # skin opts in via `mode_chip`.
+        "mode-chip": f"{mode_chip} bold",
     }

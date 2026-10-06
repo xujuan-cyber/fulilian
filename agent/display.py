@@ -70,6 +70,16 @@ def _diff_ansi() -> dict[str, str]:
         dim = _hex_fg("banner_dim", (150, 150, 150))
         file_c = _hex_fg("session_label", (180, 160, 255))
         hunk = _hex_fg("session_border", (120, 120, 140))
+
+        def _hex_bg_fg(bg_hex: str, fg_hex: str) -> str:
+            """``fg on bg`` SGR for skins that ship explicit diff tokens."""
+            if bg_hex and len(bg_hex) == 7 and bg_hex[0] == "#" \
+                    and fg_hex and len(fg_hex) == 7 and fg_hex[0] == "#":
+                fr, fg_, fb = int(fg_hex[1:3], 16), int(fg_hex[3:5], 16), int(fg_hex[5:7], 16)
+                br, bg_, bb = int(bg_hex[1:3], 16), int(bg_hex[3:5], 16), int(bg_hex[5:7], 16)
+                return f"\033[38;2;{fr};{fg_};{fb};48;2;{br};{bg_};{bb}m"
+            return ""
+
         # minus/plus use background colors — derive from ui_error/ui_ok
         err_h = skin.get_color("ui_error", "#ef5350")
         ok_h = skin.get_color("ui_ok", "#4caf50")
@@ -80,6 +90,21 @@ def _diff_ansi() -> dict[str, str]:
         if ok_h and len(ok_h) == 7:
             or_, og, ob = int(ok_h[1:3], 16), int(ok_h[3:5], 16), int(ok_h[5:7], 16)
             plus = f"\033[38;2;255;255;255;48;2;{max(or_//4,10)};{max(og//2,20)};{max(ob//4,10)}m"
+        # Skins may ship explicit diff tokens (exact Claude Code line bg +
+        # word fg); when present they win over the derived tint above.
+        # Skins without them (all pre-existing ones) keep the derived tint.
+        explicit_minus = _hex_bg_fg(
+            skin.get_color("diff_removed_bg", ""),
+            skin.get_color("diff_removed_word", ""),
+        )
+        explicit_plus = _hex_bg_fg(
+            skin.get_color("diff_added_bg", ""),
+            skin.get_color("diff_added_word", ""),
+        )
+        if explicit_minus:
+            minus = explicit_minus
+        if explicit_plus:
+            plus = explicit_plus
     except Exception:
         pass
 
@@ -1077,7 +1102,11 @@ def tool_display_name(tool_name: str) -> str:
 def render_tool_call_line(
     tool_name: str, args: dict | None, *, colorize: bool = True, max_len: int = 60,
 ) -> str:
-    """Render the ``● Tool(args)`` line that opens a tool call."""
+    """Render the ``⏺ Tool(args)`` line that opens a tool call.
+
+    Tool calls use Claude Code's ``⏺`` dot; assistant prose keeps ``●``
+    so the two surfaces stay visually distinct.
+    """
     try:
         label = tool_display_name(tool_name)
         preview = build_tool_preview(tool_name, args or {}, max_len=max_len)
@@ -1085,8 +1114,8 @@ def render_tool_call_line(
     except Exception:
         text = tool_display_name(tool_name)
     if not colorize:
-        return f"● {text}"
-    return f"{_diff_dim()}●{_ANSI_RESET} {text}"
+        return f"⏺ {text}"
+    return f"{_diff_dim()}⏺{_ANSI_RESET} {text}"
 
 
 def render_numbered_block(

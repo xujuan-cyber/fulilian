@@ -141,12 +141,19 @@ class TestStreamBulletGrammar:
         outro = [ln for ln in lines if "outro" in ln]
         assert outro and outro[0].startswith("  ")
 
-    def test_fenced_code_exempt_in_render_mode_too(self):
+    def test_render_mode_streams_nothing_final_render_takes_over(self):
+        """With ``final_response_markdown: render`` the stream is silent —
+        no scrollback lines are committed while tokens arrive, so the fully
+        rendered response appears exactly once at end of turn (via the
+        unskipped final grid). The stream tail still feeds the spinner."""
         cli = _make_cli(display_extra={"final_response_markdown": "render"})
         with patch.object(_cli_mod, "_cprint") as mock_print:
             cli._emit_stream_text("intro\n```python\ncode_one\n```\n")
-        code = [ln for ln in _emitted(mock_print) if "code_one" in ln]
-        assert code and not code[0].startswith("  ")
+        # Nothing committed to the scrollback — not even the prose intro.
+        assert _emitted(mock_print) == []
+        assert cli._stream_box_opened is False
+        # The tail buffer kept the last words for the spinner preview.
+        assert "code_one" in getattr(cli, "_stream_tail_buf", "")
 
     def test_flush_stream_does_not_close_a_box(self):
         cli = _make_cli()

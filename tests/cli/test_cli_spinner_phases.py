@@ -125,7 +125,9 @@ class TestSpinnerMetrics:
         cli = self._with_flow(_make_cli())
         assert "thinking" not in _spinner(cli)
         cli._reasoning_box_opened = True
-        assert _spinner(cli).rstrip().endswith("· thinking)")
+        # While a turn runs, the CC chrome hint rides the spinner tail after
+        # the metrics (and the thinking marker stays the last phase metric).
+        assert _spinner(cli).rstrip().endswith("· thinking)  (esc to interrupt)")
 
     def test_no_metrics_when_nothing_is_known(self):
         cli = _make_cli()
