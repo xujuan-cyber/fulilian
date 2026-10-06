@@ -7373,7 +7373,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                     parts.insert(0, battery_label)
                 compressions = snapshot.get("compressions", 0)
                 if compressions:
-                    parts.append(f"🗜️ {compressions}")
+                    parts.append(f"⌄ {compressions}")
                 bg_count = snapshot.get("active_background_tasks", 0)
                 if bg_count:
                     parts.append(f"▶ {bg_count}")
@@ -7404,7 +7404,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             if battery_label:
                 parts.insert(0, battery_label)
             if compressions:
-                parts.append(f"🗜️ {compressions}")
+                parts.append(f"⌄ {compressions}")
             bg_count = snapshot.get("active_background_tasks", 0)
             if bg_count:
                 parts.append(f"▶ {bg_count}")
@@ -7516,7 +7516,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                     ]
                     if compressions:
                         frags.append(("class:status-bar-dim", " · "))
-                        frags.append((self._compression_count_style(compressions), f"🗜️ {compressions}"))
+                        frags.append((self._compression_count_style(compressions), f"⌄ {compressions}"))
                     if bg_count:
                         frags.append(("class:status-bar-dim", " · "))
                         frags.append(("class:status-bar-strong", f"▶ {bg_count}"))
@@ -7565,7 +7565,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                     ]
                     if compressions:
                         frags.append(("class:status-bar-dim", " │ "))
-                        frags.append((self._compression_count_style(compressions), f"🗜️ {compressions}"))
+                        frags.append((self._compression_count_style(compressions), f"⌄ {compressions}"))
                     if bg_count:
                         frags.append(("class:status-bar-dim", " │ "))
                         frags.append(("class:status-bar-strong", f"▶ {bg_count}"))
@@ -7828,7 +7828,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                 if normalized_model and normalized_model != current_model:
                     if not self._model_is_default:
                         self._console_print(
-                            f"[yellow]⚠️  Normalized model '{current_model}' to '{normalized_model}' for {resolved_provider}.[/]"
+                            f"[yellow]Normalized model '{current_model}' to '{normalized_model}' for {resolved_provider}.[/]"
                         )
                     self.model = normalized_model
                     current_model = normalized_model
@@ -7844,7 +7844,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                 if canonical and canonical != current_model:
                     if not self._model_is_default:
                         self._console_print(
-                            f"[yellow]⚠️  Normalized Copilot model '{current_model}' to '{canonical}'.[/]"
+                            f"[yellow]Normalized Copilot model '{current_model}' to '{canonical}'.[/]"
                         )
                     self.model = canonical
                     current_model = canonical
@@ -7868,7 +7868,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                 if canonical and canonical != current_model:
                     if not self._model_is_default:
                         self._console_print(
-                            f"[yellow]⚠️  Stripped provider prefix from '{current_model}'; using '{canonical}' for {resolved_provider}.[/]"
+                            f"[yellow]Stripped provider prefix from '{current_model}'; using '{canonical}' for {resolved_provider}.[/]"
                         )
                     self.model = canonical
                     current_model = canonical
@@ -7890,7 +7890,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             slug = current_model.split("/", 1)[1]
             if not self._model_is_default:
                 self._console_print(
-                    f"[yellow]⚠️  Stripped provider prefix from '{current_model}'; "
+                    f"[yellow]Stripped provider prefix from '{current_model}'; "
                     f"using '{slug}' for OpenAI Codex.[/]"
                 )
             self.model = slug
@@ -8708,7 +8708,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         self._command_status = status
         self._invalidate(min_interval=0.0)
         try:
-            print(f"⏳ {status}")
+            print(status)
             yield
         finally:
             self._command_running = False
@@ -9116,7 +9116,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         if ctx_len and ctx_len < MINIMUM_CONTEXT_LENGTH:
             self._console_print()
             self._console_print(
-                f"[yellow]⚠️  Context length is only {ctx_len:,} tokens — "
+                f"[yellow]Context length is only {ctx_len:,} tokens — "
                 f"this is likely too low for agent use with tools.[/]"
             )
             self._console_print(
@@ -9711,7 +9711,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             
             if api_key_missing:
                 self._console_print()
-                self._console_print("[yellow]⚠️  Some tools disabled (missing API keys):[/]")
+                self._console_print("[yellow]Some tools disabled (missing API keys):[/]")
                 for item in api_key_missing:
                     tools_str = ", ".join(item["tools"][:2])  # Show first 2 tools
                     if len(item["tools"]) > 2:
@@ -12331,14 +12331,14 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         new_value, errors = crs.parse_args(raw_args)
         if errors:
             for err in errors:
-                _cprint(f"❌ {err}")
+                _cprint(f"{err}")
             return
 
         # Load + persist via the existing config helpers
         try:
             from fulilian_cli.config import load_config, save_config
         except Exception as exc:
-            _cprint(f"❌ could not load config: {exc}")
+            _cprint(f"could not load config: {exc}")
             return
         cfg = load_config()
 
@@ -14076,7 +14076,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                 approx_tokens,
             )
             for line in report["lines"]:
-                print(f"🗜️  {line}")
+                print(f"  {line}")
             return
 
         original_count = len(self.conversation_history)
@@ -14113,14 +14113,14 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                     tools=_tools,
                 )
                 if partial:
-                    print(f"🗜️  Summarizing up to here: compressing {len(head)} of "
+                    print(f"Summarizing up to here: compressing {len(head)} of "
                           f"{original_count} messages (~{approx_tokens:,} tokens), "
                           f"keeping last {keep_last} exchange(s) verbatim...")
                 elif focus_topic:
-                    print(f"🗜️  Compressing {original_count} messages (~{approx_tokens:,} tokens), "
+                    print(f"Compressing {original_count} messages (~{approx_tokens:,} tokens), "
                           f"focus: \"{focus_topic}\"...")
                 else:
-                    print(f"🗜️  Compressing {original_count} messages (~{approx_tokens:,} tokens)...")
+                    print(f"Compressing {original_count} messages (~{approx_tokens:,} tokens)...")
 
                 # Pass None as system_message so _compress_context rebuilds
                 # the system prompt from scratch via _build_system_prompt(None).
@@ -14207,15 +14207,9 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                         self.agent, "context_compressor", None
                     ),
                 )
-                if (
-                    summary.get("aborted")
-                    or summary.get("fallback_used")
-                    or summary.get("refused_would_grow")
-                ):
-                    icon = "⚠️"
-                else:
-                    icon = "🗜️" if summary["noop"] else "✅"
-                print(f"  {icon} {summary['headline']}")
+                # Plain text — the claude chrome keeps emoji out of the
+                # status feedback; the headline wording carries the state.
+                print(f"  {summary['headline']}")
                 print(f"     {summary['token_line']}")
                 if summary["note"]:
                     print(f"     {summary['note']}")
@@ -14225,7 +14219,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                     self.agent,
                     committed=False,
                 )
-                print(f"  ❌ Compression failed: {e}")
+                print(f"  Compression failed: {e}")
 
 
 
@@ -14262,7 +14256,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
 
         from agent.account_usage import redeem_codex_reset_credit
 
-        print("  ⏳ Checking banked reset credits...")
+        print("  Checking banked reset credits...")
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as _pool:
             try:
                 result = _pool.submit(
@@ -14272,7 +14266,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                     force=force,
                 ).result(timeout=45.0)
             except concurrent.futures.TimeoutError:
-                print("  ❌ Timed out talking to the Codex backend — try again shortly.")
+                print("  Timed out talking to the Codex backend — try again shortly.")
                 return
         print(f"  {result.message}")
 
@@ -14319,7 +14313,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
 
         model = payload.get("model") or self.model
         print()
-        print(f"  🧠 Context Usage — {model}")
+        print(f"  Context Usage — {model}")
         print()
         for line in render_context_breakdown_lines(payload, details=details, grid=True):
             print(f"  {line}")
@@ -14375,7 +14369,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         msg_count = len(self.conversation_history)
         elapsed = format_duration_compact((datetime.now() - self.session_start).total_seconds())
 
-        print("  📊 Session Token Usage")
+        print("  Session Token Usage")
         print(f"  {'─' * 40}")
         print(f"  Model:                     {agent.model}")
         print(f"  Input tokens:              {input_tokens:>10,}")
@@ -14561,10 +14555,10 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             # They can apply the new settings on their own terms with
             # /reload-mcp — which we explicitly warn may invalidate the cache.
             print()
-            print("🔄 MCP server config changed — reload skipped (auto-reload disabled).")
+            print("MCP server config changed — reload skipped (auto-reload disabled).")
             print("   New settings are NOT applied yet. To apply them now, run:")
             print("     /reload-mcp")
-            print("   ⚠️  Note: /reload-mcp rebuilds the tool set and invalidates the")
+            print("   Note: /reload-mcp rebuilds the tool set and invalidates the")
             print("   provider prompt cache (next message re-sends full input tokens).")
             return
 
@@ -14572,7 +14566,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         # timeout so a hung MCP server cannot block the process_loop
         # indefinitely (which would freeze the entire TUI).
         print()
-        print("🔄 MCP server config changed — reloading connections...")
+        print("MCP server config changed — reloading connections...")
         _reload_thread = threading.Thread(
             target=self._reload_mcp, daemon=True
         )
@@ -14683,28 +14677,28 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             ("cancel", "Cancel", "keep current conversation"),
         ]
         raw = self._prompt_text_input_modal(
-            title=f"⚠️  /{command} — destroys conversation state",
+            title=f"/{command} — destroys conversation state",
             detail=detail,
             choices=choices,
         )
         if raw is None:
-            print(f"🟡 /{command} cancelled (no input).")
+            print(f"/{command} cancelled (no input).")
             return None
         choice = self._normalize_slash_confirm_choice(raw, choices)
         if choice is None:
-            print(f"🟡 Unrecognized choice '{raw}'. /{command} cancelled.")
+            print(f"Unrecognized choice '{raw}'. /{command} cancelled.")
             return None
 
         if choice == "cancel":
-            print(f"🟡 /{command} cancelled. Conversation unchanged.")
+            print(f"/{command} cancelled. Conversation unchanged.")
             return None
 
         if choice == "always":
             if save_config_value("approvals.destructive_slash_confirm", False):
-                print("🔒 Future /clear, /new, /reset, and /undo will run without confirmation.")
+                print("Future /clear, /new, /reset, and /undo will run without confirmation.")
                 print("   Re-enable via `approvals.destructive_slash_confirm: true` in config.yaml.")
             else:
-                print("⚠️  Couldn't persist opt-out — proceeding once.")
+                print("Couldn't persist opt-out — proceeding once.")
 
         return choice
 
@@ -14744,7 +14738,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             ("cancel", "Cancel", "leave MCP tools unchanged"),
         ]
         raw = self._prompt_text_input_modal(
-            title="⚠️  /reload-mcp — Prompt cache invalidation warning",
+            title="/reload-mcp — Prompt cache invalidation warning",
             detail=(
                 "Reloading MCP servers rebuilds the tool set for this session and\n"
                 "invalidates the provider prompt cache. The next message will\n"
@@ -14754,23 +14748,23 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             choices=choices,
         )
         if raw is None:
-            print("🟡 /reload-mcp cancelled (no input).")
+            print("/reload-mcp cancelled (no input).")
             return
         choice = self._normalize_slash_confirm_choice(raw, choices)
         if choice is None:
-            print(f"🟡 Unrecognized choice '{raw}'. /reload-mcp cancelled.")
+            print(f"Unrecognized choice '{raw}'. /reload-mcp cancelled.")
             return
 
         if choice == "cancel":
-            print("🟡 /reload-mcp cancelled. MCP tools unchanged.")
+            print("/reload-mcp cancelled. MCP tools unchanged.")
             return
 
         if choice == "always":
             if save_config_value("approvals.mcp_reload_confirm", False):
-                print("🔒 Future /reload-mcp calls will run without confirmation.")
+                print("Future /reload-mcp calls will run without confirmation.")
                 print("   Re-enable via `approvals.mcp_reload_confirm: true` in config.yaml.")
             else:
-                print("⚠️  Couldn't persist opt-out — reloading once.")
+                print("Couldn't persist opt-out — reloading once.")
 
         with self._busy_command(self._slow_command_status(cmd_original)):
             self._reload_mcp()
@@ -14789,7 +14783,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                 old_servers = set(_servers.keys())
 
             if not self._command_running:
-                print("🔄 Reloading MCP servers...")
+                print("Reloading MCP servers...")
 
             # Shutdown existing connections
             shutdown_mcp_servers()
@@ -14874,10 +14868,10 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                 except Exception:
                     pass  # Best-effort
 
-            print(f"  ✅ Agent updated — {len(self.agent.tools if self.agent else [])} tool(s) available")
+            print(f"  Agent updated — {len(self.agent.tools if self.agent else [])} tool(s) available")
 
         except Exception as e:
-            print(f"  ❌ MCP reload failed: {e}")
+            print(f"  MCP reload failed: {e}")
 
     def _reload_skills(self) -> None:
         """Reload skills: rescan ~/.fulilian/skills/ and queue a note for the
@@ -14896,7 +14890,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             from agent.skill_commands import reload_skills, get_skill_commands
 
             if not self._command_running:
-                print("🔄 Reloading skills...")
+                print("Reloading skills...")
 
             result = reload_skills()
 
@@ -14955,7 +14949,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             self._pending_skills_reload_note = "\n".join(sections)
 
         except Exception as e:
-            print(f"  ❌ Skills reload failed: {e}")
+            print(f"  Skills reload failed: {e}")
 
     # ====================================================================
     # Tool-call generation indicator (shown during streaming)
@@ -14975,7 +14969,8 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
 
         from agent.display import get_tool_emoji
         emoji = get_tool_emoji(tool_name, default="⚡")
-        _cprint(f"  ┊ {emoji} preparing {tool_name}…")
+        lead = f"{emoji} " if emoji else ""
+        _cprint(f"  ┊ {lead}preparing {tool_name}…")
 
     # ====================================================================
     # Tool progress callback (audio cues for voice mode)
@@ -15122,7 +15117,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             _pl = get_tool_preview_max_len()
             if _pl > 0 and len(label) > _pl:
                 label = label[:_pl - 3] + "..."
-            self._spinner_text = f"{emoji} {label}"
+            self._spinner_text = f"{emoji} {label}".strip()
             self._tool_start_time = time.monotonic()
             self._thinking_start_time = 0.0
             self._set_spinner_phase("tool")
@@ -16669,7 +16664,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         selected = state.get("selected", 0)
         show_full = state.get("show_full", False)
 
-        title = "⚠️  Dangerous Command"
+        title = "Dangerous Command"
         cmd_display = command
         choice_labels = {
             "once": "Allow once",

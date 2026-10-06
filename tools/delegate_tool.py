@@ -1538,7 +1538,8 @@ def _build_child_progress_callback(
             from agent.display import get_tool_emoji
 
             emoji = get_tool_emoji(tool_name or "")
-            line = f" {prefix}├─ {emoji} {tool_name}"
+            lead = f"{emoji} " if emoji else ""
+            line = f" {prefix}├─ {lead}{tool_name}"
             if short:
                 line += f'  "{short}"'
             try:

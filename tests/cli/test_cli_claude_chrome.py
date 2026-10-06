@@ -79,19 +79,14 @@ class TestSpinnerInterruptHint:
         assert "esc to interrupt" not in text
 
     def test_claude_spinner_frames_reach_the_renderer(self):
-        """The claude ping-pong glyph family (✻ etc.) must feed the live
-        spinner through _active_spinner_frames, not stay in skin data."""
+        """The claude skin's single ✻ face must feed the live spinner through
+        _active_spinner_frames, not stay in skin data — and stay alone (the
+        user pinned ✻ as the only status glyph; no frame variety)."""
         import cli as cli_mod
 
         set_active_skin("claude")
         frames = cli_mod._active_spinner_frames()
-        assert "✻" in frames
-        # Ping-pong expansion (faces + faces[-2:0:-1]): the outbound frames
-        # repeat in reverse on the way back, more frames than faces.
-        raw = ["·", "✢", "✳", "✶", "✻", "✻"]
-        assert len(frames) > len(raw)
-        assert list(frames[: len(raw)]) == raw
-        assert list(frames[len(raw) :]) == list(reversed(raw[1:-1]))
+        assert frames == ("✻",)
 
     def test_default_skin_falls_back_to_braille_frames(self):
         import cli as cli_mod

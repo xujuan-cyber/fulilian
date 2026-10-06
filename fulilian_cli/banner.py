@@ -118,20 +118,9 @@ def _print_minimal_banner(
     # Clawd — Claude Code's crab mascot, 3 rows x 9 cols, cyan->white gradient.
     # Each row is [(text, has_bg), ...]:
     # segments with has_bg get a black background for the crab's body/eyes.
-    # The claude skin recolors the gradient to Claude Code's clay oranges
-    # (#d77757 body -> #eb9f7f shimmer) so the mascot matches the palette;
-    # every other skin keeps the original cyan->white.
     _CLAWD_BG = "#000000"
     _CLAWD_GRAD_START = "#00e5ff"  # cyan
     _CLAWD_GRAD_END = "#ffffff"    # white
-    try:
-        from fulilian_cli.skin_engine import get_active_skin as _gas
-        _skin = _gas()
-        if _skin is not None and _skin.name == "claude":
-            _CLAWD_GRAD_START = _skin.get_color("banner_border", "#d77757")
-            _CLAWD_GRAD_END = _skin.get_color("banner_accent", "#eb9f7f")
-    except Exception:
-        pass
 
     _CLAWD_SEGMENTS = [
         [(" \u2590", False), ("\u259b\u2588\u2588\u2588\u259c", True), ("\u258c", False)],

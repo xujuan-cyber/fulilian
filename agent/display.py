@@ -170,14 +170,24 @@ def get_skin_tool_prefix() -> str:
     return "┊"
 
 
+def _tool_emojis_enabled() -> bool:
+    """Whether the active skin wants tool emoji in the chrome (default yes)."""
+    skin = _get_skin()
+    return skin is None or skin.tool_emojis_enabled
+
+
 def get_tool_emoji(tool_name: str, default: str = "⚡") -> str:
     """Get the display emoji for a tool.
 
     Resolution order:
+    0. Skin opt-out — a skin with ``tool_emojis_enabled: False`` (claude)
+       gets bare tool names everywhere, ahead of every other source
     1. Active skin's ``tool_emojis`` overrides (if a skin is loaded)
     2. Tool registry's per-tool ``emoji`` field
     3. *default* fallback
     """
+    if not _tool_emojis_enabled():
+        return ""
     # 1. Skin override
     skin = _get_skin()
     if skin and skin.tool_emojis:
@@ -1771,6 +1781,11 @@ def _get_cute_tool_message(
         """Apply skin tool prefix and failure suffix."""
         if skin_prefix != "┊":
             line = line.replace("┊", skin_prefix, 1)
+        if not _tool_emojis_enabled():
+            # Skin opted out of tool emoji (claude): drop the leading emoji
+            # column — "┊ 🔍 search …" becomes "┊ search …" — so every branch
+            # of the hardcoded per-tool emoji map degrades uniformly.
+            line = re.sub(r"^(┊\s)\S+\s", r"\1", line, count=1)
         if not is_failure:
             return line
         return f"{line}{failure_suffix}"

@@ -173,6 +173,9 @@ class SkinConfig:
     branding: Dict[str, str] = field(default_factory=dict)
     tool_prefix: str = "┊"
     tool_emojis: Dict[str, str] = field(default_factory=dict)  # per-tool emoji overrides
+    # False → get_tool_emoji returns "" and surfaces render bare tool names
+    # (claude skin: Claude Code shows no emoji icons in the chrome).
+    tool_emojis_enabled: bool = True
     banner_logo: str = ""    # Rich-markup ASCII art logo (replaces FULILIAN_AGENT_LOGO)
     banner_hero: str = ""    # Rich-markup hero art (replaces FULILIAN_CADUCEUS)
 
@@ -337,8 +340,10 @@ _BUILTIN_SKINS: Dict[str, Dict[str, Any]] = {
             "diff_removed_word": "#b3596b",
         },
         "spinner": {
-            "waiting_faces": ["·", "✢", "✳", "✶", "✻", "✻"],
-            "thinking_faces": ["·", "✢", "✳", "✶", "✻", "✻"],
+            # Single-face spinner: the user wants ✻ alone as the status
+            # glyph — no frame variety (·✢✳✶) and no emoji anywhere.
+            "waiting_faces": ["✻"],
+            "thinking_faces": ["✻"],
             "thinking_verbs": [
                 "thinking", "pondering", "reasoning", "brewing",
                 "working", "considering", "planning",
@@ -347,6 +352,9 @@ _BUILTIN_SKINS: Dict[str, Dict[str, Any]] = {
         },
         "branding": {},  # inherit FuLiLian identity from default
         "tool_prefix": "⎿",
+        # Claude Code shows tool names bare (``Read(file)``) — no emoji
+        # icons in the spinner or activity feed.
+        "tool_emojis_enabled": False,
     },
     "ares": {
         "name": "ares",
@@ -918,6 +926,9 @@ def _build_skin_config(data: Dict[str, Any]) -> SkinConfig:
         branding=branding,
         tool_prefix=data.get("tool_prefix", default.get("tool_prefix", "┊")),
         tool_emojis=emoji_overrides,
+        tool_emojis_enabled=data.get(
+            "tool_emojis_enabled", default.get("tool_emojis_enabled", True)
+        ),
         banner_logo=data.get("banner_logo", ""),
         banner_hero=data.get("banner_hero", ""),
     )

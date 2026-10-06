@@ -100,16 +100,23 @@ class TestClaudeIdentity:
     def test_tool_prefix_is_result_slot_glyph(self):
         assert claude_skin().tool_prefix == "⎿"
 
+    def test_tool_emojis_disabled_and_other_skins_keep_them(self):
+        """claude shows bare tool names (``Read(file)``); every other skin
+        keeps emoji via get_tool_emoji's registry/fallback path."""
+        assert claude_skin().tool_emojis_enabled is False
+        for name, raw in _BUILTIN_SKINS.items():
+            if name == "claude":
+                continue
+            assert raw.get("tool_emojis_enabled", True) is True, name
+
 
 class TestClaudeSpinner:
-    def test_spinner_faces_are_the_cc_glyph_family(self):
+    def test_spinner_is_a_single_glitch_free_face(self):
+        """Only ✻ — the user pinned one status glyph, no frame variety and
+        no emoji; the renderer shows ✻ statically while a turn runs."""
         spinner = claude_skin().spinner
-        faces = spinner["waiting_faces"]
-        assert faces and faces[-1] == "✻"
-        # Every face must be a single codepoint — the renderer iterates them
-        # one per frame with no width handling.
-        for face in faces:
-            assert len(face) == 1, face
+        assert spinner["waiting_faces"] == ["✻"]
+        assert spinner["thinking_faces"] == ["✻"]
 
     def test_thinking_verbs_present(self):
         verbs = claude_skin().spinner["thinking_verbs"]
