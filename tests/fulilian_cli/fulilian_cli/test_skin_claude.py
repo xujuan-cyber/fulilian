@@ -1,11 +1,10 @@
-"""The ``claude`` skin: Claude Code's visual grammar as pure skin data.
+"""The ``claude`` skin: Claude Code's behavioral grammar as pure skin data.
 
 Behavior contracts for the built-in ``claude`` entry in ``_BUILTIN_SKINS`` —
-the exact Claude Code v2.1.291 palette values the classic CLI consumes, the
-FuLiLian identity it must NOT overwrite (the skin recolors chrome, it does
-not rebrand the agent), and the claude-only tokens that downstream consumers
-(``agent/display.py::_diff_ansi``, the composer ``mode-chip`` class) read via
-``get_color``.
+the palette is inherited from ``default`` (2026-10-07 user revert: FuLiLian
+blues everywhere, no color overrides of its own), the FuLiLian identity it
+must NOT overwrite, and the claude-only behavioral tokens (single ✻ spinner
+face, bare tool names, ⎿ result slot) that downstream consumers read.
 """
 
 import pytest
@@ -27,54 +26,30 @@ class TestClaudePalette:
         assert "claude" in _BUILTIN_SKINS
         assert _BUILTIN_SKINS["claude"]["name"] == "claude"
 
-    def test_brand_accent_is_claude_orange(self):
-        skin = claude_skin()
-        assert skin.get_color("banner_border") == "#d77757"
-        assert skin.get_color("ui_accent") == "#d77757"
-        assert skin.get_color("banner_accent") == "#eb9f7f"
+    def test_claude_ships_no_color_overrides(self):
+        """2026-10-07 user revert: the claude skin keeps Claude Code's
+        behavioral grammar (✻ spinner, bare tool names, ⎿ slot) but the
+        palette inherits the default FuLiLian blues wholesale — prompt
+        symbol and response bullet included."""
+        assert "colors" not in _BUILTIN_SKINS["claude"]
+        skin, default = claude_skin(), load_skin("default")
+        for key in (
+            "banner_border",
+            "banner_accent",
+            "ui_accent",
+            "response_border",
+            "input_rule",
+            "status_bar_bg",
+            "status_bar_text",
+            "status_bar_strong",
+        ):
+            assert skin.get_color(key) == default.get_color(key), key
 
-    def test_chrome_is_gray_not_gold(self):
-        """The claude skin must not inherit the default skin's gold chrome."""
-        skin = claude_skin()
-        assert skin.get_color("banner_dim") == "#999999"
-        assert skin.get_color("input_rule") == "#888888"
-        assert skin.get_color("status_bar_dim") == "#6e6e6e"
-
-    def test_semantic_triplet(self):
-        skin = claude_skin()
-        assert skin.get_color("ui_ok") == "#4eba65"
-        assert skin.get_color("ui_error") == "#ff6b80"
-        assert skin.get_color("ui_warn") == "#ffc107"
-
-    def test_diff_tokens_are_exact_cc_values(self):
-        """agent/display.py::_diff_ansi reads these four keys for the CC
-        line-background + word-foreground diff rendering; other skins leave
-        them unset and keep the derived colors."""
-        skin = claude_skin()
-        assert skin.get_color("diff_added_bg") == "#225c2b"
-        assert skin.get_color("diff_removed_bg") == "#7a2936"
-        assert skin.get_color("diff_added_word") == "#38a660"
-        assert skin.get_color("diff_removed_word") == "#b3596b"
-
-    def test_mode_chip_token_present(self):
-        assert claude_skin().get_color("mode_chip") == "#af87ff"
-
-    def test_status_bar_pairs_stay_paired(self):
-        """The status-bar grays are authored against their own background and
-        deliberately excluded from the light-mode foreground remap; if they
-        ever change, tests/cli/test_cli_light_mode.py's passthrough cases must
-        change with them."""
-        skin = claude_skin()
-        assert skin.get_color("status_bar_bg") == "#1f1f1f"
-        assert skin.get_color("status_bar_text") == "#9a9a9a"
-        assert skin.get_color("status_bar_dim") == "#6e6e6e"
-
-    def test_other_skins_have_no_diff_or_chip_tokens(self):
-        """The diff/mode-chip keys are claude-only opt-ins — every other
-        built-in skin must keep the derived fallback path in _diff_ansi."""
+    def test_no_skin_sets_claude_only_color_tokens(self):
+        """The diff/mode-chip keys were a claude-only color-layer opt-in and
+        went with the revert — no built-in may set them, so _diff_ansi keeps
+        its derived fallback path and mode-chip falls back to banner_dim."""
         for name, raw in _BUILTIN_SKINS.items():
-            if name == "claude":
-                continue
             colors = raw.get("colors", {})
             for key in (
                 "diff_added_bg",

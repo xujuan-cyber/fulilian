@@ -133,9 +133,16 @@ LIGHT_AUTHORED = frozenset({"daylight", "warm-lightmode"})
 # completeness + full foreground-contrast contract; overlays are audited for
 # valid keys and fill polarity only.
 def _base_palettes():
-    """Yield (skin, palette, is_light) for every built-in's base `colors`."""
+    """Yield (skin, palette, is_light) for every built-in's base `colors`.
+
+    Skins with no ``colors`` block at all inherit the default skin's palette
+    wholesale (e.g. ``claude`` since the 2026-10-07 color revert) — the
+    default is audited here itself, so there is nothing new to check.
+    """
     for name, skin in _BUILTIN_SKINS.items():
-        yield name, skin.get("colors", {}), name in LIGHT_AUTHORED
+        if "colors" not in skin:
+            continue
+        yield name, skin["colors"], name in LIGHT_AUTHORED
 
 
 def _overlays():

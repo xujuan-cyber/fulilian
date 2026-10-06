@@ -12,8 +12,9 @@ thin ``Markdown`` subclass:
 2. ``CodeBlock`` renders with ``Syntax(..., padding=1)``, one leading
    column of background — Claude Code renders code blocks flush-left.
 
-Colors are the exact Claude Code v2.1.291 dark/light truecolor values,
-mirroring the ``claude`` skin in ``skin_engine.py``. The Theme only
+Colors use the default FuLiLian blue accents with neutral gray chips —
+the Claude Code *structure* (flush-left headings, flush code blocks,
+borderless blocks) without the clay-orange palette. The Theme only
 registers ``markdown.*`` keys, so non-markdown Rich output is untouched.
 """
 
@@ -32,11 +33,12 @@ __all__ = [
     "render_claude_markdown",
 ]
 
-# Claude Code dark theme values (truecolor). Kept in one table so the
-# dark/light variants stay diffable against each other.
+# Accent colors follow the default FuLiLian palette (2026-10-07 user
+# revert of the clay-orange layer): #339AF0 on dark, a darker blue on
+# light. The neutral grays/chips stay; only the accent hue changed.
 _DARK = {
-    "accent": "#d77757",        # claude orange — headings h1/h2, list bullets
-    "accent_shimmer": "#eb9f7f",
+    "accent": "#339AF0",        # FuLiLian blue — headings h1/h2, list bullets
+    "accent_shimmer": "#5DB8F5",
     "text": "#ffffff",
     "inactive": "#999999",      # h4-h6, block quotes
     "subtle": "#505050",        # hr, table borders
@@ -46,8 +48,8 @@ _DARK = {
 }
 
 _LIGHT = {
-    "accent": "#b05332",        # darker orange for white backgrounds
-    "accent_shimmer": "#d77757",
+    "accent": "#1E7AD4",        # darker blue for white backgrounds
+    "accent_shimmer": "#339AF0",
     "text": "#1a1a1a",
     "inactive": "#666666",
     "subtle": "#afafaf",

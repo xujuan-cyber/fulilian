@@ -137,15 +137,15 @@ class TestClaudeMarkdownThemeRendering:
         # Claude Code keeps every heading flush-left.
         assert not line.startswith(" " * 8), repr(line)
 
-    def test_h1_uses_claude_orange_bold_and_no_underline(self):
+    def test_h1_uses_accent_blue_bold_and_no_underline(self):
         out = self._render("# Head One")
         line = next(ln for ln in out.splitlines() if "Head One" in ln)
-        assert "\x1b[1;38;2;215;119;87m" in line  # bold #d77757
+        assert "\x1b[1;38;2;51;154;240m" in line  # bold #339AF0
         assert "4;38" not in line  # no underline
 
     def test_light_theme_darkens_the_accent(self):
         out = self._render("# Head One", light=True)
-        assert "176;83;50" in out  # #b05332 as rgb triple
+        assert "30;122;212" in out  # #1E7AD4 as rgb triple
 
     def test_inline_code_gets_dark_chip_background(self):
         out = self._render("use `npm run` here")

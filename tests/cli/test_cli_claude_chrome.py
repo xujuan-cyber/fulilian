@@ -30,10 +30,12 @@ class TestComposerRuleLine:
         assert bottom[0][1].startswith("╰") and bottom[0][1].endswith("╯")
         assert len(top[0][1]) == len(bottom[0][1]) == 40
 
-    def test_claude_rule_uses_the_skin_input_rule_color(self):
+    def test_claude_rule_uses_the_inherited_input_rule_color(self):
+        """The color revert made the claude skin inherit default's palette —
+        the rounded composer keeps its shape but takes default's rule blue."""
         set_active_skin("claude")
         top = _composer_rule_line(40)
-        assert top[0][0] == "#888888"
+        assert top[0][0] == "#2E77B9"
 
     def test_other_skins_keep_the_gradient_rule(self):
         set_active_skin("ares")
@@ -152,15 +154,10 @@ class TestYoloModeChip:
 
 
 class TestClaudeLightModeRemap:
-    def test_inactive_gray_darkens_for_light_terminals(self, monkeypatch):
-        import cli as cli_mod
-
-        monkeypatch.setattr(cli_mod, "_detect_light_mode", lambda: True)
-        assert _maybe_remap_for_light_mode("#999999") == "#555555"
-
-    def test_status_bar_text_gray_passes_through_in_light_mode(self, monkeypatch):
-        """#9a9a9a is authored against status_bar_bg (#1f1f1f), not the
-        terminal background — remapping it would break the pairing."""
+    def test_unlisted_hex_passes_through_in_light_mode(self, monkeypatch):
+        """Skins inherit default's palette now — any hex not in the remap
+        table must reach the terminal untouched (the old claude-gray
+        darkening entry went with the color revert)."""
         import cli as cli_mod
 
         monkeypatch.setattr(cli_mod, "_detect_light_mode", lambda: True)
@@ -171,6 +168,7 @@ class TestClaudeLightModeRemap:
 
         monkeypatch.setattr(cli_mod, "_detect_light_mode", lambda: True)
         # The remap table is upper-case; compare case-insensitively.
+        # (#D77757 is the banner mascot's body orange — pre-claude entry.)
         assert _maybe_remap_for_light_mode("#d77757").upper() == "#B05332"
 
     def test_remap_is_noop_in_dark_mode(self, monkeypatch):

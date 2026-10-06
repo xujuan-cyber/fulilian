@@ -231,15 +231,18 @@ class TestDiffPaletteBySkin:
         yield
         display._diff_colors_cached = None
 
-    def test_claude_skin_uses_exact_cc_diff_tokens(self):
+    def test_claude_skin_keeps_the_derived_diff_tint(self):
+        """2026-10-07 color revert: the claude skin no longer opts into the
+        CC diff tokens — it falls back to the same derived tint as default."""
         from agent.display import _diff_ansi
         from fulilian_cli.skin_engine import set_active_skin
 
         set_active_skin("claude")
         tokens = _diff_ansi()
-        # plus: #38a660 fg on #225c2b bg; minus: #b3596b fg on #7a2936 bg
-        assert tokens["plus"] == "\033[38;2;56;166;96;48;2;34;92;43m"
-        assert tokens["minus"] == "\033[38;2;179;89;107;48;2;122;41;54m"
+        # Derived tint of ui_ok/ui_error — no explicit token backgrounds.
+        assert "48;2;34;92;43m" not in tokens["plus"]
+        assert "48;2;122;41;54m" not in tokens["minus"]
+        assert "48;2;" in tokens["plus"] and "48;2;" in tokens["minus"]
 
     def test_default_skin_keeps_derived_tint(self):
         from agent.display import _diff_ansi

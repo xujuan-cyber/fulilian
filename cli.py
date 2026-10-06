@@ -3323,11 +3323,6 @@ _LIGHT_MODE_REMAP: dict[str, str] = {
     "#EAF7FF": "#0F1B26",   # ice
     "#D4CDE0": "#6E6485",   # gradient-start lavender -> dark mauve (light mode)
     "#D77757": "#B05332",   # Clawd body orange -> darker orange (light mode)
-    # Claude skin standalone-foreground gray. Deliberately excludes the
-    # paired status-bar grays (#9a9a9a/#6e6e6e): those sit on a dark
-    # status-bar bg where a darker remap would vanish (same rule as the
-    # #C0C0C0/#888888 skips below).
-    "#999999": "#555555",   # claude inactive chrome -> darker gray
     "#B4A7C9": "#5C5275",   # gradient-end mauve -> darker mauve (light mode)
     "#F5F5F5": "#1A1A1A",
     "#FFF0D4": "#1A1A1A",
