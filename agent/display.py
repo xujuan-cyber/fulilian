@@ -176,6 +176,16 @@ def _tool_emojis_enabled() -> bool:
     return skin is None or skin.tool_emojis_enabled
 
 
+def _tool_result_body_enabled() -> bool:
+    """Whether the active skin wants file bodies inline in the transcript.
+
+    Claude Code collapses file reads to a bare ``Read N lines`` summary line;
+    skins opt into that shape with ``tool_result_body_enabled: False``.
+    """
+    skin = _get_skin()
+    return skin is None or getattr(skin, "tool_result_body_enabled", True)
+
+
 def get_tool_emoji(tool_name: str, default: str = "⚡") -> str:
     """Get the display emoji for a tool.
 
@@ -1254,6 +1264,10 @@ def render_tool_result_summary(
     # File content: the gutter carries the file's own line numbers, so every
     # line belongs to the body and the summary states the size instead.
     if tool_name in _NUMBERED_BODY_TOOLS:
+        if not _tool_result_body_enabled():
+            # Skin collapses file output (claude): the body stays in the
+            # model's context — the transcript only carries the size line.
+            return f"Read {total} line{'' if total == 1 else 's'}", [], False
         if total > max_lines:
             return (f"Read {total} lines (showing first {max_lines})", clipped[:max_lines], True)
         return f"Read {total} line{'' if total == 1 else 's'}", clipped, True

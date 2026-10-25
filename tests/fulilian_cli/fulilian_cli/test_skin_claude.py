@@ -84,6 +84,39 @@ class TestClaudeIdentity:
                 continue
             assert raw.get("tool_emojis_enabled", True) is True, name
 
+    def test_tool_result_body_disabled_and_other_skins_keep_it(self):
+        """claude collapses read_file to ``⎿ Read N lines`` (CC keeps file
+        bodies out of the transcript); every other skin keeps the numbered
+        body block via render_tool_result_summary."""
+        assert claude_skin().tool_result_body_enabled is False
+        for name, raw in _BUILTIN_SKINS.items():
+            if name == "claude":
+                continue
+            assert raw.get("tool_result_body_enabled", True) is True, name
+
+    def test_claude_collapses_read_body_but_default_keeps_it(self):
+        """render_tool_result_summary honors the skin gate: claude returns a
+        size-only summary with no body; default renders the numbered body."""
+        from agent.display import render_tool_result_summary
+        from fulilian_cli.skin_engine import set_active_skin
+
+        content = "\n".join(f"line {i}" for i in range(1, 13))
+        try:
+            set_active_skin("claude")
+            summary, body, _numbered = render_tool_result_summary(
+                "read_file", content
+            )
+            assert summary == "Read 12 lines"
+            assert body == []
+            set_active_skin("default")
+            summary, body, numbered = render_tool_result_summary(
+                "read_file", content
+            )
+            assert summary == "Read 12 lines"
+            assert len(body) == 12 and numbered is True
+        finally:
+            set_active_skin("default")
+
 
 class TestClaudeSpinner:
     def test_spinner_is_a_single_glitch_free_face(self):

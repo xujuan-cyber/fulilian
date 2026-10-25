@@ -176,6 +176,10 @@ class SkinConfig:
     # False → get_tool_emoji returns "" and surfaces render bare tool names
     # (claude skin: Claude Code shows no emoji icons in the chrome).
     tool_emojis_enabled: bool = True
+    # False → read_file results collapse to a bare "Read N lines" summary
+    # with no numbered body block (claude skin: Claude Code keeps file
+    # bodies out of the transcript; the model's context still has them).
+    tool_result_body_enabled: bool = True
     banner_logo: str = ""    # Rich-markup ASCII art logo (replaces FULILIAN_AGENT_LOGO)
     banner_hero: str = ""    # Rich-markup hero art (replaces FULILIAN_CADUCEUS)
 
@@ -315,6 +319,9 @@ _BUILTIN_SKINS: Dict[str, Dict[str, Any]] = {
         # Claude Code shows tool names bare (``Read(file)``) — no emoji
         # icons in the spinner or activity feed.
         "tool_emojis_enabled": False,
+        # Claude Code collapses file reads to ``⎿ Read N lines`` — the
+        # numbered body block stays out of the transcript.
+        "tool_result_body_enabled": False,
     },
     "ares": {
         "name": "ares",
@@ -888,6 +895,9 @@ def _build_skin_config(data: Dict[str, Any]) -> SkinConfig:
         tool_emojis=emoji_overrides,
         tool_emojis_enabled=data.get(
             "tool_emojis_enabled", default.get("tool_emojis_enabled", True)
+        ),
+        tool_result_body_enabled=data.get(
+            "tool_result_body_enabled", default.get("tool_result_body_enabled", True)
         ),
         banner_logo=data.get("banner_logo", ""),
         banner_hero=data.get("banner_hero", ""),
