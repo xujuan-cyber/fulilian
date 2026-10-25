@@ -6965,16 +6965,20 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
     def _turn_summary_is_active(self) -> bool:
         """Whether the per-turn summary line should render for this surface.
 
-        Gated off for: the config key, quiet/tool-progress-off mode, and any
+        Gated off for: the config key, tool-progress-off mode, and any
         non-interactive path (single query, ``-Q``, gateway/messaging) — those
-        surfaces either want machine-readable output or carry their own footer.
+        surfaces either want machine-readable output or carry their own footer
+        (``_interactive_turn`` is only ever set inside the interactive run
+        loop). ``agent.quiet_mode`` is deliberately NOT consulted: the
+        interactive CLI always constructs its agent with
+        ``quiet_mode = not self.verbose`` (verbose = DEBUG logging, off by
+        default), so that flag is the *normal* interactive state, not a
+        user-silence preference — gating on it suppressed the summary line
+        in every default session.
         """
         if not getattr(self, "_turn_summary_enabled", False):
             return False
         if getattr(self, "tool_progress_mode", "all") == "off":
-            return False
-        agent = getattr(self, "agent", None)
-        if agent is not None and getattr(agent, "quiet_mode", False):
             return False
         if not getattr(self, "_interactive_turn", False):
             return False

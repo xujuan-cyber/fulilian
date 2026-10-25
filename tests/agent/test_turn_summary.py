@@ -186,6 +186,21 @@ def test_gating_enabled_prints_summary(monkeypatch):
     assert "read 1 file" in printed[0]
 
 
+def test_gating_default_interactive_agent_quiet_mode_still_prints(monkeypatch):
+    """Regression: the interactive CLI builds its agent with quiet_mode=True.
+
+    ``_init_agent`` passes ``quiet_mode=not self.verbose`` (verbose = DEBUG
+    logging, off by default), so quiet_mode=True is the NORMAL interactive
+    state, not a user-silence preference. The old gate consulted
+    ``agent.quiet_mode`` and suppressed the summary line in every default
+    session.
+    """
+    stub = _make_cli(agent=_StubAgent(quiet_mode=True))
+    printed = _emit_and_capture(stub, monkeypatch)
+    assert len(printed) == 1
+    assert "read 1 file" in printed[0]
+
+
 
 
 
