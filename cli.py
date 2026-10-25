@@ -14965,10 +14965,12 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             self._stream_box_opened = False
         self._close_reasoning_box()
 
-        from agent.display import get_tool_emoji
+        from agent.display import get_skin_tool_prefix, get_tool_emoji
         emoji = get_tool_emoji(tool_name, default="⚡")
         lead = f"{emoji} " if emoji else ""
-        _cprint(f"  ┊ {lead}preparing {tool_name}…")
+        # Skin-aware prefix so the claude transcript grammar stays consistent
+        # (⎿ everywhere); default skins keep the ┊ gutter unchanged.
+        _cprint(f"  {get_skin_tool_prefix()} {lead}preparing {tool_name}…")
 
     # ====================================================================
     # Tool progress callback (audio cues for voice mode)
