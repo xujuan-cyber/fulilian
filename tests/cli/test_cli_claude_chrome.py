@@ -1,6 +1,6 @@
 """Claude-Code chrome behaviors that only the ``claude`` skin activates.
 
-Covers the composer's rounded rule line, the ``(esc to interrupt)`` spinner
+Covers the composer's full-width rule line, the ``(esc to interrupt)`` spinner
 suffix, the YOLO ``bypass permissions on`` mode chip, and the light-mode
 remap cases the claude palette added. Every other skin must keep its
 existing visuals — each test pins the fallback, not just the claude path.
@@ -22,17 +22,19 @@ def restore_default_skin():
 
 
 class TestComposerRuleLine:
-    def test_claude_skin_rounds_the_composer(self):
+    def test_claude_skin_rules_the_composer_full_width(self):
+        """CC v2.1.274 shape: the composer is two full-width ``─`` rules with
+        no corner glyphs and no side borders (~/cc-probe/shots/01_boot.txt).
+        The ``╭─╮``/``╰─╯`` rounded box only appeared in later CC builds."""
         set_active_skin("claude")
         top = _composer_rule_line(40)
         bottom = _composer_rule_line(40, bottom=True)
-        assert top[0][1].startswith("╭") and top[0][1].endswith("╮")
-        assert bottom[0][1].startswith("╰") and bottom[0][1].endswith("╯")
-        assert len(top[0][1]) == len(bottom[0][1]) == 40
+        assert top[0][1] == "─" * 40
+        assert bottom[0][1] == "─" * 40
 
     def test_claude_rule_uses_the_inherited_input_rule_color(self):
         """The color revert made the claude skin inherit default's palette —
-        the rounded composer keeps its shape but takes default's rule blue."""
+        the composer rule keeps its shape but takes default's rule blue."""
         set_active_skin("claude")
         top = _composer_rule_line(40)
         assert top[0][0] == "#2E77B9"

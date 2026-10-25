@@ -4651,10 +4651,11 @@ def _gradient_frame_line(left_char: str, right_char: str, width: int) -> list:
 def _composer_rule_line(width: int, *, bottom: bool = False) -> list:
     """Return formatted-text fragments for the composer's top/bottom rule.
 
-    ``claude`` skin: Claude Code's rounded prompt border — ``╭─…─╮`` /
-    ``╰─…─╯`` in the skin's flat ``input_rule`` gray. Every other skin
-    keeps the existing full-width gradient rule (no corner glyphs), so
-    this is a claude-only visual change.
+    ``claude`` skin: Claude Code's composer rules — two full-width ``─``
+    lines in the skin's flat ``input_rule`` gray, no corner glyphs and no
+    side borders (CC v2.1.274 shape per ~/cc-probe/shots/01_boot.txt; the
+    ``╭─╮``/``╰─╯`` rounded box only appeared in later CC builds). Every
+    other skin keeps the existing full-width gradient rule.
     """
     try:
         from fulilian_cli.skin_engine import get_active_skin
@@ -4664,9 +4665,7 @@ def _composer_rule_line(width: int, *, bottom: bool = False) -> list:
     if skin is None or skin.name != "claude" or width <= 2:
         return _gradient_rule_line(width)
     color = _maybe_remap_for_light_mode(skin.get_color("input_rule", "#888888"))
-    bar = "─" * max(width - 2, 0)
-    left, right = ("╰", "╯") if bottom else ("╭", "╮")
-    return [(color, left + bar + right)]
+    return [(color, "─" * max(width, 0))]
 
 
 def _gradient_rule_line(width: int) -> list:
