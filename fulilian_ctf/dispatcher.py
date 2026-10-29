@@ -866,7 +866,7 @@ class Dispatcher:
             "scan_offset": 0,     # solver.log 已扫描到的字节 offset
             "scan_tail": "",      # 上次扫描末尾残留（候选跨块时拼接用）
             "board_cache": None,  # ((mtime_ns, size), Board) 缓存对
-            "flag_seen": False,   # 本轮增量扫描曾检出 flag（一旦 True 恒 True）
+            "flag_seen": False,   # 本轮增量扫描曾检出 flag（日志重写时失效）
         }
         try:
             proc.start()
@@ -1101,23 +1101,24 @@ class Dispatcher:
         若把该轮结果直接当全量语义返回，已检出的 flag 会回落为 False，
         "临门不弃"保护随之丢失，NO_OUTPUT 止损可能提前杀掉已打出 flag、
         只是在空转的 solver。因此检出一次即记入 ``slot["flag_seen"]``，
-        此后恒返回 True（记忆随 slot 生命周期，respawn 新槽自然重置）。
-        日志被截断重写（新尝试 ``open(..., "w")``）时 size < offset，自动
-        重置 offset 从头扫。``scan_tail`` 保留末尾 1024 字符做跨块拼接
-        （候选正则上限 256 内容字符 + 前缀，余量充足）。
+        只要日志未重写就恒返回 True；日志被截断重写（新尝试）时记忆随
+        日志内容一并失效，回到与全量扫描逐字节对齐的语义（respawn 本就
+        换新 slot，此处兜住异常的进程内重写）。``scan_tail`` 保留末尾
+        1024 字符做跨块拼接（候选正则上限 256 内容字符 + 前缀，余量充足）。
         """
-        if slot.get("flag_seen"):
-            return True
         log_file = work_dir / SOLVER_LOG
         try:
             size = log_file.stat().st_size if log_file.is_file() else 0
         except OSError:
             return False
         offset = slot.get("scan_offset", 0)
-        if size < offset:  # 截断重写 → 从头扫
+        if size < offset:  # 截断重写 → 从头扫；旧记忆一并失效（对齐全量语义）
             offset = 0
             slot["scan_offset"] = 0
             slot["scan_tail"] = ""
+            slot["flag_seen"] = False
+        if slot.get("flag_seen"):
+            return True
         if size == offset:
             return False
         try:

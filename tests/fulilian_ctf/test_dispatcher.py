@@ -440,8 +440,11 @@ def test_incremental_flag_scan_remembers_flag_when_log_idle(tmp_path):
     # 日志无增长：不得回落
     assert d._incremental_flag_scan(slot, work) is True
     assert slot["flag_seen"] is True
-    # 截断重写（新尝试）后记忆同样保持
-    log.write_text("fresh attempt\n", encoding="utf-8")
+    # 截断重写（新尝试）→ 记忆随日志内容失效，与全量扫描布尔语义一致
+    log.write_text("fresh attempt, no flag yet\n", encoding="utf-8")
+    assert d._incremental_flag_scan(slot, work) is False
+    with log.open("a", encoding="utf-8") as f:
+        f.write("then flag{real_flag_42} appears\n")
     assert d._incremental_flag_scan(slot, work) is True
 
 
