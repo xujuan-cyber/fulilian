@@ -26,7 +26,13 @@ from enum import Enum
 from pathlib import Path
 from typing import Callable, Optional
 
-from .blackboard import BLACKBOARD_FILENAME, Fact, State, load_blackboard, save_blackboard
+from .blackboard import (
+    BLACKBOARD_FILENAME,
+    Fact,
+    State,
+    load_blackboard,
+    update_blackboard,
+)
 
 _SAFE_MP_CONTEXT = multiprocessing.get_context(
     "forkserver" if "forkserver" in multiprocessing.get_all_start_methods() else "spawn"
@@ -493,18 +499,24 @@ class Dispatcher:
                 self._check_timeboxes()
                 self._check_stop_loss()
 
-                if not self._running:
-                    if limit is not None and self._spawns >= limit:
-                        break  # 达到启动上限，不再分配
+                # 有空槽就补货。旧实现把整块包在 `if not self._running:` 里，
+                # 只在所有 solver 都空闲时才调度：实测 max_workers=3、A 题
+                # 长跑 60 分钟而 B/C 题 5 分钟结束时，B/C 让出的两个空槽要
+                # 闲置 55 分钟才有题补进来——并行度退化成串行尾延迟。且旧
+                # 块内 `available` 恒等于 max_workers、`if not self._running:
+                # continue` 后紧跟无条件 continue，两处均为死代码。
+                if limit is None or self._spawns < limit:
                     available = self.max_workers - len(self._running)
-                    candidates = self.schedule(available)
-                    if not candidates:
-                        break
-                    self._spawn_candidates(candidates, limit)
-                    if not self._running:
-                        # 全部候选被探针拦下（INFRA_BLOCKED）→ 无题可跑
-                        continue
-                    continue
+                    if available > 0:
+                        candidates = self.schedule(available)
+                        if candidates:
+                            self._spawn_candidates(candidates, limit)
+                            # 候选可能全被探针拦下（_running 仍空）：回循环
+                            # 顶部重新收割/查 limit，并继续调度剩余候选
+                            continue
+                # 到达 limit / 无空槽 / 无候选：没有运行中的 solver 即收工
+                if not self._running:
+                    break
 
                 # 等待：到最近的档位边界或任意 solver 结束（≤5s 轮询，保证响应）
                 wait = min(slot["timebox"].remaining() for slot in self._running.values())
@@ -760,10 +772,6 @@ class Dispatcher:
 
     def _spawn(self, project: Project, limit: Optional[int] = None) -> bool:
         """启动一个 solver 独立进程。返回 False 表示达到 limit 未启动。"""
-        # P1-2 / M-3：名额在进程创建前原子消耗——达到 limit 不再 spawn，
-        # 对外语义与原 run() 层的 limit 判断一致（此处是最终收口）。
-        if not self._try_consume_spawn_slot(limit):
-            return False
         work_dir = Path(project.challenge_dir or project.challenge_id)
         work_dir.mkdir(parents=True, exist_ok=True)
         # F4-001：spawn 时即生成 AGENTS.md（solver_worker 内 ensure 幂等兜底）
@@ -822,6 +830,13 @@ class Dispatcher:
         # Process 幽灵条目。
         self._inject_relay_into_board(work_dir)
         board = _load_blackboard_safe(work_dir / BLACKBOARD_FILENAME)
+        # P1-2 / M-3：名额消耗放在所有可能抛异常的前置步骤（mkdir / Queue
+        # 创建 / RELAY 回注……）成功之后。旧实现入口即消耗名额、随后才做
+        # 可能抛 OSError 的黑板注入——注入失败路径上名额已被多计，limit
+        # 提前耗尽（spawn 名额泄漏）。达到 limit 在这里仍是最终收口，
+        # 语义与原 run() 层的 limit 判断一致。
+        if not self._try_consume_spawn_slot(limit):
+            return False
         # 先注册槽位再 start：proc.start() 之后、槽位注册之前若抛异常
         # （黑板书损坏、内存不足 fork 失败），已启动的 solver 进程无人回收
         # → 孤儿进程继续烧 token 直到时间盒在无人监管下永远不到期。
@@ -845,16 +860,22 @@ class Dispatcher:
                 else 0
             ),
             # P0-2 增量扫描状态（H-1）：止损轮询只扫 solver.log 新增字节、
-            # 黑板按 mtime 缓存，语义与全量扫描等价（见 _stop_reason_for）
+            # 黑板按 mtime 缓存。增量扫描只看"本轮新增"，日志停止增长后
+            # 布尔结果会回落，故用 flag_seen 记忆"本轮检出过"（见
+            # _incremental_flag_scan），保持与全量扫描等价的单调语义
             "scan_offset": 0,     # solver.log 已扫描到的字节 offset
             "scan_tail": "",      # 上次扫描末尾残留（候选跨块时拼接用）
             "board_cache": None,  # ((mtime_ns, size), Board) 缓存对
+            "flag_seen": False,   # 本轮增量扫描曾检出 flag（一旦 True 恒 True）
         }
         try:
             proc.start()
         except BaseException:
             # 启动失败：撤掉刚注册的槽位，不留幽灵条目
             self._running.pop(project.challenge_id, None)
+            # start 失败 = 没有真的启动 solver，名额一并退还，limit 判定才精确
+            with self._counters_lock:
+                self._spawns -= 1
             raise
         project.status = ChallengeStatus.IN_PROGRESS
         with self._counters_lock:
@@ -881,25 +902,31 @@ class Dispatcher:
         board_path = work_dir / BLACKBOARD_FILENAME
         if not relay_text or not board_path.is_file():
             return
-        board = _load_blackboard_safe(board_path)
-        if board is None:
-            return
         relay = parse_relay(relay_text)
-        for d in relay["dead_ends"]:
-            board.mark_dead_end(d)
-        # 原语按 content 幂等注入：接力块在多次重跑间反复存在，按 id 去重无效
-        # （Fact 每次 new uuid）；运行时元信息行（"solver ran ..."）不是原语，不注入。
-        existing = {f.content for f in board.get_facts()}
-        for p in relay["achieved_primitives"]:
-            # P1-3 / A-4：回注通道与 _write_relay 用同一谓词口径，防滚雪球
-            if is_relay_meta_text(p) or p in existing:
-                continue
-            try:
-                board.add_fact(Fact(content=p, source="relay"))
-                existing.add(p)
-            except ValueError:
-                pass  # append-only：重复 id 忽略
-        save_blackboard(board, board_path)
+
+        def _mutate(board) -> None:
+            # 死路进免疫集
+            for d in relay["dead_ends"]:
+                board.mark_dead_end(d)
+            # 原语按 content 幂等注入：接力块在多次重跑间反复存在，按 id 去重无效
+            # （Fact 每次 new uuid）；运行时元信息行（"solver ran ..."）不是原语，不注入。
+            existing = {f.content for f in board.get_facts()}
+            for p in relay["achieved_primitives"]:
+                # P1-3 / A-4：回注通道与 _write_relay 用同一谓词口径，防滚雪球
+                if is_relay_meta_text(p) or p in existing:
+                    continue
+                try:
+                    board.add_fact(Fact(content=p, source="relay"))
+                    existing.add(p)
+                except ValueError:
+                    pass  # append-only：重复 id 忽略
+
+        # 锁内 read-modify-write：旧实现锁外 load、锁内 save_blackboard 整体
+        # 覆盖写，会丢掉 load 之后、save 之前并发写者（其他 solver / 记忆压缩）
+        # 落盘的内容——blackboard.save_blackboard 的文档明确告诫"加发现必须
+        # 走 merge/update"。create=False 维持旧语义：黑板缺失/损坏时不落新
+        # 文件、不注入（上面 is_file 已排除缺失，这里兜住损坏）。
+        update_blackboard(board_path, _mutate, create=False)
 
     # ── 内部：收割与中断 ────────────────────────────────────────────────
 
@@ -1067,13 +1094,20 @@ class Dispatcher:
                 self._interrupt_stopped(cid, slot, reason)
 
     def _incremental_flag_scan(self, slot: dict, work_dir: Path) -> bool:
-        """只扫 solver.log 新增字节（P0-2 / H-1）；返回本轮是否检出过三门 flag。
+        """只扫 solver.log 新增字节（P0-2 / H-1）；返回是否检出过三门 flag。
 
-        语义等价于 ``scan_log_for_flag(work_dir)`` 的布尔结果，成本 O(增量)。
+        布尔语义必须**单调**地等价于 ``scan_log_for_flag(work_dir)`` 的全量
+        结果：增量扫描只看"本轮新增字节"，日志停止增长后本轮新增为空——
+        若把该轮结果直接当全量语义返回，已检出的 flag 会回落为 False，
+        "临门不弃"保护随之丢失，NO_OUTPUT 止损可能提前杀掉已打出 flag、
+        只是在空转的 solver。因此检出一次即记入 ``slot["flag_seen"]``，
+        此后恒返回 True（记忆随 slot 生命周期，respawn 新槽自然重置）。
         日志被截断重写（新尝试 ``open(..., "w")``）时 size < offset，自动
         重置 offset 从头扫。``scan_tail`` 保留末尾 1024 字符做跨块拼接
         （候选正则上限 256 内容字符 + 前缀，余量充足）。
         """
+        if slot.get("flag_seen"):
+            return True
         log_file = work_dir / SOLVER_LOG
         try:
             size = log_file.stat().st_size if log_file.is_file() else 0
@@ -1095,7 +1129,10 @@ class Dispatcher:
         slot["scan_offset"] = size
         text = slot.get("scan_tail", "") + chunk.decode("utf-8", errors="replace")
         slot["scan_tail"] = text[-1024:]
-        return check_output_for_flag(text) is not None
+        found = check_output_for_flag(text) is not None
+        if found:
+            slot["flag_seen"] = True
+        return found
 
     def _cached_board(self, slot: dict, work_dir: Path):
         """mtime 缓存的黑板加载（P0-2 / H-1）：未变复用对象，变了才重载。

@@ -1,11 +1,13 @@
-"""P0-4 回归锁：ctf_solve 三工具统一 work_dir 边界校验（H-2）+ stub 工具移除（M-5）。
+"""P0-4 回归锁：ctf_solve 统一 work_dir 边界校验（H-2）+ stub 工具移除（M-5）。
 
 契约：
-1. submit_flag / record_fact / git_auto_commit 共用 _bound_work_dir 校验，
+1. submit_flag / record_fact / git_auto_commit / declare_intent /
+   mark_dead_end 共用 _bound_work_dir 校验，
    FULILIAN_CTF_WORK_DIR 绑定时严格相等才放行（子目录也拒绝）。
 2. 绑定未设时只做基本合法性检查（保持单题直调兼容）。
 3. 越界返回错误文本（工具协议字符串），不读/不写越界路径。
 4. checkpoint / generate_writeup 两个 stub 工具从 registry 注销。
+5. declare_intent / mark_dead_end：黑板写入、同 goal 去重、set 幂等。
 """
 
 from __future__ import annotations
@@ -116,3 +118,82 @@ def test_git_auto_commit_no_changes_message(bound_dir):
     subprocess.run(["git", "init"], cwd=str(bound_dir), capture_output=True, check=True)
     out = ctf_solve._git_auto_commit_impl(work_dir=str(bound_dir), message="step")
     assert out == "Auto-commit skipped: "
+
+
+# ── 7. declare_intent / mark_dead_end（boomerang 多轮闭环的数据源）────
+#
+# 没有这两个工具，黑板的 intents / dead_ends 结构上永远为空：boomerang
+# 每轮末尾读不到 open Intent，多轮机制退化成单轮（--max-rounds 失效）；
+# 一个 solver 踩过的死路别的 solver 还会原样再踩。
+
+def test_declare_intent_publishes_open_intent(bound_dir):
+    from fulilian_ctf.blackboard import BLACKBOARD_FILENAME, State, load_blackboard
+
+    out = ctf_solve._declare_intent_impl(
+        work_dir=str(bound_dir), goal="inspect hidden endpoint", approach="HTTP headers"
+    )
+    assert out == "declare_intent: declared — inspect hidden endpoint"
+    board = load_blackboard(bound_dir / BLACKBOARD_FILENAME)
+    assert len(board.intents) == 1
+    assert board.intents[0].goal == "inspect hidden endpoint"
+    assert board.intents[0].approach == "HTTP headers"
+    assert board.intents[0].state == State.OPEN
+
+
+def test_declare_intent_dedupes_same_goal_any_state(bound_dir):
+    from fulilian_ctf.blackboard import BLACKBOARD_FILENAME, load_blackboard
+
+    first = ctf_solve._declare_intent_impl(work_dir=str(bound_dir), goal="probe admin")
+    # strip 后同 goal 去重；意图声明与消费翻状态都不改变「已声明」事实
+    second = ctf_solve._declare_intent_impl(work_dir=str(bound_dir), goal="  probe admin  ")
+    assert "declared" in first
+    assert "duplicate" in second
+    board = load_blackboard(bound_dir / BLACKBOARD_FILENAME)
+    assert len(board.intents) == 1
+
+
+def test_declare_intent_rejects_out_of_bound(bound_dir, evil_dir):
+    out = ctf_solve._declare_intent_impl(work_dir=str(evil_dir), goal="pwned")
+    assert out == "declare_intent: work_dir is outside the bound CTF workspace"
+    assert list(evil_dir.iterdir()) == []  # 不落盘任何 blackboard
+
+
+def test_declare_intent_requires_goal(bound_dir):
+    out = ctf_solve._declare_intent_impl(work_dir=str(bound_dir), goal="   ")
+    assert out == "declare_intent: work_dir and goal are required"
+    assert not (bound_dir / "blackboard.json").exists()
+
+
+def test_mark_dead_end_publishes(bound_dir):
+    from fulilian_ctf.blackboard import BLACKBOARD_FILENAME, load_blackboard
+
+    out = ctf_solve._mark_dead_end_impl(
+        work_dir=str(bound_dir),
+        path="CVE-X not exploitable — 404 on all payloads",
+    )
+    assert out == "mark_dead_end: marked — CVE-X not exploitable — 404 on all payloads"
+    board = load_blackboard(bound_dir / BLACKBOARD_FILENAME)
+    assert board.dead_ends == {"CVE-X not exploitable — 404 on all payloads"}
+
+
+def test_mark_dead_end_is_idempotent(bound_dir):
+    from fulilian_ctf.blackboard import BLACKBOARD_FILENAME, load_blackboard
+
+    ctf_solve._mark_dead_end_impl(work_dir=str(bound_dir), path="bruteforce /login")
+    out = ctf_solve._mark_dead_end_impl(work_dir=str(bound_dir), path="bruteforce /login")
+    assert "marked" in out  # set 语义：重复标记不报错
+    board = load_blackboard(bound_dir / BLACKBOARD_FILENAME)
+    assert board.dead_ends == {"bruteforce /login"}
+
+
+def test_mark_dead_end_rejects_out_of_bound(bound_dir, evil_dir):
+    out = ctf_solve._mark_dead_end_impl(work_dir=str(evil_dir), path="x")
+    assert out == "mark_dead_end: work_dir is outside the bound CTF workspace"
+    assert list(evil_dir.iterdir()) == []
+
+
+def test_blackboard_tools_registered_in_ctf_solve():
+    for name in ("record_fact", "declare_intent", "mark_dead_end"):
+        entry = registry.get_entry(name)
+        assert entry is not None, name
+        assert entry.toolset == "ctf_solve"

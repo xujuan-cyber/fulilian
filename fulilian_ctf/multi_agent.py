@@ -37,6 +37,7 @@ from .blackboard import (
     Blackboard,
     Fact,
     Hint,
+    State,
     load_blackboard,
     merge_into_blackboard,
     save_blackboard,
@@ -947,6 +948,7 @@ def run_boomerang(project, *, max_rounds: int = 2, max_explorers: int = 4,
         if board is None:
             break
         directions = []
+        consumed: list[str] = []
         for intent in board.get_open_intents():
             text = " ".join(
                 part for part in (str(intent.goal).strip(), str(intent.approach).strip())
@@ -955,8 +957,23 @@ def run_boomerang(project, *, max_rounds: int = 2, max_explorers: int = 4,
             if text and text not in seen:
                 seen.add(text)
                 directions.append(text)
+                consumed.append(intent.id)
         if not directions:
             break
+        # 已消费的 open intent 立即翻成 NEXT，且写回必须走 update_blackboard
+        # （锁内 RMW）：若停留在 OPEN，下一轮结束时它们会再次被读出、又撞
+        # seen 去重——explorer 一旦没声明新 Intent，directions 就全空提前
+        # break，--max-rounds 退化成摆设。NEXT 顺带也是审计痕迹：该方向
+        # 已被 boomerang 消费过一轮。逐个标记并吞 KeyError：锁外快照与锁内
+        # 最新状态之间可能有并发写者增删，单个 intent 消失不该毁掉整次回写。
+        def _consume(b: Blackboard) -> None:
+            for intent_id in consumed:
+                try:
+                    b.mark_intent_state(intent_id, State.NEXT)
+                except KeyError:
+                    pass
+
+        update_blackboard(round_dir / BLACKBOARD_FILENAME, _consume)
     return final
 
 

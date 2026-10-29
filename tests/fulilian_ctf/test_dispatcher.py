@@ -10,6 +10,8 @@
 - 难度自适应预算（F2-010）
 - P2 回归锁：Project 序列化往返（description / timebox_override）、
   探活逐题隔离（单题探活异常不得终止整轮调度）
+- 补货：有空槽即补（不等所有 solver 空闲）、增量 flag 扫描记忆、
+  spawn 名额失败回滚、黑板注入不整体覆盖并发写者
 
 预修复基线（``git checkout HEAD -- fulilian_ctf/dispatcher.py`` 后跑对应
 ``-k``，再按 md5 恢复）::
@@ -26,7 +28,15 @@ from pathlib import Path
 
 import pytest
 
+from fulilian_ctf.blackboard import (
+    BLACKBOARD_FILENAME,
+    Blackboard,
+    Fact,
+    load_blackboard,
+    save_blackboard,
+)
 from fulilian_ctf.dispatcher import ChallengeStatus, Dispatcher, Project
+from fulilian_ctf.relay import build_relay, write_relay_file
 from fulilian_ctf.solver import SolverResult
 
 
@@ -364,3 +374,118 @@ def test_package_exports_match_all():
 
     for name in fulilian_ctf.__all__:
         assert hasattr(fulilian_ctf, name), f"fulilian_ctf.{name} declared in __all__ but not importable"
+
+
+# ── 补货（回归：主循环只在所有 solver 空闲时才补货，空槽长期闲置）─────────
+
+def fake_solver_gated(project, work_dir, model, queue):
+    """按题分流：p1 长跑（等 release 放行），p2 快速结束，p3 快速结束并放行 p1。
+
+    release 由 p3 写出而不是 p2：保证「p1 退出」严格晚于「p3 已启动」，
+    使下面的时间断言免受 p1/p2 收割竞态影响；15s 兜底让旧实现下测试
+    也能自终（只是断言失败），不会挂死。
+    """
+    work = Path(work_dir)
+    work.joinpath("pid").write_text(str(os.getpid()))
+    work.joinpath("started").write_text(str(time.time()))
+    cid = project.challenge_id
+    if cid == "p1":
+        release = work / "release"
+        deadline = time.time() + 15
+        while not release.exists() and time.time() < deadline:
+            time.sleep(0.05)
+    else:
+        if cid == "p3":
+            (work.parent / "p1" / "release").write_text("go")
+        time.sleep(0.2)
+    queue.put(SolverResult(ok=True, exit_code=0))
+
+
+def test_replenishes_free_slot_while_long_solver_running(tmp_path):
+    """max_workers=2：第 2 题结束后第 3 题立即补位，不等第 1 题长跑结束。
+
+    旧主循环把补货块包在 ``if not self._running:`` 里：p2 结束让出的空槽
+    一直闲置，p3 要等 p1（15s 兜底超时）退出后才会 spawn。修复后 p3 在
+    p2 被收割后的下一个轮询周期内启动，此时 p1 仍在等 release——即 p3
+    的启动时刻必须早于 p1 的 finished_at。
+    """
+    d = Dispatcher(max_workers=2, solver_fn=fake_solver_gated, quiet=True,
+                   max_attempts=1)  # fake solver 不产出 flag，避免收割轮反复 respawn
+    for cid in ("p1", "p2", "p3"):
+        d.add_project(_project(cid, tmp_path))
+    d.run()
+
+    assert d._spawns == 3
+    t3 = float((tmp_path / "p3" / "started").read_text())
+    # p3 启动时 p1 还在跑（旧实现下 p3 只能等 p1 退出后才 spawn）
+    assert t3 < d.projects["p1"].finished_at
+
+
+# ── 增量 flag 扫描（回归：日志停止增长后 has_partial_flag 回落）───────────
+
+def test_incremental_flag_scan_remembers_flag_when_log_idle(tmp_path):
+    """增量检出 flag 后日志无增长 → 布尔语义仍为 True（临门不弃不丢）。
+
+    旧实现只看"本轮新增字节"，日志停止增长后返回值从 True 回落为
+    False，NO_OUTPUT 止损可能提前杀掉已打出 flag 的 solver。
+    """
+    d = Dispatcher(max_workers=1, quiet=True)
+    work = tmp_path / "p1"
+    work.mkdir(parents=True)
+    slot = {"scan_offset": 0, "scan_tail": "", "flag_seen": False}
+    log = work / "solver.log"
+    log.write_text("enumerating...\nflag{real_flag_42}\n", encoding="utf-8")
+
+    assert d._incremental_flag_scan(slot, work) is True
+    # 日志无增长：不得回落
+    assert d._incremental_flag_scan(slot, work) is True
+    assert slot["flag_seen"] is True
+    # 截断重写（新尝试）后记忆同样保持
+    log.write_text("fresh attempt\n", encoding="utf-8")
+    assert d._incremental_flag_scan(slot, work) is True
+
+
+# ── spawn 名额（回归：注入失败路径名额多计，limit 提前耗尽）───────────────
+
+def test_spawn_slot_not_consumed_when_inject_fails(tmp_path, monkeypatch):
+    """RELAY 回注黑板抛 OSError → spawn 名额不得被消耗。"""
+    def boom(self, work_dir):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(Dispatcher, "_inject_relay_into_board", boom)
+    d = Dispatcher(max_workers=1, solver_fn=fake_solver_solve, quiet=True)
+    project = _project("p1", tmp_path)
+
+    with pytest.raises(OSError):
+        d._spawn(project, limit=None)
+
+    assert d._spawns == 0  # 名额未消耗（旧实现此处为 1，limit 被泄漏）
+    assert not d._running  # 无幽灵槽位
+    assert project.status == ChallengeStatus.NEW
+    assert project.attempts == 0
+
+
+# ── 黑板注入（回归：覆盖式保存丢掉并发写者落盘的内容）─────────────────────
+
+def test_inject_relay_preserves_concurrent_writer_facts(tmp_path):
+    """注入 RELAY 后，磁盘黑板上并发写者的 Fact 仍在（锁内 RMW，非整体覆盖）。"""
+    work = tmp_path / "p1"
+    work.mkdir(parents=True)
+    # 先落一份含"别人"Fact 的黑板（模拟并发写者已写盘），再放 RELAY.md
+    board = Blackboard()
+    board.add_fact(Fact(content="并发写者的独家 Fact", source="solver"))
+    save_blackboard(board, work / BLACKBOARD_FILENAME)
+    write_relay_file(work, build_relay(
+        achieved_primitives=["已拿到 login shell"],
+        dead_ends=["sqlmap 全参数盲注"],
+        next_steps=["RESUME p1: continue"],
+    ))
+
+    d = Dispatcher(max_workers=1, quiet=True)
+    d._inject_relay_into_board(work)
+
+    after = load_blackboard(work / BLACKBOARD_FILENAME)
+    contents = {f.content for f in after.get_facts()}
+    assert "并发写者的独家 Fact" in contents  # 整体覆盖写会丢掉它
+    assert "已拿到 login shell" in contents  # relay 原语已注入
+    assert "sqlmap 全参数盲注" in after.dead_ends

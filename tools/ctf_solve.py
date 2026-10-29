@@ -1,4 +1,4 @@
-"""CTF solver tools — verify_flag, submit_flag, record_fact, git_auto_commit, compile_check, http_session.
+"""CTF solver tools — verify_flag, submit_flag, record_fact, declare_intent, mark_dead_end, git_auto_commit, compile_check, http_session.
 
 Registered in the ``ctf_solve`` toolset.
 - Phase 1: verify_flag (flag 校验门), submit_flag（声明式提交）, record_fact, git_auto_commit.
@@ -182,6 +182,73 @@ def _record_fact_impl(work_dir: str, content: str, tags: str = "") -> str:
         return f"record_fact failed: {e}"
 
 
+def _declare_intent_impl(work_dir: str, goal: str, approach: str = "") -> str:
+    """把探索方向声明到黑板 intents（boomerang 跨轮方向的数据源）。
+
+    之所以要有本工具：intents 永远为空的话，run_boomerang 每轮末尾读不到
+    open Intent，多轮机制退化成单轮（--max-rounds 失效）。同 goal 幂等去
+    重（任意状态都算已声明）：重复占位不会开出新方向，只会白耗一轮去重。
+    失败不抛异常（工具返回错误文本）。
+    """
+    goal = (goal or "").strip()
+    approach = (approach or "").strip()
+    if not work_dir or not goal:
+        return "declare_intent: work_dir and goal are required"
+    work_dir = _bound_work_dir(work_dir)
+    if work_dir is None:
+        return "declare_intent: work_dir is outside the bound CTF workspace"
+    try:
+        from fulilian_ctf.blackboard import (
+            BLACKBOARD_FILENAME,
+            Intent,
+            update_blackboard,
+        )
+
+        board_path = Path(work_dir) / BLACKBOARD_FILENAME
+        duplicate = {"hit": False}
+
+        def _add_if_new(board):
+            # 去重判断必须放进锁内：锁外读会与并发写者的写入交错，判重
+            # 结果可能过期（两个 solver 同时声明同一方向会双双漏判）。
+            if any((i.goal or "").strip() == goal for i in board.intents):
+                duplicate["hit"] = True
+                return
+            board.add_intent(Intent(goal=goal, approach=approach))
+
+        update_blackboard(board_path, _add_if_new)
+        if duplicate["hit"]:
+            return "declare_intent: duplicate goal already on blackboard (ignored)"
+        return f"declare_intent: declared — {goal[:80]}"
+    except Exception as e:  # noqa: BLE001 — 黑板写入失败不中断 agent 流程
+        return f"declare_intent failed: {e}"
+
+
+def _mark_dead_end_impl(work_dir: str, path: str) -> str:
+    """把已证死路写进黑板 dead_ends 免疫集（跨 solver/轮次免疫重试）。
+
+    没有本工具，dead_ends 结构上永远为空：一个 solver 踩过的坑别的 solver
+    还会原样再踩一遍。mark_dead_end 自带父黑板透传（这里 parent 为 None，
+    无影响）；set 语义天然幂等，重复标记无害。失败不抛异常（工具返回
+    错误文本）。
+    """
+    path = (path or "").strip()
+    if not work_dir or not path:
+        return "mark_dead_end: work_dir and path are required"
+    work_dir = _bound_work_dir(work_dir)
+    if work_dir is None:
+        return "mark_dead_end: work_dir is outside the bound CTF workspace"
+    try:
+        from fulilian_ctf.blackboard import BLACKBOARD_FILENAME, update_blackboard
+
+        update_blackboard(
+            Path(work_dir) / BLACKBOARD_FILENAME,
+            lambda board: board.mark_dead_end(path),
+        )
+        return f"mark_dead_end: marked — {path[:80]}"
+    except Exception as e:  # noqa: BLE001 — 黑板写入失败不中断 agent 流程
+        return f"mark_dead_end failed: {e}"
+
+
 def _git_auto_commit_impl(work_dir: str, message: str) -> str:
     """自动提交解题进度到 git（每个步骤一个 commit，便于回滚与追踪）。"""
     if not work_dir:
@@ -346,6 +413,72 @@ registry.register(
     },
     handler=_unpack(_record_fact_impl),
     description="Publish a confirmed/refuted finding to the blackboard",
+)
+
+registry.register(
+    name="declare_intent",
+    toolset="ctf_solve",
+    schema={
+        "type": "function",
+        "function": {
+            "name": "declare_intent",
+            "description": "Declare an exploration direction before pursuing it "
+                           "(what you're going to try and how). Already-explored "
+                           "directions should not be re-declared.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "work_dir": {
+                        "type": "string",
+                        "description": "Challenge workspace directory containing blackboard.json",
+                    },
+                    "goal": {
+                        "type": "string",
+                        "description": "The exploration goal, e.g. 'probe /admin backup "
+                                       "endpoints for unauthenticated access'",
+                    },
+                    "approach": {
+                        "type": "string",
+                        "description": "Optional attack method, e.g. 'dirb wordlist + "
+                                       "curl status-code diff'",
+                    },
+                },
+                "required": ["work_dir", "goal"],
+            },
+        },
+    },
+    handler=_unpack(_declare_intent_impl),
+    description="Declare an exploration direction on the blackboard",
+)
+
+registry.register(
+    name="mark_dead_end",
+    toolset="ctf_solve",
+    schema={
+        "type": "function",
+        "function": {
+            "name": "mark_dead_end",
+            "description": "Mark a path as proven dead (e.g. 'CVE-X not exploitable — 404 "
+                           "on all payloads') so other solvers/sessions never retry it.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "work_dir": {
+                        "type": "string",
+                        "description": "Challenge workspace directory containing blackboard.json",
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "The dead path, e.g. 'sqli on /login — parameterized "
+                                       "backend, quote payloads all rejected'",
+                    },
+                },
+                "required": ["work_dir", "path"],
+            },
+        },
+    },
+    handler=_unpack(_mark_dead_end_impl),
+    description="Mark a proven-dead path on the blackboard",
 )
 
 registry.register(

