@@ -8,7 +8,7 @@ arm — and scores every run from its NeMo Relay ATOF trace plus wall clock:
   - llm_calls (turns), tool_calls, tool_errors, retry_after_error
   - total tool-result bytes fed to the model, wall seconds, task success
 
-Arms differ ONLY by PYTHONPATH (e.g. a worktree of origin/main vs a worktree
+Arms differ ONLY by PYTHONPATH (e.g. a worktree of origin/FuLilian vs a worktree
 of the integration branch), so measured deltas are attributable to the diff.
 
 Usage:

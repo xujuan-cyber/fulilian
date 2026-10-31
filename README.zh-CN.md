@@ -72,7 +72,7 @@ fulilian chat
 
 ```bash
 # 一行远程安装（安装到 ~/.fulilian/fulilian-agent）
-curl -fsSL https://raw.githubusercontent.com/xujuan-cyber/fulilian/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/xujuan-cyber/fulilian/FuLilian/scripts/install.sh | bash
 
 # 验证安装
 fulilian status
@@ -84,13 +84,13 @@ fulilian doctor
 习惯用 Windows CMD 终端？FuLiLian 在 Windows 上是**原生**安装的，不经过 WSL，并把 `fll`、`fulilian` 放进 PATH。在 CMD 里：
 
 ```bat
-curl -fsSL https://raw.githubusercontent.com/xujuan-cyber/fulilian/main/scripts/install.cmd -o install.cmd && install.cmd && del install.cmd
+curl -fsSL https://raw.githubusercontent.com/xujuan-cyber/fulilian/FuLilian/scripts/install.cmd -o install.cmd && install.cmd && del install.cmd
 ```
 
 在 PowerShell 里可以直接跑安装器：
 
 ```powershell
-iex (irm https://raw.githubusercontent.com/xujuan-cyber/fulilian/main/scripts/install.ps1)
+iex (irm https://raw.githubusercontent.com/xujuan-cyber/fulilian/FuLilian/scripts/install.ps1)
 ```
 
 装完开一个新的 CMD 窗口，用 `fll --version` 验证。

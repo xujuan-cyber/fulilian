@@ -15,7 +15,7 @@ name: Install & Update E2E (reusable)
 #       uses: ./.github/workflows/install-e2e-run.yml
 #       with:
 #         route: update
-#         install-ref: refs/heads/main
+#         install-ref: refs/heads/FuLilian
 
 on:
   workflow_call:
@@ -28,7 +28,7 @@ on:
         description: 'What to install before updating: a branch, a tag (v2026.7.7), or a SHA reachable from main.'
         required: false
         type: string
-        default: refs/heads/main
+        default: refs/heads/FuLilian
       runner:
         description: 'Runner label.'
         required: false
@@ -50,11 +50,13 @@ jobs:
     timeout-minutes: ${{ inputs.timeout-minutes }}
 
     steps:
-      # Full history: the sandbox fetches the starting commit and the test
-      # compares against this commit, so a shallow clone is not enough.
+      # Full history, and the tags with it: the sandbox resolves the commit it
+      # installs from this checkout, so a shallow clone is not enough and a
+      # clone without tags cannot resolve the release the leg starts from.
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
+          fetch-tags: true
 
       # bubblewrap + slirp4netns are what the sandbox is built on; util-linux
       # supplies the `unshare` that builds the multi-uid userns for the
@@ -96,7 +98,7 @@ jobs:
           FULILIAN_E2E_LOG_DIR: ${{ runner.temp }}/e2e-logs
 
       # Artifact names cannot contain '/', and install-ref may be a full ref
-      # like refs/heads/main. GitHub Actions expressions have no string-replace
+      # like refs/heads/FuLilian. GitHub Actions expressions have no string-replace
       # function, so build the safe name here. Runs even on failure -- that is
       # exactly when the logs are wanted.
       - name: Build artifact name

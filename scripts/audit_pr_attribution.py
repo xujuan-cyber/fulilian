@@ -9,7 +9,7 @@ you are about to push:
     python3 scripts/audit_pr_attribution.py --fix      # create mapping files
 
 Logic (kept in sync with contributor-check.yml):
-  - scans ``git log $(git merge-base origin/main HEAD)..HEAD --format=%ae``
+  - scans ``git log $(git merge-base origin/FuLilian HEAD)..HEAD --format=%ae``
   - skips teknium/bot emails and ``<id>+<login>@users.noreply.github.com``
     (CI auto-resolves those)
   - everything else must have ``contributors/emails/<email>`` or a legacy
@@ -56,7 +56,7 @@ def run(*args: str, check: bool = True) -> str:
 
 
 def new_emails() -> list[str]:
-    base = run("git", "merge-base", "origin/main", "HEAD")
+    base = run("git", "merge-base", "origin/FuLilian", "HEAD")
     log = run("git", "log", f"{base}..HEAD", "--format=%ae", "--no-merges", check=False)
     return sorted({e for e in log.splitlines() if e.strip()})
 

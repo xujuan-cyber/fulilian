@@ -45,7 +45,7 @@ ensure_sandbox_install() {
   rm -rf "$SANDBOX"
   mkdir -p "$SANDBOX"
   # The literal user path: install.sh against a clone of THIS checkout, so
-  # the repro reproduces what you're about to ship, not origin/main.
+  # the repro reproduces what you're about to ship, not origin/FuLilian.
   git clone --quiet "$REPO_ROOT" "$SANDBOX_ROOT"
   FULILIAN_HOME="$SANDBOX" bash "$SANDBOX_ROOT/scripts/install.sh" --non-interactive --skip-setup --fulilian-home "$SANDBOX"
 }

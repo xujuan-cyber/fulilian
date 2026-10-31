@@ -9,7 +9,7 @@ Usage:
     lint_diff.py \\
         --base-ruff base/ruff.json --head-ruff head/ruff.json \\
         --base-ty   base/ty.json   --head-ty   head/ty.json \\
-        [--base-ref origin/main] [--head-ref HEAD]
+        [--base-ref origin/FuLilian] [--head-ref HEAD]
 
 Any of the four --{base,head}-{ruff,ty} files may be missing or empty; in that
 case the tool treats it as "0 diagnostics" (e.g. if base/main doesn't have the

@@ -28,7 +28,7 @@
 #                     installer  re-running the curl one-liner over the checkout
 #   --install-ref   what to install first; anything git resolves (a branch, a
 #                   tag like v2026.7.7, or a SHA reachable from main).
-#                   Default: refs/heads/main.
+#                   Default: refs/heads/FuLilian.
 #
 # Requires a CLEAN worktree: every dev-sandbox invocation re-derives fake main
 # from the working copy, so uncommitted changes move the update target between
@@ -37,7 +37,7 @@
 set -euo pipefail
 
 ROUTE=""
-INSTALL_REF="refs/heads/main"
+INSTALL_REF="refs/heads/FuLilian"
 KEEP=false
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -73,9 +73,10 @@ SANDBOX_ROOT="$REPO_ROOT/$SANDBOX_DIR_NAME"
 INSTALL_DIR="/home/fulilian/.fulilian/fulilian-agent"   # user-level layout (sandbox default)
 FAKE_REMOTE="/work/repos/fulilian-agent.git"
 # Only used to fetch an old install.sh for the flag probe below; the sandbox does
-# its own fetching. Same override dev-sandbox.sh honours, so a fork can retarget
-# both together.
-UPSTREAM_URL="${FULILIAN_DEV_SANDBOX_UPSTREAM:-https://github.com/NousResearch/hermes-agent.git}"
+# its own fetching. Same override dev-sandbox.sh honours, and the same default:
+# leaving the two out of step means the probe reads another project's install.sh
+# and tests it for flags this one never grew.
+UPSTREAM_URL="${FULILIAN_DEV_SANDBOX_UPSTREAM:-https://github.com/xujuan-cyber/fulilian.git}"
 
 # Installer transcripts live outside the sandbox root: the sandbox is recreated
 # and (unless --keep) deleted, and these logs are the most useful artifact when

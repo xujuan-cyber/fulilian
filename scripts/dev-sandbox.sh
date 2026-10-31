@@ -48,11 +48,11 @@ Options:
   --installer PATH      With `install`, serve PATH at the canonical install.sh
                         URL. Default: scripts/install.sh in this worktree.
   --from-main           With `install`, fetch the real upstream main installer
-                        and repository, then advance fake main to this folder
+                        and repository, then advance the fake default branch to this folder
                         after a successful install for update testing.
-                        Shorthand for --install-ref refs/heads/main.
+                        Shorthand for --install-ref refs/heads/FuLilian.
   --install-ref REF     Like --from-main, but installs REF instead of main:
-                        a branch, a tag (v2026.7.7), or a SHA reachable from main.
+                        a branch, a tag (v2026.7.7), or a SHA reachable from FuLilian.
                         Use it to test updating from an older release, not just
                         from the tip.
   -h, --help            Show this help.
@@ -82,7 +82,7 @@ requests pass through the sandbox's rootless outbound network. SSH to github.com
 runs a sandbox-local upload-pack shim, never your SSH config, agent,
 known-hosts file, or authorized keys.
 
-Fake github main always comes from this folder. If it has staged, unstaged, or
+The fake github default branch always comes from this folder. If it has staged, unstaged, or
 non-ignored untracked changes, the sandbox warns and creates a temporary local
 commit containing them; it never stages or commits the real worktree.
 
@@ -91,11 +91,11 @@ Environment:
                             (default: .fulilian-sandbox).
 
 Examples:
-  # create a sandbox, install this branch as `main`, and then drop to a shell,
+  # create a sandbox, install this branch as `FuLilian`, and then drop to a shell,
   # skipping `fulilian setup` & the browser tools for speed.
   scripts/dev-sandbox.sh install --persistent -- --skip-setup --skip-browser
 
-  # Install the official upstream main. You're dropped into a shell where
+  # Install the official upstream default branch. You're dropped into a shell where
   # you can run `fulilian update`.
   scripts/dev-sandbox.sh install --persistent --from-main
 
@@ -112,8 +112,8 @@ INSTALLER_PATH=""
 # Which upstream commit the sandbox installs before the update routes run.
 # Empty means "install this worktree's own installer" (no upstream fetch); set,
 # it is anything git can resolve -- a branch, a tag (v2026.7.7), or a SHA
-# reachable from main -- so "can a user two releases back still update?" is
-# expressible. --from-main is shorthand for refs/heads/main.
+# reachable from FuLilian -- so "can a user two releases back still update?" is
+# expressible. --from-main is shorthand for refs/heads/FuLilian.
 INSTALL_REF=""
 UPSTREAM_URL="${FULILIAN_DEV_SANDBOX_UPSTREAM:-https://github.com/xujuan-cyber/fulilian.git}"
 
@@ -137,7 +137,7 @@ while [ "$#" -gt 0 ]; do
     --installer)
       [ "$#" -ge 2 ] || { echo 'error: --installer needs a file' >&2; exit 1; }
       INSTALLER_PATH="$2"; shift 2 ;;
-    --from-main) INSTALL_REF="refs/heads/main"; shift ;;
+    --from-main) INSTALL_REF="refs/heads/FuLilian"; shift ;;
     --install-ref)
       [ "$#" -ge 2 ] || { echo 'error: --install-ref needs a value' >&2; exit 1; }
       INSTALL_REF="$2"
@@ -221,26 +221,68 @@ mkdir -p "$SANDBOX_ROOT"/{root,home,etc}
 UPSTREAM_REPO=""
 UPSTREAM_COMMIT=""
 if [ -n "$INSTALL_REF" ]; then
-  echo "[sandbox] fetching upstream $INSTALL_REF for installer/update test" >&2
+  echo "[sandbox] resolving upstream $INSTALL_REF for installer/update test" >&2
   UPSTREAM_REPO="$(mktemp -d -t fulilian-sandbox-upstream.XXXXXX)"
   git -C "$UPSTREAM_REPO" init -q
-  # Fetch the ref as given. A branch or tag name resolves on its own; a raw SHA
-  # needs the remote to allow fetching it directly, so fall back to fetching
-  # main and resolving the SHA locally (which works for any commit that is an
-  # ancestor of main -- the interesting case for "update from N versions ago").
+  # Resolve a tag or a SHA from the checkout under test first. It is already on
+  # disk, and it needs no credentials -- which is the whole point: the remote is
+  # private and the throwaway repo above carries no credential of its own, so
+  # against a private remote the network branches below fail unconditionally.
+  # CI checks this checkout out with the full tag set for exactly this reason.
   #
-  # Peel to ^{commit} in both cases: an annotated tag fetches as a tag OBJECT,
+  # Branch names are deliberately left out: `--from-main` promises the upstream
+  # FuLilian, and resolving that from here would quietly substitute the developer's
+  # own branch for the one the flag names.
+  local_commit=""
+  case "$INSTALL_REF" in
+    refs/*) ;;      # a fully-qualified ref: neither a bare SHA nor a tag name
+    *[!0-9a-f]*)    # holds a non-hex character, so it can only be a tag name
+      local_commit="$(git -C "$GIT_ROOT" rev-parse --verify -q "refs/tags/$INSTALL_REF^{commit}" 2>/dev/null || true)" ;;
+    ???????*)       # seven or more hex digits: a SHA, abbreviated or full
+      local_commit="$(git -C "$GIT_ROOT" rev-parse --verify -q "$INSTALL_REF^{commit}" 2>/dev/null || true)" ;;
+  esac
+
+  # Peel to ^{commit} in every case: an annotated tag fetches as a tag OBJECT,
   # and using it directly fails later with "trying to write non-commit object
-  # ... to branch 'refs/heads/main'".
-  if git -C "$UPSTREAM_REPO" fetch -q "$UPSTREAM_URL" "$INSTALL_REF" 2>/dev/null; then
-    UPSTREAM_COMMIT="$(git -C "$UPSTREAM_REPO" rev-parse "FETCH_HEAD^{commit}")"
-  elif git -C "$UPSTREAM_REPO" fetch -q "$UPSTREAM_URL" refs/heads/main \
-    && UPSTREAM_COMMIT="$(git -C "$UPSTREAM_REPO" rev-parse --verify -q "$INSTALL_REF^{commit}")"; then
-    :
-  else
+  # ... to branch 'refs/heads/FuLilian'".
+  peel_upstream() {
+    git -C "$UPSTREAM_REPO" rev-parse --verify -q "${1:-FETCH_HEAD}^{commit}" 2>/dev/null || true
+  }
+
+  # Each attempt has to prove it resolved something before the next is skipped.
+  # A shallow source refuses every fetch this way -- "rejecting <sha> because
+  # shallow roots are not allowed to be updated" -- and still exits 0, leaving a
+  # FETCH_HEAD that names nothing. So a fetch that "succeeded" can leave
+  # UPSTREAM_COMMIT empty, and only the value is safe to branch on. (The clone
+  # here is full because CI checks out with fetch-depth: 0; a developer's may
+  # not be, which is why this has to degrade rather than abort.)
+  #
+  # The local fetch asks for the resolved commit, not the name the user gave:
+  # an abbreviated SHA is not a ref, and git resolves a bare fetch argument as
+  # a ref name, so `fetch . 1a2b3c4` fails outright with "couldn't find remote
+  # ref". A full commit SHA is fetched by any transport.
+  UPSTREAM_COMMIT=""
+  if [ -n "$local_commit" ] \
+    && git -C "$UPSTREAM_REPO" fetch -q "$GIT_ROOT" "$local_commit" 2>/dev/null; then
+    UPSTREAM_COMMIT="$(peel_upstream)"
+  fi
+  if [ -z "$UPSTREAM_COMMIT" ] \
+    && git -C "$UPSTREAM_REPO" fetch -q "$UPSTREAM_URL" "$INSTALL_REF" 2>/dev/null; then
+    UPSTREAM_COMMIT="$(peel_upstream)"
+  fi
+  # A raw SHA cannot be fetched by name from every remote, so fall back to
+  # fetching FuLilian and resolving the SHA locally -- which covers any commit
+  # that is an ancestor of FuLilian, the interesting case for "update from N versions
+  # ago".
+  if [ -z "$UPSTREAM_COMMIT" ] \
+    && git -C "$UPSTREAM_REPO" fetch -q "$UPSTREAM_URL" refs/heads/FuLilian 2>/dev/null; then
+    UPSTREAM_COMMIT="$(peel_upstream "$INSTALL_REF")"
+  fi
+  if [ -z "$UPSTREAM_COMMIT" ]; then
     rm -rf -- "$UPSTREAM_REPO"
     echo "error: could not resolve upstream ref: $INSTALL_REF" >&2
-    echo '       Use a branch (main), a tag (v2026.7.7), or a SHA reachable from main.' >&2
+    echo "       Looked for it in $GIT_ROOT and in $UPSTREAM_URL." >&2
+    echo '       Use a tag (v1.3), a branch (FuLilian), or a SHA.' >&2
     exit 1
   fi
 fi
@@ -279,7 +321,7 @@ if [ "$INSTALL_SHORTCUT" = true ]; then
     install_status=$?
     if [ "$install_status" -eq 0 ] && [ -f /work/promote-main ]; then
       next_main=$(cat /work/promote-main)
-      if git --git-dir=/work/repos/fulilian-agent.git update-ref refs/heads/main "$next_main"; then
+      if git --git-dir=/work/repos/fulilian-agent.git update-ref refs/heads/FuLilian "$next_main"; then
         rm -f /work/promote-main
         printf "[sandbox] fake main advanced to this folder for update testing\n" >&2
       else
@@ -385,7 +427,7 @@ FAKE_REPO="$SANDBOX_ROOT/root/repos/fulilian-agent.git"
 git -C "$SANDBOX_ROOT/root/repos" init --bare -q fulilian-agent.git
 if [ -n "$INSTALL_REF" ]; then
   git --git-dir="$FAKE_REPO" fetch -q --force "$UPSTREAM_REPO" \
-    "$UPSTREAM_COMMIT:refs/heads/main"
+    "$UPSTREAM_COMMIT:refs/heads/FuLilian"
 fi
 if [ -n "$(git -C "$GIT_ROOT" status --porcelain)" ]; then
   echo '[sandbox] warning: current folder is dirty; creating a temporary fake commit for main' >&2
@@ -399,7 +441,7 @@ if [ -n "$(git -C "$GIT_ROOT" status --porcelain)" ]; then
     git add -A -- .
   SNAPSHOT_TREE="$(GIT_DIR="$SNAPSHOT_REPO/.git" git write-tree)"
   SNAPSHOT_PARENT="$COMMIT"
-  if EXISTING_MAIN="$(git --git-dir="$FAKE_REPO" rev-parse --verify refs/heads/main 2>/dev/null)"; then
+  if EXISTING_MAIN="$(git --git-dir="$FAKE_REPO" rev-parse --verify refs/heads/FuLilian 2>/dev/null)"; then
     git -C "$SNAPSHOT_REPO" fetch -q "$FAKE_REPO" "$EXISTING_MAIN"
     SNAPSHOT_PARENT="$EXISTING_MAIN"
   fi
@@ -414,9 +456,9 @@ if [ -n "$INSTALL_REF" ]; then
   printf '%s\n' "$SOURCE_REF" > "$SANDBOX_ROOT/root/promote-main"
 else
   git --git-dir="$FAKE_REPO" fetch -q --force "$SOURCE_REPO" \
-    "$SOURCE_REF:refs/heads/main"
+    "$SOURCE_REF:refs/heads/FuLilian"
 fi
-git --git-dir="$FAKE_REPO" symbolic-ref HEAD refs/heads/main
+git --git-dir="$FAKE_REPO" symbolic-ref HEAD refs/heads/FuLilian
 if [ -n "$SNAPSHOT_REPO" ]; then
   # Best-effort: it is a mktemp directory the OS will reap, and failing the whole
   # run over a leftover object file would be worse than leaking it. Concurrent
