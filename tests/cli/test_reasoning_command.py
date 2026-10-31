@@ -489,10 +489,12 @@ class TestConfigDefault(unittest.TestCase):
         from fulilian_cli.config import DEFAULT_CONFIG
         display = DEFAULT_CONFIG.get("display", {})
         self.assertIn("show_reasoning", display)
-        # Default ON (July 2026 TTFT-perception change): thinking models
-        # stream reasoning for tens of seconds; hiding it left users staring
-        # at a spinner. The key must exist and be a bool.
-        self.assertTrue(display["show_reasoning"])
+        # Default OFF since v1.3.0 (02d88a9): private model reasoning stays
+        # out of the user-facing transcript, and tool lifecycle events keep
+        # the screen alive instead. A skin may force it off too (claude);
+        # /reasoning show still overrides at runtime. This asserts the
+        # shipped default only.
+        self.assertFalse(display["show_reasoning"])
 
 
 class TestCommandRegistered(unittest.TestCase):

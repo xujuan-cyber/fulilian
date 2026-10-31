@@ -177,9 +177,9 @@ def _tool_emojis_enabled() -> bool:
 
 
 def _tool_result_body_enabled() -> bool:
-    """Whether the active skin wants file bodies inline in the transcript.
+    """Whether the active skin wants tool result bodies inline in the transcript.
 
-    Claude Code collapses file reads to a bare ``Read N lines`` summary line;
+    Claude Code collapses every tool result to a single summary line;
     skins opt into that shape with ``tool_result_body_enabled: False``.
     """
     skin = _get_skin()
@@ -1260,19 +1260,24 @@ def render_tool_result_summary(
 
     total = len(raw)
     clipped = [_truncate_preview(line, max_line_width) for line in raw]
+    head = _truncate_preview(_oneline(raw[0]), max_line_width)
+
+    if not _tool_result_body_enabled():
+        # Skin collapses tool output (claude): the body stays in the model's
+        # context — the transcript only carries one summary line per call.
+        if tool_name in _NUMBERED_BODY_TOOLS:
+            return f"Read {total} line{'' if total == 1 else 's'}", [], False
+        if total == 1:
+            return head, [], False
+        return f"{head} (+{total - 1} lines)", [], False
 
     # File content: the gutter carries the file's own line numbers, so every
     # line belongs to the body and the summary states the size instead.
     if tool_name in _NUMBERED_BODY_TOOLS:
-        if not _tool_result_body_enabled():
-            # Skin collapses file output (claude): the body stays in the
-            # model's context — the transcript only carries the size line.
-            return f"Read {total} line{'' if total == 1 else 's'}", [], False
         if total > max_lines:
             return (f"Read {total} lines (showing first {max_lines})", clipped[:max_lines], True)
         return f"Read {total} line{'' if total == 1 else 's'}", clipped, True
 
-    head = _truncate_preview(_oneline(raw[0]), max_line_width)
     if total == 1:
         return head, [], False
 

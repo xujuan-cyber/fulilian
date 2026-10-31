@@ -154,3 +154,49 @@ class TestUnknownTokensFallBack:
         skin = _build_skin_config(_BUILTIN_SKINS["claude"])
         assert skin.light_colors == {}
         assert skin.dark_colors == {}
+
+
+class TestClaudeDensityFlags:
+    """The four density switches (2026-10-31): claude drops chrome that
+    carries no information, every other skin keeps it."""
+
+    _FLAGS = (
+        "reasoning_visible",
+        "tool_call_announcements_enabled",
+        "inline_diffs_enabled",
+        "decorations_enabled",
+    )
+
+    def test_claude_disables_every_density_flag(self):
+        skin = claude_skin()
+        for flag in self._FLAGS:
+            assert getattr(skin, flag) is False, flag
+
+    def test_other_skins_keep_every_density_flag(self):
+        for name, raw in _BUILTIN_SKINS.items():
+            if name == "claude":
+                continue
+            for flag in self._FLAGS:
+                assert raw.get(flag, True) is True, f"{name}.{flag}"
+
+    def test_user_skin_inherits_true_defaults(self):
+        """A user skin that never mentions the flags gets the decorated
+        defaults — the switches are opt-out, never opt-in."""
+        skin = _build_skin_config({"name": "minimal"})
+        for flag in self._FLAGS:
+            assert getattr(skin, flag) is True, flag
+
+    def test_decorations_flag_reaches_the_cli_helper(self):
+        """``_decorations_enabled`` must read the live skin, so /skin switches
+        take effect without a restart."""
+        import cli as cli_mod
+
+        from fulilian_cli.skin_engine import set_active_skin
+
+        try:
+            set_active_skin("claude")
+            assert cli_mod._decorations_enabled() is False
+            set_active_skin("default")
+            assert cli_mod._decorations_enabled() is True
+        finally:
+            set_active_skin("default")

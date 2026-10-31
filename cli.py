@@ -243,6 +243,34 @@ def _active_spinner_frames() -> tuple:
     return _COMMAND_SPINNER_FRAMES
 
 
+def _skin_flag(name: str, default: bool = True) -> bool:
+    """Read a boolean density flag from the active skin (fail-open).
+
+    Read live rather than cached: ``/skin`` switches take effect immediately
+    and instances built via ``FulilianCLI.__new__`` (tests) need no extra
+    attributes. The module-level ``init_skin_from_config(CLI_CONFIG)`` at
+    startup has already selected the skin by the time any method calls this.
+    """
+    try:
+        from fulilian_cli.skin_engine import get_active_skin
+        skin = get_active_skin()
+        return bool(getattr(skin, name, default)) if skin is not None else default
+    except Exception:
+        return default
+
+
+def _decorations_enabled() -> bool:
+    """Whether the active skin wants decorative chrome (fail-open).
+
+    One switch for the non-functional layer only: the status bar's ☿ brand
+    glyph and its ⊙ goal / ↻ background / stash segments, the composer's
+    ● effort badge, the prompt's profile-name prefix, and the terminal pet.
+    Functional affordances — the prompt symbol itself, the YOLO chip, the
+    context/token readout — are never gated here.
+    """
+    return _skin_flag("decorations_enabled")
+
+
 # Load .env from ~/.fulilian/.env first, then project root as dev fallback.
 # User-managed env files should override stale shell exports on restart.
 from fulilian_constants import get_fulilian_home, display_fulilian_home
@@ -5257,8 +5285,14 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         self.resume_display = CLI_CONFIG["display"].get("resume_display", "full")
         # bell_on_complete: play terminal bell (\a) when agent finishes a response
         self.bell_on_complete = CLI_CONFIG["display"].get("bell_on_complete", False)
-        # show_reasoning: display model thinking/reasoning before the response
-        self.show_reasoning = CLI_CONFIG["display"].get("show_reasoning", True)
+        # show_reasoning: display model thinking/reasoning before the response.
+        # The skin can force it off by default (claude keeps thinking behind
+        # the ✻ spinner); /reasoning show still overrides at runtime.
+        self._reasoning_skin_visible = _skin_flag("reasoning_visible")
+        self.show_reasoning = (
+            bool(CLI_CONFIG["display"].get("show_reasoning", True))
+            and self._reasoning_skin_visible
+        )
         # reasoning_full: when reasoning display is on, print the post-response
         # recap box uncollapsed instead of clamping to the first 10 lines.
         self.reasoning_full = CLI_CONFIG["display"].get("reasoning_full", False)
@@ -5295,8 +5329,16 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         if self.final_response_markdown not in {"render", "strip", "raw"}:
             self.final_response_markdown = "strip"
 
-        # Inline diff previews for write actions (display.inline_diffs in config.yaml)
-        self._inline_diffs_enabled = CLI_CONFIG["display"].get("inline_diffs", True)
+        # Inline diff previews for write actions (display.inline_diffs in config.yaml).
+        # The config value alone decides whether the tool callbacks are wired
+        # (so the delegate_task background notice survives); the skin flag
+        # additionally suppresses the diff block itself.
+        self._inline_diffs_config_enabled = bool(
+            CLI_CONFIG["display"].get("inline_diffs", True)
+        )
+        self._inline_diffs_enabled = (
+            self._inline_diffs_config_enabled and _skin_flag("inline_diffs_enabled")
+        )
 
         # Per-turn accounting (display.turn_summary / display.spinner_token_flow).
         # Both are CLI-only, display-only chrome. The collector rides the
@@ -7045,6 +7087,15 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         the TUI's steady poll. Cheap and fail-open: any problem disables the pet.
         """
         try:
+            if not _decorations_enabled():
+                # A skin that drops decorations also drops the pet sprite;
+                # clear state so a later /skin switch re-resolves cleanly.
+                with self._pet_lock:
+                    self._pet_enabled = False
+                    self._pet_renderer = None
+                    self._pet_frames_cache.clear()
+                return
+
             from agent.pet import constants, store
             from agent.pet.render import PetRenderer
             from fulilian_cli.config import load_config
@@ -7330,14 +7381,17 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         model = snapshot.get("model_short") or "Fulilian"
         provider = snapshot.get("provider_short") or ""
         model_label = f"{provider}/{model}" if provider else model
-        parts = [f"☿ {model_label}", snapshot.get("duration", "0s")]
-        goal_segment = self._status_bar_goal_segment(snapshot)
-        if goal_segment:
-            # Match legacy width-tier ordering (goal sits before duration).
-            parts.insert(1, goal_segment)
-        subagent_count = snapshot.get("active_background_subagents", 0)
-        if subagent_count:
-            parts.insert(len(parts) - 1, f"↻ {subagent_count}")
+        decorated = _decorations_enabled()
+        model_segment = f"☿ {model_label}" if decorated else model_label
+        parts = [model_segment, snapshot.get("duration", "0s")]
+        if decorated:
+            goal_segment = self._status_bar_goal_segment(snapshot)
+            if goal_segment:
+                # Match legacy width-tier ordering (goal sits before duration).
+                parts.insert(1, goal_segment)
+            subagent_count = snapshot.get("active_background_subagents", 0)
+            if subagent_count:
+                parts.insert(len(parts) - 1, f"↻ {subagent_count}")
         text = " │ ".join(parts)
         return self._right_align_status_title(text, snapshot.get("session_title") or "", width)
         # Legacy width-tier rendering retained below for reference during
@@ -7443,14 +7497,16 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             provider = snapshot.get("provider_short") or ""
             model_short = snapshot.get("model_short") or "Fulilian"
             model_label = f"{provider}/{model_short}" if provider else model_short
+            decorated = _decorations_enabled()
             meta_parts = [model_label, snapshot.get("duration", "0s")]
-            goal_segment = self._status_bar_goal_segment(snapshot)
-            if goal_segment:
-                # Match legacy width-tier ordering (goal sits before duration).
-                meta_parts.insert(1, goal_segment)
-            subagent_count = snapshot.get("active_background_subagents", 0)
-            if subagent_count:
-                meta_parts.insert(len(meta_parts) - 1, f"↻ {subagent_count}")
+            if decorated:
+                goal_segment = self._status_bar_goal_segment(snapshot)
+                if goal_segment:
+                    # Match legacy width-tier ordering (goal sits before duration).
+                    meta_parts.insert(1, goal_segment)
+                subagent_count = snapshot.get("active_background_subagents", 0)
+                if subagent_count:
+                    meta_parts.insert(len(meta_parts) - 1, f"↻ {subagent_count}")
             # The brand symbol gets its own fragment so it can carry the
             # azure "strong" color while the rest of the line stays at the
             # status-bar text color.  Splitting " ☿ <meta> " into
@@ -7458,16 +7514,21 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             # the width accounting in _right_align_status_title_fragments)
             # byte-for-byte identical to the single-fragment version.
             summary = f"{' │ '.join(meta_parts)} "
-            frags = [
-                ("class:status-bar-symbol", " ☿ "),
-                ("class:status-bar", summary),
-            ]
-            try:
-                stash_indicator = self._prompt_stash.indicator()
-            except Exception:
-                stash_indicator = ""
-            if stash_indicator:
-                frags.append(("class:status-bar-strong", f" · {stash_indicator}"))
+            if decorated:
+                frags = [
+                    ("class:status-bar-symbol", " ☿ "),
+                    ("class:status-bar", summary),
+                ]
+                try:
+                    stash_indicator = self._prompt_stash.indicator()
+                except Exception:
+                    stash_indicator = ""
+                if stash_indicator:
+                    frags.append(("class:status-bar-strong", f" · {stash_indicator}"))
+            else:
+                # No brand column: one leading space keeps the row's left
+                # padding identical to the decorated shape.
+                frags = [("class:status-bar", f" {summary}")]
             frags = self._right_align_status_title_fragments(frags, snapshot.get("session_title") or "", width)
             if sum(self._status_bar_display_width(text) for _, text in frags) > width:
                 plain_text = "".join(text for _, text in frags)
@@ -7718,10 +7779,13 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             # Claude Code additionally parks a mode chip (`bypass permissions
             # on`) on the same row while a permission bypass is active.
             effort = snapshot.get("reasoning_effort") or ""
+            # The effort badge is decoration; the bypass chip is a safety
+            # affordance and survives even when the skin drops chrome.
+            badge = f"● {effort}" if (effort and _decorations_enabled()) else ""
             chip = "bypass permissions on" if self._is_session_yolo_active() else ""
             return self._right_align_input_meta_fragments(
                 frags,
-                f"● {effort}" if effort else "",
+                badge,
                 self._get_tui_terminal_width(),
                 chip=chip,
             )
@@ -7976,6 +8040,13 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
 
     def _current_reasoning_callback(self):
         """Return the active reasoning display callback for the current mode."""
+        # A skin that hides reasoning turns off the verbose fallback too; the
+        # /reasoning show handler sets show_reasoning=True and rebinds this
+        # callback, so the runtime override still works.
+        if not getattr(self, "show_reasoning", True) and not getattr(
+            self, "_reasoning_skin_visible", True
+        ):
+            return None
         if self.show_reasoning and self.streaming_enabled:
             return self._stream_reasoning_delta
         if self.verbose and not self.show_reasoning:
@@ -7984,6 +8055,10 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
 
     def _emit_reasoning_preview(self, reasoning_text: str) -> None:
         """Render a buffered reasoning preview as a single [thinking] block."""
+        if not getattr(self, "show_reasoning", True) and not getattr(
+            self, "_reasoning_skin_visible", True
+        ):
+            return
         preview_text = reasoning_text.strip()
         if not preview_text:
             return
@@ -8144,6 +8219,8 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         so a long thinking block cannot bury the transcript.  Returns an empty
         list whenever no reasoning is in flight.
         """
+        if not getattr(self, "show_reasoning", False):
+            return []
         if not getattr(self, "_reasoning_box_opened", False):
             return []
         text = getattr(self, "_reasoning_live_text", "")
@@ -8216,6 +8293,10 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         """
         if not text:
             return
+        if not getattr(self, "show_reasoning", False):
+            # Skin hides reasoning (claude): never open the live region, so
+            # the height/render/fold paths stay no-ops for the whole turn.
+            return
         self._reasoning_shown_this_turn = True
         if getattr(self, "_stream_box_opened", False):
             return
@@ -8244,7 +8325,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         elapsed = self._reasoning_elapsed()
         self._reasoning_started_at = 0.0
 
-        if text.strip():
+        if text.strip() and getattr(self, "show_reasoning", False):
             if getattr(self, "reasoning_full", False):
                 _cprint(f"\n{_DIM}● Thinking for {elapsed:.0f}s{_RST}")
                 for line in text.splitlines():
@@ -13988,6 +14069,10 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         """Callback for intermediate reasoning display during tool-call loops."""
         if not reasoning_text:
             return
+        if not getattr(self, "show_reasoning", True) and not getattr(
+            self, "_reasoning_skin_visible", True
+        ):
+            return
         self._reasoning_preview_buf = getattr(self, "_reasoning_preview_buf", "") + reasoning_text
         self._flush_reasoning_preview(force=False)
 
@@ -14965,6 +15050,9 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             self._stream_box_opened = False
         self._close_reasoning_box()
 
+        if not _skin_flag("tool_call_announcements_enabled"):
+            return
+
         from agent.display import get_skin_tool_prefix, get_tool_emoji
         emoji = get_tool_emoji(tool_name, default="⚡")
         lead = f"{emoji} " if emoji else ""
@@ -15129,6 +15217,8 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
 
     def _on_tool_start(self, tool_call_id: str, function_name: str, function_args: dict):
         """Capture local before-state for write-capable tools."""
+        if not getattr(self, "_inline_diffs_enabled", True):
+            return
         try:
             from agent.display import capture_local_edit_snapshot
 
@@ -15156,6 +15246,8 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                 except Exception:
                     pass
         snapshot = self._pending_edit_snapshots.pop(tool_call_id, None)
+        if not getattr(self, "_inline_diffs_enabled", True):
+            return
         try:
             from agent.display import render_edit_diff_with_delta
 
@@ -18008,7 +18100,7 @@ class FulilianCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         try:
             from fulilian_cli.profiles import get_active_profile_name
             profile = get_active_profile_name()
-            if profile not in {"default", "custom"}:
+            if profile not in {"default", "custom"} and _decorations_enabled():
                 symbol = f"{profile} {symbol}"
         except Exception:
             pass

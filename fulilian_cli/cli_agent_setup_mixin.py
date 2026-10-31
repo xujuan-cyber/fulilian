@@ -535,7 +535,14 @@ class CLIAgentSetupMixin:
                 skip_memory=self.ignore_rules,
                 tool_progress_callback=self._on_tool_progress,
                 tool_start_callback=self._on_tool_start if self._inline_diffs_enabled else None,
-                tool_complete_callback=self._on_tool_complete if self._inline_diffs_enabled else None,
+                # Complete stays wired whenever the config allows it so the
+                # delegate_task background notice still fires under a skin
+                # that disables diff rendering.
+                tool_complete_callback=(
+                    self._on_tool_complete
+                    if getattr(self, "_inline_diffs_config_enabled", self._inline_diffs_enabled)
+                    else None
+                ),
                 stream_delta_callback=self._stream_delta if self.streaming_enabled else None,
                 tool_gen_callback=self._on_tool_gen_start if self.streaming_enabled else None,
                 notice_callback=self._on_notice,

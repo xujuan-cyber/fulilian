@@ -7,6 +7,7 @@ existing visuals — each test pins the fallback, not just the claude path.
 """
 
 import pytest
+from types import SimpleNamespace
 
 from cli import FulilianCLI, _composer_rule_line, _maybe_remap_for_light_mode
 from fulilian_cli.skin_engine import set_active_skin
@@ -178,3 +179,102 @@ class TestClaudeLightModeRemap:
 
         monkeypatch.setattr(cli_mod, "_detect_light_mode", lambda: False)
         assert _maybe_remap_for_light_mode("#999999") == "#999999"
+
+
+# ── decorations switch (claude density) ──────────────────────────────────
+
+
+def _decor_cli():
+    """CLI stub whose status bar has one of every decorative segment."""
+    cli = FulilianCLI.__new__(FulilianCLI)
+    cli.session_id = None
+    cli._status_bar_visible = True
+    cli._model_picker_state = None
+    cli._command_palette_state = None
+    cli._pending_title = ""
+    snapshot = dict(_SNAPSHOT)
+    snapshot.update(
+        {
+            "duration": "1m",
+            "model_short": "claude",
+            "provider_short": "anthropic",
+            "goal_active": True,
+            "goal_turns_used": 3,
+            "goal_max_turns": 20,
+            "active_background_subagents": 2,
+        }
+    )
+    cli._get_status_bar_snapshot = lambda: snapshot
+    cli._get_tui_terminal_width = lambda: 200
+    cli._is_session_yolo_active = lambda: False
+    cli._prompt_stash = SimpleNamespace(indicator=lambda: "1 stashed")
+    return cli
+
+
+class TestDecorationsSwitch:
+    def test_claude_drops_status_bar_brand_and_segments(self):
+        set_active_skin("claude")
+        text = _decor_cli()._build_status_bar_text(width=200)
+        assert "☿" not in text
+        assert "⊙" not in text
+        assert "↻" not in text
+        assert "claude" in text  # the model label itself is information
+
+    def test_default_keeps_status_bar_brand_and_segments(self):
+        set_active_skin("default")
+        text = _decor_cli()._build_status_bar_text(width=200)
+        assert "☿" in text
+        assert "⊙ goal 3/20" in text
+        assert "↻ 2" in text
+
+    def test_claude_drops_stash_indicator(self):
+        set_active_skin("claude")
+        joined = "".join(t for _, t in _decor_cli()._get_status_bar_fragments())
+        assert "stashed" not in joined
+
+    def test_default_keeps_stash_indicator(self):
+        set_active_skin("default")
+        joined = "".join(t for _, t in _decor_cli()._get_status_bar_fragments())
+        assert "stashed" in joined
+
+    def test_claude_drops_effort_badge_but_keeps_yolo_chip(self):
+        """The bypass chip is a safety affordance — it must survive a skin
+        that drops decoration."""
+        set_active_skin("claude")
+        joined = "".join(t for _, t in FulilianCLI._get_input_meta_fragments(_meta_cli(True)))
+        assert "● high" not in joined
+        assert "bypass permissions on" in joined
+
+    def test_default_keeps_effort_badge(self):
+        set_active_skin("default")
+        joined = "".join(t for _, t in FulilianCLI._get_input_meta_fragments(_meta_cli(False)))
+        assert "● high" in joined
+
+    def test_claude_drops_profile_prefix_from_prompt(self, monkeypatch):
+        import fulilian_cli.profiles as profiles
+
+        monkeypatch.setattr(profiles, "get_active_profile_name", lambda: "coder")
+        cli = FulilianCLI.__new__(FulilianCLI)
+
+        set_active_skin("default")
+        normal, _ = cli._get_tui_prompt_symbols()
+        assert normal.startswith("coder ")
+
+        set_active_skin("claude")
+        normal, _ = cli._get_tui_prompt_symbols()
+        assert "coder" not in normal
+        assert normal.strip()  # the prompt glyph itself survives
+
+    def test_claude_drops_the_terminal_pet(self):
+        import threading
+
+        set_active_skin("claude")
+        cli = FulilianCLI.__new__(FulilianCLI)
+        cli._pet_lock = threading.Lock()
+        cli._pet_enabled = True
+        cli._pet_renderer = object()
+        cli._pet_frames_cache = {"idle": [[0]]}
+        cli._pet_resolve_config()
+        assert cli._pet_enabled is False
+        assert cli._pet_renderer is None
+        assert cli._pet_frames_cache == {}

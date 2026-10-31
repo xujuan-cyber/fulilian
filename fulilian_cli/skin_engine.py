@@ -180,6 +180,21 @@ class SkinConfig:
     # with no numbered body block (claude skin: Claude Code keeps file
     # bodies out of the transcript; the model's context still has them).
     tool_result_body_enabled: bool = True
+    # False → hide model reasoning entirely: the live tail, [thinking]
+    # previews, the "Thought for Ns" fold, and the post-response recap.
+    # /reasoning show still overrides at runtime.
+    reasoning_visible: bool = True
+    # False → no "preparing <tool>…" line while streaming tool arguments.
+    tool_call_announcements_enabled: bool = True
+    # False → no inline review-diff block after write/patch tools.
+    # display.inline_diffs and this flag must BOTH be true.
+    inline_diffs_enabled: bool = True
+    # False → drop the non-functional chrome: the status bar's ☿ brand
+    # glyph plus its ⊙ goal / ↻ background / stash segments, the composer's
+    # ● effort badge, the prompt's profile-name prefix, and the terminal pet.
+    # Functional affordances (prompt symbol, YOLO chip, context/token
+    # readout) are never gated by this flag.
+    decorations_enabled: bool = True
     banner_logo: str = ""    # Rich-markup ASCII art logo (replaces FULILIAN_AGENT_LOGO)
     banner_hero: str = ""    # Rich-markup hero art (replaces FULILIAN_CADUCEUS)
 
@@ -314,7 +329,9 @@ _BUILTIN_SKINS: Dict[str, Dict[str, Any]] = {
             ],
             "wings": [],
         },
-        "branding": {},  # inherit FuLiLian identity from default
+        # Identity inherits from default; only the parting line is overridden
+        # so the ☿ glyph stays out of claude's chrome.
+        "branding": {"goodbye": "Goodbye!"},
         "tool_prefix": "⎿",
         # Claude Code shows tool names bare (``Read(file)``) — no emoji
         # icons in the spinner or activity feed.
@@ -322,6 +339,14 @@ _BUILTIN_SKINS: Dict[str, Dict[str, Any]] = {
         # Claude Code collapses file reads to ``⎿ Read N lines`` — the
         # numbered body block stays out of the transcript.
         "tool_result_body_enabled": False,
+        # Density: thinking stays hidden behind the ✻ spinner (the user can
+        # still open it with /reasoning show), tool calls get one call line +
+        # one summary line with no "preparing" preamble and no diff block,
+        # and the status bar/prompt drop decorative glyphs.
+        "reasoning_visible": False,
+        "tool_call_announcements_enabled": False,
+        "inline_diffs_enabled": False,
+        "decorations_enabled": False,
     },
     "ares": {
         "name": "ares",
@@ -898,6 +923,19 @@ def _build_skin_config(data: Dict[str, Any]) -> SkinConfig:
         ),
         tool_result_body_enabled=data.get(
             "tool_result_body_enabled", default.get("tool_result_body_enabled", True)
+        ),
+        reasoning_visible=data.get(
+            "reasoning_visible", default.get("reasoning_visible", True)
+        ),
+        tool_call_announcements_enabled=data.get(
+            "tool_call_announcements_enabled",
+            default.get("tool_call_announcements_enabled", True),
+        ),
+        inline_diffs_enabled=data.get(
+            "inline_diffs_enabled", default.get("inline_diffs_enabled", True)
+        ),
+        decorations_enabled=data.get(
+            "decorations_enabled", default.get("decorations_enabled", True)
         ),
         banner_logo=data.get("banner_logo", ""),
         banner_hero=data.get("banner_hero", ""),
