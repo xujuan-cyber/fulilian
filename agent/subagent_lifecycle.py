@@ -215,14 +215,14 @@ class SubagentLifecycleService:
                     "Duplicate correlation_id for this parent session."
                 )
 
-        # Delegate construction remains internal so plugin code never imports
-        # private delegation helpers or manipulates the active-child registry.
+        # Delegate construction stays behind a public name so callers never
+        # import private delegation helpers or touch the active-child registry.
         from tools.delegate_tool import (
-            _build_child_preserving_parent_tools,
             DEFAULT_MAX_ITERATIONS,
+            build_child_preserving_parent_tools,
         )
 
-        child = _build_child_preserving_parent_tools(
+        child = build_child_preserving_parent_tools(
             task_index=0,
             goal=request.goal,
             context=request.context,
@@ -424,9 +424,9 @@ class SubagentLifecycleService:
             record.started_at = time.time()
             record.updated_at = record.started_at
         try:
-            from tools.delegate_tool import _run_child_lifecycle
+            from tools.delegate_tool import run_child_lifecycle
 
-            raw = _run_child_lifecycle(0, goal, record.agent, parent)
+            raw = run_child_lifecycle(0, goal, record.agent, parent)
             status = (
                 str(raw.get("status", "error")) if isinstance(raw, dict) else "error"
             )

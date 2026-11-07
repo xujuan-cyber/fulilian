@@ -3419,6 +3419,31 @@ def _build_child_preserving_parent_tools(**kwargs):
     return child
 
 
+def build_child_preserving_parent_tools(**kwargs):
+    """Public cross-module contract for building a child agent.
+
+    Builds a child without leaking its resolved toolset into the parent; see
+    ``_build_child_preserving_parent_tools`` for the mechanics.
+
+    ``agent/subagent_lifecycle.py`` calls this through this name; it must
+    never import the underscore-prefixed original, because that would make
+    this module's internals a public dependency of ``agent/`` with no
+    compile-time signal when the signature drifts.
+
+    Any signature change here must update the call site in
+    ``agent/subagent_lifecycle.py`` (``SubagentLifecycleService.spawn``) in
+    the same commit.
+
+    Deliberately a wrapper rather than a module-level alias: two tests patch
+    ``tools.delegate_tool._build_child_preserving_parent_tools``
+    (``tests/tools/test_delegate_output_schema.py``,
+    ``tests/run_agent/test_sequential_tool_timeout.py``), and an alias bound
+    at import time would silently stop honouring those patches. Resolving the
+    name per call keeps the patch point live.
+    """
+    return _build_child_preserving_parent_tools(**kwargs)
+
+
 def _parent_finalization_lock(parent_agent) -> threading.RLock:
     """Return the per-parent lock that serializes lifecycle side effects."""
     if parent_agent is None:
@@ -3542,6 +3567,33 @@ def _run_child_lifecycle(
         parent_agent,
     )
     return result
+
+
+def run_child_lifecycle(
+    task_index: int,
+    goal: str,
+    child=None,
+    parent_agent=None,
+) -> Dict[str, Any]:
+    """Public cross-module contract for running one child end to end.
+
+    ``agent/subagent_lifecycle.py`` calls this through this name; it must
+    never import the underscore-prefixed original, because that would make
+    this module's internals a public dependency of ``agent/`` with no
+    compile-time signal when the signature drifts.
+
+    Any signature change here must update the call site in
+    ``agent/subagent_lifecycle.py`` (``_SubagentRuntime._run``) in the same
+    commit.
+
+    Deliberately a wrapper rather than ``run_child_lifecycle =
+    _run_child_lifecycle``: a module-level alias would bind the function
+    object once at import time, so ``monkeypatch.setattr`` on
+    ``_run_child_lifecycle`` (used by the subagent tests) would silently stop
+    intercepting this path. Resolving the name per call keeps that patch
+    point live.
+    """
+    return _run_child_lifecycle(task_index, goal, child, parent_agent)
 
 
 def _recover_tasks_from_json_string(
@@ -3705,7 +3757,7 @@ def delegate_task(
     background = is_truthy_value(background, default=False) if background is not None else False
 
     # Depth limit — configurable via delegation.max_spawn_depth,
-    # default 2 for parity with the original MAX_DEPTH constant.
+    # default 1, matching MAX_DEPTH.
     depth = getattr(parent_agent, "_delegate_depth", 0)
     max_spawn = _get_max_spawn_depth()
     if depth >= max_spawn:
@@ -4854,7 +4906,7 @@ DELEGATE_TASK_SCHEMA = {
                     "required": ["goal"],
                 },
                 # No maxItems — the runtime limit is configurable via
-                # delegation.max_concurrent_children (default 3) and
+                # delegation.max_concurrent_children (default 10) and
                 # enforced with a clear error in delegate_task().
                 # NOTE: the handler also accepts a per-task `role` — legacy,
                 # ignored: delegation capability is depth-derived, not
